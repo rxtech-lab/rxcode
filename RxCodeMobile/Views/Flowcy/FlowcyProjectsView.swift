@@ -19,6 +19,7 @@ struct FlowcyProjectsView: View {
     @State private var releaseByRepository: [String: ReleaseRepoStatus] = [:]
     @State private var summaryLoading = false
     @State private var refreshID = UUID()
+    @State private var projectCardHeight: CGFloat = 130
     @AppStorage("mobile.flowcy.projectOrder") private var savedProjectOrders = Data()
 
     private var orderScope: String { cloud.accountID ?? "signed-in" }
@@ -73,7 +74,14 @@ struct FlowcyProjectsView: View {
                         ForEach(projects) { project in
                             projectButton(project)
                                 .padding(20)
-                                .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .onGeometryChange(for: CGFloat.self) { geometry in
+                                    geometry.size.height
+                                } action: { height in
+                                    // Keep every card tall enough for the largest content seen in this grid.
+                                    projectCardHeight = max(projectCardHeight, height)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: projectCardHeight, alignment: .topLeading)
                                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
                                 .mobileReorderItem()
                         }

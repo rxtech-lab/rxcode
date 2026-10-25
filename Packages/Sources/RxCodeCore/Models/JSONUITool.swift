@@ -14,6 +14,16 @@ public enum JSONUITool {
         return name == flowcyName || name.hasSuffix(ideName)
     }
 
+    /// Whether a chat tool call is this tool. Also recognizes calls saved under a generic MCP name
+    /// (`mcp__rxcode-ide`, `mcpToolCall`) before the Codex parser read the tool name, by their input.
+    public static func matches(_ toolCall: ToolCall) -> Bool {
+        if matches(toolCall.name) { return true }
+        let name = toolCall.name.lowercased()
+        guard ["mcp__rxcode-ide", "mcp__rxcode", "mcptoolcall"].contains(name) else { return false }
+        if let tool = toolCall.input["tool"]?.stringValue, matches(tool) { return true }
+        return toolCall.input["spec"].map { JSONUISpec(json: $0) != nil } ?? false
+    }
+
     /// The view a tool call asks for: its optional title and spec. The spec is nil while the
     /// call is still streaming its arguments or when they can't be read.
     public struct Payload: Sendable, Hashable {
@@ -22,6 +32,10 @@ public enum JSONUITool {
     }
 
     public static func payload(from input: [String: JSONValue]) -> Payload {
+        // A raw Codex item carries the arguments under `arguments`.
+        if input["spec"] == nil, let arguments = input["arguments"]?.objectValue {
+            return payload(from: arguments)
+        }
         let title = input["title"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
         // Accept the spec nested under `spec` or, leniently, inlined at the top level.
         let spec = JSONUISpec(json: input["spec"]) ?? JSONUISpec(json: .object(input))

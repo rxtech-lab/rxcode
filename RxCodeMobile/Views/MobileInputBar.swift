@@ -14,6 +14,7 @@ struct MobileInputBar: View {
 
     @State private var borderAnimationProgress: CGFloat = 0
     @State private var shimmerOffset: CGFloat = -1
+    @State private var voiceSession = MobileVoiceInputSession()
     @FocusState private var isInputFocused: Bool
 
     /// Subtle warm gradient that mirrors the streaming glow.
@@ -38,25 +39,28 @@ struct MobileInputBar: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            inputField
-                .frame(maxWidth: .infinity)
+            if voiceSession.isPresented {
+                MobileVoiceCancelButton { text = voiceSession.discard() }
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
 
-            MobileVoiceInputButton(text: $text)
+            composer
+                .frame(maxWidth: .infinity)
 
             if isStreaming {
                 stopButton
-                if hasText {
-                    sendButton
-                        .transition(.scale.combined(with: .opacity))
-                }
-            } else {
-                sendButton
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .animation(.easeInOut(duration: 0.15), value: isStreaming)
-        .animation(.easeInOut(duration: 0.15), value: hasText)
+        .animation(.snappy(duration: 0.2), value: hasText)
+        .animation(.spring(duration: 0.35, bounce: 0.15), value: voiceSession.mode)
+        .mobileVoiceInput(session: voiceSession, text: $text)
+        .onChange(of: voiceSession.mode) { _, mode in
+            if mode != .idle { isInputFocused = false }
+        }
         .onChange(of: isStreaming) { _, newValue in
             if newValue {
                 startBorderAnimation()
@@ -77,71 +81,91 @@ struct MobileInputBar: View {
     // MARK: - Buttons
 
     private var sendButton: some View {
-        Button {
+        MobileComposerButton("Send", systemImage: "arrow.up", style: .accent) {
             sendIfPossible()
-        } label: {
-            Image(systemName: "arrow.up")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 36, height: 36)
-                .contentShape(Circle())
-                .glassEffect(.regular.interactive(), in: .circle)
         }
-        .buttonStyle(.plain)
-        .contentShape(Circle())
         .disabled(isSendDisabled)
         .accessibilityIdentifier("send-button")
     }
 
     private var stopButton: some View {
-        Button {
+        MobileComposerSideButton(title: "Stop", systemImage: "stop.fill", tint: Color(red: 0.9, green: 0.4, blue: 0.4)) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             onStop()
-        } label: {
-            Image(systemName: "stop.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color(red: 0.9, green: 0.4, blue: 0.4))
-                .frame(width: 36, height: 36)
-                .contentShape(Circle())
-                .glassEffect(
-                    .regular.tint(Color(red: 0.95, green: 0.6, blue: 0.6).opacity(0.3)).interactive(),
-                    in: .circle
-                )
         }
-        .buttonStyle(.plain)
-        .contentShape(Circle())
         .accessibilityIdentifier("stop-button")
     }
 
-    // MARK: - Input Field
+    // MARK: - Composer
+
+    /// iMessage-style capsule: the text field and its trailing Mic/Send button are swapped for
+    /// recording or review content, while the surrounding bar stays in place.
+    private var composer: some View {
+        Group {
+            switch voiceSession.mode {
+            case .idle:
+                HStack(alignment: .bottom, spacing: 8) {
+                    inputField
+                    if hasText {
+                        sendButton
+                            .transition(.scale.combined(with: .opacity))
+                    } else {
+                        MobileVoiceMicButton(text: $text, session: voiceSession)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .transition(.blurReplace)
+            case .recording:
+                MobileVoiceRecordingContent(session: voiceSession)
+                    .transition(.blurReplace)
+            case .review:
+                MobileVoiceReviewContent(session: voiceSession, canSend: true) {
+                    text = voiceSession.draft
+                    voiceSession.endReview()
+                    sendIfPossible()
+                } onEdit: {
+                    text = voiceSession.draft
+                    voiceSession.endReview()
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(250))
+                        isInputFocused = true
+                    }
+                }
+                .transition(.blurReplace)
+            }
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .frame(minHeight: 48)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(isStreaming ? AnyShapeStyle(animatedBackgroundGradient) : AnyShapeStyle(.clear))
+        )
+        .glassEffect(in: .rect(cornerRadius: 24))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(animatedBorderGradient, lineWidth: 4)
+                .blur(radius: 8)
+                .opacity(isStreaming ? 0.6 : 0)
+        )
+        .shadow(
+            color: isStreaming
+                ? gradientColors[Int(borderAnimationProgress * 7) % 8].opacity(0.4)
+                : .clear,
+            radius: 12,
+            x: 0,
+            y: 0
+        )
+    }
 
     private var inputField: some View {
         TextField(placeholder, text: $text, axis: .vertical)
             .lineLimit(1 ... 6)
             .textFieldStyle(.plain)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
             .accessibilityIdentifier("chat-input")
             .focused($isInputFocused)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isStreaming ? AnyShapeStyle(animatedBackgroundGradient) : AnyShapeStyle(.clear))
-            )
-            .glassEffect(in: .rect(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(animatedBorderGradient, lineWidth: 4)
-                    .blur(radius: 8)
-                    .opacity(isStreaming ? 0.6 : 0)
-            )
-            .shadow(
-                color: isStreaming
-                    ? gradientColors[Int(borderAnimationProgress * 7) % 8].opacity(0.4)
-                    : .clear,
-                radius: 12,
-                x: 0,
-                y: 0
-            )
     }
 
     private var placeholder: String {

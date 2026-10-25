@@ -1,217 +1,409 @@
 import AVFoundation
+import Observation
 import Speech
 import SwiftUI
 
-/// Shared by desktop-connected chat and Flowcy Agent. Dictation only edits the draft.
-struct MobileVoiceInputButton: View {
-    @Binding var text: String
-    @State private var isPresented = false
+/// Drives the iMessage-style composer: idle text field → live recording → review before sending.
+@MainActor @Observable
+final class MobileVoiceInputSession {
+    enum Mode { case idle, recording, review }
 
-    var body: some View {
-        Button {
-            MobileHaptics.buttonTap()
-            isPresented = true
-        } label: {
-            Image(systemName: "mic")
-                .font(.system(size: 18, weight: .medium))
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+    let speech = MobileSpeechRecognizer()
+    var mode: Mode = .idle
+    var showingSettings = false
+    private(set) var startedAt = Date()
+    private(set) var duration: TimeInterval = 0
+    private(set) var recordedLevels: [Float] = []
+    private var originalDraft = ""
+    @ObservationIgnored private var pausedAt: Date?
+    @ObservationIgnored private var startTask: Task<Void, Never>?
+
+    var isPresented: Bool { mode != .idle }
+
+    var draft: String {
+        guard !speech.transcript.isEmpty else { return originalDraft }
+        let separator = originalDraft.isEmpty || originalDraft.last?.isWhitespace == true ? "" : "\n"
+        return originalDraft + separator + speech.transcript
+    }
+
+    var hasDraft: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    func begin(draft: String, locale: String) {
+        MobileHaptics.buttonTap()
+        originalDraft = draft
+        speech.transcript = ""
+        speech.resetHistory()
+        recordedLevels = []
+        duration = 0
+        startedAt = .now
+        pausedAt = nil
+        mode = .recording
+        resume(locale: locale)
+    }
+
+    func resume(locale: String) {
+        if let pausedAt {
+            startedAt += Date.now.timeIntervalSince(pausedAt)
+            self.pausedAt = nil
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Voice Input")
-        .accessibilityIdentifier("voice-input-button")
-        .sheet(isPresented: $isPresented) {
-            MobileVoiceInputSheet { transcript in
-                if text.isEmpty {
-                    text = transcript
-                } else {
-                    text += text.last?.isWhitespace == true ? transcript : "\n" + transcript
-                }
-            }
-            .mobileSheetPresentation()
+        startTask = Task { await speech.start(localeIdentifier: locale) }
+    }
+
+    /// Recording pauses while the language sheet is open and resumes when it closes.
+    func openSettings() {
+        MobileHaptics.buttonTap()
+        showingSettings = true
+        guard mode == .recording else { return }
+        pausedAt = .now
+        startTask?.cancel()
+        speech.cancel()
+        speech.errorMessage = nil
+    }
+
+    /// Ends capture; `captureEnded()` moves to review once the recognizer delivers its last words.
+    func stop() {
+        MobileHaptics.buttonTap()
+        duration = Date.now.timeIntervalSince(startedAt)
+        if speech.phase == .recording {
+            speech.finish()
+        } else {
+            startTask?.cancel()
+            speech.cancel()
+            captureEnded()
+        }
+    }
+
+    /// Backgrounding, audio interruptions and lost input devices keep the partial transcript for review.
+    func interrupt() {
+        guard mode == .recording else { return }
+        duration = Date.now.timeIntervalSince(startedAt)
+        startTask?.cancel()
+        speech.cancel()
+        captureEnded()
+    }
+
+    func captureEnded() {
+        guard mode == .recording, !showingSettings, speech.phase == .idle else { return }
+        guard speech.errorMessage == nil else {
+            mode = .idle
+            return
+        }
+        if duration == 0 { duration = Date.now.timeIntervalSince(startedAt) }
+        recordedLevels = Self.downsample(speech.history, to: 32)
+        mode = .review
+        MobileHaptics.connected()
+    }
+
+    /// Returns the text that was in the composer before recording started.
+    func discard() -> String {
+        mode = .idle
+        startTask?.cancel()
+        speech.cancel()
+        return originalDraft
+    }
+
+    func endReview() {
+        mode = .idle
+    }
+
+    private static func downsample(_ samples: [Float], to count: Int) -> [Float] {
+        guard !samples.isEmpty else { return Array(repeating: 0.1, count: count) }
+        return (0..<count).map { index in
+            let lower = index * samples.count / count
+            let upper = max(lower + 1, (index + 1) * samples.count / count)
+            return samples[lower..<min(upper, samples.count)].max() ?? 0
         }
     }
 }
 
-private struct MobileVoiceInputSheet: View {
-    var onInsert: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
+extension View {
+    /// Language sheet, permission alerts, draft syncing and audio lifecycle for a voice composer.
+    func mobileVoiceInput(session: MobileVoiceInputSession, text: Binding<String>) -> some View {
+        modifier(MobileVoiceInputModifier(text: text, session: session))
+    }
+}
+
+private struct MobileVoiceInputModifier: ViewModifier {
+    @Binding var text: String
+    var session: MobileVoiceInputSession
+
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
-    @AppStorage("mobile.voiceInput.locale") private var localeIdentifier = Locale.current.identifier
-    @State private var speech = MobileSpeechRecognizer()
-    @State private var startTask: Task<Void, Never>?
-    @State private var confirmingDiscard = false
-    @State private var interrupted = false
+    @AppStorage(MobileVoiceLocale.storageKey) private var localeIdentifier = Locale.current.identifier
 
-    private var hasTranscript: Bool {
-        !speech.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                HStack {
-                    Label("On-device recognition", systemImage: "iphone.gen3.radiowaves.left.and.right")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    NavigationLink {
-                        MobileVoiceLanguageView(selection: $localeIdentifier)
-                    } label: {
-                        Label(languageName, systemImage: "globe")
-                            .font(.subheadline)
-                    }
-                    .disabled(speech.isBusy)
-                    .accessibilityIdentifier("voice-input-language")
-                }
-                .padding()
-                Group {
-                    if hasTranscript || speech.isBusy {
-                        TextEditor(text: $speech.transcript)
-                            .padding(.horizontal, 12)
-                            .disabled(speech.isBusy)
-                            .accessibilityLabel("Voice transcript")
-                            .accessibilityIdentifier("voice-input-transcript")
-                    } else {
-                        ContentUnavailableView(
-                            "Speak Your Message",
-                            systemImage: "mic",
-                            description: Text("Choose a language, then start recording. Review the text before adding it to your message.")
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                VoiceWaveform(levels: speech.levels, isRecording: speech.phase == .recording)
-                    .frame(height: 64)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
-
-                recordButton
-            }
-            .navigationTitle("Voice Input")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        MobileHaptics.buttonTap()
-                        speech.cancel()
-                        startTask?.cancel()
-                        if hasTranscript { confirmingDiscard = true } else { dismiss() }
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add to Message") {
-                        speech.cancel()
-                        onInsert(speech.transcript.trimmingCharacters(in: .whitespacesAndNewlines))
-                        MobileHaptics.connected()
-                        dismiss()
-                    }
-                    .disabled(!hasTranscript || speech.isBusy)
-                    .accessibilityIdentifier("voice-input-insert")
-                }
-            }
-            .overlay(alignment: .top) {
-                if speech.isBusy || interrupted {
-                    HStack(spacing: 8) {
-                        if speech.phase == .authorizing || speech.phase == .finishing {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: interrupted ? "pause.circle" : "record.circle")
-                                .foregroundStyle(interrupted ? Color.secondary : Color.red)
+    func body(content: Content) -> some View {
+        @Bindable var session = session
+        content
+            .sheet(isPresented: $session.showingSettings, onDismiss: {
+                if session.mode == .recording { session.resume(locale: localeIdentifier) }
+            }) {
+                NavigationStack {
+                    MobileVoiceLanguageView(selection: $localeIdentifier)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { MobileHaptics.buttonTap(); session.showingSettings = false }
+                            }
                         }
-                        Text(status).font(.caption.weight(.medium))
-                    }
-                    .padding(10)
-                    .background(.regularMaterial, in: Capsule())
-                    .padding(.top, 56)
-                    .allowsHitTesting(false)
-                    .accessibilityAddTraits(.updatesFrequently)
                 }
+                .mobileSheetPresentation()
             }
             .alert("Voice Input Unavailable", isPresented: Binding(
-                get: { speech.errorMessage != nil },
-                set: { if !$0 { speech.errorMessage = nil } }
+                get: { session.speech.errorMessage != nil },
+                set: { if !$0 { session.speech.errorMessage = nil } }
             )) {
-                if speech.needsSettings {
+                Button("Language Settings") { session.openSettings() }
+                if session.speech.needsSettings {
                     Button("Open Settings") {
                         if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                     }
                 }
-                Button("OK", role: .cancel) { speech.errorMessage = nil }
+                Button("OK", role: .cancel) { session.speech.errorMessage = nil }
             } message: {
-                Text(speech.errorMessage ?? "")
+                Text(session.speech.errorMessage ?? "")
             }
-            .confirmationDialog("Discard voice transcript?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
-                Button("Discard", role: .destructive) {
-                    MobileHaptics.buttonTap()
-                    dismiss()
-                }
-                Button("Keep Editing", role: .cancel) {}
+            .onChange(of: session.speech.transcript) { _, _ in
+                if session.mode == .recording { text = session.draft }
             }
-        }
-        .interactiveDismissDisabled(speech.isBusy || hasTranscript)
-        .onDisappear {
-            startTask?.cancel()
-            speech.cancel()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background { interrupt() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in interrupt() }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { notification in
-            if let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-               reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { interrupt() }
-        }
-        .onChange(of: speech.errorMessage) { _, message in
-            if message != nil { MobileHaptics.connectionError() }
-        }
+            .onChange(of: session.speech.phase) { _, phase in
+                if phase == .idle { session.captureEnded() }
+            }
+            .onChange(of: session.speech.errorMessage) { _, message in
+                if message != nil { MobileHaptics.connectionError() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { session.interrupt() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in session.interrupt() }
+            .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { notification in
+                if let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                   reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { session.interrupt() }
+            }
+            .onDisappear {
+                guard session.mode == .recording else { return }
+                text = session.draft
+                _ = session.discard()
+            }
+    }
+}
+
+enum MobileVoiceLocale {
+    static let storageKey = "mobile.voiceInput.locale"
+
+    static func shortName(_ identifier: String) -> String {
+        Locale(identifier: identifier).language.languageCode?.identifier.uppercased() ?? identifier
+    }
+}
+
+/// Mic, Send and Stop share one footprint at the trailing edge of the composer capsule.
+struct MobileComposerButton: View {
+    enum Style { case accent, plain, destructive }
+
+    static let size: CGFloat = 36
+
+    let title: LocalizedStringKey
+    let systemImage: String
+    var style: Style = .plain
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(_ title: LocalizedStringKey, systemImage: String, style: Style = .plain, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.style = style
+        self.action = action
     }
 
-    private var languageName: String {
-        Locale.current.localizedString(forIdentifier: localeIdentifier) ?? localeIdentifier
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: style == .plain ? 20 : 16, weight: .bold))
+                .foregroundStyle(style == .plain ? AnyShapeStyle(.primary) : AnyShapeStyle(.white))
+                .frame(width: Self.size, height: Self.size)
+                .background(fill, in: Circle())
+                .contentShape(Circle())
+                .opacity(isEnabled ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 
-    private var recordButton: some View {
-        let isRecording = speech.phase == .recording
-        let title = isRecording ? String(localized: "Stop Recording") : String(localized: "Start Recording")
-        return Button {
+    private var fill: AnyShapeStyle {
+        switch style {
+        case .accent: AnyShapeStyle(Color.accentColor)
+        case .plain: AnyShapeStyle(Color.clear)
+        case .destructive: AnyShapeStyle(Color.red)
+        }
+    }
+}
+
+/// Glass circle that sits beside the composer capsule (cancel recording, stop streaming).
+struct MobileComposerSideButton: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    var tint: Color?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint ?? .primary)
+                .frame(width: 48, height: 48)
+                .contentShape(Circle())
+                .glassEffect(.regular.tint(tint?.opacity(0.2)).interactive(), in: .circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+}
+
+struct MobileVoiceMicButton: View {
+    @Binding var text: String
+    var session: MobileVoiceInputSession
+    @AppStorage(MobileVoiceLocale.storageKey) private var localeIdentifier = Locale.current.identifier
+
+    var body: some View {
+        MobileComposerButton("Voice Input", systemImage: "waveform") {
+            session.begin(draft: text, locale: localeIdentifier)
+        }
+        .accessibilityIdentifier("voice-input-button")
+        .contextMenu {
+            Button("Recognition Language", systemImage: "globe") { session.openSettings() }
+        }
+    }
+}
+
+struct MobileVoiceCancelButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        MobileComposerSideButton(title: "Discard Voice Message", systemImage: "xmark") {
             MobileHaptics.buttonTap()
-            interrupted = false
-            if isRecording {
-                speech.finish()
-            } else {
-                startTask = Task { await speech.start(localeIdentifier: localeIdentifier) }
+            action()
+        }
+            .accessibilityIdentifier("voice-input-cancel")
+    }
+}
+
+/// Live recording content that takes the text field's place inside the composer capsule.
+struct MobileVoiceRecordingContent: View {
+    var session: MobileVoiceInputSession
+    @AppStorage(MobileVoiceLocale.storageKey) private var localeIdentifier = Locale.current.identifier
+
+    private var isRecording: Bool { session.speech.phase == .recording }
+    private var isPreparing: Bool {
+        session.speech.phase == .authorizing || session.speech.phase == .finishing
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 8))
+                .foregroundStyle(.red)
+                .symbolEffect(.pulse, options: .repeating, isActive: isRecording)
+                .accessibilityHidden(true)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let seconds = max(0, Int(context.date.timeIntervalSince(session.startedAt)))
+                Text(MobileVoiceDuration.format(TimeInterval(seconds)))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                    .accessibilityLabel("Recording duration")
             }
-        } label: {
-            Label(title, systemImage: isRecording ? "stop.fill" : "mic.fill")
+            VoiceWaveform(levels: session.speech.levels, isRecording: isRecording)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .frame(height: 24)
+            Button {
+                session.openSettings()
+            } label: {
+                Text(MobileVoiceLocale.shortName(localeIdentifier))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .background(Color.primary.opacity(0.08), in: Capsule())
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Recognition Language")
+            .accessibilityValue(Locale.current.localizedString(forIdentifier: localeIdentifier) ?? localeIdentifier)
+            .accessibilityIdentifier("voice-input-settings")
+            ZStack {
+                if isPreparing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel(session.speech.phase == .authorizing ? "Requesting permission…" : "Finishing…")
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    MobileComposerButton("Stop Recording", systemImage: "stop.fill", style: .destructive) {
+                        session.stop()
+                    }
+                    .accessibilityIdentifier("voice-input-stop")
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(width: MobileComposerButton.size, height: MobileComposerButton.size)
+            .animation(.snappy, value: isPreparing)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(isRecording ? Color.red : Color.accentColor)
-        .disabled(speech.phase == .authorizing || speech.phase == .finishing)
-        .accessibilityIdentifier("voice-input-record")
-        .padding(.horizontal)
-        .padding(.bottom)
+        .frame(minHeight: MobileComposerButton.size)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice-input-recording-bar")
     }
+}
 
-    private var status: String {
-        switch speech.phase {
-        case .idle: return String(localized: "Recording paused. Review or continue your message.")
-        case .authorizing: return String(localized: "Requesting permission…")
-        case .recording: return String(localized: "Listening on device…")
-        case .finishing: return String(localized: "Finishing transcription…")
+/// After Stop: the recorded waveform with Send, and the transcription beneath it.
+struct MobileVoiceReviewContent: View {
+    var session: MobileVoiceInputSession
+    var canSend: Bool
+    var onSend: () -> Void
+    var onEdit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                RecordedWaveform(levels: session.recordedLevels)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 24)
+                Text(MobileVoiceDuration.format(session.duration))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                MobileComposerButton("Send Voice Message", systemImage: "arrow.up", style: .accent) {
+                    MobileHaptics.buttonTap()
+                    onSend()
+                }
+                .disabled(!canSend || !session.hasDraft)
+                .accessibilityIdentifier("voice-input-send")
+            }
+            Button {
+                MobileHaptics.buttonTap()
+                onEdit()
+            } label: {
+                Text(session.hasDraft ? session.draft : String(localized: "No speech detected"))
+                    .font(.body)
+                    .foregroundStyle(session.hasDraft ? .primary : .secondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Edit the transcribed text")
+            .accessibilityIdentifier("voice-input-transcript")
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice-input-review")
     }
+}
 
-    private func interrupt() {
-        guard speech.isBusy else { return }
-        speech.interrupt()
-        startTask?.cancel()
-        interrupted = true
-        MobileHaptics.attentionNeeded()
+enum MobileVoiceDuration {
+    static func format(_ interval: TimeInterval) -> String {
+        let seconds = max(0, Int(interval.rounded()))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 
@@ -275,10 +467,10 @@ private struct VoiceWaveform: View {
 
     var body: some View {
         GeometryReader { geometry in
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 ForEach(levels.indices, id: \.self) { index in
                     Capsule()
-                        .fill(isRecording ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(isRecording ? Color.red.opacity(0.65) : Color.secondary.opacity(0.3))
                         .frame(height: max(4, CGFloat(levels[index]) * geometry.size.height))
                         .frame(maxWidth: .infinity)
                 }
@@ -289,5 +481,34 @@ private struct VoiceWaveform: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(isRecording ? "Microphone sound level" : "Microphone stopped")
         .accessibilityIdentifier("voice-input-waveform")
+    }
+}
+
+/// Static waveform of a finished recording; bars grow in when review appears.
+private struct RecordedWaveform: View {
+    var levels: [Float]
+    @State private var revealed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 2) {
+                ForEach(levels.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(Color.accentColor.opacity(0.8))
+                        .frame(height: max(3, CGFloat(revealed ? levels[index] : 0.05) * geometry.size.height))
+                        .frame(maxWidth: .infinity)
+                        .animation(
+                            reduceMotion ? nil : .spring(duration: 0.4, bounce: 0.3).delay(Double(index) * 0.012),
+                            value: revealed
+                        )
+                }
+            }
+            .frame(height: geometry.size.height)
+        }
+        .onAppear { revealed = true }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Recorded audio waveform")
+        .accessibilityIdentifier("voice-input-recorded-waveform")
     }
 }

@@ -10,6 +10,8 @@ final class MobileSpeechRecognizer {
     var transcript = ""
     private(set) var phase: Phase = .idle
     private(set) var levels = Array(repeating: Float(0), count: 40)
+    /// Every meter sample since `resetHistory()`, so a finished recording can draw its full waveform.
+    private(set) var history: [Float] = []
     var errorMessage: String?
     private(set) var needsSettings = false
 
@@ -46,6 +48,17 @@ final class MobileSpeechRecognizer {
         phase = .authorizing
         errorMessage = nil
         needsSettings = false
+
+        #if DEBUG && targetEnvironment(simulator)
+        // Deterministic UI coverage without microphone permissions or language assets.
+        if ProcessInfo.processInfo.arguments.contains("-uitest-voice-input") {
+            if transcript.isEmpty { transcript = "Dictated test message" }
+            levels = (0..<40).map { Float($0 % 8 + 1) / 9 }
+            history += levels
+            phase = .recording
+            return
+        }
+        #endif
 
         let authorization = await authorizeSpeech()
         guard sessionID == id else { return }
@@ -124,6 +137,7 @@ final class MobileSpeechRecognizer {
                     guard let self, self.sessionID == id, self.phase == .recording else { return }
                     self.levels.removeFirst()
                     self.levels.append(level)
+                    self.history.append(level)
                 }
             }
             engine.prepare()
@@ -137,6 +151,12 @@ final class MobileSpeechRecognizer {
     /// End microphone capture, then allow the recognizer to deliver the last words.
     func finish() {
         guard phase == .recording else { return }
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-uitest-voice-input") {
+            cancel()
+            return
+        }
+        #endif
         phase = .finishing
         stopAudio()
         request?.endAudio()
@@ -160,6 +180,10 @@ final class MobileSpeechRecognizer {
         recognizer = nil
         request = nil
         phase = .idle
+    }
+
+    func resetHistory() {
+        history = []
     }
 
     func interrupt() {

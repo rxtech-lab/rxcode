@@ -330,9 +330,12 @@ extension AppState {
     /// then falls back to whatever else the registry declares (`npx`/`uvx`).
     /// After install, probes the agent (`initialize` + `session/new`) to
     /// populate the model picker from its advertised `configOptions`.
-    func installACPClient(from agent: ACPRegistryAgent, version: String? = nil) async throws -> ACPClientSpec {
+    func installACPClient(
+        from agent: ACPRegistryAgent, version: String? = nil,
+        progress: (@Sendable (ACPInstallerService.Progress) -> Void)? = nil
+    ) async throws -> ACPClientSpec {
         let selectedVersion = version ?? agent.version
-        let launch = try await resolveLaunch(for: agent, version: selectedVersion)
+        let launch = try await resolveLaunch(for: agent, version: selectedVersion, progress: progress)
         let spec = ACPClientSpec(
             registryId: agent.id,
             installedVersion: selectedVersion,
@@ -340,20 +343,25 @@ extension AppState {
             launch: launch,
             iconURL: agent.icon
         )
+        progress?(ACPInstallerService.Progress(phase: .preparing))
         return try await preparedInstalledSpec(spec, agentId: agent.id)
     }
 
     /// Install a newer registry release while retaining the user's client
     /// identity, enablement, model override, arguments, and environment.
-    func updateACPClient(id: String, from agent: ACPRegistryAgent, version: String? = nil) async throws {
+    func updateACPClient(
+        id: String, from agent: ACPRegistryAgent, version: String? = nil,
+        progress: (@Sendable (ACPInstallerService.Progress) -> Void)? = nil
+    ) async throws {
         guard let current = acpClients.first(where: { $0.id == id }),
               current.registryId == agent.id else { return }
         let selectedVersion = version ?? agent.version
-        let launch = try await resolveLaunch(for: agent, version: selectedVersion)
+        let launch = try await resolveLaunch(for: agent, version: selectedVersion, progress: progress)
         var updated = current
         updated.launch = launch
         updated.installedVersion = selectedVersion
         updated.iconURL = agent.icon
+        progress?(ACPInstallerService.Progress(phase: .preparing))
         updated = try await preparedInstalledSpec(updated, agentId: agent.id)
         updateACPClient(updated)
     }
@@ -575,7 +583,10 @@ extension AppState {
         }.joined(separator: ", ")
     }
 
-    func resolveLaunch(for agent: ACPRegistryAgent, version: String) async throws -> ACPClientSpec.LaunchKind {
+    func resolveLaunch(
+        for agent: ACPRegistryAgent, version: String,
+        progress: (@Sendable (ACPInstallerService.Progress) -> Void)? = nil
+    ) async throws -> ACPClientSpec.LaunchKind {
         guard ACPPackageVersion.isValid(version) else {
             throw ACPInstallError.invalidPackageVersion(package: agent.id, version: version)
         }
@@ -598,7 +609,7 @@ extension AppState {
         if let bin = agent.distribution.binary?[ACPPlatform.current] {
             do {
                 let path = try await ACPInstallerService.shared.install(
-                    bin, registryId: agent.id, version: agent.version
+                    bin, registryId: agent.id, version: agent.version, progress: progress
                 )
                 return .binary(path: path, args: bin.args ?? [], env: bin.env ?? [:])
             } catch {

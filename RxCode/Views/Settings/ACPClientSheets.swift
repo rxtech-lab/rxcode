@@ -5,7 +5,7 @@ import SwiftUI
 /// it in place and show progress until the client is pinned and verified.
 struct ACPVersionSheet: View {
     let selection: ACPVersionSelection
-    let onInstall: (String) async throws -> Void
+    let onInstall: (String, @escaping @Sendable (ACPInstallerService.Progress) -> Void) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var version: String
@@ -13,10 +13,11 @@ struct ACPVersionSheet: View {
     @State private var isLoadingVersions = false
     @State private var versionLoadFailed = false
     @State private var isInstalling = false
+    @State private var progress: ACPInstallerService.Progress?
     @State private var didFinish = false
     @State private var errorMessage: String?
 
-    init(selection: ACPVersionSelection, onInstall: @escaping (String) async throws -> Void) {
+    init(selection: ACPVersionSelection, onInstall: @escaping (String, @escaping @Sendable (ACPInstallerService.Progress) -> Void) async throws -> Void) {
         self.selection = selection
         self.onInstall = onInstall
         _version = State(initialValue: selection.initialVersion
@@ -32,7 +33,7 @@ struct ACPVersionSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             versionPicker
-            Color.clear.frame(height: 50)
+            Color.clear.frame(height: 80)
             footer
         }
         .padding(20)
@@ -106,15 +107,41 @@ struct ACPVersionSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             if didFinish {
                 ProgressView(value: 1)
+            } else if let fraction = progress?.fraction {
+                ProgressView(value: fraction)
             } else {
                 ProgressView().progressViewStyle(.linear)
             }
             Text(didFinish
                 ? "Installed \(selection.agent.name) \(version)."
-                : "Installing \(version)…")
+                : progressLabel)
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
+            if let progress, progress.phase == .downloading {
+                Text(byteCountLabel(progress))
+                    .font(.system(size: ClaudeTheme.size(11)).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
+    }
+
+    private var progressLabel: String {
+        switch progress?.phase {
+        case .downloading: "Downloading \(version)…"
+        case .extracting: "Extracting \(version)…"
+        case .preparing: "Preparing client and discovering models…"
+        case nil: "Installing \(version)…"
+        }
+    }
+
+    private func byteCountLabel(_ progress: ACPInstallerService.Progress) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB]
+        formatter.countStyle = .file
+        formatter.includesActualByteCount = false
+        let downloaded = formatter.string(fromByteCount: progress.downloadedBytes)
+        guard let expected = progress.expectedBytes, expected > 0 else { return downloaded }
+        return "\(downloaded) of \(formatter.string(fromByteCount: expected))"
     }
 
     private var footer: some View {
@@ -163,11 +190,20 @@ struct ACPVersionSheet: View {
     private func install() {
         isInstalling = true
         errorMessage = nil
+        progress = nil
         let target = version
         Task {
             defer { isInstalling = false }
             do {
-                try await onInstall(target)
+                try await onInstall(target) { update in
+                    Task { @MainActor in
+                        guard isInstalling, !didFinish else { return }
+                        // Delegate callbacks may reach the main actor after extraction starts.
+                        if progress?.phase == .preparing { return }
+                        if progress?.phase == .extracting, update.phase == .downloading { return }
+                        progress = update
+                    }
+                }
                 didFinish = true
             } catch {
                 errorMessage = error.localizedDescription

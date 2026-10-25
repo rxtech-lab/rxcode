@@ -89,6 +89,15 @@ struct ToolActivityTests {
         #expect(!labels.contains("Read"))
     }
 
+    @Test func toolNamesAndArgumentsBecomeReadableLabels() {
+        #expect(ToolActivityPresentation.title(for: "mcp__rxcode-ide__ide__get_projects") == "Get projects")
+        #expect(ToolActivityPresentation.title(for: "list_issues") == "List issues")
+        #expect(ToolActivityPresentation.source(for: "mcp__github__search") == "github")
+        #expect(ToolActivityPresentation.source(for: "list_issues") == nil)
+        #expect(ToolActivityPresentation.preview(for: ["limit": 5, "query": "open bugs\nmore"]) == "open bugs")
+        #expect(ToolActivityPresentation.preview(for: ["limit": 5]) == nil)
+    }
+
     @Test func interactiveViewsRenderInlineOutsideTheGroup() throws {
         let view = ToolActivityGroupView(tools: [
             ToolCall(id: "a", name: "Read", result: "ok"),

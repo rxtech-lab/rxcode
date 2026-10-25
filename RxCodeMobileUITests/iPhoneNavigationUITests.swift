@@ -17,7 +17,7 @@ final class iPhoneNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    func testToolGroupsExpandAndShowFullLongResult() throws {
+    func testToolGroupsExpandAndShowFullLongParameters() throws {
         let session = try UITestRunner.launch(.phone, on: self, additionalLaunchArguments: ["-uitest-tool-activity"])
         let r = session.robot
         let app = session.app
@@ -34,11 +34,12 @@ final class iPhoneNavigationUITests: XCTestCase {
         XCTAssertLessThanOrEqual(call.frame.maxX, app.frame.maxX)
         attachScreenshot(app, name: "Expanded tool calls")
         call.tap()
-        XCTAssertTrue(app.navigationBars["Bash"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Tool Call"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "build")).firstMatch.waitForExistence(timeout: 5))
         let firstRecord = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Task 1:")).firstMatch
         XCTAssertTrue(firstRecord.waitForExistence(timeout: 5))
-        XCTAssertTrue(firstRecord.isHittable, "JSON must draw on the first result page")
-        attachScreenshot(app, name: "Visible first JSON result page")
+        XCTAssertTrue(firstRecord.isHittable, "JSON must draw on the first parameters page")
+        attachScreenshot(app, name: "Visible first JSON parameters page")
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(firstRecord.waitForExistence(timeout: 5))
         XCTAssertTrue(firstRecord.isHittable)
@@ -47,7 +48,7 @@ final class iPhoneNavigationUITests: XCTestCase {
         app.buttons["Next page"].tap()
         let nextRecord = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Task 9:")).firstMatch
         XCTAssertTrue(nextRecord.waitForExistence(timeout: 5))
-        attachScreenshot(app, name: "Visible JSON result in landscape")
+        attachScreenshot(app, name: "Visible JSON parameters in landscape")
         pager.tap()
         app.buttons["Last Page"].tap()
         let end = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "END OF TOOL RESULT")).firstMatch
@@ -56,13 +57,8 @@ final class iPhoneNavigationUITests: XCTestCase {
             app.scrollViews.firstMatch.swipeUp()
         }
         XCTAssertTrue(end.exists && end.isHittable, "The last page must be directly reachable")
-        attachScreenshot(app, name: "Last JSON result page")
+        attachScreenshot(app, name: "Last JSON parameters page")
         XCUIDevice.shared.orientation = .portrait
-        app.buttons["Parameters"].tap()
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "build")).firstMatch.waitForExistence(timeout: 5))
-        app.buttons["Raw Result"].tap()
-        XCTAssertTrue(pager.waitForExistence(timeout: 5))
-        attachScreenshot(app, name: "Raw result on separate tab")
         app.buttons["Done"].tap()
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         toggle.tap()

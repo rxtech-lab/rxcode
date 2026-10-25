@@ -30,9 +30,9 @@ User-scope servers can be overridden per project from the same MCP tab when a pr
 
 ## Agent Runtimes
 
-Open **Settings -> Agent** to manage Claude Code, Codex, and installed ACP clients. Click **Install Client…** to open the installation catalogue. Claude Code and Codex offer published npm versions in their install sheets.
+Open **Settings -> Agent** to manage Claude Code, Codex, and installed ACP clients. Click **Install Client…** to browse Claude Code, Codex, and ACP clients together in the registry. Claude Code and Codex offer published npm versions in their install sheets.
 
-Click **Manage…** beside an installed runtime to open its management sheet, where you can install another version, sign in, or sign out. Removal requires confirmation. For Claude Code and Codex, removal is available for copies installed by RxCode; separately installed copies are managed outside RxCode.
+Click **Manage…** beside an installed runtime to open its dropdown menu, where you can install another version, sign in, or sign out. Removal requires confirmation. For Claude Code and Codex, removal is available for copies installed by RxCode; separately installed copies are managed outside RxCode.
 
 ## ACP Clients
 

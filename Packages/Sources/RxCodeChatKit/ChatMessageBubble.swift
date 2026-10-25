@@ -84,7 +84,7 @@ private struct CompactChatMessageBubble: View {
         case .tool(let toolCall):
             if toolCall.name == "AskUserQuestion" {
                 AskUserQuestionView(toolCall: toolCall)
-            } else if JSONUITool.matches(toolCall.name) {
+            } else if JSONUITool.matches(toolCall) {
                 JSONUIToolCard(toolCall: toolCall, isStreaming: message.isStreaming)
             } else {
                 ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
@@ -197,7 +197,7 @@ private struct CompactChatMessageBubble: View {
             // Interactive questions, plan cards and json-render views retain their dedicated controls.
             if ["askuserquestion", "exitplanmode", "exit_plan_mode"].contains(toolCall.name.lowercased())
                 || toolCall.name == ReviewCountdownCard.toolName
-                || JSONUITool.matches(toolCall.name) {
+                || JSONUITool.matches(toolCall) {
                 flushTransientTools()
                 result.append(.tool(toolCall))
             } else {

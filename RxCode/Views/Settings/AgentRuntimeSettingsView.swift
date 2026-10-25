@@ -3,117 +3,70 @@ import SwiftUI
 
 struct AgentRuntimeSettingsView: View {
     @Environment(AppState.self) private var appState
+    let runtime: AgentRuntimeInstaller.Runtime
     let catalog: Bool
     @State private var installingRuntime: AgentRuntimeInstaller.Runtime?
     @State private var signingInRuntime: AgentRuntimeInstaller.Runtime?
     @State private var installSheetRuntime: AgentRuntimeInstaller.Runtime?
     @State private var runtimeMessage: String?
-    @State private var managingRuntime: AgentRuntimeInstaller.Runtime?
     @State private var pendingRemoval: AgentRuntimeInstaller.Runtime?
 
     var body: some View {
-        agentRuntimeSection
-            .sheet(item: Binding(
-                get: { catalog ? installSheetRuntime : nil },
-                set: { installSheetRuntime = $0 },
-            )) { runtime in
+        agentRuntimeRow(
+            runtime: runtime,
+            title: runtime.displayName,
+            installed: runtime == .claude ? appState.claudeInstalled : appState.codexInstalled,
+            signedIn: runtime == .claude ? appState.claudeSignedIn : appState.codexSignedIn,
+            version: runtime == .claude ? appState.claudeVersion : appState.codexVersion,
+            path: runtime == .claude ? appState.claudeBinaryPath : appState.codexBinaryPath,
+        )
+            .sheet(item: $installSheetRuntime) { runtime in
                 AgentRuntimeInstallSheet(
                     runtime: runtime,
                     installedVersion: installedVersion(in: runtime == .claude ? appState.claudeVersion : appState.codexVersion),
                     onInstalled: { await appState.refreshAgentInstallations() },
                 )
             }
-            .sheet(item: $managingRuntime) { runtime in
-                managementSheet(runtime)
-                    .sheet(item: $installSheetRuntime) { selection in
-                        AgentRuntimeInstallSheet(
-                            runtime: selection,
-                            installedVersion: installedVersion(in: selection == .claude ? appState.claudeVersion : appState.codexVersion),
-                            onInstalled: { await appState.refreshAgentInstallations() },
-                        )
+            .alert("Remove managed runtime?", isPresented: Binding(
+                get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } },
+            ), presenting: pendingRemoval) { runtime in
+                Button("Cancel", role: .cancel) { pendingRemoval = nil }
+                Button("Remove", role: .destructive) {
+                    pendingRemoval = nil
+                    remove(runtime)
+                }
+            } message: { _ in
+                Text("RxCode's managed copy will be removed. Separately installed copies are managed outside RxCode.")
+            }
+            .overlay(alignment: .bottom) {
+                if signingInRuntime != nil || installingRuntime != nil || runtimeMessage != nil {
+                    HStack {
+                        if signingInRuntime != nil || installingRuntime != nil { ProgressView().controlSize(.small) }
+                        Text(runtimeMessage ?? "Working…")
+                        if runtimeMessage != nil { Button("Dismiss") { runtimeMessage = nil } }
                     }
-                    .alert("Remove managed runtime?", isPresented: Binding(
-                        get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } },
-                    )) {
-                        Button("Cancel", role: .cancel) { pendingRemoval = nil }
-                        Button("Remove", role: .destructive) {
-                            pendingRemoval = nil
-                            remove(runtime)
-                        }
-                    } message: {
-                        Text("RxCode's managed copy will be removed. Separately installed copies are managed outside RxCode.")
-                    }
+                    .font(.callout)
+                    .padding(12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
             }
     }
 
-    private func managementSheet(_ runtime: AgentRuntimeInstaller.Runtime) -> some View {
+    private func managementMenu(_ runtime: AgentRuntimeInstaller.Runtime) -> some View {
         let signedIn = runtime == .claude ? appState.claudeSignedIn : appState.codexSignedIn
         let path = runtime == .claude ? appState.claudeBinaryPath : appState.codexBinaryPath
-        return VStack(alignment: .leading, spacing: 16) {
-            Text("Manage \(runtime.displayName)").font(.headline)
-            Text(path ?? "No executable detected").font(.caption).textSelection(.enabled)
-            Form {
-                Button("Install Version…") { installSheetRuntime = runtime }
-                Button(signedIn ? "Re-sign In" : "Sign In") { signIn(runtime) }
-                if signedIn { Button("Sign Out") { signOut(runtime) } }
-                if path == AgentRuntimeInstaller.executablePath(for: runtime) {
-                    Button("Remove…", role: .destructive) { pendingRemoval = runtime }
-                }
-            }
-            .disabled(signingInRuntime != nil || installingRuntime != nil)
-            HStack {
-                Spacer()
-                Button("Done") { managingRuntime = nil }
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(signingInRuntime != nil || installingRuntime != nil)
+        return Menu("Manage…") {
+            Button("Install Version…") { installSheetRuntime = runtime }
+            Button(signedIn ? "Re-sign In" : "Sign In") { signIn(runtime) }
+            if signedIn { Button("Sign Out") { signOut(runtime) } }
+            if path == AgentRuntimeInstaller.executablePath(for: runtime) {
+                Divider()
+                Button("Remove…", role: .destructive) { pendingRemoval = runtime }
             }
         }
-        .padding(24)
-        .frame(width: 460, height: 330)
-        .interactiveDismissDisabled(signingInRuntime != nil || installingRuntime != nil)
-        .overlay(alignment: .bottom) {
-            if signingInRuntime != nil || installingRuntime != nil || runtimeMessage != nil {
-                HStack {
-                    if signingInRuntime != nil || installingRuntime != nil { ProgressView().controlSize(.small) }
-                    Text(runtimeMessage ?? "Working…")
-                    if runtimeMessage != nil { Button("Dismiss") { runtimeMessage = nil } }
-                }
-                .font(.callout)
-                .padding(12)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                .padding(.bottom, 60)
-            }
-        }
-    }
-
-    // MARK: - Agent Runtime Section
-
-    private var agentRuntimeSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(spacing: 8) {
-                if catalog || appState.claudeInstalled { agentRuntimeRow(
-                    runtime: .claude,
-                    title: "Claude Code",
-                    installed: appState.claudeInstalled,
-                    signedIn: appState.claudeSignedIn,
-                    version: appState.claudeVersion,
-                    path: appState.claudeBinaryPath,
-                ) }
-                if catalog || appState.codexInstalled { agentRuntimeRow(
-                    runtime: .codex,
-                    title: "Codex",
-                    installed: appState.codexInstalled,
-                    signedIn: appState.codexSignedIn,
-                    version: appState.codexVersion,
-                    path: appState.codexBinaryPath,
-                ) }
-            }
-            if catalog {
-                Text("Claude Code and Codex downloads use npm and are stored in RxCode's application support folder.")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-            }
-        }
+        .fixedSize()
+        .controlSize(.small)
+        .disabled(signingInRuntime != nil || installingRuntime != nil)
     }
 
     private func agentRuntimeRow(
@@ -162,11 +115,13 @@ struct AgentRuntimeSettingsView: View {
             if signingInRuntime == runtime || installingRuntime == runtime {
                 ProgressView().controlSize(.small)
             }
-            Button(catalog ? "Install…" : "Manage…") {
-                if catalog { installSheetRuntime = runtime } else { managingRuntime = runtime }
+            if catalog {
+                Button("Install…") { installSheetRuntime = runtime }
+                    .controlSize(.small)
+                    .disabled(signingInRuntime != nil || installingRuntime != nil)
+            } else {
+                managementMenu(runtime)
             }
-            .controlSize(.small)
-            .disabled(installingRuntime != nil)
         }
         .padding(10)
         .background(Color(NSColor.controlBackgroundColor))

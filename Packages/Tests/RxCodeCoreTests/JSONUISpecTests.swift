@@ -69,6 +69,17 @@ struct JSONUISpecTests {
         #expect(IDEToolRegistry.tools(for: []).contains { $0.name == "ide__show_ui" })
     }
 
+    @Test("Calls saved under a generic MCP name are recognized by their input")
+    func genericCodexCalls() throws {
+        let spec = Self.comparison["spec"]!
+        #expect(JSONUITool.matches(ToolCall(id: "1", name: "mcp__rxcode-ide", input: ["title": "Demo", "spec": spec])))
+        let item = ToolCall(id: "2", name: "mcpToolCall", input: ["tool": "ide__show_ui", "arguments": ["spec": spec]])
+        #expect(JSONUITool.matches(item))
+        #expect(JSONUITool.payload(from: item.input).spec?.elements.count == 5)
+        #expect(!JSONUITool.matches(ToolCall(id: "3", name: "mcp__rxcode-ide", input: ["query": "tasks"])))
+        #expect(!JSONUITool.matches(ToolCall(id: "4", name: "mcp__other", input: ["spec": spec])))
+    }
+
     @Test("Values format by their format")
     func formatting() {
         #expect(JSONUIFormat.text(.string("n/a"), format: "money") == "n/a")

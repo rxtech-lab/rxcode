@@ -44,7 +44,21 @@ enum ACPInstallError: LocalizedError {
 actor ACPInstallerService {
 
     private let logger = Logger(subsystem: "com.claudework", category: "ACPInstaller")
-    private let session: URLSession = .shared
+
+    struct Progress: Sendable, Equatable {
+        enum Phase: Sendable {
+            case downloading, extracting, preparing
+        }
+
+        var phase: Phase
+        var downloadedBytes: Int64 = 0
+        var expectedBytes: Int64?
+
+        var fraction: Double? {
+            guard phase == .downloading, let expectedBytes, expectedBytes > 0 else { return nil }
+            return min(max(Double(downloadedBytes) / Double(expectedBytes), 0), 1)
+        }
+    }
 
     static let shared = ACPInstallerService()
 
@@ -56,7 +70,10 @@ actor ACPInstallerService {
     }
 
     /// Downloads + extracts `bin`, returning the absolute path of the resolved executable.
-    func install(_ bin: ACPBinaryDist, registryId: String, version: String) async throws -> String {
+    func install(
+        _ bin: ACPBinaryDist, registryId: String, version: String,
+        progress: (@Sendable (Progress) -> Void)? = nil
+    ) async throws -> String {
         let installDir = Self.installRoot()
             .appendingPathComponent(registryId, isDirectory: true)
             .appendingPathComponent(version, isDirectory: true)
@@ -80,13 +97,20 @@ actor ACPInstallerService {
         logger.info("[ACPInstaller] downloading \(bin.archive, privacy: .public)")
         let downloaded: URL
         do {
-            let (tempURL, _) = try await session.download(from: archiveURL)
+            progress?(Progress(phase: .downloading))
+            let delegate = ACPDownloadProgressDelegate(progress: progress)
+            let (tempURL, response) = try await URLSession.shared.download(from: archiveURL, delegate: delegate)
+            if let response = response as? HTTPURLResponse, !(200..<300).contains(response.statusCode) {
+                try? fm.removeItem(at: tempURL)
+                throw URLError(.badServerResponse)
+            }
             downloaded = tempURL
         } catch {
             throw ACPInstallError.downloadFailed(underlying: error)
         }
         defer { try? fm.removeItem(at: downloaded) }
 
+        progress?(Progress(phase: .extracting))
         try extract(archive: downloaded, originalURL: archiveURL, into: installDir)
 
         // chmod +x and strip quarantine.
@@ -172,4 +196,30 @@ actor ACPInstallerService {
             logger.warning("[ACPInstaller] failed to strip quarantine: \(error.localizedDescription, privacy: .public)")
         }
     }
+}
+
+/// Per-download delegate keeps simultaneous installs' byte counts separate.
+private final class ACPDownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, Sendable {
+    private let progress: (@Sendable (ACPInstallerService.Progress) -> Void)?
+
+    nonisolated init(progress: (@Sendable (ACPInstallerService.Progress) -> Void)?) {
+        self.progress = progress
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession, downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        progress?(ACPInstallerService.Progress(
+            phase: .downloading,
+            downloadedBytes: totalBytesWritten,
+            expectedBytes: totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : nil
+        ))
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession, downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {}
 }

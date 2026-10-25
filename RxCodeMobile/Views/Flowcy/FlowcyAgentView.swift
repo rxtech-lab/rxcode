@@ -7,6 +7,8 @@ struct FlowcyAgentView: View {
     @Environment(FlowcyToolsState.self) private var tools
     @Environment(MobileCloudState.self) private var cloud
     @State private var prompt = ""
+    @State private var voiceSession = MobileVoiceInputSession()
+    @FocusState private var composerFocused: Bool
     @State private var confirmingNewChat = false
     @State private var pinnedUserMessageID: UUID?
 
@@ -37,35 +39,27 @@ struct FlowcyAgentView: View {
             Button("New Chat") { agent.newChat() }
         }
         .safeAreaBar(edge: .bottom) {
-            VStack(spacing: 10) {
-                HStack(alignment: .bottom, spacing: 12) {
-                    TextField("Message Flowcy…", text: $prompt, axis: .vertical)
-                        .lineLimit(1...6).textFieldStyle(.plain)
-                        .padding(.horizontal, 8).padding(.vertical, 10)
-                        .accessibilityIdentifier("flowcy-agent-composer")
-                    MobileVoiceInputButton(text: $prompt)
-                    Group {
-                        if agent.isStreaming {
-                            Button("Cancel", systemImage: "stop.circle.fill") { agent.cancel(); MobileHaptics.buttonTap() }
-                        } else {
-                            TimelineView(.periodic(from: .now, by: 1)) { context in
-                                Button("Send", systemImage: "arrow.up.circle.fill") {
-                                    guard agent.canSubmit() else { return }
-                                    let text = prompt; prompt = ""
-                                    MobileHaptics.buttonTap()
-                                    agent.send(text, tools: tools, cloud: cloud)
-                                }
-                                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !agent.canSubmit(at: context.date))
-                            }
-                        }
-                    }
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
-                    .buttonStyle(.plain)
-                    .frame(minWidth: 44, minHeight: 44)
+            HStack(alignment: .bottom, spacing: 8) {
+                if voiceSession.isPresented {
+                    MobileVoiceCancelButton { prompt = voiceSession.discard() }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                .padding(8)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
+                composer
+                    .frame(maxWidth: .infinity)
+                if agent.isStreaming {
+                    MobileComposerSideButton(title: "Cancel", systemImage: "stop.fill", tint: .red) {
+                        agent.cancel()
+                        MobileHaptics.buttonTap()
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.15), value: agent.isStreaming)
+            .animation(.snappy(duration: 0.2), value: prompt.isEmpty)
+            .animation(.spring(duration: 0.35, bounce: 0.15), value: voiceSession.mode)
+            .mobileVoiceInput(session: voiceSession, text: $prompt)
+            .onChange(of: voiceSession.mode) { _, mode in
+                if mode != .idle { composerFocused = false }
             }
             .frame(maxWidth: 820)
             .padding(.horizontal, 16)
@@ -95,8 +89,6 @@ struct FlowcyAgentView: View {
                     }
                     .padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                     .padding()
-                } else if let progress = agent.progress, agent.pendingTool == nil {
-                    ProgressView(progress).padding().background(.regularMaterial, in: Capsule()).padding()
                 }
             }
         }
@@ -116,6 +108,67 @@ struct FlowcyAgentView: View {
                 }
             }.mobileSheetPresentation()
         }
+    }
+
+    /// iMessage-style capsule shared with connected chat; voice recording and review replace the text field.
+    private var composer: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let canSubmit = !agent.isStreaming && agent.canSubmit(at: context.date)
+            Group {
+                switch voiceSession.mode {
+                case .idle:
+                    HStack(alignment: .bottom, spacing: 8) {
+                        TextField("Message Flowcy…", text: $prompt, axis: .vertical)
+                            .lineLimit(1...6).textFieldStyle(.plain)
+                            .padding(.vertical, 7)
+                            .focused($composerFocused)
+                            .accessibilityIdentifier("flowcy-agent-composer")
+                        if prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            MobileVoiceMicButton(text: $prompt, session: voiceSession)
+                                .transition(.scale.combined(with: .opacity))
+                        } else {
+                            MobileComposerButton("Send", systemImage: "arrow.up", style: .accent) {
+                                MobileHaptics.buttonTap()
+                                sendPrompt()
+                            }
+                            .disabled(!canSubmit)
+                            .accessibilityIdentifier("flowcy-agent-send")
+                            .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .transition(.blurReplace)
+                case .recording:
+                    MobileVoiceRecordingContent(session: voiceSession)
+                        .transition(.blurReplace)
+                case .review:
+                    MobileVoiceReviewContent(session: voiceSession, canSend: canSubmit) {
+                        prompt = voiceSession.draft
+                        voiceSession.endReview()
+                        sendPrompt()
+                    } onEdit: {
+                        prompt = voiceSession.draft
+                        voiceSession.endReview()
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(250))
+                            composerFocused = true
+                        }
+                    }
+                    .transition(.blurReplace)
+                }
+            }
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .frame(minHeight: 48)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+
+    private func sendPrompt() {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !agent.isStreaming, agent.canSubmit() else { return }
+        prompt = ""
+        agent.send(text, tools: tools, cloud: cloud)
     }
 
     private var transcript: some View {
@@ -143,7 +196,9 @@ struct FlowcyAgentView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(minHeight: pinnedUserMessageID != nil && pinnedUserMessageID == latestUserMessageID ? max(0, geometry.size.height - 32) : 0, alignment: .top)
+                        // Reserved for restored history too, so reopening a chat keeps
+                        // the same bottom spacing as when the turn was live.
+                        .frame(minHeight: latestUserMessageID != nil ? max(0, geometry.size.height - 32) : 0, alignment: .top)
                         .id("latest-turn")
                     }
                     .padding(16)
@@ -186,13 +241,9 @@ struct FlowcyAgentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .accessibilityIdentifier("flowcy-agent-user-message")
-        } else if !message.text.isEmpty || !(message.toolCalls ?? []).isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                if message.role == "tool" {
-                    Text("Tool Result")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
+        } else if message.role != "tool", !message.text.isEmpty || !(message.toolCalls ?? []).isEmpty {
+            // Tool results stay out of the transcript; calls render as a compact timeline.
+            VStack(alignment: .leading, spacing: 10) {
                 if !message.text.isEmpty {
                     MarkdownContentView(text: message.text)
                         .textSelection(.enabled)

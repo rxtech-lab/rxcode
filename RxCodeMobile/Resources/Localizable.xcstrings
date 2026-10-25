@@ -341,6 +341,16 @@
         }
       }
     },
+    "%lld of %lld tasks complete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld tasks complete"
+          }
+        }
+      }
+    },
     "%lld of %lld tasks done" : {
       "localizations" : {
         "en" : {
@@ -460,6 +470,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "%lld/%lld done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld/%2$lld done"
           }
         }
       }
@@ -2124,6 +2144,9 @@
 
     },
     "CI Security Scan" : {
+
+    },
+    "CI unavailable" : {
 
     },
     "Classifying" : {
@@ -4151,6 +4174,9 @@
     "Discard changes?" : {
 
     },
+    "Discard Voice Message" : {
+
+    },
     "Disconnect" : {
 
     },
@@ -4434,6 +4460,9 @@
           }
         }
       }
+    },
+    "Edit the transcribed text" : {
+
     },
     "Edit this view's Swift filter in RxCode on your Mac." : {
 
@@ -5295,6 +5324,9 @@
     "Finished" : {
 
     },
+    "Finishing…" : {
+
+    },
     "Fix Check Error" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6111,6 +6143,9 @@
     "Labels" : {
 
     },
+    "Language Settings" : {
+
+    },
     "Laptop" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6131,7 +6166,6 @@
 
     },
     "Latest: %@" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6369,6 +6403,9 @@
           }
         }
       }
+    },
+    "Loading version…" : {
+
     },
     "Loading workflows…" : {
       "localizations" : {
@@ -6910,6 +6947,12 @@
         }
       }
     },
+    "Microphone sound level" : {
+
+    },
+    "Microphone stopped" : {
+
+    },
     "Milestone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7398,6 +7441,9 @@
         }
       }
     },
+    "No CI activity" : {
+
+    },
     "No CI Activity" : {
 
     },
@@ -7767,6 +7813,9 @@
     "No Release Workflows" : {
 
     },
+    "No releases" : {
+
+    },
     "No releases created from Flowcy yet." : {
 
     },
@@ -7920,6 +7969,9 @@
           }
         }
       }
+    },
+    "No speech detected" : {
+
     },
     "No status" : {
       "localizations" : {
@@ -8419,6 +8471,9 @@
         }
       }
     },
+    "On-device language availability depends on your device and installed dictation languages. Audio is never sent to a speech recognition server." : {
+
+    },
     "Only workflows with a workflow_dispatch trigger can be started from Flowcy." : {
 
     },
@@ -8567,6 +8622,9 @@
       }
     },
     "Open RxCode on your Mac to sync this Swift filter view." : {
+
+    },
+    "Open Settings" : {
 
     },
     "Open System Notification Settings" : {
@@ -9294,6 +9352,9 @@
     "Recent Runs" : {
 
     },
+    "Recognition Language" : {
+
+    },
     "Reconnect" : {
 
     },
@@ -9319,6 +9380,12 @@
           }
         }
       }
+    },
+    "Recorded audio waveform" : {
+
+    },
+    "Recording duration" : {
+
     },
     "Refresh" : {
       "localizations" : {
@@ -9420,6 +9487,9 @@
           }
         }
       }
+    },
+    "Releases not configured" : {
+
     },
     "Reload" : {
       "localizations" : {
@@ -9734,6 +9804,9 @@
           }
         }
       }
+    },
+    "Requesting permission…" : {
+
     },
     "Rescan Workflows" : {
 
@@ -10784,6 +10857,9 @@
         }
       }
     },
+    "Send Voice Message" : {
+
+    },
     "Serious" : {
       "localizations" : {
         "en" : {
@@ -11393,6 +11469,9 @@
         }
       }
     },
+    "Stop Recording" : {
+
+    },
     "Stop watching %@?" : {
 
     },
@@ -11727,7 +11806,13 @@
         }
       }
     },
+    "Task progress" : {
+
+    },
     "Task Progress" : {
+
+    },
+    "Task update unavailable" : {
 
     },
     "Tasks" : {
@@ -11751,6 +11836,9 @@
       }
     },
     "Tasks on this board run on the Mac it belongs to. Tap the card later to open its session." : {
+
+    },
+    "Tasks unavailable" : {
 
     },
     "Template" : {
@@ -12573,9 +12661,6 @@
         }
       }
     },
-    "Tool Result" : {
-
-    },
     "Tools use your signed-in Flowcy account." : {
 
     },
@@ -12726,6 +12811,7 @@
       }
     },
     "Unable to connect to your Mac. Make sure RxCode is running on your desktop and both devices are on the same network." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12746,6 +12832,9 @@
           }
         }
       }
+    },
+    "Unable to connect to your Mac. Make sure RxCode is running on your desktop and both devices have an internet connection." : {
+
     },
     "Unable to Import Ruleset" : {
 
@@ -13218,6 +13307,9 @@
         }
       }
     },
+    "Version unavailable" : {
+
+    },
     "Versions" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13351,6 +13443,12 @@
           }
         }
       }
+    },
+    "Voice Input" : {
+
+    },
+    "Voice Input Unavailable" : {
+
     },
     "Vulnerabilities (%lld)" : {
 

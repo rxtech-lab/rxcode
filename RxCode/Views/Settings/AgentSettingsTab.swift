@@ -23,7 +23,6 @@ struct AgentSettingsTab: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var showInstall = false
-    @State private var managingClient: ACPClientSpec?
     @State private var pendingRemoval: ACPClientSpec?
     @State private var editingClient: ACPClientSpec?
     @State private var registrySearch: String = ""
@@ -43,9 +42,8 @@ struct AgentSettingsTab: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     header
-                    AgentRuntimeSettingsView(catalog: catalog)
                     if catalog {
-                        registrySection(availableHeight: max(0, geometry.size.height - 270))
+                        registrySection(availableHeight: max(0, geometry.size.height - 150))
                     } else if appState.claudeInstalled || appState.codexInstalled || !appState.acpClients.isEmpty {
                         installedSection
                     } else {
@@ -99,86 +97,52 @@ struct AgentSettingsTab: View {
             AgentSettingsTab(catalog: true)
                 .frame(width: 620, height: 560)
         }
-        .sheet(item: $managingClient) { client in
-            managementSheet(appState.acpClients.first { $0.id == client.id } ?? client)
-                .overlay(alignment: .bottom) {
-                    if signingOutClientID != nil || signOutMessage != nil {
-                        HStack(spacing: 8) {
-                            if signingOutClientID != nil { ProgressView().controlSize(.small) }
-                            Text(signOutMessage ?? "Signing out…")
-                            if signOutMessage != nil {
-                                Button("Dismiss") { signOutMessage = nil }
-                            }
-                        }
-                        .padding(12)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .padding()
-                    }
+        .sheet(item: $cursorLogout, onDismiss: { cursorLogoutClientID = nil }) { state in
+            ACPTerminalSignInSheet(state: state) {
+                guard let clientID = cursorLogoutClientID else { return }
+                cursorLogout = nil
+                signingOutClientID = clientID
+                Task {
+                    defer { signingOutClientID = nil }
+                    await appState.completeACPTerminalLogout(id: clientID)
+                    await refreshSignInStatuses()
+                    signOutMessage = "Signed out of Cursor."
                 }
-                .alert("Sign-out Failed", isPresented: Binding(
-                    get: { signOutError != nil }, set: { if !$0 { signOutError = nil } },
-                )) {
-                    Button("OK", role: .cancel) { signOutError = nil }
-                } message: {
-                    Text(signOutError ?? "")
-                }
-
-                .sheet(item: $cursorLogout, onDismiss: { cursorLogoutClientID = nil }) { state in
-                    ACPTerminalSignInSheet(state: state) {
-                        guard let clientID = cursorLogoutClientID else { return }
-                        cursorLogout = nil
-                        signingOutClientID = clientID
-                        Task {
-                            defer { signingOutClientID = nil }
-                            await appState.completeACPTerminalLogout(id: clientID)
-                            await refreshSignInStatuses()
-                            signOutMessage = "Signed out of Cursor."
-                        }
-                    }
-                }
-
-                .sheet(item: $editingClient) { client in
-                    ACPClientEditorSheet(
-                        client: client,
-                        refreshModels: { id in
-                            await appState.refreshACPClientModels(id: id)
-                            return appState.acpClients.first { $0.id == id }
-                        },
-                        onSave: { updated in
-                            appState.updateACPClient(updated)
-                            editingClient = nil
-                            signOutMessage = "Client updated."
-                        },
-                        onCancel: { editingClient = nil },
-                    )
-                }
-                .sheet(item: $versionSelection) { selection in
-                    ACPVersionSheet(selection: selection) { version in
-                        try await install(selection, version: version)
-                    }
-                }
-                .sheet(item: $signInClient) { client in
-                    ACPSignInSheet(client: client, isSignedIn: signedInClientIDs.contains(client.id))
-                }
-                .alert("Remove ACP client?", isPresented: removalBinding, presenting: pendingRemoval) { client in
-                    Button("Cancel", role: .cancel) { pendingRemoval = nil }
-                    Button("Remove", role: .destructive) {
-                        appState.removeACPClient(id: client.id)
-                        pendingRemoval = nil
-                        managingClient = nil
-                        signOutMessage = "Client removed."
-                    }
-                } message: { client in
-                    Text(verbatim: "“\(client.displayName)” will be removed from RxCode.")
-                }
-        }
-        .sheet(item: Binding(
-            get: { catalog ? versionSelection : nil },
-            set: { versionSelection = $0 },
-        )) { selection in
-            ACPVersionSheet(selection: selection) { version in
-                try await install(selection, version: version)
             }
+        }
+
+        .sheet(item: $editingClient) { client in
+            ACPClientEditorSheet(
+                client: client,
+                refreshModels: { id in
+                    await appState.refreshACPClientModels(id: id)
+                    return appState.acpClients.first { $0.id == id }
+                },
+                onSave: { updated in
+                    appState.updateACPClient(updated)
+                    editingClient = nil
+                    signOutMessage = "Client updated."
+                },
+                onCancel: { editingClient = nil },
+            )
+        }
+        .sheet(item: $versionSelection) { selection in
+            ACPVersionSheet(selection: selection) { version, progress in
+                try await install(selection, version: version, progress: progress)
+            }
+        }
+        .sheet(item: $signInClient) { client in
+            ACPSignInSheet(client: client, isSignedIn: signedInClientIDs.contains(client.id))
+        }
+        .alert("Remove ACP client?", isPresented: removalBinding, presenting: pendingRemoval) { client in
+            Button("Cancel", role: .cancel) { pendingRemoval = nil }
+            Button("Remove", role: .destructive) {
+                appState.removeACPClient(id: client.id)
+                pendingRemoval = nil
+                signOutMessage = "Client removed."
+            }
+        } message: { client in
+            Text(verbatim: "“\(client.displayName)” will be removed from RxCode.")
         }
     }
 
@@ -211,13 +175,15 @@ struct AgentSettingsTab: View {
     // MARK: - Installed
 
     private var installedSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !appState.acpClients.isEmpty {
-                VStack(spacing: 8) {
-                    ForEach(appState.acpClients) { client in
-                        installedRow(client)
-                    }
-                }
+        VStack(spacing: 8) {
+            if appState.claudeInstalled {
+                AgentRuntimeSettingsView(runtime: .claude, catalog: false)
+            }
+            if appState.codexInstalled {
+                AgentRuntimeSettingsView(runtime: .codex, catalog: false)
+            }
+            ForEach(appState.acpClients) { client in
+                installedRow(client)
             }
         }
     }
@@ -266,9 +232,7 @@ struct AgentSettingsTab: View {
             if let agent = registryAgent(for: client), installingAgentId == agent.id {
                 ProgressView().controlSize(.small)
             }
-            Button("Manage…") { managingClient = client }
-                .controlSize(.small)
-                .disabled(installingAgentId != nil || signingOutClientID == client.id)
+            managementMenu(client)
         }
         .padding(10)
         .background(Color(NSColor.controlBackgroundColor))
@@ -279,66 +243,59 @@ struct AgentSettingsTab: View {
         )
     }
 
-    private func managementSheet(_ client: ACPClientSpec) -> some View {
+    private func managementMenu(_ client: ACPClientSpec) -> some View {
         let isSignedIn = signedInClientIDs.contains(client.id)
-        return VStack(alignment: .leading, spacing: 16) {
-            Text("Manage \(client.displayName)").font(.headline)
-            Form {
-                Toggle("Enabled", isOn: Binding(
-                    get: { client.enabled },
-                    set: { newValue in
-                        var updated = client
-                        updated.enabled = newValue
-                        appState.updateACPClient(updated)
-                        signOutMessage = newValue ? "Client enabled." : "Client disabled."
-                    },
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
+        return Menu("Manage…") {
+            Toggle("Enabled", isOn: Binding(
+                get: { client.enabled },
+                set: { newValue in
+                    var updated = client
+                    updated.enabled = newValue
+                    appState.updateACPClient(updated)
+                    signOutMessage = newValue ? "Client enabled." : "Client disabled."
+                },
+            ))
 
-                if let agent = registryAgent(for: client) {
-                    Button("Install Version…") {
-                        versionSelection = ACPVersionSelection(agent: agent, client: client)
+            if let agent = registryAgent(for: client) {
+                Button("Install Version…") {
+                    versionSelection = ACPVersionSelection(agent: agent, client: client)
+                }
+                if hasUpdate(client, agent: agent) {
+                    Button("Update to \(agent.version)…") {
+                        versionSelection = ACPVersionSelection(
+                            agent: agent,
+                            client: client,
+                            initialVersion: agent.version,
+                        )
                     }
-                    if hasUpdate(client, agent: agent) {
-                        Button("Update to \(agent.version)…") {
-                            versionSelection = ACPVersionSelection(
-                                agent: agent,
-                                client: client,
-                                initialVersion: agent.version,
-                            )
-                        }
-                    }
-                    Divider()
                 }
-                Button(isSignedIn ? LocalizedStringKey("Re-sign In…") : LocalizedStringKey("Sign In…")) {
-                    signInClient = client
-                }
-                if logoutClientIDs.contains(client.id) {
-                    Button("Sign Out") { signOut(client) }
-                        .disabled(signingOutClientID != nil)
-                }
-                Button("Edit…") { editingClient = client }
                 Divider()
-                Button("Remove", role: .destructive) { pendingRemoval = client }
             }
-            .disabled(installingAgentId != nil || signingOutClientID != nil)
-            HStack {
-                Spacer()
-                Button("Done") { managingClient = nil }
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(installingAgentId != nil || signingOutClientID != nil)
+            Button(isSignedIn ? LocalizedStringKey("Re-sign In…") : LocalizedStringKey("Sign In…")) {
+                signInClient = client
             }
+            if logoutClientIDs.contains(client.id) {
+                Button("Sign Out") { signOut(client) }
+                    .disabled(signingOutClientID != nil)
+            }
+            Button("Edit…") { editingClient = client }
+            Divider()
+            Button("Remove", role: .destructive) { pendingRemoval = client }
         }
-        .padding(24)
-        .frame(width: 460, height: 400)
-        .interactiveDismissDisabled(installingAgentId != nil || signingOutClientID != nil)
+        .fixedSize()
+        .controlSize(.small)
+        .disabled(installingAgentId != nil || signingOutClientID != nil)
     }
 
     // MARK: - Registry
 
     private func registrySection(availableHeight: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let agents = appState.acpRegistry?.agents ?? []
+        let filtered = filteredAgents(agents)
+        let runtimes = filteredRuntimes
+        let totalCount = agents.count + 2
+        let filteredCount = filtered.count + runtimes.count
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Registry")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
@@ -357,55 +314,56 @@ struct AgentSettingsTab: View {
                 .help("Refresh registry")
             }
 
-            if let agents = appState.acpRegistry?.agents, !agents.isEmpty {
-                let filtered = filteredAgents(agents)
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.system(size: ClaudeTheme.size(11)))
-                    TextField("Search agents", text: $registrySearch)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: ClaudeTheme.size(12)))
-                    if !registrySearch.isEmpty {
-                        Button {
-                            registrySearch = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color(NSColor.controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1),
-                )
-
-                Text(registrySearch.isEmpty
-                    ? "\(agents.count) agents available"
-                    : "\(filtered.count) of \(agents.count) agents")
-                    .font(.system(size: ClaudeTheme.size(11)))
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                TextField("Search agents", text: $registrySearch)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: ClaudeTheme.size(12)))
+                if !registrySearch.isEmpty {
+                    Button {
+                        registrySearch = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1),
+            )
 
-                if filtered.isEmpty {
-                    ContentUnavailableView.search(text: registrySearch)
-                        .frame(maxWidth: .infinity, minHeight: availableHeight)
-                } else {
-                    VStack(spacing: 8) {
-                        ForEach(filtered) { agent in
-                            registryRow(agent)
-                        }
+            Text(registrySearch.isEmpty
+                ? "\(totalCount) agents available"
+                : "\(filteredCount) of \(totalCount) agents")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+
+            if filteredCount == 0 {
+                ContentUnavailableView.search(text: registrySearch)
+                    .frame(maxWidth: .infinity, minHeight: availableHeight)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(runtimes, id: \.rawValue) { runtime in
+                        AgentRuntimeSettingsView(runtime: runtime, catalog: true)
+                    }
+                    ForEach(filtered) { agent in
+                        registryRow(agent)
                     }
                 }
-            } else if appState.acpRegistryLoading {
+            }
+            if appState.acpRegistryLoading {
                 Text("Loading registry…")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
-            } else {
+            } else if appState.acpRegistry == nil {
                 ContentUnavailableView("Registry Unavailable", systemImage: "network",
                     description: Text("Check your network connection and refresh the registry."))
                     .frame(maxWidth: .infinity, minHeight: availableHeight)
@@ -469,13 +427,13 @@ struct AgentSettingsTab: View {
         )
     }
 
-    private func install(_ selection: ACPVersionSelection, version: String) async throws {
+    private func install(_ selection: ACPVersionSelection, version: String, progress: @escaping @Sendable (ACPInstallerService.Progress) -> Void) async throws {
         installingAgentId = selection.agent.id
         defer { installingAgentId = nil }
         if let client = selection.client {
-            try await appState.updateACPClient(id: client.id, from: selection.agent, version: version)
+            try await appState.updateACPClient(id: client.id, from: selection.agent, version: version, progress: progress)
         } else {
-            let spec = try await appState.installACPClient(from: selection.agent, version: version)
+            let spec = try await appState.installACPClient(from: selection.agent, version: version, progress: progress)
             appState.addACPClient(spec)
         }
     }
@@ -488,6 +446,15 @@ struct AgentSettingsTab: View {
     private func hasUpdate(_ client: ACPClientSpec, agent: ACPRegistryAgent) -> Bool {
         client.installedVersion != agent.version
             || !ACPPackageVersion.isPinned(client.launch, to: agent.version)
+    }
+
+    private var filteredRuntimes: [AgentRuntimeInstaller.Runtime] {
+        let runtimes: [AgentRuntimeInstaller.Runtime] = [.claude, .codex]
+        let query = registrySearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return runtimes }
+        return runtimes.filter {
+            $0.displayName.lowercased().contains(query) || $0.package.lowercased().contains(query)
+        }
     }
 
     private func filteredAgents(_ agents: [ACPRegistryAgent]) -> [ACPRegistryAgent] {

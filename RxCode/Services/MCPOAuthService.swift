@@ -40,12 +40,25 @@ actor MCPOAuthService {
         }
     }
 
-    private var refreshes: [String: Task<Credential, Error>] = [:]
+    struct CredentialStorage: Sendable {
+        var read: @Sendable (String) throws -> Credential?
+        var write: @Sendable (Credential) throws -> Void
+        var delete: @Sendable (String) throws -> Void
+    }
+
+    private struct Refresh {
+        let id: UUID
+        let task: Task<Credential, Error>
+    }
+    private var refreshes: [String: Refresh] = [:]
+    private var generations: [String: UUID] = [:]
+    private let storage: CredentialStorage?
     private let session: URLSession
     private let requestURL: @Sendable (URL) -> URL
 
-    init(session: URLSession = MCPOAuthHTTP.session, requestURL: @escaping @Sendable (URL) -> URL = { $0 }) {
+    init(session: URLSession = MCPOAuthHTTP.session, storage: CredentialStorage? = nil, requestURL: @escaping @Sendable (URL) -> URL = { $0 }) {
         self.session = session
+        self.storage = storage
         self.requestURL = requestURL
     }
 
@@ -148,6 +161,8 @@ actor MCPOAuthService {
         let credential = try credential(from: token, clientID: authorization.clientID,
                                         endpoint: authorization.tokenEndpoint, resource: authorization.resource)
         try Task.checkCancellation()
+        refreshes.removeValue(forKey: authorization.resource)?.task.cancel()
+        generations[authorization.resource] = UUID()
         try store(credential)
     }
 
@@ -173,32 +188,72 @@ actor MCPOAuthService {
         return code
     }
 
-    func accessToken(for resource: String) async throws -> String? {
-        guard var saved = try read(resource) else { return nil }
-        if let expiry = saved.expiresAt, expiry <= Date().addingTimeInterval(60) {
-            guard let refresh = saved.refreshToken else { throw AuthError.invalid("Sign in again to renew MCP access.") }
-            if let pending = refreshes[resource] { return try await pending.value.accessToken }
-            let previous = saved
-            let pending = Task {
-                let token = try await exchange(endpoint: previous.tokenEndpoint, fields: [
-                    "grant_type": "refresh_token", "refresh_token": refresh,
-                    "client_id": previous.clientID, "resource": resource
-                ])
-                var renewed = try credential(from: token, clientID: previous.clientID, endpoint: previous.tokenEndpoint, resource: resource)
-                renewed.refreshToken = renewed.refreshToken ?? previous.refreshToken
-                try Task.checkCancellation()
-                try store(renewed)
-                return renewed
-            }
-            refreshes[resource] = pending
-            defer { refreshes.removeValue(forKey: resource) }
-            saved = try await pending.value
+    /// Refresh early, or after a server rejects the exact token used by a request.
+    /// A late 401 must not rotate a token that another request already renewed.
+    func accessToken(for resource: String, rejecting rejectedToken: String? = nil) async throws -> String? {
+        guard let saved = try read(resource) else { return nil }
+        if let pending = refreshes[resource] { return try await pending.task.value.accessToken }
+        let rejected = rejectedToken != nil && saved.accessToken == rejectedToken
+        let expiring = saved.expiresAt.map { $0 <= Date().addingTimeInterval(60) } ?? false
+        guard rejected || expiring else { return saved.accessToken }
+        // A token without refresh credentials remains usable until its actual expiry.
+        guard let refresh = saved.refreshToken, !refresh.isEmpty else {
+            if !rejected, let expiry = saved.expiresAt, expiry > Date() { return saved.accessToken }
+            throw AuthError.invalid("Sign in again to renew MCP access.")
         }
-        return saved.accessToken
+        let id = UUID()
+        let generation = generations[resource]
+        let pending = Task {
+            let token = try await exchange(endpoint: saved.tokenEndpoint, fields: [
+                "grant_type": "refresh_token", "refresh_token": refresh,
+                "client_id": saved.clientID, "resource": resource
+            ])
+            var renewed = try credential(from: token, clientID: saved.clientID, endpoint: saved.tokenEndpoint, resource: resource)
+            renewed.refreshToken = renewed.refreshToken ?? saved.refreshToken
+            try Task.checkCancellation()
+            guard generations[resource] == generation else { throw CancellationError() }
+            try store(renewed)
+            return renewed
+        }
+        refreshes[resource] = Refresh(id: id, task: pending)
+        defer {
+            if refreshes[resource]?.id == id { refreshes.removeValue(forKey: resource) }
+        }
+        return try await pending.value.accessToken
     }
 
+    /// Only retry explicit authentication rejection; transport failures can be ambiguous writes.
+    func data(for request: URLRequest, resource: String) async throws -> (Data, URLResponse) {
+        var authorized = request
+        let token = try await accessToken(for: resource)
+        if let token { authorized.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let response = try await session.data(for: authorized)
+        guard (response.1 as? HTTPURLResponse)?.statusCode == 401, let token,
+              let renewed = try await accessToken(for: resource, rejecting: token) else { return response }
+        authorized.setValue("Bearer \(renewed)", forHTTPHeaderField: "Authorization")
+        return try await session.data(for: authorized)
+    }
+
+    func bytes(for request: URLRequest, resource: String) async throws -> (URLSession.AsyncBytes, URLResponse) {
+        var authorized = request
+        let token = try await accessToken(for: resource)
+        if let token { authorized.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let response = try await session.bytes(for: authorized)
+        guard (response.1 as? HTTPURLResponse)?.statusCode == 401, let token else { return response }
+        response.0.task.cancel()
+        guard let renewed = try await accessToken(for: resource, rejecting: token) else {
+            throw AuthError.invalid("Sign in again to renew MCP access.")
+        }
+        authorized.setValue("Bearer \(renewed)", forHTTPHeaderField: "Authorization")
+        return try await session.bytes(for: authorized)
+    }
+
+    func hasCredential(for resource: String) throws -> Bool { try read(resource) != nil }
+
     func signOut(resource: String) throws {
-        refreshes.removeValue(forKey: resource)?.cancel()
+        generations[resource] = UUID()
+        refreshes.removeValue(forKey: resource)?.task.cancel()
+        if let storage { try storage.delete(resource); return }
         let status = SecItemDelete(query(resource) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw AuthError.invalid("Could not remove MCP credentials from Keychain.")
@@ -278,6 +333,7 @@ actor MCPOAuthService {
     }
 
     private func read(_ resource: String) throws -> Credential? {
+        if let storage { return try storage.read(resource) }
         var fields = query(resource)
         fields[kSecReturnData as String] = true
         fields[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -291,6 +347,7 @@ actor MCPOAuthService {
     }
 
     private func store(_ credential: Credential) throws {
+        if let storage { try storage.write(credential); return }
         let data = try JSONEncoder().encode(credential)
         let fields = query(credential.resource)
         let status = SecItemUpdate(fields as CFDictionary, [kSecValueData as String: data] as CFDictionary)

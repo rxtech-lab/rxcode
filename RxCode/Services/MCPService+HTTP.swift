@@ -11,11 +11,7 @@ extension MCPService {
 
         var sessionID: String?
         do {
-            var headers = detail.headers
-            if let token = try await MCPOAuthService.shared.accessToken(for: urlString) {
-                headers = headers.filter { $0.key.lowercased() != "authorization" }
-                headers["Authorization"] = "Bearer \(token)"
-            }
+            let headers = detail.headers
             let (initData, initResp, sid) = try await postMCP(
                 url: baseURL,
                 body: initializeRequest(id: 1),
@@ -98,7 +94,7 @@ extension MCPService {
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await MCPOAuthHTTP.session.data(for: req)
+        let (data, response) = try await MCPOAuthService.shared.data(for: req, resource: url.absoluteString)
         let returnedSession = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Mcp-Session-Id")
         return (data, response, returnedSession ?? sessionID)
     }

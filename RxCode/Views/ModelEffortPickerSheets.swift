@@ -14,19 +14,13 @@ struct ModelPickerSheet: View {
     @State private var selectedIndex: Int = 0
     @FocusState private var isFocused: Bool
 
-    @State private var pendingComputerUseModel: AgentModel?
-
     var effectiveModel: String { appState.effectiveModelSelection(in: windowState).model }
     var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
     var flatModels: [AgentModel] { appState.availableAgentModelSections().flatMap(\.models) }
 
     private func selectModel(_ model: AgentModel) {
-        if model.provider == .codex, !appState.streamState(in: windowState).computerUseAcknowledged {
-            pendingComputerUseModel = model
-        } else {
-            appState.setSessionModel(model.id, provider: model.provider, in: windowState)
-            dismiss()
-        }
+        appState.setSessionModel(model.id, provider: model.provider, in: windowState)
+        dismiss()
     }
 
     var body: some View {
@@ -88,9 +82,6 @@ struct ModelPickerSheet: View {
         .padding(20)
         .frame(width: 380)
         .frame(maxHeight: .infinity, alignment: .top)
-        .modifier(ComputerUseSelectionConfirmation(pendingModel: $pendingComputerUseModel) {
-            dismiss()
-        })
         .background(ClaudeTheme.background)
         .focusable()
         .focused($isFocused)
@@ -225,35 +216,5 @@ struct EffortPickerSheet: View {
             await appState.loadReasoningLevels(for: provider)
             selectedIndex = items.firstIndex(where: { $0 == effectiveEffort }) ?? 0
         }
-    }
-}
-
-/// Acknowledges computer use without broadening the session's permission mode.
-struct ComputerUseSelectionConfirmation: ViewModifier {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @Binding var pendingModel: AgentModel?
-    var onConfirmed: () -> Void = {}
-
-    func body(content: Content) -> some View {
-        content.alert("Use Codex for this session?", isPresented: Binding(
-            get: { pendingModel != nil },
-            set: { if !$0 { pendingModel = nil } }
-        )) {
-            Button("Cancel", role: .cancel) { pendingModel = nil }
-            Button("Confirm for This Session") {
-                guard let model = pendingModel else { return }
-                appState.updateState(windowState.currentSessionId ?? windowState.newSessionKey) {
-                    $0.computerUseAcknowledged = true
-                }
-                appState.setSessionModel(model.id, provider: model.provider, in: windowState)
-                pendingModel = nil
-                onConfirmed()
-            }
-        } message: {
-            Text("Codex may use computer-control tools to view your screen and interact with apps when available. Acknowledge computer use for the rest of this chat session. Existing tool permissions still apply.")
-        }
-        .onChange(of: windowState.currentSessionId) { _, _ in pendingModel = nil }
-        .onChange(of: windowState.selectedProject?.id) { _, _ in pendingModel = nil }
     }
 }

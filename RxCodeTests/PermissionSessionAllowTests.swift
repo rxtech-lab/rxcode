@@ -51,4 +51,41 @@ final class PermissionSessionAllowTests: XCTestCase {
         let later = await server.requestDecision(toolUseId: "b", sessionId: "s1", toolName: "Bash", toolInput: [:], mode: .default)
         XCTAssertEqual(later, .allow)
     }
+    func testComputerUseRequiresExplicitGrantEvenInAutoMode() async {
+        let server = PermissionServer()
+        await server.registerSession(sid: "cua-session", projectKey: "cua-test", mode: .auto)
+        let (_, stream) = await server.subscribe()
+        let first = Task {
+            await server.requestDecision(toolUseId: "cua-first", sessionId: "cua-session",
+                                         toolName: "mcp__cua_repl__js", toolInput: [:], mode: .auto)
+        }
+        let requests = await awaitRequests(stream, count: 1)
+        XCTAssertEqual(requests.first?.id, "cua-first")
+        await server.respond(toolUseId: "cua-first", decision: .deny)
+        let denied = await first.value
+        XCTAssertEqual(denied, .deny)
+
+        let retry = Task {
+            await server.requestDecision(toolUseId: "cua-retry", sessionId: "cua-session",
+                                         toolName: "mcp__cua_repl__js", toolInput: [:], mode: .auto)
+        }
+        _ = await awaitRequests(stream, count: 1)
+        await server.respond(toolUseId: "cua-retry", decision: .allowSessionTool)
+        let allowed = await retry.value
+        XCTAssertEqual(allowed, .allow)
+        let later = await server.requestDecision(toolUseId: "cua-later", sessionId: "cua-session",
+                                                toolName: "mcp__cua__click", toolInput: [:], mode: .auto)
+        XCTAssertEqual(later, .allow)
+
+        let other = Task {
+            await server.requestDecision(toolUseId: "cua-other", sessionId: "another-session",
+                                         toolName: "mcp__cua__click", toolInput: [:], mode: .auto)
+        }
+        _ = await awaitRequests(stream, count: 1)
+        await server.respond(toolUseId: "cua-other", decision: .deny)
+        let otherDecision = await other.value
+        XCTAssertEqual(otherDecision, .deny)
+        await server.stop()
+    }
+
 }

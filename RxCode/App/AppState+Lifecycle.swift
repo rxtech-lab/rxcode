@@ -649,6 +649,10 @@ extension AppState {
             return await self.steerAllQueuedAsOne(in: window)
         }
 
+        bridge.computerUseDecisionHandler = { [weak self, weak window] request, decision in
+            guard let self, let window else { return }
+            await self.respondToPermission(request, decision: decision, in: window)
+        }
         startBridgeObservation(bridge, for: window)
     }
 
@@ -664,7 +668,6 @@ extension AppState {
                     self.logger.info("[Bridge.observe] push sid=\(window.currentSessionId ?? "<nil>", privacy: .public) messages \(bridge.messages.count)→\(state.messages.count) loading \(bridge.isLoadingFromDisk)→\(state.isLoadingFromDisk) streaming=\(state.isStreaming)")
                 }
                 bridge.messages = state.messages
-                bridge.computerUseAcknowledged = state.computerUseAcknowledged
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
                 bridge.isLoadingFromDisk = state.isLoadingFromDisk

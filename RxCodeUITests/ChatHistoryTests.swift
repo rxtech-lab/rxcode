@@ -40,7 +40,7 @@ final class ChatHistoryTests: XCTestCase {
             "-onboardingCompleted", "YES", "-showMenuBarExtra", "NO",
             "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
             "-historyShowAllProjects", "NO", "-historyShowArchived", "NO",
-            "-autoArchiveEnabled", "NO",
+            "-autoArchiveEnabled", "NO", "-globalChatSidebarVisible", "YES",
         ]
         app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UI_TESTING": "1"]
         app.launch()
@@ -49,35 +49,30 @@ final class ChatHistoryTests: XCTestCase {
         XCTAssertTrue(chatTab.waitForExistence(timeout: 30))
         chatTab.click()
 
-        // History lives in a sheet opened from the welcome page, not a sidebar.
+        // History lives in a collapsible sidebar inside the Chat tab, scoped
+        // to chats started from the Chat tab.
         let history = app.descendants(matching: .any)["global-chat-history"].firstMatch
-        XCTAssertFalse(history.exists)
-        let welcomeHistory = app.buttons["global-chat-welcome-history"]
-        XCTAssertTrue(welcomeHistory.waitForExistence(timeout: 10))
-        welcomeHistory.click()
-
         XCTAssertTrue(history.waitForExistence(timeout: 10))
-        let repositoryChat = history.staticTexts["Saved repository chat"].firstMatch
-        XCTAssertTrue(repositoryChat.waitForExistence(timeout: 10))
-        XCTAssertTrue(history.staticTexts["Saved global chat"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["global-chat-welcome-history"].exists)
+        let globalChat = history.staticTexts["Saved global chat"].firstMatch
+        XCTAssertTrue(globalChat.waitForExistence(timeout: 10))
+        XCTAssertFalse(history.staticTexts["Saved repository chat"].firstMatch.exists)
         XCTAssertFalse(history.staticTexts["Archived conversation"].firstMatch.exists)
 
-        // Picking a thread opens it and dismisses the sheet.
-        repositoryChat.click()
-        XCTAssertTrue(app.staticTexts["Repository transcript content"].firstMatch.waitForExistence(timeout: 10))
-        XCTAssertFalse(history.exists)
-        XCTAssertFalse(welcomeHistory.exists)
-
-        // The header button reopens history mid-conversation.
-        app.buttons["global-chat-history-toggle"].click()
-        XCTAssertTrue(history.waitForExistence(timeout: 5))
-        history.staticTexts["Saved global chat"].firstMatch.click()
+        // Picking a thread opens it while the sidebar stays visible.
+        globalChat.click()
         XCTAssertTrue(app.staticTexts["Global transcript content"].firstMatch.waitForExistence(timeout: 10))
-        XCTAssertFalse(history.exists)
+        XCTAssertTrue(history.exists)
+
+        // The toggle collapses and restores the sidebar.
+        let toggle = app.buttons["global-chat-sidebar-toggle"]
+        toggle.click()
+        XCTAssertFalse(history.waitForExistence(timeout: 2))
+        toggle.click()
+        XCTAssertTrue(history.waitForExistence(timeout: 5))
 
         app.buttons["global-new-chat"].click()
         XCTAssertFalse(app.staticTexts["Global transcript content"].firstMatch.exists)
-        XCTAssertTrue(welcomeHistory.waitForExistence(timeout: 5))
     }
 }
 

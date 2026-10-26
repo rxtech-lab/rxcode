@@ -11,7 +11,6 @@ import SwiftUI
 /// Encapsulates all independent state per session.
 /// Stored in the `AppState.sessionStates` dictionary keyed by session ID.
 struct SessionStreamState {
-    var computerUseAcknowledged = false
 
     // Messages
     var messages: [ChatMessage] = []
@@ -350,6 +349,14 @@ final class AppState {
 
     var selectedAgentProvider: AgentProvider = .claudeCode {
         didSet { workspaceDefaults.set(selectedAgentProvider.rawValue, for: "selectedAgentProvider") }
+    }
+
+    var globalChatLastAgentProvider: AgentProvider? {
+        didSet { workspaceDefaults.set(globalChatLastAgentProvider?.rawValue, for: "globalChatLastAgentProvider") }
+    }
+
+    var globalChatLastModel: String? {
+        didSet { workspaceDefaults.set(globalChatLastModel, for: "globalChatLastModel") }
     }
 
     var codexModels: [AgentModel] = []
@@ -727,8 +734,8 @@ final class AppState {
 
     func projectDefaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String)? {
         guard let project,
-              let provider = project.lastAgentProvider,
-              let model = project.lastModel,
+              let provider = project.isGlobalChat ? globalChatLastAgentProvider : project.lastAgentProvider,
+              let model = project.isGlobalChat ? globalChatLastModel : project.lastModel,
               isModelAvailable(model, provider: provider)
         else {
             return nil
@@ -766,6 +773,12 @@ final class AppState {
     }
 
     func rememberProjectModelSelection(_ model: String, provider: AgentProvider, in window: WindowState) {
+        if window.selectedProject?.isGlobalChat == true {
+            globalChatLastAgentProvider = provider
+            globalChatLastModel = model
+            return
+        }
+
         guard let project = window.selectedProject,
               let index = projects.firstIndex(where: { $0.id == project.id })
         else {

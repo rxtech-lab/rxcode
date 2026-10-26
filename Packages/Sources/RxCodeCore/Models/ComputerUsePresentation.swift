@@ -4,7 +4,7 @@ import Foundation
 public enum ComputerUsePresentation {
     public static func recognizes(_ name: String) -> Bool {
         let name = name.lowercased()
-        return ["computer", "computer_use", "computeruse", "computer_call"].contains(name)
+        return ["computer", "computer_use", "computeruse", "computer_call", "mcp__cua", "mcp__cua_repl", "mcp__computer_use"].contains(name)
             || name.hasPrefix("mcp__cua__")
             || name.hasPrefix("mcp__cua_repl__")
             || name.hasPrefix("mcp__computer_use__")

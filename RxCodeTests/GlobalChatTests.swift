@@ -13,6 +13,8 @@ final class GlobalChatTests: XCTestCase {
         defaultsSnapshot = [
             "selectedAgentProvider": UserDefaults.standard.object(forKey: "selectedAgentProvider"),
             "selectedModel": UserDefaults.standard.object(forKey: "selectedModel"),
+            "globalChatLastAgentProvider": UserDefaults.standard.object(forKey: "globalChatLastAgentProvider"),
+            "globalChatLastModel": UserDefaults.standard.object(forKey: "globalChatLastModel"),
             "selectedACPClientId": UserDefaults.standard.object(forKey: "selectedACPClientId"),
             "memoryMaxContextItems": UserDefaults.standard.object(forKey: "memoryMaxContextItems"),
         ]
@@ -35,6 +37,72 @@ final class GlobalChatTests: XCTestCase {
     }
 
     // MARK: - Global chat
+
+    func testGlobalChatRemembersModelForNewChatsAndReloadedSettings() {
+        let originalDefaults = appState.workspaceDefaults
+        let workspaceID = UUID().uuidString.lowercased()
+        appState.workspaceDefaults = WorkspaceDefaults(workspaceID: workspaceID)
+        defer {
+            for key in UserDefaults.standard.dictionaryRepresentation().keys where key.hasPrefix("workspace.\(workspaceID).") {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+            appState.workspaceDefaults = originalDefaults
+        }
+        appState.acpClients = [ACPClientSpec(
+            id: "remembered-client", displayName: "Test Agent",
+            launch: .binary(path: "/usr/bin/true", args: [], env: [:]),
+            models: ["test-model"]
+        )]
+        appState.openGlobalChat(in: window)
+
+        for (provider, model) in [
+            (AgentProvider.claudeCode, "sonnet"),
+            (.codex, "gpt-5.4"),
+            (.acp, "remembered-client::test-model")
+        ] {
+            appState.setSessionModel(model, provider: provider, in: window)
+            appState.startNewGlobalChat(in: window)
+            XCTAssertEqual(appState.effectiveModelSelection(in: window).provider, provider)
+            XCTAssertEqual(appState.effectiveModelSelection(in: window).model, model)
+
+            let reloaded = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+            reloaded.workspaceDefaults = WorkspaceDefaults(workspaceID: workspaceID)
+            reloaded.loadWorkspaceSettings()
+            reloaded.acpClients = appState.acpClients
+            let newWindow = WindowState()
+            reloaded.openGlobalChat(in: newWindow)
+            XCTAssertEqual(reloaded.effectiveModelSelection(in: newWindow).provider, provider)
+            XCTAssertEqual(reloaded.effectiveModelSelection(in: newWindow).model, model)
+        }
+        XCTAssertTrue(appState.projects.isEmpty)
+    }
+
+    func testGlobalChatModelIsIndependentOfProjectSelectionAndFallsBackWhenUnavailable() {
+        let originalProvider = appState.globalChatLastAgentProvider
+        let originalModel = appState.globalChatLastModel
+        defer {
+            appState.globalChatLastAgentProvider = originalProvider
+            appState.globalChatLastModel = originalModel
+        }
+        appState.selectedAgentProvider = .claudeCode
+        appState.selectedModel = "opus"
+        appState.openGlobalChat(in: window)
+        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
+
+        let project = makeProject("Repository")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        appState.setSessionModel("sonnet", provider: .claudeCode, in: window)
+        appState.startNewGlobalChat(in: window)
+        XCTAssertEqual(appState.effectiveModelSelection(in: window).provider, .codex)
+        XCTAssertEqual(appState.effectiveModelSelection(in: window).model, "gpt-5.4")
+        XCTAssertEqual(appState.projects.first?.lastModel, "sonnet")
+
+        appState.setSessionModel("removed-client::model", provider: .acp, in: window)
+        appState.startNewGlobalChat(in: window)
+        XCTAssertEqual(appState.effectiveModelSelection(in: window).provider, .claudeCode)
+        XCTAssertEqual(appState.effectiveModelSelection(in: window).model, "opus")
+    }
 
     func testGlobalChatOpensWithoutRegisteringAProject() {
         appState.projects = []

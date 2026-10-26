@@ -12,7 +12,6 @@ public final class ChatBridge {
     // MARK: - Streaming State (pushed by AppState)
 
     public var messages: [ChatMessage] = []
-    public var computerUseAcknowledged = false
     public var isStreaming: Bool = false
     public var isThinking: Bool = false
     /// True while persisted messages are being loaded from disk for the current session.
@@ -53,6 +52,7 @@ public final class ChatBridge {
 
     // MARK: - Action Handlers (set up by the app target)
 
+    public var computerUseDecisionHandler: ((PermissionRequest, PermissionDecision) async -> Void)?
     public var sendHandler: (() async -> Void)?
     public var cancelStreamingHandler: (() async -> Void)?
     public var sendSlashCommandHandler: ((String) async -> Void)?

@@ -35,11 +35,7 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
             } else {
                 messageScrollView
 
-                InputBarView(accessory: inputAccessory) {
-                    aboveInputAccessory
-                }
-
-                computerUseBanner
+                composer
                 bottomAccessory
             }
 
@@ -57,16 +53,49 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
         }
     }
 
+    private var pendingComputerUseRequest: PermissionRequest? {
+        windowState.pendingPermissions.first {
+            $0.sessionId == windowState.currentSessionId && ComputerUsePresentation.recognizes($0.toolName)
+        }
+    }
+
     @ViewBuilder
-    private var computerUseBanner: some View {
-        if chatBridge.agentProvider == .codex, chatBridge.computerUseAcknowledged {
-            Label("Computer use acknowledged for this session. Tool permissions still apply.", systemImage: "desktopcomputer")
-                .font(.caption)
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(ClaudeTheme.surfaceSecondary)
-                .accessibilityIdentifier("computer-use-session-banner")
+    private var composer: some View {
+        if let request = pendingComputerUseRequest {
+            // Replace the editor while approval is pending so its native text view
+            // cannot retain keyboard focus behind the confirmation panel.
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Confirm computer use for this session", systemImage: "desktopcomputer")
+                    .font(.headline)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                Text("Codex is waiting to use your computer. Confirm to allow computer use for the rest of this session.")
+                    .font(.callout)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                HStack(spacing: 12) {
+                    Spacer(minLength: 0)
+                    Button("Deny", role: .destructive) {
+                        Task { await chatBridge.computerUseDecisionHandler?(request, .deny) }
+                    }
+                    Button("Confirm for This Session") {
+                        Task { await chatBridge.computerUseDecisionHandler?(request, .allowSessionTool) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, minHeight: 140, alignment: .leading)
+            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
+            .overlay {
+                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
+                    .strokeBorder(ClaudeTheme.accent.opacity(0.5), lineWidth: 1)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 12)
+            .accessibilityIdentifier("computer-use-session-banner")
+        } else {
+            InputBarView(accessory: inputAccessory) {
+                aboveInputAccessory
+            }
         }
     }
 
@@ -92,11 +121,7 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
                     .lineLimit(2)
                     .padding(.horizontal, 24)
 
-                InputBarView(accessory: inputAccessory) {
-                    aboveInputAccessory
-                }
-
-                computerUseBanner
+                composer
                 bottomAccessory
             }
             .frame(maxWidth: 720)

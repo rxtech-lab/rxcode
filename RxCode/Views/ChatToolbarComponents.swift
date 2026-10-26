@@ -28,8 +28,6 @@ struct ChatToolbarControls: View {
     @Environment(AppState.self) var appState
     @Environment(WindowState.self) var windowState
 
-    @State private var pendingComputerUseModel: AgentModel?
-
     let placement: ChatToolbarControlsPlacement
 
     init(placement: ChatToolbarControlsPlacement = .toolbar) {
@@ -80,14 +78,6 @@ struct ChatToolbarControls: View {
     var effectiveModel: String { appState.effectiveModelSelection(in: windowState).model }
     var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
 
-    private func selectModel(_ model: AgentModel) {
-        if model.provider == .codex, !appState.streamState(in: windowState).computerUseAcknowledged {
-            pendingComputerUseModel = model
-        } else {
-            appState.setSessionModel(model.id, provider: model.provider, in: windowState)
-        }
-    }
-
     var body: some View {
         HStack(spacing: placement == .composer ? 8 : 4) {
             if placement == .composer {
@@ -124,7 +114,7 @@ struct ChatToolbarControls: View {
                         Section {
                             ForEach(section.models, id: \.key) { model in
                                 Button {
-                                    selectModel(model)
+                                    appState.setSessionModel(model.id, provider: model.provider, in: windowState)
                                 } label: {
                                     let isSelected = effectiveProvider == model.provider && effectiveModel == model.id
                                     if let iconURL = section.iconURL {
@@ -182,7 +172,6 @@ struct ChatToolbarControls: View {
                 .accessibilityIdentifier("effort-menu")
             }
         }
-        .modifier(ComputerUseSelectionConfirmation(pendingModel: $pendingComputerUseModel))
         .task(id: effectiveProvider) {
             await appState.loadReasoningLevels(for: effectiveProvider)
             appState.reconcileSessionEffort(in: windowState, provider: effectiveProvider)

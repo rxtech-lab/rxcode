@@ -4789,6 +4789,7 @@
       }
     },
     "Chat History" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4819,6 +4820,9 @@
           }
         }
       }
+    },
+    "Chats" : {
+
     },
     "Check Again" : {
       "localizations" : {
@@ -11529,6 +11533,9 @@
       }
     },
     "Hide" : {
+
+    },
+    "Hide chat sidebar" : {
 
     },
     "Hide Cloud Project" : {
@@ -19307,6 +19314,9 @@
         }
       }
     },
+    "Refreshing catalog..." : {
+
+    },
     "Regenerate" : {
       "localizations" : {
         "ko" : {
@@ -22613,6 +22623,7 @@
 
     },
     "Show chat history" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -22627,6 +22638,9 @@
           }
         }
       }
+    },
+    "Show chat sidebar" : {
+
     },
     "Show Cloud Project" : {
       "localizations" : {
@@ -26842,6 +26856,7 @@
       }
     },
     "View Chat History" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {

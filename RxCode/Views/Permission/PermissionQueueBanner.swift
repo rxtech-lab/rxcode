@@ -13,7 +13,9 @@ struct PermissionQueueBanner: View {
     @State private var isHovered: Bool = false
 
     private var pendingRequests: [PermissionRequest] {
-        windowState.pendingPermissions.filter { $0.sessionId == windowState.currentSessionId }
+        windowState.pendingPermissions.filter {
+            $0.sessionId == windowState.currentSessionId && !ComputerUsePresentation.recognizes($0.toolName)
+        }
     }
 
     private var questionCount: Int {

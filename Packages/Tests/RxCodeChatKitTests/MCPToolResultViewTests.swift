@@ -8,6 +8,16 @@ import RxCodeCore
 @Suite("MCP tool result view")
 struct MCPToolResultViewTests {
 
+    @Test("Codex image generation remains visible as an image card")
+    func generatedImageCard() throws {
+        var tool = ToolCall(id: "image-1", name: "imageGeneration", input: [:])
+        tool.result = "{\"savedPath\":\"/missing/generated.png\",\"status\":\"completed\"}"
+        let labels = try ToolResultView(toolCall: tool).inspect().findAll(ViewType.Text.self)
+            .compactMap { try? $0.string() }
+        #expect(labels.contains("Generated image"))
+        #expect(labels.contains("Image not available"))
+    }
+
     private struct Host: View {
         let window = WindowState()
         let toolCall: ToolCall

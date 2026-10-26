@@ -7,6 +7,43 @@ import XCTest
 /// briefing token-usage panel never counted Codex turns.
 final class CodexTokenUsageTests: XCTestCase {
 
+    func testGeneratedImageOutputPreservesSavedPathWithoutBase64() throws {
+        let output = CodexAppServer.imageGenerationOutput(from: [
+            "type": .string("imageGeneration"), "savedPath": .string("/tmp/generated image.png"),
+            "result": .string("large-image-payload"), "status": .string("completed")
+        ])
+        let object = try JSONDecoder().decode([String: JSONValue].self, from: Data(output.utf8))
+        XCTAssertEqual(object["savedPath"], .string("/tmp/generated image.png"))
+        XCTAssertNil(object["result"])
+    }
+
+    func testGeneratedImageOutputPersistsBase64WhenNoSavedPathExists() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bytes = Data("image bytes".utf8)
+        let output = CodexAppServer.imageGenerationOutput(from: [
+            "type": .string("imageGeneration"), "result": .string(bytes.base64EncodedString()),
+            "status": .string("completed")
+        ], directory: directory)
+        let object = try JSONDecoder().decode([String: JSONValue].self, from: Data(output.utf8))
+        guard case .string(let path) = object["savedPath"] else {
+            return XCTFail("Expected a saved generated image path")
+        }
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), bytes)
+        XCTAssertNil(object["result"])
+    }
+
+    func testFailedImageGenerationPreservesFailureWithoutCreatingAFile() throws {
+        let output = CodexAppServer.toolOutput(from: [
+            "type": .string("imageGeneration"), "result": .string(""),
+            "status": .string("failed"), "failure": .object(["type": .string("usageLimitExceeded")])
+        ])
+        let object = try JSONDecoder().decode([String: JSONValue].self, from: Data(output.utf8))
+        XCTAssertNotNil(object["failure"])
+        XCTAssertNil(object["savedPath"])
+        XCTAssertNil(object["result"])
+    }
+
     private func breakdown(input: Int, cached: Int, output: Int, reasoning: Int = 0) -> JSONValue {
         .object([
             "totalTokens": .number(Double(input + output)),

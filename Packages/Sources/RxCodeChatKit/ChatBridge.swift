@@ -12,6 +12,7 @@ public final class ChatBridge {
     // MARK: - Streaming State (pushed by AppState)
 
     public var messages: [ChatMessage] = []
+    public var computerUseAcknowledged = false
     public var isStreaming: Bool = false
     public var isThinking: Bool = false
     /// True while persisted messages are being loaded from disk for the current session.

@@ -664,6 +664,7 @@ extension AppState {
                     self.logger.info("[Bridge.observe] push sid=\(window.currentSessionId ?? "<nil>", privacy: .public) messages \(bridge.messages.count)→\(state.messages.count) loading \(bridge.isLoadingFromDisk)→\(state.isLoadingFromDisk) streaming=\(state.isStreaming)")
                 }
                 bridge.messages = state.messages
+                bridge.computerUseAcknowledged = state.computerUseAcknowledged
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
                 bridge.isLoadingFromDisk = state.isLoadingFromDisk

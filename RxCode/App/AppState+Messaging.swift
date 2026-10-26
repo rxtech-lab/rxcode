@@ -259,6 +259,7 @@ extension AppState {
         }
 
         if isNewSession {
+            let computerUseAcknowledged = streamState(in: window).computerUseAcknowledged
             let tempId = "pending-\(streamId.uuidString)"
             window.currentSessionId = tempId
             window.insertPendingPlaceholder(tempId)
@@ -272,6 +273,7 @@ extension AppState {
             let pendingWorktreePath = window.pendingWorktreePath
             let pendingWorktreeBranch = window.pendingWorktreeBranch
             updateState(tempId) { state in
+                state.computerUseAcknowledged = computerUseAcknowledged
                 state.agentProvider = snapProvider
                 state.model = snapModel
                 state.effort = snapEffort

@@ -39,6 +39,7 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
                     aboveInputAccessory
                 }
 
+                computerUseBanner
                 bottomAccessory
             }
 
@@ -53,6 +54,19 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
             guard chatBridge.isStreaming else { return .ignored }
             Task { await chatBridge.cancelStreaming() }
             return .handled
+        }
+    }
+
+    @ViewBuilder
+    private var computerUseBanner: some View {
+        if chatBridge.agentProvider == .codex, chatBridge.computerUseAcknowledged {
+            Label("Computer use acknowledged for this session. Tool permissions still apply.", systemImage: "desktopcomputer")
+                .font(.caption)
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(ClaudeTheme.surfaceSecondary)
+                .accessibilityIdentifier("computer-use-session-banner")
         }
     }
 
@@ -82,6 +96,7 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
                     aboveInputAccessory
                 }
 
+                computerUseBanner
                 bottomAccessory
             }
             .frame(maxWidth: 720)

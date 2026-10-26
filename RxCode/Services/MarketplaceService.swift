@@ -54,7 +54,7 @@ actor MarketplaceService {
 
         await withTaskGroup(of: [MarketplacePlugin].self) { group in
             group.addTask {
-                await self.fetchOpenAISkills()
+                await self.fetchOpenAISkills(forceRefresh: forceRefresh)
             }
             let customSources = loadCustomSources()
             let repoSources = Self.sourceRepos.map {
@@ -67,7 +67,8 @@ actor MarketplaceService {
                 group.addTask {
                     await self.fetchRepoPlugins(
                         source: source.source,
-                        defaultCategory: source.defaultCategory
+                        defaultCategory: source.defaultCategory,
+                        forceRefresh: forceRefresh
                     )
                 }
             }
@@ -85,12 +86,22 @@ actor MarketplaceService {
         return allPlugins
     }
 
-    private func fetchOpenAISkills() async -> [MarketplacePlugin] {
+    /// A manual refresh must bypass URLSession's cache as well as our catalog TTL.
+    private func catalogRequest(url: URL, forceRefresh: Bool) -> URLRequest {
+        var request = URLRequest(url: url)
+        if forceRefresh {
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        }
+        return request
+    }
+
+    private func fetchOpenAISkills(forceRefresh: Bool) async -> [MarketplacePlugin] {
         let apiURL = "https://api.github.com/repos/openai/skills/contents/skills/.curated?ref=main"
         guard let url = URL(string: apiURL) else { return [] }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: catalogRequest(url: url, forceRefresh: forceRefresh))
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200,
                   let entries = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
@@ -105,7 +116,7 @@ actor MarketplaceService {
             var skills: [MarketplacePlugin] = []
             await withTaskGroup(of: MarketplacePlugin?.self) { group in
                 for name in names {
-                    group.addTask { await self.fetchOpenAISkill(named: name) }
+                    group.addTask { await self.fetchOpenAISkill(named: name, forceRefresh: forceRefresh) }
                 }
                 for await skill in group {
                     if let skill { skills.append(skill) }
@@ -118,9 +129,9 @@ actor MarketplaceService {
         }
     }
 
-    private func fetchOpenAISkill(named name: String) async -> MarketplacePlugin? {
+    private func fetchOpenAISkill(named name: String, forceRefresh: Bool) async -> MarketplacePlugin? {
         let path = "skills/.curated/\(name)"
-        guard let instructions = await fetchRawSkillInstructions(source: Self.openAISkillsSource, path: path) else {
+        guard let instructions = await fetchRawSkillInstructions(source: Self.openAISkillsSource, path: path, forceRefresh: forceRefresh) else {
             return nil
         }
 
@@ -140,13 +151,15 @@ actor MarketplaceService {
 
     // MARK: - Fetch Repository
 
-    private func fetchRepoPlugins(source: MarketplaceSource, defaultCategory: String) async -> [MarketplacePlugin] {
+    private func fetchRepoPlugins(
+        source: MarketplaceSource, defaultCategory: String, forceRefresh: Bool
+    ) async -> [MarketplacePlugin] {
         let ref = source.ref?.isEmpty == false ? source.ref! : "main"
         let catalogURL = "https://raw.githubusercontent.com/\(source.owner)/\(source.repo)/\(ref)/.claude-plugin/marketplace.json"
         guard let url = URL(string: catalogURL) else { return [] }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: catalogRequest(url: url, forceRefresh: forceRefresh))
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
                 return []
@@ -519,14 +532,16 @@ actor MarketplaceService {
         return nil
     }
 
-    private func fetchRawSkillInstructions(source: MarketplaceSource, path: String) async -> String? {
+    private func fetchRawSkillInstructions(
+        source: MarketplaceSource, path: String, forceRefresh: Bool = false
+    ) async -> String? {
         let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let ref = source.ref?.isEmpty == false ? source.ref! : "main"
         let rawURL = "https://raw.githubusercontent.com/\(source.owner)/\(source.repo)/\(ref)/\(cleanPath)/SKILL.md"
         guard let url = URL(string: rawURL) else { return nil }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: catalogRequest(url: url, forceRefresh: forceRefresh))
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
                 return nil

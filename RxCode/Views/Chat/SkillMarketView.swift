@@ -51,6 +51,13 @@ struct SkillMarketView: View {
             }
             Divider()
             pluginGrid
+                .overlay {
+                    if appState.marketplaceLoading && !appState.marketplaceCatalog.isEmpty {
+                        ProgressView("Refreshing catalog...")
+                            .padding(20)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
         }
     }
 

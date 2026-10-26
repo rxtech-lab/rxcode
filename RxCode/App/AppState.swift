@@ -11,6 +11,8 @@ import SwiftUI
 /// Encapsulates all independent state per session.
 /// Stored in the `AppState.sessionStates` dictionary keyed by session ID.
 struct SessionStreamState {
+    var computerUseAcknowledged = false
+
     // Messages
     var messages: [ChatMessage] = []
 

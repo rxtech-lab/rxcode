@@ -258,6 +258,7 @@ extension CodexAppServer {
         let id = Self.firstString(in: item, keys: ["id", "itemId", "callId"]) ?? UUID().uuidString
         let output = Self.toolOutput(from: item)
         let isError = Self.toolValueIndicatesError(item["error"]) || item["isError"]?.boolValue == true
+            || Self.toolValueIndicatesError(item["failure"])
         continuation.yield(.user(UserMessage(toolUseId: id, content: output, isError: isError)))
     }
 

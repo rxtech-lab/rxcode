@@ -52,6 +52,8 @@ struct ToolResultView: View {
         if toolCall.name == ReviewCountdownCard.toolName {
             // Interactive "review will start in N seconds" card (Stop / Start now).
             ReviewCountdownCardView(toolCall: toolCall)
+        } else if toolNameLower == "imagegeneration" {
+            GeneratedImageToolView(toolCall: toolCall, isStreaming: isMessageStreaming)
         } else {
             standardBody
         }
@@ -105,7 +107,7 @@ struct ToolResultView: View {
                                 .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                                 .foregroundStyle(ClaudeTheme.textPrimary)
                         } else {
-                            Text(toolCall.name)
+                            Text(ComputerUsePresentation.recognizes(toolCall.name) ? "Computer use" : toolCall.name)
                                 .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                                 .foregroundStyle(ClaudeTheme.textPrimary)
                         }
@@ -514,6 +516,7 @@ struct ToolResultView: View {
     // MARK: - Helpers
 
     private var sfSymbol: String {
+        if ComputerUsePresentation.recognizes(toolCall.name) { return "desktopcomputer" }
         if isAutoContinueTool { return "arrow.triangle.2.circlepath" }
         if isHookTool { return "bolt.horizontal.circle" }
         switch toolNameLower {
@@ -620,6 +623,9 @@ struct ToolResultView: View {
     }
 
     private var inputSummary: String {
+        if let summary = ComputerUsePresentation.summary(name: toolCall.name, input: toolCall.input) {
+            return summary
+        }
         if isAutoContinueTool {
             return toolCall.input["summary"]?.stringValue
                 ?? "Stop hook failed — sent back to the agent to continue."

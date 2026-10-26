@@ -1,0 +1,6 @@
+simulation: mcp-oauth
+routing: path
+mocks:
+  - name: mcp-oauth
+    routeKey: oauth
+    path: postman/mocks/mcp-oauth/config.yaml

@@ -142,10 +142,12 @@ nonisolated struct MockFixtures: Sendable {
                  "status": index == 100 ? "END OF TOOL RESULT" : "backlog"]
             }
             let longResult = String(decoding: try! JSONEncoder().encode(records), as: UTF8.self)
+            // The detail sheet shows parameters only, so the long payload lives in the input.
+            let longInput = try! JSONDecoder().decode(JSONValue.self, from: Data(longResult.utf8))
             for spec in specs {
                 messagesBySession[spec.sessionId]?.append(ChatMessage(role: .assistant, blocks: [
                     .toolCall(ToolCall(id: "fixture-read", name: "Read", input: ["path": .string("README.md")], result: "# Project\n\nRead successfully.")),
-                    .toolCall(ToolCall(id: "fixture-bash", name: "Bash", input: ["command": .string("build")], result: longResult)),
+                    .toolCall(ToolCall(id: "fixture-bash", name: "Bash", input: ["command": .string("build"), "records": longInput], result: longResult)),
                     .toolCall(ToolCall(id: "fixture-error", name: "Search", result: "The requested file was not found.", isError: true))
                 ]))
             }

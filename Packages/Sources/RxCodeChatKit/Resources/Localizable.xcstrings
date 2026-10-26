@@ -246,6 +246,9 @@
         }
       }
     },
+    "%lld." : {
+
+    },
     "%lld/%lld" : {
       "localizations" : {
         "en" : {
@@ -283,6 +286,9 @@
           }
         }
       }
+    },
+    "•" : {
+
     },
     "+%d more pending" : {
       "localizations" : {
@@ -3171,6 +3177,9 @@
         }
       }
     },
+    "Interactive View" : {
+
+    },
     "Interrupt and send all now" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3829,10 +3838,7 @@
         }
       }
     },
-    "No Result" : {
-
-    },
-    "No result was received." : {
+    "No Parameters" : {
 
     },
     "No results found" : {
@@ -4258,6 +4264,9 @@
         }
       }
     },
+    "Preparing view…" : {
+
+    },
     "Previous change" : {
       "localizations" : {
         "ko" : {
@@ -4320,9 +4329,6 @@
           }
         }
       }
-    },
-    "Raw Result" : {
-
     },
     "Read file" : {
       "localizations" : {
@@ -5436,6 +5442,9 @@
         }
       }
     },
+    "Show View JSON" : {
+
+    },
     "Side question not added to conversation" : {
       "localizations" : {
         "en" : {
@@ -5696,6 +5705,9 @@
         }
       }
     },
+    "Tabs" : {
+
+    },
     "Tell Claude what to change" : {
       "localizations" : {
         "en" : {
@@ -5762,9 +5774,6 @@
         }
       }
     },
-    "The tool failed without a result." : {
-
-    },
     "The tool returned an empty result." : {
 
     },
@@ -5811,6 +5820,12 @@
           }
         }
       }
+    },
+    "This tool was called without arguments." : {
+
+    },
+    "This view could not be displayed." : {
+
     },
     "Todos" : {
       "localizations" : {
@@ -5944,7 +5959,10 @@
         }
       }
     },
-    "Tool details" : {
+    "Tool Call" : {
+
+    },
+    "Total" : {
 
     },
     "Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out." : {
@@ -6340,9 +6358,6 @@
           }
         }
       }
-    },
-    "Waiting for the tool result…" : {
-
     },
     "Waiting to start review" : {
       "localizations" : {

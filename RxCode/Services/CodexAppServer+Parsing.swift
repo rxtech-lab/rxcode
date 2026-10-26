@@ -28,8 +28,9 @@ extension CodexAppServer {
 
         guard looksLikeMCP else { return nil }
 
+        // Codex's `mcpToolCall` items name the tool under `tool`.
         let rawToolName = Self.firstString(in: item, keys: [
-            "toolName", "tool_name", "name"
+            "toolName", "tool_name", "tool", "name"
         ]).flatMap { value -> String? in
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, trimmed.lowercased() != "mcptoolcall" else { return nil }

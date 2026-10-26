@@ -25,6 +25,12 @@ struct SettingsView: View {
             }
             .tag(0)
 
+            AgentSettingsTab()
+                .tabItem {
+                    Label("Agent", systemImage: "person.crop.rectangle.stack")
+                }
+                .tag(5)
+
             ChatSettingsTab()
                 .tabItem {
                     Label("Message", systemImage: "bubble.left.and.bubble.right")
@@ -48,12 +54,6 @@ struct SettingsView: View {
                     Label("MCP", systemImage: "puzzlepiece.extension")
                 }
                 .tag(4)
-
-            ACPClientSettingsTab()
-                .tabItem {
-                    Label("ACP Clients", systemImage: "link.circle")
-                }
-                .tag(5)
 
             MobileSettingsTab()
                 .tabItem {

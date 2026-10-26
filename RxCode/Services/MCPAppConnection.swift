@@ -125,15 +125,12 @@ actor MCPAppConnection {
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "POST"
         for (key, value) in detail.headers { request.setValue(value, forHTTPHeaderField: key) }
-        if let token = try await MCPOAuthService.shared.accessToken(for: url.absoluteString) {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("2025-11-25", forHTTPHeaderField: "MCP-Protocol-Version")
         if let sessionID { request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id") }
         request.httpBody = data
-        let (bytes, response) = try await MCPOAuthHTTP.session.bytes(for: request)
+        let (bytes, response) = try await MCPOAuthService.shared.bytes(for: request, resource: url.absoluteString)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw failure("MCP App request failed. Test the connection or sign in again in Settings.")
         }

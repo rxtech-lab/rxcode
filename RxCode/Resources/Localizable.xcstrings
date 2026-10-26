@@ -420,6 +420,7 @@
       }
     },
     "%@ actions" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1817,6 +1818,7 @@
       }
     },
     "ACP page" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2879,6 +2881,7 @@
       }
     },
     "Agent Runtimes" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4877,6 +4880,9 @@
         }
       }
     },
+    "Check your network connection and refresh the registry." : {
+
+    },
     "Checking enrollment…" : {
       "localizations" : {
         "ko" : {
@@ -4963,6 +4969,9 @@
           }
         }
       }
+    },
+    "Choose Claude Code, Codex, or an ACP registry client." : {
+
     },
     "Choose File…" : {
       "localizations" : {
@@ -9005,6 +9014,7 @@
       }
     },
     "Download…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9015,6 +9025,7 @@
       }
     },
     "Downloads use npm and are stored in RxCode's application support folder. Use Manage to install a specific published version." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12402,6 +12413,15 @@
         }
       }
     },
+    "Install Claude Code, Codex, or a client from the ACP registry." : {
+
+    },
+    "Install Client" : {
+
+    },
+    "Install Client…" : {
+
+    },
     "Install DOCS_UPLOAD_TOKEN secret" : {
       "localizations" : {
         "ko" : {
@@ -12524,6 +12544,12 @@
         }
       }
     },
+    "Install…" : {
+
+    },
+    "Installation Failed" : {
+
+    },
     "installed" : {
       "localizations" : {
         "ko" : {
@@ -12563,6 +12589,7 @@
       }
     },
     "Installed %@ %@." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12611,6 +12638,7 @@
       }
     },
     "Installing %@…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13741,6 +13769,7 @@
       }
     },
     "Manage agents that speak the Agent Client Protocol. Detected from agentclientprotocol.com." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -14046,6 +14075,9 @@
           }
         }
       }
+    },
+    "Manage your installed agent runtimes and accounts." : {
+
     },
     "Manage your repositories, environments, and secrets." : {
       "localizations" : {
@@ -15385,7 +15417,11 @@
         }
       }
     },
+    "No Agents Installed" : {
+
+    },
     "No agents match “%@”." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -15478,6 +15514,7 @@
       }
     },
     "No clients installed. Add one from the Registry tab." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -19318,6 +19355,9 @@
         }
       }
     },
+    "Registry Unavailable" : {
+
+    },
     "Reindex all threads" : {
       "localizations" : {
         "ko" : {
@@ -19625,6 +19665,9 @@
           }
         }
       }
+    },
+    "Remove managed runtime?" : {
+
     },
     "Remove MCP server?" : {
       "localizations" : {
@@ -20759,6 +20802,9 @@
           }
         }
       }
+    },
+    "RxCode's managed copy will be removed. Separately installed copies are managed outside RxCode." : {
+
     },
     "rxcode/feature-name" : {
       "localizations" : {

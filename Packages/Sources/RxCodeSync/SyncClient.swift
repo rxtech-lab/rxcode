@@ -31,6 +31,7 @@ public actor SyncClient: PeerManagerHost {
     private var advertiser: BonjourAdvertiser?
     private var browser: BonjourBrowser?
     private var pathMonitor: NWPathMonitor?
+    private var hasReceivedNetworkPath = false
     private let portMapper = PortMapper()
     private var currentWANMapping: PortMapping?
     private var wanRenewTask: Task<Void, Never>?
@@ -49,6 +50,7 @@ public actor SyncClient: PeerManagerHost {
         // `reconnect()` (not `connect()`) so a stale socket left behind by an
         // OS suspend is torn down and reopened. At initial startup `task` is nil,
         // so this behaves exactly like a plain connect.
+        startPathMonitorIfNeeded()
         await relay.reconnect()
         guard directPathsEnabled else { return }
         startHubIfNeeded()
@@ -66,6 +68,7 @@ public actor SyncClient: PeerManagerHost {
         pumpTasks.removeAll()
         wanRenewTask?.cancel(); wanRenewTask = nil
         pathMonitor?.cancel(); pathMonitor = nil
+        hasReceivedNetworkPath = false
         await advertiser?.stop()
         await browser?.stop()
         // Drop the per-peer managers. Their event pumps were just cancelled and
@@ -211,16 +214,17 @@ public actor SyncClient: PeerManagerHost {
             for await peer in discoveries { await self?.handleDiscovery(peer) }
         }
 
-        // 4. Watch for network changes to re-gather candidates and re-probe.
+    }
+
+    private func startPathMonitorIfNeeded() {
+        guard pathMonitor == nil else { return }
         let monitor = NWPathMonitor()
-        self.pathMonitor = monitor
-        monitor.pathUpdateHandler = { [weak self] _ in
-            Task { await self?.handlePathChange() }
+        pathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self, weak monitor] _ in
+            guard let monitor else { return }
+            Task { await self?.handlePathChange(from: monitor) }
         }
         monitor.start(queue: DispatchQueue(label: "com.idealapp.RxCodeSync.pathmonitor"))
-
-        // WAN mapping + candidate offers are kicked off from `handleListenerReady`
-        // once the Bonjour listener actually binds a port (step 2 above).
     }
 
     /// The Bonjour listener bound a port: (re)request a WAN mapping and re-offer
@@ -247,11 +251,23 @@ public actor SyncClient: PeerManagerHost {
         emitUp(event)
     }
 
-    private func handlePathChange() async {
-        await refreshWANMapping()
+    private func handlePathChange(from monitor: NWPathMonitor) async {
+        guard pathMonitor === monitor else { return }
+        // The first callback describes startup, not a network transition.
+        guard hasReceivedNetworkPath else {
+            hasReceivedNetworkPath = true
+            return
+        }
+        currentWANMapping = nil
         for manager in managers.values {
             await manager.networkChanged()
         }
+        guard pathMonitor === monitor else { return }
+        // A socket may remain assigned after Wi-Fi disappears. Reopen it even
+        // in relay-only mode, so recovery does not wait for a TCP timeout.
+        await relay.reconnect()
+        await refreshWANMapping()
+        for manager in managers.values { await manager.offerLocalCandidates() }
     }
 
     /// Ask the gateway for a public IP:port mapping to our direct listener, then

@@ -390,6 +390,11 @@ extension ClaudeCodeServer {
     - `mcp__rxcode-ide__ide__get_running_jobs` / `ide__get_job_output` — \
     inspect run-profile jobs (dev servers, scripts) executing in the IDE.
     - `mcp__rxcode-ide__ide__get_usage` — current rate-limit / token usage.
+    - `mcp__rxcode-ide__ide__show_ui` — show the user an interactive native UI \
+    inline in the chat (json-render style spec: cards, tables, tabs, steps, \
+    stats, charts, code). Use it when a visual explanation — a comparison, an \
+    architecture or flow walkthrough, a plan, a test or build summary — is \
+    clearer than prose, then don't repeat its content in text.
 
     Reach for these when a task spans projects — e.g. checking what another \
     project already did, or delegating a subtask to its agent — rather than \

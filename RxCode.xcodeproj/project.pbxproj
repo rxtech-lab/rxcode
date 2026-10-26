@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AC2500000000000000000100 /* MCPOAuthRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2500000000000000000000 /* MCPOAuthRelay.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
@@ -199,6 +200,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AC2500000000000000000000 /* MCPOAuthRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/MCPOAuthRelay.swift; sourceTree = SOURCE_ROOT; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -580,6 +582,7 @@
 				AC2300000000000000000002 /* RxCode/Services/CIUpdates/CIUpdateService.swift */,
 				AC2300000000000000000001 /* RxCode/Services/Secrets/SecretsService.swift */,
 				AC2300000000000000000000 /* RxCode/Services/MCPOAuthService.swift */,
+				AC2500000000000000000000 /* MCPOAuthRelay.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -1124,6 +1127,7 @@
 				AC2300000000000000000102 /* RxCode/Services/CIUpdates/CIUpdateService.swift in Sources */,
 				AC2300000000000000000101 /* RxCode/Services/Secrets/SecretsService.swift in Sources */,
 				AC2300000000000000000100 /* RxCode/Services/MCPOAuthService.swift in Sources */,
+				AC2500000000000000000100 /* MCPOAuthRelay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

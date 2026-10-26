@@ -479,6 +479,15 @@ final class MobileAppState: ObservableObject {
         }
     }
 
+    /// Serialize manual recovery with background/foreground transitions.
+    func reconnectToDesktop() async {
+        enqueueLifecycle(label: "manual/reconnect") { [client] in
+            await client.stop()
+            await client.start()
+        }
+        await lifecycleTask?.value
+    }
+
     func startClient() async {
         clientStarted = true
         for desktop in pairedDesktops {

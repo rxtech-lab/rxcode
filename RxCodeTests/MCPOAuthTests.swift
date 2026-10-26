@@ -1,10 +1,187 @@
 import XCTest
 import RxCodeCore
 import CryptoKit
+import Synchronization
 @testable import RxCode
 
 @MainActor
 final class MCPOAuthTests: XCTestCase {
+    private let resource = "https://refresh-fixture.example/mcp"
+
+    private func refreshFixture(expiry: Date? = nil, refreshToken: String? = "refresh-original") -> (MCPOAuthService, OAuthMemoryStorage) {
+        let saved = MCPOAuthService.Credential(
+            accessToken: "original", refreshToken: refreshToken, expiresAt: expiry,
+            clientID: "rxcode", tokenEndpoint: URL(string: "https://refresh-fixture.example/token")!, resource: resource
+        )
+        let storage = OAuthMemoryStorage(saved)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthFixtureProtocol.self]
+        return (MCPOAuthService(session: URLSession(configuration: configuration), storage: storage.storage), storage)
+    }
+
+    func testExpiredTokenRefreshesAndPersistsRotation() async throws {
+        let (service, storage) = refreshFixture(expiry: .distantPast)
+        let token = try await service.accessToken(for: resource)
+        XCTAssertEqual(token, "renewed")
+        XCTAssertEqual(storage.credential?.refreshToken, "refresh-rotated")
+        XCTAssertEqual(storage.writes, 1)
+        XCTAssertGreaterThan(try XCTUnwrap(storage.credential?.expiresAt).timeIntervalSinceNow, 3500)
+    }
+
+    func testConcurrentRefreshesShareOneRotationAndLateRejectionUsesCurrentToken() async throws {
+        let (service, storage) = refreshFixture(expiry: .distantPast)
+        let tokens = try await withThrowingTaskGroup(of: String?.self) { group in
+            for _ in 0..<20 { group.addTask { try await service.accessToken(for: "https://refresh-fixture.example/mcp") } }
+            var tokens: [String?] = []
+            for try await token in group { tokens.append(token) }
+            return tokens
+        }
+        XCTAssertTrue(tokens.allSatisfy { $0 == "renewed" })
+        let current = try await service.accessToken(for: resource, rejecting: "original")
+        XCTAssertEqual(current, "renewed")
+        XCTAssertEqual(storage.writes, 1)
+    }
+
+    func test401RefreshesTokenWithoutExpiryAndRetriesOriginalRequest() async throws {
+        let (service, storage) = refreshFixture()
+        var request = URLRequest(url: URL(string: resource)!)
+        request.httpMethod = "POST"
+        request.httpBody = Data("original-request".utf8)
+        request.setValue("session-123", forHTTPHeaderField: "Mcp-Session-Id")
+        let (data, response) = try await service.data(for: request, resource: resource)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), "{\"accepted\":true}")
+        XCTAssertEqual(storage.writes, 1)
+    }
+
+    func testDoesNotRetry403OrRepeated401() async throws {
+        for path in ["/forbidden", "/always-unauthorized"] {
+            let (service, storage) = refreshFixture()
+            let request = URLRequest(url: URL(string: "https://refresh-fixture.example" + path)!)
+            let (_, response) = try await service.data(for: request, resource: resource)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, path == "/forbidden" ? 403 : 401)
+            XCTAssertEqual(storage.writes, path == "/forbidden" ? 0 : 1)
+        }
+    }
+
+    func testRefreshResponseWithoutRefreshTokenPreservesExistingOne() async throws {
+        let (service, storage) = refreshFixture(expiry: .distantPast, refreshToken: "keep-existing")
+        _ = try await service.accessToken(for: resource)
+        XCTAssertEqual(storage.credential?.refreshToken, "keep-existing")
+    }
+
+    func testTokenWithoutRefreshCredentialRemainsUsableUntilExpiry() async throws {
+        let (service, storage) = refreshFixture(expiry: Date().addingTimeInterval(30), refreshToken: nil)
+        let token = try await service.accessToken(for: resource)
+        XCTAssertEqual(token, "original")
+        XCTAssertEqual(storage.writes, 0)
+        do {
+            _ = try await service.accessToken(for: resource, rejecting: "original")
+            XCTFail("A rejected token without refresh credentials requires sign-in")
+        } catch is MCPOAuthService.AuthError {}
+    }
+
+    func testFailedRefreshKeepsCredentialsForLaterRetry() async throws {
+        let (service, storage) = refreshFixture(expiry: .distantPast, refreshToken: "fail-refresh")
+        for _ in 0..<2 {
+            do {
+                _ = try await service.accessToken(for: resource)
+                XCTFail("Refresh should fail")
+            } catch is MCPOAuthService.AuthError {}
+        }
+        XCTAssertEqual(storage.credential?.accessToken, "original")
+        XCTAssertEqual(storage.writes, 0)
+    }
+
+    func testSignOutCancelsRefreshWithoutRestoringCredentials() async throws {
+        let (service, storage) = refreshFixture(expiry: .distantPast, refreshToken: "slow-refresh")
+        let pending = Task { try await service.accessToken(for: resource) }
+        try await Task.sleep(for: .milliseconds(30))
+        try await service.signOut(resource: resource)
+        do {
+            _ = try await pending.value
+            XCTFail("Signed-out credentials must not be restored")
+        } catch {}
+        XCTAssertNil(storage.credential)
+        XCTAssertEqual(storage.writes, 0)
+    }
+
+    /// Run the repository's Postman simulation on port 49491 to enable this check.
+    func testRelayRefreshesOverHTTPAndPreservesSSEAndProviderRouting() async throws {
+        let origin = ProcessInfo.processInfo.environment["MCP_OAUTH_SIMULATION_URL"] ?? "http://127.0.0.1:49491/oauth"
+        let base = try XCTUnwrap(URL(string: origin))
+        var reset = URLRequest(url: base.appendingPathComponent("reset"), timeoutInterval: 2)
+        reset.httpMethod = "POST"
+        let session = URLSession(configuration: .ephemeral)
+        do {
+            let (_, response) = try await session.data(for: reset)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+        } catch {
+            if ProcessInfo.processInfo.environment["MCP_OAUTH_SIMULATION_URL"] != nil { throw error }
+            throw XCTSkip("Start postman/simulations/mcp-oauth.sim.yaml on port 49491 for the HTTP integration test.")
+        }
+        let resource = base.appendingPathComponent("mcp")
+        let saved = MCPOAuthService.Credential(accessToken: "fixture-expired", refreshToken: "fixture-refresh",
+            expiresAt: .distantPast, clientID: "rxcode-fixture", tokenEndpoint: base.appendingPathComponent("token"),
+            resource: resource.absoluteString)
+        let storage = OAuthMemoryStorage(saved)
+        let oauth = MCPOAuthService(storage: storage.storage)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try JSONEncoder().encode(MCPConfiguration()).write(to: root.appendingPathComponent("mcp.json"))
+        let mcp = MCPService(baseURL: root, claudeService: ClaudeService(cliStore: CLISessionStore(metaStore: SessionMetaStore())), oauth: oauth)
+        var spec = MCPServerSpec(name: "oauth", transport: .http, url: resource.absoluteString)
+        spec.headers = [MCPKeyValue(key: "X-Fixture-Header", value: "preserved")]
+        try await mcp.add(spec: spec, scope: .user, projectPath: nil)
+        let records = await mcp.enabledServerRecords(projectPath: nil)
+        let record = try XCTUnwrap(records.first)
+        let local = try XCTUnwrap(record.url.flatMap(URL.init(string:)))
+        XCTAssertEqual(local.host, "127.0.0.1")
+        XCTAssertNotEqual(local, resource)
+        XCTAssertTrue(record.headers.isEmpty)
+        let acp = await mcp.acpMCPServers(projectPath: nil)
+        guard case .string(let acpURL) = acp.first?["url"] else { return XCTFail("Missing ACP relay URL") }
+        XCTAssertEqual(acpURL, local.absoluteString)
+        let codex = await mcp.codexConfigOverrides(projectPath: nil)
+        XCTAssertTrue(codex.contains { $0.contains(local.absoluteString) })
+        let generatedPath = await mcp.writeClaudeConfig(projectPath: nil)
+        let claudePath = try XCTUnwrap(generatedPath)
+        let claude = try String(contentsOfFile: claudePath, encoding: .utf8)
+        XCTAssertTrue(claude.contains(String(local.port!)))
+        XCTAssertFalse(claude.contains("fixture-access"))
+        var request = URLRequest(url: local)
+        request.httpMethod = "POST"
+        request.httpBody = Data(#"{"jsonrpc":"2.0","id":7,"method":"tools/list"}"#.utf8)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (body, response) = try await session.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(String(decoding: body, as: UTF8.self).contains("accepted"))
+        XCTAssertEqual(storage.writes, 2, "Early invalidation must trigger one refresh after the initial expiry refresh")
+        let (events, eventResponse) = try await session.data(from: local)
+        XCTAssertEqual((eventResponse as? HTTPURLResponse)?.value(forHTTPHeaderField: "Mcp-Session-Id"), "fixture-session")
+        let text = String(decoding: events, as: UTF8.self)
+        XCTAssertTrue(text.contains("event: message"))
+        let endpoint = try XCTUnwrap(text.components(separatedBy: "\n").first { $0.hasPrefix("data: http://") })
+        let endpointURL = try XCTUnwrap(URL(string: String(endpoint.dropFirst(6))))
+        XCTAssertEqual(endpointURL.host, "127.0.0.1")
+        XCTAssertEqual(endpointURL.port, local.port)
+        XCTAssertEqual(endpointURL.query, "session=fixture-session")
+        request.url = endpointURL
+        let (_, posted) = try await session.data(for: request)
+        XCTAssertEqual((posted as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(storage.writes, 2)
+        // Browser requests and routes without the capability never reach upstream.
+        request.setValue("https://untrusted.example", forHTTPHeaderField: "Origin")
+        let (_, browser) = try await session.data(for: request)
+        XCTAssertEqual((browser as? HTTPURLResponse)?.statusCode, 502)
+        request.setValue(nil, forHTTPHeaderField: "Origin")
+        request.url = URL(string: "http://127.0.0.1:\(local.port!)/mcp")!
+        let (_, unknownRoute) = try await session.data(for: request)
+        XCTAssertEqual((unknownRoute as? HTTPURLResponse)?.statusCode, 502)
+        try await mcp.remove(name: "oauth", scope: .user)
+    }
+
     private func authorization(redirect: String) -> MCPOAuthService.Authorization {
         MCPOAuthService.Authorization(
             url: URL(string: "https://auth.example/authorize")!, state: "expected-state", verifier: "verifier",
@@ -152,6 +329,48 @@ nonisolated private final class OAuthFixtureProtocol: URLProtocol, @unchecked Se
         let body: [String: Any]
         let status: Int
         var headers = ["Content-Type": "application/json"]
+        if url.host == "refresh-fixture.example" {
+            let formData = request.httpBody ?? request.httpBodyStream.map { stream in
+                stream.open()
+                defer { stream.close() }
+                var data = Data()
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    if count <= 0 { break }
+                    data.append(contentsOf: buffer.prefix(count))
+                }
+                return data
+            } ?? Data()
+            let form = String(decoding: formData, as: UTF8.self)
+            if url.path == "/token" {
+                guard form.contains("grant_type=refresh_token"), form.contains("client_id=rxcode"),
+                      form.contains("resource=https%3A%2F%2Frefresh-fixture.example%2Fmcp") else {
+                    respond(status: 400, body: ["error": "invalid_request"]); return
+                }
+                if form.contains("fail-refresh") {
+                    respond(status: 503, body: ["error": "temporarily_unavailable"]); return
+                }
+                var token: [String: Any] = ["access_token": "renewed", "token_type": "Bearer", "expires_in": 3600]
+                if !form.contains("keep-existing") { token["refresh_token"] = "refresh-rotated" }
+                let response = try! JSONSerialization.data(withJSONObject: token)
+                DispatchQueue.global().asyncAfter(deadline: .now() + (form.contains("slow-refresh") ? 0.3 : 0.02)) { [self] in
+                    respond(status: 200, data: response)
+                }
+                return
+            }
+            if url.path == "/forbidden" { respond(status: 403, body: [:]); return }
+            let authorized = request.value(forHTTPHeaderField: "Authorization") == "Bearer renewed"
+            let accepted = authorized && url.path != "/always-unauthorized"
+            if accepted {
+                guard request.httpMethod == "POST", form == "original-request",
+                      request.value(forHTTPHeaderField: "Mcp-Session-Id") == "session-123" else {
+                    respond(status: 400, body: [:]); return
+                }
+            }
+            respond(status: accepted ? 200 : 401, body: ["accepted": accepted])
+            return
+        }
         switch url.path {
         case "/mcp":
             body = [:]
@@ -181,5 +400,32 @@ nonisolated private final class OAuthFixtureProtocol: URLProtocol, @unchecked Se
         client?.urlProtocol(self, didLoad: try! JSONSerialization.data(withJSONObject: body))
         client?.urlProtocolDidFinishLoading(self)
     }
-    override func stopLoading() {}
+    private func respond(status: Int, body: [String: Any]) {
+        respond(status: status, data: try! JSONSerialization.data(withJSONObject: body, options: .sortedKeys))
+    }
+    private let stopped = Mutex(false)
+    private func respond(status: Int, data: Data) {
+        guard !stopped.withLock({ $0 }) else { return }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+                           headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() { stopped.withLock { $0 = true } }
+}
+
+nonisolated private final class OAuthMemoryStorage: Sendable {
+    private struct State {
+        var credential: MCPOAuthService.Credential?
+        var writes = 0
+    }
+    private let state: Mutex<State>
+    init(_ credential: MCPOAuthService.Credential) { state = Mutex(State(credential: credential)) }
+    var credential: MCPOAuthService.Credential? { state.withLock { $0.credential } }
+    var writes: Int { state.withLock { $0.writes } }
+    var storage: MCPOAuthService.CredentialStorage {
+        .init(read: { [self] resource in state.withLock { $0.credential?.resource == resource ? $0.credential : nil } },
+              write: { [self] credential in state.withLock { $0.credential = credential; $0.writes += 1 } },
+              delete: { [self] _ in state.withLock { $0.credential = nil } })
+    }
 }

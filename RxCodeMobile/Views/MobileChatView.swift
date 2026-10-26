@@ -426,6 +426,7 @@ struct MobileChatView: View {
                     .zIndex(3)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chat-screen")
         .environment(\.openURL, OpenURLAction { url in
             if let link = LocalFileLink.parse(url) {

@@ -86,13 +86,16 @@ public actor PeerConnectionManager {
     /// fresh one on the next start, so we close sockets cleanly rather than
     /// leaking dead `NWConnection`s across a suspend.
     public func teardown() async {
+        probeSessionID = UUID()
         retryTask?.cancel(); retryTask = nil
-        for info in probing.values { await info.transport.disconnect() }
+        let staleProbes = Array(probing.values)
+        let staleActive = active
         probing.removeAll()
-        await active?.disconnect()
         active = nil
         activePath = .relay
         knownTargets.removeAll()
+        for info in staleProbes { await info.transport.disconnect() }
+        await staleActive?.disconnect()
     }
 
     public func events() -> AsyncStream<TransportEvent> {
@@ -128,14 +131,16 @@ public actor PeerConnectionManager {
         await offerCandidates()
     }
 
-    /// The network path changed — re-advertise candidates and, if we're on relay,
-    /// reset backoff and re-probe known targets.
+    /// Discard links tied to the old network before gathering fresh candidates.
     public func networkChanged() async {
-        await offerCandidates()
-        if active == nil {
-            backoffSeconds = 1
-            dialAllKnownTargets()
-        }
+        retryTask?.cancel(); retryTask = nil
+        probeSessionID = UUID()
+        knownTargets.removeAll()
+        let staleProbes = Array(probing.values)
+        probing.removeAll()
+        demote()
+        backoffSeconds = 1
+        for info in staleProbes { await info.transport.disconnect() }
     }
 
     /// A Bonjour endpoint matching this peer was discovered (dialer only).
@@ -206,17 +211,19 @@ public actor PeerConnectionManager {
 
     private func dialAllKnownTargets() {
         guard active == nil else { return }
+        let sessionID = probeSessionID
         let targets = knownTargets.values.sorted { $0.priority < $1.priority }
         for target in targets {
             let delay = Double(target.priority) * 0.2  // stagger so LAN wins before WAN is attempted
             Task { [weak self] in
                 if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
-                await self?.dialTarget(target)
+                await self?.dialTarget(target, sessionID: sessionID)
             }
         }
     }
 
-    private func dialTarget(_ target: DialTarget) async {
+    private func dialTarget(_ target: DialTarget, sessionID: UUID? = nil) async {
+        guard sessionID == nil || sessionID == probeSessionID else { return }
         guard active == nil, let host else { return }
         // LAN links are opened only by the dialer role; a WAN-mapped endpoint is
         // dialed by whichever side received it (see `handleRelayICE`).
@@ -306,7 +313,7 @@ public actor PeerConnectionManager {
         backoffSeconds = min(30, backoffSeconds * 2)
         retryTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
-            guard let self else { return }
+            guard !Task.isCancelled, let self else { return }
             await self.retryNow()
         }
     }

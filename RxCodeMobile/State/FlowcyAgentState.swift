@@ -35,6 +35,13 @@ final class FlowcyAgentState {
     @ObservationIgnored private var accountID: String?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var performedWrite = false
+    /// Cleared when the chat endpoint predates `show_ui` and rejects the declaration.
+    @ObservationIgnored private var declaresLocalTools = true
+
+    /// Tools the phone answers itself instead of calling the Flowcy MCP service.
+    nonisolated static let localTools = [
+        FlowcyTool(name: JSONUITool.flowcyName, description: JSONUITool.description, inputSchema: JSONUITool.inputSchema, annotations: .object(["readOnlyHint": .bool(true)])),
+    ]
 
     private struct Saved: Codable { let messages: [FlowcyChatMessage]; let history: [JSONValue] }
     private var file: URL? {
@@ -147,11 +154,22 @@ final class FlowcyAgentState {
         for _ in 0..<8 {
             try Task.checkCancellation()
             progress = nil
-            let declared = try tools.tools.map { tool -> JSONValue in
-                try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(tool))
+            func request(includingLocalTools: Bool) async throws -> (URLSession.AsyncBytes, HTTPURLResponse) {
+                let available = tools.tools + (includingLocalTools ? Self.localTools : [])
+                let declared = try available.map { tool -> JSONValue in
+                    try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(tool))
+                }
+                let body: JSONValue = .object(["messages": .array(history), "tools": .array(declared)])
+                return try await api.request(path: "agent/chat", body: body)
             }
-            let body: JSONValue = .object(["messages": .array(history), "tools": .array(declared)])
-            let (bytes, response) = try await api.request(path: "agent/chat", body: body)
+            let bytes: URLSession.AsyncBytes, response: HTTPURLResponse
+            do {
+                (bytes, response) = try await request(includingLocalTools: declaresLocalTools)
+            } catch FlowcyError.transport(400) where declaresLocalTools {
+                // The request is validated before metering, so retrying without the local tools is free.
+                (bytes, response) = try await request(includingLocalTools: false)
+                declaresLocalTools = false
+            }
             guard response.value(forHTTPHeaderField: "Content-Type")?.contains("application/x-ndjson") == true else { throw FlowcyError.protocolError }
             messages.append(.init(role: "assistant", text: ""))
             let index = messages.count - 1
@@ -172,7 +190,7 @@ final class FlowcyAgentState {
                     messages[index].text = text
                 case "tool-call":
                     guard let name = event["name"]?.stringValue, let id = event["id"]?.stringValue,
-                          let tool = tools.tools.first(where: { $0.name == name }), let arguments = event["arguments"] else { throw FlowcyError.protocolError }
+                          let tool = (tools.tools + Self.localTools).first(where: { $0.name == name }), let arguments = event["arguments"] else { throw FlowcyError.protocolError }
                     calls.append((id, tool, arguments))
                     var input: [String: JSONValue] = ["arguments": arguments]
                     if case .object(let object) = arguments { input = object }
@@ -206,7 +224,14 @@ final class FlowcyAgentState {
                 try Task.checkCancellation()
                 progress = "Running \(tool.name)…"
                 let result: JSONValue
-                if allowed {
+                if JSONUITool.matches(tool.name) {
+                    // Drawn by the transcript from the call's arguments; only validation runs here.
+                    do {
+                        result = .object(["content": .array([.object(["type": .string("text"), "text": .string(try JSONUITool.result(for: arguments))])])])
+                    } catch {
+                        result = .object(["isError": .bool(true), "content": .array([.object(["type": .string("text"), "text": .string(error.localizedDescription)])])])
+                    }
+                } else if allowed {
                     do {
                         if !tool.isReadOnly { performedWrite = true }
                         result = try await tools.call(tool, arguments: arguments)

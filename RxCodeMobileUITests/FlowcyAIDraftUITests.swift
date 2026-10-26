@@ -23,9 +23,15 @@ final class FlowcyAIDraftUITests: XCTestCase {
             ai.tap()
             let prompt = app.descendants(matching: .any)["ai-draft-prompt"].firstMatch
             XCTAssertTrue(prompt.waitForExistence(timeout: 5), app.debugDescription)
-            prompt.tap()
-            prompt.typeText("Support offline work")
-            app.buttons["ai-draft-generate"].tap()
+            // The sheet may still be presenting, so a first tap can miss focus and drop the typed text.
+            let generate = app.buttons["ai-draft-generate"]
+            for _ in 0..<3 where !generate.isEnabled {
+                prompt.tap()
+                prompt.typeText("Support offline work")
+                _ = generate.waitForEnabled(timeout: 2)
+            }
+            XCTAssertTrue(generate.isEnabled, app.debugDescription)
+            generate.tap()
             let apply = app.buttons["ai-draft-apply"]
             XCTAssertTrue(apply.waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["Support offline work"].exists)
@@ -41,5 +47,12 @@ final class FlowcyAIDraftUITests: XCTestCase {
             app.buttons["Cancel"].firstMatch.tap()
         }
         XCTAssertFalse(app.staticTexts["Support offline work"].exists)
+    }
+}
+
+private extension XCUIElement {
+    func waitForEnabled(timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: self)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 }

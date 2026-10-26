@@ -266,7 +266,7 @@ enum ACPError: LocalizedError {
         case .agentError(let code, let msg): return "ACP agent error \(code): \(msg)"
         case .processExited(let code): return "ACP agent exited (code \(code))"
         case .probeTimeout(let s): return "ACP agent did not respond within \(s)s"
-        case .authRequired(let name): return "\(name) requires sign-in. Open Settings → ACP Clients and choose Manage → Sign In…"
+        case .authRequired(let name): return "\(name) requires sign-in. Open Settings → Agent and choose Manage → Sign In…"
         }
     }
 }

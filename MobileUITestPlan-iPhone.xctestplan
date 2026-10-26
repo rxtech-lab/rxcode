@@ -15,7 +15,9 @@
   "testTargets" : [
     {
       "selectedTests" : [
-        "iPhoneNavigationUITests/testToolGroupsExpandAndShowFullLongResult()",
+        "MobileVoiceInputUITests/testFlowcyVoiceRecordReviewAndEdit()",
+        "MobileVoiceInputUITests/testConnectedChatVoiceReviewSends()",
+        "iPhoneNavigationUITests/testToolGroupsExpandAndShowFullLongParameters()",
         "TaskDetailSheetUITests/testTaskAndStoryCardsOpenDismissibleDetailSheets()",
         "FlowcyAIDraftUITests/testTaskAndStoryDraftReviewBeforeSave()",
         "FlowcyProductionUITests/testDashboardWithoutPairingAndRootNavigation()",

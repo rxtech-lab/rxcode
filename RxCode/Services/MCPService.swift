@@ -13,14 +13,17 @@ actor MCPService {
 
     private let baseURL: URL
     private let claudeService: ClaudeService
+    private let oauth: MCPOAuthService
     private let logger = Logger(subsystem: "com.claudework", category: "MCPService")
+    private var oauthRelays: [String: (record: MCPServerRecord, relay: MCPOAuthRelay)] = [:]
     // Connection health belongs to the connection definition, not the active
     // project. Never forward a known failed connection to an agent runtime.
     var failedConnections: [String: MCPServerDetail] = [:]
 
-    init(baseURL: URL = AppSupport.bundleScopedURL, claudeService: ClaudeService) {
+    init(baseURL: URL = AppSupport.bundleScopedURL, claudeService: ClaudeService, oauth: MCPOAuthService = .shared) {
         self.baseURL = baseURL
         self.claudeService = claudeService
+        self.oauth = oauth
     }
 
     // MARK: - Errors
@@ -112,6 +115,7 @@ actor MCPService {
 
         try saveConfig(config)
         failedConnections.removeValue(forKey: name)
+        if let old = oauthRelays.removeValue(forKey: name) { await old.relay.stop() }
     }
 
     func remove(name: String, scope: MCPScope) async throws {
@@ -119,6 +123,7 @@ actor MCPService {
         config.servers.removeAll { $0.name == name }
         try saveConfig(config)
         failedConnections.removeValue(forKey: name)
+        if let old = oauthRelays.removeValue(forKey: name) { await old.relay.stop() }
     }
 
     func setGlobalEnabled(name: String, enabled: Bool) async throws {
@@ -305,10 +310,22 @@ actor MCPService {
 
     private func authorizedRecord(_ record: MCPServerRecord) async throws -> MCPServerRecord {
         guard record.transport != .stdio, let resource = record.url,
-              let token = try await MCPOAuthService.shared.accessToken(for: resource) else { return record }
+              let url = URL(string: resource),
+              try await oauth.hasCredential(for: resource) else { return record }
+        // Fail early if renewal is already impossible; the relay owns subsequent refreshes.
+        _ = try await oauth.accessToken(for: resource)
+        let localURL: URL
+        if let existing = oauthRelays[record.name], existing.record == record {
+            localURL = try await existing.relay.start()
+        } else {
+            let relay = MCPOAuthRelay(resource: url, headers: record.headers, oauth: oauth)
+            let old = oauthRelays.updateValue((record, relay), forKey: record.name)
+            if let old { await old.relay.stop() }
+            localURL = try await relay.start()
+        }
         var authorized = record
-        authorized.headers = record.headers.filter { $0.key.lowercased() != "authorization" }
-        authorized.headers["Authorization"] = "Bearer \(token)"
+        authorized.url = localURL.absoluteString
+        authorized.headers = [:]
         return authorized
     }
 
@@ -317,7 +334,7 @@ actor MCPService {
               record.isEnabled(for: projectPath) else {
             throw MCPError.probeFailed("This MCP server is unavailable in the current project.")
         }
-        return makeDetail(record: try await authorizedRecord(record), projectPath: projectPath)
+        return makeDetail(record: record, projectPath: projectPath)
     }
 
     /// The enabled servers without known connection failures, unrendered.

@@ -20,7 +20,7 @@ struct LocalizedEnumLabelTests {
 
     @Test("Inspector labels do not rely on persisted raw values for display")
     func inspectorLabels() {
-        #expect(InspectorTab.memo.titleText == String(localized: InspectorTab.memo.title))
+        #expect(InspectorTab.views.titleText == String(localized: InspectorTab.views.title))
         #expect(InspectorReviewTab.thisThread.titleText == "This thread")
         #expect(InspectorMode.inspector.titleText == "Inspector")
     }

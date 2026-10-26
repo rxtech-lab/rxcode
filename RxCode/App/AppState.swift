@@ -383,6 +383,8 @@ final class AppState {
     /// Resumes the `ide__create_scheduled_task` call waiting on each proposal,
     /// keyed by proposal id.
     @ObservationIgnored var scheduledTaskProposalContinuations: [UUID: CheckedContinuation<ScheduledTask?, Never>] = [:]
+    /// Agent confirmation alerts and UI dialogs awaiting the user (see `AgentPromptState`).
+    var agentPrompts = AgentPromptState()
     /// The loop that fires scheduled tasks when their cron schedule comes due.
     @ObservationIgnored var scheduledTaskTimer: Task<Void, Never>?
 

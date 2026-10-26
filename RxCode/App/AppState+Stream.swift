@@ -684,6 +684,19 @@ extension AppState {
             }
         }
 
+        // Polyfill questions (`ide__ask_user`) have no matching chat tool call —
+        // build the answer payload from the queued request's input instead.
+        if updatedInput["answers"]?.objectValue?.isEmpty ?? true,
+           let request = window.pendingPermissions.first(where: { $0.id == toolUseId })
+               ?? mobilePendingRequests[toolUseId],
+           let parsed = AskUserQuestion(input: request.toolInput) {
+            updatedInput = AskUserQuestion.updatedInputJSON(
+                originalInput: request.toolInput,
+                questions: parsed.questions,
+                answers: answers
+            )
+        }
+
         window.pendingPermissions.removeAll { $0.id == toolUseId }
         let requestSessionId = mobilePendingRequests.removeValue(forKey: toolUseId)?.sessionId
         if window.presentedPermissionId == toolUseId {

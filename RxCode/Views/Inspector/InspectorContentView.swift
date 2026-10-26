@@ -3,7 +3,7 @@ import RxCodeCore
 
 // MARK: - InspectorContentView
 
-/// Inspector-mode body for the right sidebar: Terminal + Memo, switched by
+/// Inspector-mode body for the right sidebar: Terminal, Run and Views, switched by
 /// `windowState.inspectorTab`. State for the terminal process and reset/clear
 /// triggers is owned by the parent (`RightInspectorPanel`) so header action
 /// buttons can drive them.
@@ -12,9 +12,7 @@ struct InspectorContentView: View {
 
     let terminals: [InspectorTerminal]
     let activeTerminalId: UUID?
-    let memoClearID: UUID?
     let terminalFocusID: UUID?
-    let memoFocusID: UUID?
     let onSelectTerminal: (UUID) -> Void
     let onCloseTerminal: (UUID) -> Void
     let onAddTerminal: () -> Void
@@ -47,12 +45,10 @@ struct InspectorContentView: View {
                 .padding(8)
                 .background(ClaudeTheme.codeBackground)
             }
-        case .memo:
-            InspectorMemoPanel(projectId: windowState.selectedProject?.id,
-                               clearTrigger: memoClearID,
-                               focusTrigger: memoFocusID)
         case .run:
             RunOutputInspectorView()
+        case .views:
+            AgentViewsInspectorView()
         }
     }
 

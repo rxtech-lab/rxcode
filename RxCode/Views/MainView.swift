@@ -20,7 +20,6 @@ struct MainView: View {
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
-    @State private var memoAnchor: Bool = false
     @State private var showAllWhatsNew = false
 
     // Kept for backward compatibility with `ClaudeSegmentedControl` and `SidebarTabShortcuts`.

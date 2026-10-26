@@ -22,6 +22,7 @@ public struct JSONUIRenderer: View {
 public struct JSONUIToolCard: View {
     let toolCall: ToolCall
     let isStreaming: Bool
+    @Environment(\.openJSONUIDialog) private var openDialog
     @State private var showsDetails = false
 
     public init(toolCall: ToolCall, isStreaming: Bool = false) {
@@ -71,7 +72,11 @@ public struct JSONUIToolCard: View {
     @ViewBuilder
     private func content(_ payload: JSONUITool.Payload) -> some View {
         if let spec = payload.spec, spec.issues.isEmpty {
-            JSONUIRenderer(spec: spec)
+            if payload.presentation == .dialog, let openDialog {
+                JSONUIDialogOpenRow(payload: payload, open: openDialog)
+            } else {
+                JSONUIRenderer(spec: spec)
+            }
         } else if payload.spec == nil && toolCall.result == nil && !toolCall.isError && isStreaming {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)

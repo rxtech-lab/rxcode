@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AC2500000000000000000100 /* MCPOAuthRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2500000000000000000000 /* MCPOAuthRelay.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
@@ -47,6 +46,7 @@
 		AC2300000000000000000102 /* RxCode/Services/CIUpdates/CIUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2300000000000000000002 /* RxCode/Services/CIUpdates/CIUpdateService.swift */; };
 		AC2300000000000000000103 /* RxCode/Services/Docs/DocsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2300000000000000000003 /* RxCode/Services/Docs/DocsService.swift */; };
 		AC2300000000000000000104 /* RxCode/Services/Release/ReleaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2300000000000000000004 /* RxCode/Services/Release/ReleaseService.swift */; };
+		AC2500000000000000000100 /* RxCode/Services/MCPOAuthRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2500000000000000000000 /* RxCode/Services/MCPOAuthRelay.swift */; };
 		B81EF0012FD0000000000002 /* ThreadStoreBriefingDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81EF0012FD0000000000001 /* ThreadStoreBriefingDeletionTests.swift */; };
 		B81EF0012FD0000000000004 /* BriefingDayGroupingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81EF0012FD0000000000003 /* BriefingDayGroupingTests.swift */; };
 		B81EF0012FD0000000000014 /* BriefingTimeFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81EF0012FD0000000000013 /* BriefingTimeFilterTests.swift */; };
@@ -200,7 +200,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AC2500000000000000000000 /* MCPOAuthRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/MCPOAuthRelay.swift; sourceTree = SOURCE_ROOT; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -236,6 +235,7 @@
 		AC2300000000000000000002 /* RxCode/Services/CIUpdates/CIUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/CIUpdates/CIUpdateService.swift; sourceTree = SOURCE_ROOT; };
 		AC2300000000000000000003 /* RxCode/Services/Docs/DocsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/Docs/DocsService.swift; sourceTree = SOURCE_ROOT; };
 		AC2300000000000000000004 /* RxCode/Services/Release/ReleaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/Release/ReleaseService.swift; sourceTree = SOURCE_ROOT; };
+		AC2500000000000000000000 /* RxCode/Services/MCPOAuthRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/MCPOAuthRelay.swift; sourceTree = SOURCE_ROOT; };
 		B2F2EE0EE87F4F36B534FDDA /* MCPOAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPOAuthTests.swift; sourceTree = "<group>"; };
 		B81EF0012FD0000000000001 /* ThreadStoreBriefingDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadStoreBriefingDeletionTests.swift; sourceTree = "<group>"; };
 		B81EF0012FD0000000000003 /* BriefingDayGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingDayGroupingTests.swift; sourceTree = "<group>"; };
@@ -582,7 +582,7 @@
 				AC2300000000000000000002 /* RxCode/Services/CIUpdates/CIUpdateService.swift */,
 				AC2300000000000000000001 /* RxCode/Services/Secrets/SecretsService.swift */,
 				AC2300000000000000000000 /* RxCode/Services/MCPOAuthService.swift */,
-				AC2500000000000000000000 /* MCPOAuthRelay.swift */,
+				AC2500000000000000000000 /* RxCode/Services/MCPOAuthRelay.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -1127,7 +1127,7 @@
 				AC2300000000000000000102 /* RxCode/Services/CIUpdates/CIUpdateService.swift in Sources */,
 				AC2300000000000000000101 /* RxCode/Services/Secrets/SecretsService.swift in Sources */,
 				AC2300000000000000000100 /* RxCode/Services/MCPOAuthService.swift in Sources */,
-				AC2500000000000000000100 /* MCPOAuthRelay.swift in Sources */,
+				AC2500000000000000000100 /* RxCode/Services/MCPOAuthRelay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

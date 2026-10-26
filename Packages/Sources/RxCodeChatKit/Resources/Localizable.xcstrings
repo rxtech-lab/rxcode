@@ -3963,6 +3963,9 @@
         }
       }
     },
+    "Open" : {
+
+    },
     "Open in browser" : {
       "localizations" : {
         "en" : {
@@ -5464,6 +5467,9 @@
       }
     },
     "Show View JSON" : {
+
+    },
+    "Shown in a dialog." : {
 
     },
     "Side question not added to conversation" : {

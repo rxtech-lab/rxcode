@@ -883,6 +883,9 @@
         }
       }
     },
+    "%lld elements" : {
+
+    },
     "%lld env · %lld secrets" : {
       "localizations" : {
         "en" : {
@@ -5595,6 +5598,9 @@
           }
         }
       }
+    },
+    "Close. The view stays in this thread's Views list in the inspector." : {
+
     },
     "Cloud" : {
       "localizations" : {
@@ -12687,6 +12693,9 @@
         }
       }
     },
+    "Interactive View" : {
+
+    },
     "Interface" : {
       "localizations" : {
         "en" : {
@@ -14307,28 +14316,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "中"
-          }
-        }
-      }
-    },
-    "Memo" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Memo"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "메모"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "备忘"
           }
         }
       }
@@ -16671,6 +16658,9 @@
           }
         }
       }
+    },
+    "No Views" : {
+
     },
     "No workflows scanned yet. Add a release workflow (e.g. .github/workflows/create-release.yaml) to the repo, then re-add the repository to rescan." : {
       "localizations" : {
@@ -19675,6 +19665,9 @@
           }
         }
       }
+    },
+    "Remove from Views" : {
+
     },
     "Remove managed runtime?" : {
 
@@ -26949,6 +26942,12 @@
           }
         }
       }
+    },
+    "Views" : {
+
+    },
+    "Views an agent opens in a dialog in this thread appear here." : {
+
     },
     "Wait for the agent to finish responding" : {
 

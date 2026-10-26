@@ -6,7 +6,7 @@ import RxCodeCore
 
 /// Right-side panel with two modes:
 /// - Review: This thread / Unstaged / Staged / Branch tabs.
-/// - Inspector: Memo / Terminal tabs.
+/// - Inspector: Terminal / Run / Views tabs.
 /// Per-terminal instance state. A thread can have multiple of these.
 struct InspectorTerminal: Identifiable {
     let id: UUID
@@ -29,9 +29,7 @@ struct RightInspectorPanel: View {
     @State private var terminalsBySession: [String: [InspectorTerminal]] = [:]
     @State private var activeTerminalIdBySession: [String: UUID] = [:]
     @State private var terminalSessionAccessOrder: [String] = []
-    @State private var memoClearID: UUID? = nil
     @State private var terminalFocusID: UUID? = nil
-    @State private var memoFocusID: UUID? = nil
     @State private var resizeStartWidth: Double?
 
     private var currentSessionKey: String {
@@ -71,8 +69,7 @@ struct RightInspectorPanel: View {
     private func bumpFocus(for tab: InspectorTab) {
         switch tab {
         case .terminal: terminalFocusID = UUID()
-        case .memo: memoFocusID = UUID()
-        case .run: break
+        case .run, .views: break
         }
     }
 
@@ -178,9 +175,7 @@ struct RightInspectorPanel: View {
                         InspectorContentView(
                             terminals: currentTerminals,
                             activeTerminalId: activeTerminalId,
-                            memoClearID: memoClearID,
                             terminalFocusID: terminalFocusID,
-                            memoFocusID: memoFocusID,
                             onSelectTerminal: selectTerminal,
                             onCloseTerminal: closeTerminal,
                             onAddTerminal: addTerminalToCurrent,
@@ -283,10 +278,6 @@ struct RightInspectorPanel: View {
                     }
                     HeaderIconButton(systemImage: "arrow.counterclockwise", help: "Reset Terminal") {
                         resetActiveTerminal()
-                    }
-                } else if windowState.inspectorTab == .memo {
-                    HeaderIconButton(systemImage: "trash", help: "Clear Memo") {
-                        memoClearID = UUID()
                     }
                 }
             }

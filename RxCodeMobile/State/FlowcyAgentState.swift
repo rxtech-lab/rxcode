@@ -227,7 +227,7 @@ final class FlowcyAgentState {
                 if JSONUITool.matches(tool.name) {
                     // Drawn by the transcript from the call's arguments; only validation runs here.
                     do {
-                        result = .object(["content": .array([.object(["type": .string("text"), "text": .string(try JSONUITool.result(for: arguments))])])])
+                        result = .object(["content": .array([.object(["type": .string("text"), "text": .string(try JSONUITool.result(for: arguments, supportsDialog: false))])])])
                     } catch {
                         result = .object(["isError": .bool(true), "content": .array([.object(["type": .string("text"), "text": .string(error.localizedDescription)])])])
                     }

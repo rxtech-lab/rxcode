@@ -87,4 +87,26 @@ struct JSONUISpecTests {
         #expect(JSONUIFormat.text(.number(0.25), format: "duration") == "250 ms")
         #expect(JSONUIFormat.text(.number(42), format: "percent").contains("42"))
     }
+
+    @Test("Presentation defaults to inline and accepts dialog")
+    func presentation() throws {
+        let spec = Self.comparison["spec"]!
+        #expect(JSONUITool.payload(from: ["spec": spec]).presentation == .inline)
+        let dialog: JSONValue = ["title": "Report", "spec": spec, "presentation": "dialog"]
+        #expect(try JSONUITool.validated(dialog).payload.presentation == .dialog)
+        #expect(try JSONUITool.result(for: dialog).contains("in a dialog"))
+        #expect(try !JSONUITool.result(for: dialog, supportsDialog: false).contains("in a dialog"))
+        #expect(throws: JSONUIToolError.self) {
+            try JSONUITool.result(for: ["spec": spec, "presentation": "popover"])
+        }
+    }
+
+    @Test("Confirmation requests read labels and require a title")
+    func confirmation() throws {
+        let request = try ConfirmationTool.request(from: ["title": " Delete 3 files? ", "confirm_label": "Delete", "destructive": true])
+        #expect(request == ConfirmationTool.Request(title: "Delete 3 files?", confirmLabel: "Delete", isDestructive: true))
+        #expect(throws: ConfirmationToolError.self) { try ConfirmationTool.request(from: ["message": "No title"]) }
+        #expect(ConfirmationTool.result(confirmed: false)["confirmed"]?.boolValue == false)
+        #expect(IDEToolRegistry.tools(for: []).contains { $0.name == ConfirmationTool.ideName })
+    }
 }

@@ -62,15 +62,15 @@ public enum RightInspectorPanelLayout {
 // MARK: - InspectorTab
 
 public enum InspectorTab: String, CaseIterable {
-    case memo = "Memo"
     case terminal = "Terminal"
     case run = "Run"
+    case views = "Views"
 
     public var title: LocalizedStringResource {
         switch self {
-        case .memo: "Memo"
         case .terminal: "Terminal"
         case .run: "Run"
+        case .views: "Views"
         }
     }
 
@@ -81,8 +81,8 @@ public enum InspectorTab: String, CaseIterable {
     public var icon: String {
         switch self {
         case .terminal: "apple.terminal"
-        case .memo: "note.text"
         case .run: "play.fill"
+        case .views: "square.grid.2x2"
         }
     }
 }

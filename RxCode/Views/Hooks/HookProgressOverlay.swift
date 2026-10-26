@@ -10,6 +10,9 @@ struct HookUIModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Agent prompts sit on an inner view so their alert and sheet don't
+            // compete with the hook alert and sheet attached below.
+            .agentPromptUI()
             .overlay {
                 if let status = appState.hookProgressStatus {
                     HookProgressDialog(status: status)

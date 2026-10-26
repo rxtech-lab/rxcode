@@ -29,6 +29,14 @@ public enum JSONUITool {
     public struct Payload: Sendable, Hashable {
         public var title: String?
         public var spec: JSONUISpec?
+        public var presentation: Presentation = .inline
+    }
+
+    /// Where the view is shown: inline in the transcript, or in a dialog over the chat that a
+    /// card in the transcript reopens.
+    public enum Presentation: String, Sendable, Hashable, CaseIterable {
+        case inline
+        case dialog
     }
 
     public static func payload(from input: [String: JSONValue]) -> Payload {
@@ -39,13 +47,23 @@ public enum JSONUITool {
         let title = input["title"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
         // Accept the spec nested under `spec` or, leniently, inlined at the top level.
         let spec = JSONUISpec(json: input["spec"]) ?? JSONUISpec(json: .object(input))
-        return Payload(title: title, spec: spec)
+        let presentation = input["presentation"]?.stringValue.flatMap { Presentation(rawValue: $0.lowercased()) } ?? .inline
+        return Payload(title: title, spec: spec, presentation: presentation)
     }
 
     /// Validates a call's arguments and returns the text result for the agent. Throws a message
-    /// listing every problem so the agent can fix the spec and call again.
-    public static func result(for arguments: JSONValue) throws -> String {
+    /// listing every problem so the agent can fix the spec and call again. Pass
+    /// `supportsDialog: false` from hosts that only draw views inline.
+    public static func result(for arguments: JSONValue, supportsDialog: Bool = true) throws -> String {
+        try validated(arguments, supportsDialog: supportsDialog).message
+    }
+
+    /// Validates a call's arguments and returns the payload to show with the agent's text result.
+    public static func validated(_ arguments: JSONValue, supportsDialog: Bool = true) throws -> (payload: Payload, spec: JSONUISpec, message: String) {
         let payload = payload(from: arguments.objectValue ?? [:])
+        if let raw = arguments["presentation"]?.stringValue, Presentation(rawValue: raw.lowercased()) == nil {
+            throw JSONUIToolError(message: "Unknown `presentation` \"\(raw)\". Use \"inline\" or \"dialog\".")
+        }
         guard let spec = payload.spec else {
             throw JSONUIToolError(message: "Missing `spec`: pass an object { root, elements } where elements maps ids to { type, props, children? }.")
         }
@@ -54,7 +72,11 @@ public enum JSONUITool {
             throw JSONUIToolError(message: "The view was not shown. Fix these problems and call again:\n" + issues.map { "- \($0)" }.joined(separator: "\n"))
         }
         let name = payload.title.map { "\"\($0)\"" } ?? "The view"
-        return "\(name) is displayed to the user in the chat (\(spec.elements.count) elements). Don't repeat its content in text; refer to it briefly instead."
+        let place = supportsDialog && payload.presentation == .dialog
+            ? "in a dialog; the chat shows a card that reopens it"
+            : "in the chat"
+        let message = "\(name) is displayed to the user \(place) (\(spec.elements.count) elements). Don't repeat its content in text; refer to it briefly instead."
+        return (payload, spec, message)
     }
 
     public static let description = """
@@ -94,6 +116,11 @@ public enum JSONUITool {
     Values are strings, numbers or null. `format`: text|number|money|percent|bytes|duration (seconds). \
     Tones: default|muted|accent|positive|negative|warning. At most 300 elements. After the call, don't repeat \
     the view's content in text.
+
+    `presentation`: "inline" (default) draws the view in the chat. "dialog" opens it in a dialog over the chat \
+    instead, and the chat shows a small card that reopens it; the thread's Views list keeps it after the user closes \
+    it. Use dialog for larger content that deserves the full window, such as a final report or a dashboard. The call \
+    returns without waiting for the dialog to close.
     """
 
     public static let inputSchema: JSONValue = {
@@ -125,6 +152,11 @@ public enum JSONUITool {
             "properties": .object([
                 "title": .object(["type": .string("string"), "description": .string("Optional short title shown above the view.")]),
                 "spec": spec,
+                "presentation": .object([
+                    "type": .string("string"),
+                    "enum": .array(Presentation.allCases.map { .string($0.rawValue) }),
+                    "description": .string("inline (default) draws the view in the chat; dialog opens it in a dialog, with a card in the chat to reopen it."),
+                ]),
             ]),
             "required": .array([.string("spec")]),
         ])

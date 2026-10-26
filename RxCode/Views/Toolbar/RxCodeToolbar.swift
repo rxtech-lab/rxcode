@@ -5,7 +5,7 @@ import SwiftUI
 // MARK: - RxCodeToolbar
 
 /// Shared trailing toolbar group: New Chat, Open in Editor, Terminal,
-/// Memo, Inspector toggle, What's New, Settings.
+/// Views, Inspector toggle, What's New, Settings.
 ///
 /// Wrapped in an isolated struct so toolbar reads do not trigger NSToolbar
 /// re-layout when `selectedProject` changes.
@@ -56,12 +56,13 @@ struct RxCodeToolbarContent: ToolbarContent {
 
             Button {
                 windowState.inspectorMode = .inspector
-                windowState.inspectorTab = .memo
+                windowState.inspectorTab = .views
                 appState.showRightSidebar = true
             } label: {
-                Image(systemName: "note.text")
+                Image(systemName: InspectorTab.views.icon)
             }
-            .help("Memo")
+            .help("Views")
+            .accessibilityIdentifier("open-views-button")
 
             Button {
                 appState.showRightSidebar.toggle()

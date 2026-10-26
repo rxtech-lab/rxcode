@@ -48,11 +48,9 @@ extension AppState: IDEToolHandling {
         case "ide__list_agent_models":
             return handleListAgentModels()
         case JSONUITool.ideName:
-            do {
-                return textResult(try JSONUITool.result(for: arguments))
-            } catch {
-                throw IDEToolError.invalidArguments(error.localizedDescription)
-            }
+            return try await handleShowUI(arguments: arguments, sessionKey: sessionKey)
+        case ConfirmationTool.ideName:
+            return try await handleShowConfirmation(arguments: arguments)
         case "ide__update_task":
             return try await handleUpdateTask(arguments: arguments)
         case "ide__delete_task":
@@ -96,33 +94,13 @@ extension AppState: IDEToolHandling {
         case "ide__send_notification":
             return try await handleSendNotification(arguments: arguments, sessionKey: sessionKey)
         case "ide__ask_user":
-            throw IDEToolError.notSupported("ide__ask_user polyfill not implemented yet — surface the question as plain assistant text instead.")
+            return try await handleAskUser(arguments: arguments, sessionKey: sessionKey)
         default:
             throw IDEToolError.unknownTool(name)
         }
     }
 
     // MARK: - Handlers
-
-    @MainActor
-    private func handleSetTodos(arguments: JSONValue, sessionKey: String) throws -> JSONValue {
-        guard let todosArray = arguments["todos"]?.arrayValue else {
-            throw IDEToolError.invalidArguments("missing 'todos' array")
-        }
-        let parsed: [TodoItem] = todosArray.enumerated().compactMap { idx, entry -> TodoItem? in
-            guard
-                let dict = entry.objectValue,
-                let content = dict["content"]?.stringValue,
-                let statusRaw = dict["status"]?.stringValue,
-                let status = TodoItem.Status(rawValue: statusRaw)
-            else { return nil }
-            let activeForm = dict["activeForm"]?.stringValue ?? content
-            return TodoItem(id: idx, content: content, activeForm: activeForm, status: status)
-        }
-        threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: parsed)
-        todoSnapshotsRevision &+= 1
-        return textResult("Recorded \(parsed.count) todo(s).")
-    }
 
     @MainActor
     private func handleGetRunningJobs() -> JSONValue {

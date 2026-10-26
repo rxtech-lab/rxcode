@@ -103,7 +103,11 @@ extension CodexAppServer {
     chat (json-render style spec: cards, tables, tabs, steps, stats, charts, \
     code). Use it when a visual explanation — a comparison, an architecture or \
     flow walkthrough, a plan, a test or build summary — is clearer than prose, \
-    then don't repeat its content in text.
+    then don't repeat its content in text. Pass `presentation: "dialog"` to \
+    open it in a dialog, with a card in the chat to reopen it.
+    - `ide__show_confirmation` — ask the user to confirm or cancel an action \
+    in a native confirmation dialog and wait for the answer. Use it before \
+    hard-to-undo steps such as deleting, overwriting, or pushing.
 
     Reach for these when a task spans projects rather than guessing. Prefer \
     reading threads first; only use `ide__send_to_thread` when you actually \

@@ -198,6 +198,7 @@ public enum IDEToolRegistry {
         ),
         listAgentModelsTool,
         showUITool,
+        showConfirmationTool,
         IDETool(
             name: "ide__update_task",
             description: "Update an existing task by task_id from any project. Only supplied fields change. Preserves the task thread. Use provider and model to change its agent assignment; discover choices with ide__list_agent_models. All fields are validated before saving. Use ide__run_task to explicitly start work or send follow-ups.",

@@ -306,6 +306,33 @@ actor PermissionServer {
         return outcome.decision
     }
 
+    /// Surface an `AskUserQuestion`-shaped prompt for transports that are not a
+    /// CLI hook (the `ide__ask_user` polyfill). Never auto-approved. Returns the
+    /// `{questions, answers}` payload once the user answers, or nil when skipped.
+    func requestAskUserAnswers(
+        toolUseId: String,
+        sessionId: String?,
+        toolInput: [String: JSONValue]
+    ) async -> JSONValue? {
+        let request = PermissionRequest(
+            id: toolUseId,
+            toolName: "AskUserQuestion",
+            toolInput: toolInput,
+            runToken: "",
+            streamPermissionMode: nil,
+            sessionId: sessionId
+        )
+        let outcome = await waitForDecision(
+            toolUseId: toolUseId,
+            sessionId: sessionId,
+            toolName: "AskUserQuestion",
+            toolInput: toolInput,
+            emit: request
+        )
+        guard outcome.decision == .allow else { return nil }
+        return outcome.updatedInput
+    }
+
     /// Idempotent.
     func registerSession(sid: String, projectKey: String, mode: PermissionMode) async {
         await loadBashAllowlistIfNeeded()

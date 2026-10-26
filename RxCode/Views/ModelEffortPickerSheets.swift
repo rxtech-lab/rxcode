@@ -18,51 +18,57 @@ struct ModelPickerSheet: View {
     var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
     var flatModels: [AgentModel] { appState.availableAgentModelSections().flatMap(\.models) }
 
+    private func selectModel(_ model: AgentModel) {
+        appState.setSessionModel(model.id, provider: model.provider, in: windowState)
+        dismiss()
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Text("Select Model")
                 .font(.headline)
                 .foregroundStyle(ClaudeTheme.textPrimary)
 
-            VStack(spacing: 8) {
-                ForEach(appState.availableAgentModelSections(), id: \.id) { section in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            if let iconURL = section.iconURL {
-                                ACPIconView(url: iconURL, size: 14)
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                if let iconURL = section.iconURL {
+                                    ACPIconView(url: iconURL, size: 14)
+                                }
+                                Text(section.title)
+                                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                                    .foregroundStyle(ClaudeTheme.textTertiary)
                             }
-                            Text(section.title)
-                                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                        }
-                        .padding(.horizontal, 4)
+                            .padding(.horizontal, 4)
 
-                        ForEach(section.models, id: \.key) { model in
-                            let index = flatModels.firstIndex(where: { $0.key == model.key }) ?? 0
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(model.displayName)
-                                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                                        .foregroundStyle(ClaudeTheme.textPrimary)
-                                    Text(model.description)
-                                        .font(.system(size: ClaudeTheme.size(11)))
-                                        .foregroundStyle(ClaudeTheme.textSecondary)
-                                        .fixedSize(horizontal: false, vertical: true)
+                            ForEach(section.models, id: \.key) { model in
+                                let index = flatModels.firstIndex(where: { $0.key == model.key }) ?? 0
+                                HStack(alignment: .top) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(model.displayName)
+                                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                                            .foregroundStyle(ClaudeTheme.textPrimary)
+                                        Text(model.description)
+                                            .font(.system(size: ClaudeTheme.size(11)))
+                                            .foregroundStyle(ClaudeTheme.textSecondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer()
+                                    if effectiveProvider == model.provider && effectiveModel == model.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(ClaudeTheme.accent)
+                                            .padding(.top, 2)
+                                    }
                                 }
-                                Spacer()
-                                if effectiveProvider == model.provider && effectiveModel == model.id {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(ClaudeTheme.accent)
-                                        .padding(.top, 2)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(index == selectedIndex ? ClaudeTheme.accentSubtle : ClaudeTheme.surfacePrimary)
+                                .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                                .onTapGesture {
+                                    selectModel(model)
                                 }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(index == selectedIndex ? ClaudeTheme.accentSubtle : ClaudeTheme.surfacePrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
-                            .onTapGesture {
-                                appState.setSessionModel(model.id, provider: model.provider, in: windowState)
-                                dismiss()
                             }
                         }
                     }
@@ -75,21 +81,24 @@ struct ModelPickerSheet: View {
         }
         .padding(20)
         .frame(width: 380)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(ClaudeTheme.background)
         .focusable()
         .focused($isFocused)
         .onKeyPress(.upArrow) {
+            guard !flatModels.isEmpty else { return .ignored }
             selectedIndex = (selectedIndex - 1 + flatModels.count) % flatModels.count
             return .handled
         }
         .onKeyPress(.downArrow) {
+            guard !flatModels.isEmpty else { return .ignored }
             selectedIndex = (selectedIndex + 1) % flatModels.count
             return .handled
         }
         .onKeyPress(.return) {
+            guard flatModels.indices.contains(selectedIndex) else { return .ignored }
             let model = flatModels[selectedIndex]
-            appState.setSessionModel(model.id, provider: model.provider, in: windowState)
-            dismiss()
+            selectModel(model)
             return .handled
         }
         .onKeyPress(.escape) {

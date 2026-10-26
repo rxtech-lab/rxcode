@@ -72,7 +72,8 @@ actor PermissionServer {
 
     /// Safe: CLI tool names are alphanumeric (`Bash`, `Edit`, `mcp__server__name`).
     private static func sessionToolKey(sid: String, tool: String) -> String {
-        "\(sid)::\(tool)"
+        let scope = ComputerUsePresentation.recognizes(tool) ? "__computer_use__" : tool
+        return "\(sid)::\(scope)"
     }
 
     /// Per-subscriber broadcast continuations. One is issued per window via subscribe().
@@ -315,6 +316,13 @@ actor PermissionServer {
 
     /// Determines whether the request should be auto-approved. Returns a reason string if approved, or nil otherwise.
     private func autoApproveReason(sessionId: String?, toolName: String, toolInput: [String: JSONValue]) async -> String? {
+        // Computer control requires an explicit session grant, even in Auto mode.
+        if ComputerUsePresentation.recognizes(toolName) {
+            guard let sid = sessionId,
+                  sessionToolAllows.contains(Self.sessionToolKey(sid: sid, tool: toolName)) else { return nil }
+            return "Computer use confirmed for this session"
+        }
+
         // Auto mode short-circuit: when the session is registered as `.auto`, resolve every hook
         // as allow without surfacing UI. This is the contract for "Auto" in the permission dropdown
         // and for the plan-card "Accept + auto-approve" button.

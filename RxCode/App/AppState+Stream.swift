@@ -584,7 +584,7 @@ extension AppState {
         if let sessionId = request.sessionId {
             broadcastMobileSessionStatus(sessionID: sessionId)
         }
-        clearAutoResolvedPermissions(autoResolvedIds)
+        clearAutoResolvedPermissions(autoResolvedIds + [request.id])
 
         // Fan the resolved decision out to hooks. Dispatching here (rather than at
         // each UI button) means desktop and mobile responses both fire exactly once.

@@ -649,6 +649,10 @@ extension AppState {
             return await self.steerAllQueuedAsOne(in: window)
         }
 
+        bridge.computerUseDecisionHandler = { [weak self, weak window] request, decision in
+            guard let self, let window else { return }
+            await self.respondToPermission(request, decision: decision, in: window)
+        }
         startBridgeObservation(bridge, for: window)
     }
 

@@ -92,6 +92,9 @@ struct TaskProjectSection: View {
             if case .story(let story, _) = candidate { appState.deleteStory(story) }
         }
         .task(id: scriptFilterKey) { await runScriptFilter() }
+        .task(id: project.path) {
+            ExternalEditorService.shared.detectRepoURLIfNeeded(for: project)
+        }
     }
 
     @ViewBuilder
@@ -220,6 +223,7 @@ struct TaskProjectSection: View {
                 Menu {
                     Button("Open Project Board", action: openProject)
                     openInNewWindowButton
+                    openOnGitHubLink
                     Divider()
                     TaskCreationMenuItems(
                         onNewTask: { openNewTask(mode: $0) },
@@ -249,6 +253,17 @@ struct TaskProjectSection: View {
         .contextMenu {
             Button("Open Project Board", action: openProject)
             openInNewWindowButton
+            openOnGitHubLink
+        }
+    }
+
+    @ViewBuilder
+    private var openOnGitHubLink: some View {
+        if let url = ExternalEditorService.shared.gitHubURL(for: project) {
+            Link(destination: url) {
+                Label("Open on GitHub", systemImage: "arrow.up.right.square")
+            }
+            .accessibilityIdentifier("task-project-open-github")
         }
     }
 

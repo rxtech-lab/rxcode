@@ -44,6 +44,8 @@ extension AppState {
         messageFontSizeAdjustment = workspaceDefaults.int(for: "messageFontSizeAdjustment", default: 0)
         selectedModel = workspaceDefaults.string(for: "selectedModel") ?? "opus"
         selectedAgentProvider = AgentProvider(rawValue: workspaceDefaults.string(for: "selectedAgentProvider") ?? "") ?? .claudeCode
+        globalChatLastAgentProvider = workspaceDefaults.string(for: "globalChatLastAgentProvider").flatMap(AgentProvider.init(rawValue:))
+        globalChatLastModel = workspaceDefaults.string(for: "globalChatLastModel")
         selectedACPClientId = workspaceDefaults.string(for: "selectedACPClientId") ?? ""
         selectedEffort = workspaceDefaults.string(for: "selectedEffort") ?? "auto"
 

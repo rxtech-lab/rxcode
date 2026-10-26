@@ -3,116 +3,128 @@ import RxCodeCore
 import SwiftUI
 
 struct GlobalChatView: View {
-    @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @Environment(ChatBridge.self) private var chatBridge
-    @State private var showsHistory = false
-
-    /// Mirrors `ChatView`'s empty state so the welcome-page history button only
-    /// appears before a conversation starts.
-    private var isEmptyState: Bool {
-        windowState.currentSessionId == nil
-            && chatBridge.messages.isEmpty
-            && !chatBridge.isStreaming
-    }
+    @AppStorage("globalChatSidebarVisible") private var showsSidebar = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button {
-                    showsHistory = true
-                } label: {
-                    Label("History", systemImage: "clock")
-                }
-                .help("Show chat history")
-                .accessibilityIdentifier("global-chat-history-toggle")
+        HStack(spacing: 0) {
+            if showsSidebar {
+                GlobalChatSidebar()
+                    .frame(width: 260)
+                    .transition(.move(edge: .leading))
 
-                if let project = windowState.selectedProject, !project.isGlobalChat {
-                    Label(project.name, systemImage: "folder")
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                        .lineLimit(1)
-                        .help(project.path)
-                }
-
-                Spacer()
-
-                Button {
-                    appState.startNewGlobalChat(in: windowState)
-                } label: {
-                    Label("New Chat", systemImage: "square.and.pencil")
-                }
-                .accessibilityIdentifier("global-new-chat")
+                Rectangle()
+                    .fill(ClaudeTheme.border)
+                    .frame(width: 1)
             }
-            .buttonStyle(.borderless)
-            .padding(12)
 
-            ClaudeThemeDivider()
-
-            ChatView(inputAccessory: {
-                HStack(spacing: 8) {
-                    ChatToolbarControls(placement: .composer)
-                    if windowState.selectedProject?.isGlobalChat == false {
-                        BranchPickerChip()
-                    }
-                }
-            }, bottomAccessory: {
-                if isEmptyState {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
                     Button {
-                        showsHistory = true
+                        withAnimation(.easeInOut(duration: 0.2)) { showsSidebar.toggle() }
                     } label: {
-                        Label("View Chat History", systemImage: "clock.arrow.circlepath")
+                        Image(systemName: "sidebar.left")
+                            .font(.system(size: ClaudeTheme.size(14)))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                    }
+                    .help(showsSidebar ? "Hide chat sidebar" : "Show chat sidebar")
+                    .accessibilityIdentifier("global-chat-sidebar-toggle")
+
+                    if !showsSidebar {
+                        GlobalNewChatButton()
+                    }
+
+                    if let project = windowState.selectedProject, !project.isGlobalChat {
+                        Label(project.name, systemImage: "folder")
                             .font(.system(size: ClaudeTheme.size(13)))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                            .lineLimit(1)
+                            .help(project.path)
                     }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("global-chat-welcome-history")
+
+                    Spacer()
                 }
-            }, aboveInputAccessory: {
-                VStack(spacing: 8) {
-                    PermissionQueueBanner()
-                    if windowState.selectedProject?.isGlobalChat == false {
-                        ThreadDiffBanner()
+                .buttonStyle(.borderless)
+                .padding(.horizontal, 12)
+                .frame(height: GlobalChatLayout.headerHeight)
+
+                ClaudeThemeDivider()
+
+                ChatView(inputAccessory: {
+                    HStack(spacing: 8) {
+                        ChatToolbarControls(placement: .composer)
+                        if windowState.selectedProject?.isGlobalChat == false {
+                            BranchPickerChip()
+                        }
                     }
-                }
-            })
-            .frame(minWidth: 350, maxWidth: .infinity, maxHeight: .infinity)
-            .modifier(ChatDetailModifiers())
+                }, aboveInputAccessory: {
+                    VStack(spacing: 8) {
+                        PermissionQueueBanner()
+                        if windowState.selectedProject?.isGlobalChat == false {
+                            ThreadDiffBanner()
+                        }
+                    }
+                })
+                .frame(minWidth: 350, maxWidth: .infinity, maxHeight: .infinity)
+                .modifier(ChatDetailModifiers())
+            }
+            .background(ClaudeTheme.background)
         }
-        .background(ClaudeTheme.background)
-        .sheet(isPresented: $showsHistory) {
-            GlobalChatHistorySheet { showsHistory = false }
-        }
+        .clipped()
         .accessibilityIdentifier("global-chat-view")
     }
 }
 
-/// History of chats started from the Chat tab. Picking a thread
-/// opens it in the Chat tab and dismisses the sheet.
-private struct GlobalChatHistorySheet: View {
-    let dismiss: () -> Void
+private enum GlobalChatLayout {
+    /// Shared by the sidebar and chat headers so their dividers line up.
+    static let headerHeight: CGFloat = 44
+}
 
+private struct GlobalNewChatButton: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+
+    var body: some View {
+        Button {
+            appState.startNewGlobalChat(in: windowState)
+        } label: {
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: ClaudeTheme.size(14)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+        }
+        .buttonStyle(.borderless)
+        .help("New Chat")
+        .accessibilityIdentifier("global-new-chat")
+    }
+}
+
+/// Collapsible list of chats started from the Chat tab. Picking a thread
+/// opens it in the Chat tab.
+private struct GlobalChatSidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Chat History")
-                    .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
+                Text("Chats")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
-                Button("Done", action: dismiss)
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("global-chat-history-done")
+                GlobalNewChatButton()
             }
-            .padding(16)
+            .padding(.horizontal, 14)
+            .frame(height: GlobalChatLayout.headerHeight)
 
             ClaudeThemeDivider()
 
             HistoryListView(
                 scopedProjectId: Project.globalChatID,
-                opensInChatTab: true,
-                onSelectSession: dismiss
+                opensInChatTab: true
             )
+            // Drop the `.sidebar` list's translucent material so the panel
+            // matches the theme instead of showing the desktop through it.
+            .scrollContentBackground(.hidden)
             .accessibilityIdentifier("global-chat-history")
         }
-        .frame(width: 460, height: 560)
-        .background(ClaudeTheme.background)
+        .frame(maxHeight: .infinity)
+        .background(ClaudeTheme.sidebarBackground)
     }
 }

@@ -1207,6 +1207,9 @@
         }
       }
     },
+    "Codex is waiting to use your computer. Confirm to allow computer use for the rest of this session." : {
+
+    },
     "Collapse" : {
       "localizations" : {
         "en" : {
@@ -1521,6 +1524,12 @@
           }
         }
       }
+    },
+    "Confirm computer use for this session" : {
+
+    },
+    "Confirm for This Session" : {
+
     },
     "Connect GitHub account to Claude Code on the web" : {
       "localizations" : {
@@ -1943,6 +1952,9 @@
           }
         }
       }
+    },
+    "Deny" : {
+
     },
     "Description" : {
       "localizations" : {
@@ -2792,6 +2804,12 @@
           }
         }
       }
+    },
+    "Generated image" : {
+
+    },
+    "Generating image…" : {
+
     },
     "How can I help you?" : {
       "localizations" : {
@@ -4265,6 +4283,9 @@
       }
     },
     "Preparing view…" : {
+
+    },
+    "Preview generated image" : {
 
     },
     "Previous change" : {

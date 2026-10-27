@@ -235,6 +235,7 @@ struct MobileTaskBoardView: View {
                         .padding(.top, 8)
                 }
                 kanbanBoard
+                    .padding(.top, isRegularWidth ? 0 : 12)
             }
         } else {
             List {
@@ -300,8 +301,7 @@ struct MobileTaskBoardView: View {
         let tasks = board.tasks(in: column.id).filter { snapshotContains($0.id, story: false) && currentView.matches($0) && $0.matches(keyword: searchText) }
         return TaskKanbanColumnContent(
             headerSpacing: 0,
-            cardInsets: EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8),
-            allowsCardOverflow: true
+            cardInsets: EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8)
         ) {
             HStack(spacing: 6) {
                 Image(systemName: column.systemImage)
@@ -357,6 +357,8 @@ struct MobileTaskBoardView: View {
             .mobileReorderable()
         }
         .frame(width: 300, height: height, alignment: .top)
+        // Keep swiped cards and their actions inside the column.
+        .clipShape(RoundedRectangle(cornerRadius: 14))
         .background(column.tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(column.tint.opacity(0.18)))
         .contentShape(Rectangle())

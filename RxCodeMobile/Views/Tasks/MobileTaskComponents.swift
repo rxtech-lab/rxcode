@@ -62,8 +62,8 @@ struct MobileTaskRow: View {
                     .lineLimit(2)
             }
 
-            if let link = state.activeTaskRunLink(for: task) {
-                Label("Running on \(link.desktopName)", systemImage: "desktopcomputer")
+            if let deviceName = state.taskRunDeviceName(for: task) {
+                Label("Running on \(deviceName)", systemImage: "desktopcomputer")
                     .font(.caption)
                     .foregroundStyle(Color.accentColor)
                     .lineLimit(1)

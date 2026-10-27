@@ -8,6 +8,12 @@ import SwiftUI
 // MARK: - Mobile Snapshot Broadcasting
 
 extension AppState {
+    func nextMobileSnapshotSeq() -> UInt64 {
+        mobileSnapshotSeq &+= 1
+        if mobileSnapshotSeq == 0 { mobileSnapshotSeq = 1 } // skip wraparound zero
+        return mobileSnapshotSeq
+    }
+
     func scheduleMobileSnapshotBroadcast() {
         mobileSnapshotBroadcastTask?.cancel()
         mobileSnapshotBroadcastTask = Task { @MainActor [weak self] in

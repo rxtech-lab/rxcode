@@ -224,6 +224,14 @@ extension MobileAppState {
         if var snapshot = taskSnapshots[projectID],
            let index = snapshot.board.tasks.firstIndex(where: { $0.id == task.id }) {
             let resolvedIndex = sortIndex ?? snapshot.board.appendSortIndex(for: status)
+            // Entering a chat column with no Mac picked: drop the previous
+            // run's lock so the first Mac to claim the task runs it.
+            let board = snapshot.board
+            if usesCloudTasks,
+               board.column(for: status).triggersChat,
+               !board.column(for: board.resolvedStatus(of: snapshot.board.tasks[index])).triggersChat {
+                snapshot.board.tasks[index].assignedDeviceId = nil
+            }
             snapshot.board.tasks[index].status = status
             snapshot.board.tasks[index].sortIndex = resolvedIndex
             if usesCloudTasks {
@@ -258,6 +266,10 @@ extension MobileAppState {
         guard let task = board.tasks.first(where: { $0.id == taskID }), task.id != target?.id else { return }
         guard !board.isStatusLocked(task) || board.resolvedStatus(of: task) == status else {
             throw AutopilotRemoteError.server(String(localized: "The agent is working on this task; it moves on when the turn finishes."))
+        }
+        if usesCloudTasks, task.assignedDeviceId != nil, board.resolvedStatus(of: task) != status,
+           let deviceName = taskRunDeviceName(for: task) {
+            throw AutopilotRemoteError.server(String(localized: "This task is running on \(deviceName). It moves on when that run finishes."))
         }
         try await moveTask(task, to: status, sortIndex: dropSortIndex(taskID, projectID: projectID, before: target, in: status))
     }

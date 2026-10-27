@@ -3341,6 +3341,12 @@
         }
       }
     },
+    "another device" : {
+
+    },
+    "Another device claimed this run. The card moves on when that run finishes." : {
+
+    },
     "Any" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4905,6 +4911,9 @@
           }
         }
       }
+    },
+    "Checking which device runs this task…" : {
+
     },
     "Checking..." : {
       "localizations" : {
@@ -20573,6 +20582,9 @@
         }
       }
     },
+    "Running on %@" : {
+
+    },
     "Running swift build" : {
       "localizations" : {
         "ko" : {
@@ -25500,6 +25512,9 @@
       }
     },
     "This task is already running" : {
+
+    },
+    "This task is assigned to another Mac. Reassign it to this Mac before running it here." : {
 
     },
     "This task will be removed from the board." : {

@@ -2015,6 +2015,9 @@
     "Checks %@'s GitHub Actions for outdated versions and opens a pull request when updates are needed." : {
 
     },
+    "Choose a Model" : {
+
+    },
     "Choose a setting from the sidebar." : {
 
     },
@@ -4511,6 +4514,9 @@
     "Enable" : {
 
     },
+    "Enable an agent on this Mac, then try again." : {
+
+    },
     "Enable native release management for this repository. You can review workflows and trigger releases from your device." : {
 
     },
@@ -6347,6 +6353,9 @@
         }
       }
     },
+    "Loading models from %@…" : {
+
+    },
     "Loading project…" : {
 
     },
@@ -7706,6 +7715,9 @@
           }
         }
       }
+    },
+    "No Models Available" : {
+
     },
     "No open auto-update pull requests." : {
       "extractionState" : "stale",
@@ -9506,6 +9518,9 @@
           }
         }
       }
+    },
+    "Reload Models" : {
+
     },
     "Remote Tasks" : {
       "extractionState" : "stale",
@@ -12228,6 +12243,9 @@
           }
         }
       }
+    },
+    "This Mac hasn't shared its models yet. Reconnect and try again." : {
+
     },
     "This passkey can't unlock secrets — it doesn't support the PRF extension. Use the passkey you enrolled with." : {
       "localizations" : {

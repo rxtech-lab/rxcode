@@ -1228,6 +1228,11 @@ final class AppState {
     var cloudProjects: [CloudProject] = []
     /// Whether `cloudProjects` has been fetched since sign-in.
     var hasLoadedCloudProjects = false
+    /// Laptops registered on the signed-in account, so a card claimed by
+    /// another device can name it. See `AppState+TaskRunClaims.swift`.
+    var cloudDevices: [CloudDevice] = []
+    /// Cloud tasks whose run claim is being negotiated with Autopilot.
+    var claimingTaskIds: Set<UUID> = []
     /// Local project cards hidden from the Tasks overview, persisted per workspace.
     var hiddenTaskProjectIds: Set<UUID> = [] {
         didSet { workspaceDefaults.set(hiddenTaskProjectIds.map(\.uuidString).sorted(), for: "hiddenTaskProjectIds") }
@@ -1462,9 +1467,4 @@ final class AppState {
     @ObservationIgnored
     var mobileSnapshotSeq: UInt64 = 0
 
-    func nextMobileSnapshotSeq() -> UInt64 {
-        mobileSnapshotSeq &+= 1
-        if mobileSnapshotSeq == 0 { mobileSnapshotSeq = 1 } // skip wraparound zero
-        return mobileSnapshotSeq
-    }
 }

@@ -158,6 +158,9 @@ extension AppState {
             } catch {
                 logger.warning("Could not register cloud laptop: \(error.localizedDescription, privacy: .public)")
             }
+            if let devices = try? await projectCloud.listDevices() {
+                cloudDevices = devices
+            }
             hasLoadedCloudProjects = true
         } catch {
             logger.error("Failed to list cloud projects: \(error.localizedDescription, privacy: .public)")
@@ -168,6 +171,7 @@ extension AppState {
     /// keep their `cloudId` and resume syncing on the next sign-in.
     func clearCloudProjectState() {
         cloudProjects = []
+        cloudDevices = []
         hasLoadedCloudProjects = false
         for task in cloudSyncDebounceTasks.values { task.cancel() }
         cloudSyncDebounceTasks = [:]
@@ -343,6 +347,7 @@ extension AppState {
         await ensureTaskBoardLoaded(for: projectId)
 
         var sync = taskBoard(for: projectId).cloudSync ?? CloudBoardSyncState()
+        var remoteStarts: [UUID] = []
         do {
             let remote: CloudRemoteBoard
             do {
@@ -356,7 +361,7 @@ extension AppState {
             cloudSyncPhaseByProjectId[projectId] = .syncingStories
             try await syncStories(remote.stories, cloudId: cloudId, projectId: projectId, sync: &sync)
             cloudSyncPhaseByProjectId[projectId] = .syncingTasks
-            try await syncTasks(remote.tasks, cloudId: cloudId, projectId: projectId, sync: &sync)
+            try await syncTasks(remote.tasks, cloudId: cloudId, projectId: projectId, sync: &sync, remoteStarts: &remoteStarts)
             try await syncSavedViews(cloudId: cloudId, projectId: projectId, sync: &sync)
             cloudSyncPhaseByProjectId[projectId] = .savingChanges
             sync.lastSyncedAt = Date()
@@ -369,6 +374,7 @@ extension AppState {
         guard isCloudLinked(projectId, to: cloudId) else { return }
         editCloudBoard(projectId, cloudId: cloudId, sync: sync)
         setTaskBoard(taskBoard(for: projectId), for: projectId, fromCloud: true)
+        startRemotelyMovedTasks(remoteStarts)
     }
 
     private func syncSavedViews(cloudId: String, projectId: UUID, sync: inout CloudBoardSyncState) async throws {
@@ -522,8 +528,12 @@ extension AppState {
         _ remoteTasks: [CloudRemoteTask],
         cloudId: String,
         projectId: UUID,
-        sync: inout CloudBoardSyncState
+        sync: inout CloudBoardSyncState,
+        remoteStarts: inout [UUID]
     ) async throws {
+        // A board pulled for the first time only mirrors what is already
+        // there; runs start for cards moved after that.
+        let watchesMoves = sync.lastSyncedAt != nil
         let remoteById = Dictionary(remoteTasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         // Deletions on either side.
@@ -555,6 +565,7 @@ extension AppState {
             sync.tasks[localId] = CloudItemLink(remoteId: remote.id, base: remote.fields)
         }
         if !pulledIds.isEmpty {
+            var created: [UUID] = []
             editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
                 for (localId, remote) in pulledIds {
                     let placeholder = ProjectTask(
@@ -563,9 +574,14 @@ extension AppState {
                         title: remote.fields.title,
                         status: board.localStatus(forCloud: remote.fields.status, current: nil)
                     )
-                    board.tasks.append(board.applying(remote.fields, to: placeholder, sync: sync, updatedAt: remote.updatedAt))
+                    let task = board.applying(remote.fields, to: placeholder, sync: sync, updatedAt: remote.updatedAt)
+                    board.tasks.append(task)
+                    if watchesMoves, remoteMoveStartsRun(from: nil, to: task, board: board) {
+                        created.append(localId)
+                    }
                 }
             }
+            remoteStarts.append(contentsOf: created)
         }
 
         // New on this Mac: upload parents before their children, so each
@@ -628,13 +644,16 @@ extension AppState {
             case .pull:
                 sync.tasks[localId]?.base = remote.fields
                 let linkState = sync
+                var moved = false
                 editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
                     guard let index = board.tasks.firstIndex(where: { $0.id == localId }) else { return }
-                    let keptStatus = board.tasks[index].status
-                    var pulled = board.applying(remote.fields, to: board.tasks[index], sync: linkState, updatedAt: remote.updatedAt)
-                    if isLocked { pulled.status = keptStatus }
+                    let before = board.tasks[index]
+                    var pulled = board.applying(remote.fields, to: before, sync: linkState, updatedAt: remote.updatedAt)
+                    if isLocked { pulled.status = before.status }
                     board.tasks[index] = pulled
+                    moved = watchesMoves && !isLocked && remoteMoveStartsRun(from: before, to: pulled, board: board)
                 }
+                if moved { remoteStarts.append(localId) }
             }
         }
     }

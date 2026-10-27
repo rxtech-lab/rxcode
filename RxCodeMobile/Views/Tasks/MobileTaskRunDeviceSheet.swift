@@ -62,10 +62,12 @@ struct MobileTaskRunDeviceSheet: View {
 
             if state.usesCloudTasks {
                 Section {
-                    Button("Move Without Running") {
+                    Button("Run on First Available Mac") {
                         moveOnly()
                     }
                     .accessibilityIdentifier("task-run-device-move-only")
+                } footer: {
+                    Text("The first Mac with this project open picks the task up. Other Macs leave it alone and show where it runs.")
                 }
             }
         }

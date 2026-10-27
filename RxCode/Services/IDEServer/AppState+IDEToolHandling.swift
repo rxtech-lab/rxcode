@@ -452,9 +452,13 @@ extension AppState: IDEToolHandling {
             throw IDEToolError.handlerFailed("No agent is assigned to the task and no default task agent is configured.")
         }
 
+        if let device = otherRunDeviceName(for: task) {
+            throw IDEToolError.handlerFailed("The task is already running on \(device).")
+        }
         if board.resolvedStatus(of: task) == chatColumn.id {
             // Already sitting in the chat column without a live run (e.g. a
             // released run): moving it there again would not dispatch.
+            task = claimedForThisDevice(task)
             upsertTask(task)
             Task { await startTask(task) }
         } else {

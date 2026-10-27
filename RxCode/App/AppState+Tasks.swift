@@ -446,6 +446,11 @@ extension AppState {
         let dispatches = shouldDispatchTask(stamped, from: previousStatus)
         if dispatches {
             stamped.attentionReason = nil
+            // Started here, so it runs here; a task assigned to another Mac
+            // in the form keeps that choice and `startTask` explains it.
+            if stamped.assignedDeviceId == nil {
+                stamped = claimedForThisDevice(stamped)
+            }
         }
         updateBoard(task.projectId) { board in
             if let idx = board.tasks.firstIndex(where: { $0.id == stamped.id }) {
@@ -463,7 +468,7 @@ extension AppState {
             }
         }
         if dispatches {
-            Task { await startTask(task) }
+            Task { await startTask(stamped) }
         }
     }
 
@@ -500,6 +505,8 @@ extension AppState {
         let stored = self.task(id: task.id) ?? task
         let board = taskBoard(for: task.projectId)
         guard !board.isStatusLocked(stored) || board.resolvedStatus(of: stored) == status else { return }
+        // Another device's run owns the card until it releases it.
+        guard !isRunningOnOtherDevice(stored) || board.resolvedStatus(of: stored) == status else { return }
         var moved = task
         moved.status = status
         moved.updatedAt = Date()
@@ -509,6 +516,9 @@ extension AppState {
         let dispatches = shouldDispatchTask(moved, from: stored.status)
         if dispatches {
             moved.attentionReason = nil
+            // Moved into a chat column on this Mac: the run is locked here,
+            // and other devices show it as running on this Mac.
+            moved = claimedForThisDevice(moved)
         }
 
         updateBoard(task.projectId) { board in
@@ -522,7 +532,7 @@ extension AppState {
         }
 
         if dispatches {
-            Task { await startTask(stored) }
+            Task { await startTask(self.task(id: moved.id) ?? moved) }
         }
     }
 

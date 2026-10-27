@@ -126,6 +126,26 @@ final class ProjectCloudService {
         try await request("PATCH", url: projectURL(projectId).appendingPathComponent("tasks/\(taskId)"), body: fields)
     }
 
+    private struct ClaimTaskBody: Encodable { let deviceId: String }
+
+    /// Autopilot's answer to a run claim: whether `deviceId` now owns the
+    /// task, and the task as stored, naming its owner.
+    struct TaskClaim: Decodable {
+        let claimed: Bool
+        let task: CloudRemoteTask
+    }
+
+    /// Assigns the task to `deviceId` only while no other laptop holds it.
+    /// Autopilot applies this as one conditional update, so of several Macs
+    /// racing for the same task exactly one gets `claimed == true`.
+    func claimTask(projectId: String, taskId: String, deviceId: String) async throws -> TaskClaim {
+        try await request(
+            "POST",
+            url: projectURL(projectId).appendingPathComponent("tasks/\(taskId)/claim"),
+            body: ClaimTaskBody(deviceId: deviceId)
+        )
+    }
+
     func deleteTask(projectId: String, taskId: String) async throws {
         try await delete(projectURL(projectId).appendingPathComponent("tasks/\(taskId)"))
     }
@@ -153,6 +173,13 @@ final class ProjectCloudService {
     /// Whether `error` means the row is already gone on the server.
     static func isNotFound(_ error: Error) -> Bool {
         if case AutopilotService.ServiceError.apiError(404, _) = error { return true }
+        return false
+    }
+
+    /// Whether the server has the route but not this method — an older
+    /// Autopilot without the endpoint.
+    static func isMethodNotAllowed(_ error: Error) -> Bool {
+        if case AutopilotService.ServiceError.apiError(405, _) = error { return true }
         return false
     }
 

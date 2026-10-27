@@ -60,8 +60,12 @@ struct TaskColumnView: View {
                 ) {
                     onOpen(.task(task))
                 }
-                // A card in a chat column stays put while its agent runs.
-                .modifier(TaskCardDrag(isLocked: board.isStatusLocked(task), task: task))
+                // A card in a chat column stays put while its agent runs,
+                // here or on the device that claimed it.
+                .modifier(TaskCardDrag(
+                    isLocked: board.isStatusLocked(task) || appState.isRunningOnOtherDevice(task),
+                    task: task
+                ))
                 .transition(TaskBoardMotion.card)
             }
             if !queuedTasks.isEmpty {

@@ -1,4 +1,5 @@
 import XCTest
+import RxCodeCore
 @testable import RxCode
 
 /// Which tab `TaskFormSheet` opens on when a story or task is created from a
@@ -50,5 +51,50 @@ final class TaskCreationModeTests: XCTestCase {
             .form,
             "\"New Story → With Form\" must open the form"
         )
+    }
+}
+
+@MainActor
+final class TaskContextMenuStateTests: XCTestCase {
+    func testCardAndBackgroundBoardUpdatesKeepMenuStable() {
+        var task = ProjectTask(projectId: UUID(), title: "Move this task")
+        var board = TaskBoard(tasks: [task])
+        let original = TaskContextMenuState(task: task, board: board, canOpenChat: true)
+
+        task.title = "Updated while the menu is open"
+        task.details = "New background content"
+        task.updatedAt = Date().addingTimeInterval(10)
+        board.tasks = [task, ProjectTask(projectId: task.projectId, title: "Another task")]
+
+        XCTAssertEqual(original, TaskContextMenuState(task: task, board: board, canOpenChat: true))
+    }
+
+    func testDestinationChangesAndChatAvailabilityRefreshMenu() {
+        let task = ProjectTask(projectId: UUID(), title: "Move this task")
+        var board = TaskBoard(tasks: [task], columns: TaskColumn.defaults)
+        let original = TaskContextMenuState(task: task, board: board, canOpenChat: false)
+        XCTAssertNotEqual(original, TaskContextMenuState(task: task, board: board, canOpenChat: true))
+
+        board.columns[0].name = "Renamed destination"
+        XCTAssertNotEqual(original, TaskContextMenuState(task: task, board: board, canOpenChat: false))
+    }
+
+    func testCurrentDestinationAndAgentLockRemainAccurate() {
+        var task = ProjectTask(
+            projectId: UUID(), title: "Move this task", status: .pending,
+            agent: TaskAgentConfig(provider: .claudeCode, model: "opus"), sessionKey: "session"
+        )
+        let board = TaskBoard(tasks: [task])
+        let pending = TaskContextMenuState(task: task, board: board, canOpenChat: true)
+        XCTAssertEqual(pending.currentStatus, .pending)
+        XCTAssertFalse(pending.isStatusLocked)
+        XCTAssertTrue(pending.canRunWithAgent)
+
+        task.status = .inProgress
+        let running = TaskContextMenuState(task: task, board: board, canOpenChat: true)
+        XCTAssertNotEqual(pending, running)
+        XCTAssertEqual(running.currentStatus, .inProgress)
+        XCTAssertTrue(running.isStatusLocked)
+        XCTAssertFalse(running.canRunWithAgent)
     }
 }

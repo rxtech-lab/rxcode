@@ -65,6 +65,19 @@ extension MobileAppState {
         return link
     }
 
+    /// The device a card shows it is running on: the Mac this phone ran it
+    /// on, else, on a cloud board, the device that claimed its run. A
+    /// teammate's Mac isn't registered on this account, so it has no name.
+    func taskRunDeviceName(for task: ProjectTask) -> String? {
+        if let link = activeTaskRunLink(for: task) { return link.desktopName }
+        let board = taskBoard(for: task.projectId)
+        guard usesCloudTasks,
+              let owner = task.assignedDeviceId,
+              board.column(for: board.resolvedStatus(of: task)).triggersChat
+        else { return nil }
+        return taskCloud?.devices.first { $0.id == owner }?.name ?? String(localized: "another device")
+    }
+
     /// Whether moving `task` into `status` starts an agent run, so the Mac
     /// that runs it is picked first.
     func moveStartsRun(_ task: ProjectTask, to status: TaskStatus) -> Bool {

@@ -125,12 +125,18 @@ extension AppState {
             dispatchQueuedTasks(in: task.projectId)
         }
         if let assigned = task.assignedDeviceId, assigned != cloudDeviceID {
-            var waiting = task
-            waiting.isQueued = false
-            waiting.attentionReason = "This task is assigned to another Mac. Reassign it to this Mac before running it here."
-            upsertTask(waiting)
+            refuseRunClaimedElsewhere(task)
             return
         }
+        // A run no device was picked for goes to the first Mac that claims it;
+        // see `AppState+TaskRunClaims.swift`.
+        if task.assignedDeviceId == nil, isCloudTask(task) {
+            guard await claimCloudTaskRun(task) else {
+                if let current = self.task(id: task.id) { refuseRunClaimedElsewhere(current) }
+                return
+            }
+        }
+        let task = self.task(id: task.id) ?? task
         guard let project = projects.first(where: { $0.id == task.projectId }) else {
             logger.error("startTask: no project for id \(task.projectId.uuidString, privacy: .public)")
             return
@@ -231,6 +237,19 @@ extension AppState {
             current.sessionKey = realSessionId
             upsertTask(current)
         }
+    }
+
+    /// Leaves a task another device owns alone. In a chat column it is that
+    /// device's run, so the card just shows where it runs; elsewhere it was
+    /// assigned to another Mac on purpose, so the user is told how to run it.
+    private func refuseRunClaimedElsewhere(_ task: ProjectTask) {
+        var waiting = self.task(id: task.id) ?? task
+        waiting.isQueued = false
+        if !taskBoard(for: task.projectId).column(for: waiting.status).triggersChat {
+            waiting.attentionReason = String(localized: "This task is assigned to another Mac. Reassign it to this Mac before running it here.")
+        }
+        logger.info("[Tasks] task \(task.id.uuidString, privacy: .public) runs on another device")
+        upsertTask(waiting)
     }
 
     // MARK: - Run queue

@@ -753,68 +753,6 @@ struct TaskBoardChipLabel: View {
 
 // MARK: - Shared menus
 
-/// Right-click actions for a task, shared by board cards, table rows and the
-/// overview list so every surface offers the same verbs.
-struct TaskContextMenuItems: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-
-    let task: ProjectTask
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-    /// Called before revealing the chat, so a sheet hosting this menu can
-    /// dismiss itself instead of staying over the thread.
-    var onOpenChat: (() -> Void)?
-
-    private var board: TaskBoard { appState.taskBoard(for: task.projectId) }
-
-    var body: some View {
-        Button("Edit…", action: onEdit)
-
-        if appState.canOpenChat(for: task) {
-            Button("Open Chat") {
-                onOpenChat?()
-                appState.openChat(for: task, in: windowState)
-            }
-        }
-        if let prompt = task.checkErrorFixPrompt, !appState.isStatusLocked(task),
-           appState.canOpenChat(for: task) || (task.agent.isAssigned && board.firstChatColumn != nil) {
-            Button("Fix Check Error", systemImage: "wrench.and.screwdriver") {
-                if appState.canOpenChat(for: task) {
-                    Task { await appState.sendTaskFollowUp(task, text: prompt) }
-                } else if let chatColumn = board.firstChatColumn {
-                    appState.moveTask(task, to: chatColumn.id)
-                }
-            }
-        }
-
-        if task.agent.isAssigned, !board.column(for: task.status).triggersChat,
-           let chatColumn = board.firstChatColumn {
-            Button("Run with Agent") {
-                appState.moveTask(task, to: chatColumn.id)
-            }
-        }
-
-        Divider()
-
-        Menu("Move To") {
-            ForEach(board.effectiveColumns) { column in
-                Button(column.name) {
-                    appState.moveTask(task, to: column.id)
-                }
-                .disabled(column.id == board.resolvedStatus(of: task))
-            }
-        }
-        .disabled(board.isStatusLocked(task))
-
-        Divider()
-
-        Button("Delete", role: .destructive) {
-            onDelete()
-        }
-    }
-}
-
 struct StoryContextMenuItems: View {
     @Environment(AppState.self) private var appState
 

@@ -98,6 +98,8 @@ struct TaskCardView: View {
 
             TaskVerifyingIndicator(taskId: task.id)
 
+            TaskCardRunDeviceRow(task: task)
+
             if let reason = task.attentionReason {
                 Text(reason)
                     .font(.system(size: ClaudeTheme.size(11)))
@@ -375,6 +377,30 @@ private struct StoryRunningIndicator: View {
             }
         }
         .taskBoardAnimation(TaskBoardMotion.feedback, value: isRunning)
+    }
+}
+
+/// "Running on <device>" on a cloud task another device claimed, so this Mac
+/// shows why it isn't running the card sitting in a chat column.
+private struct TaskCardRunDeviceRow: View {
+    @Environment(AppState.self) private var appState
+
+    let task: ProjectTask
+
+    var body: some View {
+        if appState.claimingTaskIds.contains(task.id) {
+            Label("Checking which device runs this task…", systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .lineLimit(1)
+        } else if let device = appState.otherRunDeviceName(for: task) {
+            Label("Running on \(device)", systemImage: "laptopcomputer")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .lineLimit(1)
+                .help("Another device claimed this run. The card moves on when that run finishes.")
+                .accessibilityIdentifier("task-card-run-device")
+        }
     }
 }
 

@@ -500,6 +500,9 @@ extension AppState: IDEToolHandling {
 
     @MainActor
     private func handleMemoryAdd(arguments: JSONValue) async throws -> JSONValue {
+        guard memoryEnabled else {
+            throw IDEToolError.handlerFailed("Memory is disabled. Turn on Enable Memory in RxCode Settings → General → Memory, then retry.")
+        }
         guard let content = arguments["content"]?.stringValue, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw IDEToolError.invalidArguments("missing 'content'")
         }
@@ -519,6 +522,9 @@ extension AppState: IDEToolHandling {
 
     @MainActor
     private func handleMemoryUpdate(arguments: JSONValue) async throws -> JSONValue {
+        guard memoryEnabled else {
+            throw IDEToolError.handlerFailed("Memory is disabled. Turn on Enable Memory in RxCode Settings → General → Memory, then retry.")
+        }
         guard let id = arguments["id"]?.stringValue, !id.isEmpty else {
             throw IDEToolError.invalidArguments("missing 'id'")
         }

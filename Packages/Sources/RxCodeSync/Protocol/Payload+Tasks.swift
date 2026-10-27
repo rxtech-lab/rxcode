@@ -100,6 +100,8 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
     /// `nil` appends to the end of the column.
     public let sortIndex: Double?
     public let text: String?
+    /// Explicit agent chosen on mobile for this move; omitted by older clients.
+    public let runAgent: TaskAgentConfig?
     /// Set when a phone runs a cloud board's task on a paired Mac: the Mac
     /// resolves its own project and task copies from these Autopilot IDs,
     /// since its local IDs differ from the phone's. `projectID` and `taskID`
@@ -119,6 +121,7 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
         status: TaskStatus? = nil,
         sortIndex: Double? = nil,
         text: String? = nil,
+        runAgent: TaskAgentConfig? = nil,
         cloudProjectID: String? = nil,
         cloudTaskID: String? = nil
     ) {
@@ -133,6 +136,7 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
         self.status = status
         self.sortIndex = sortIndex
         self.text = text
+        self.runAgent = runAgent
         self.cloudProjectID = cloudProjectID
         self.cloudTaskID = cloudTaskID
     }

@@ -2,10 +2,13 @@ import Foundation
 import RxCodeCore
 
 /// A pending `ide__show_confirmation` prompt. `HookUIModifier` shows it as a
-/// native alert and resolves it through `AppState.resolveAgentConfirmation`.
+/// sheet and resolves it through `AppState.resolveAgentConfirmation`.
 struct AgentConfirmation: Identifiable, Hashable {
     let id = UUID()
     let request: ConfirmationTool.Request
+    let sessionKey: String
+    let projectId: UUID?
+    var isMinimized = false
 }
 
 /// An `ide__show_ui` view opened with `presentation: "dialog"`, kept with the
@@ -19,7 +22,7 @@ struct AgentUIDialog: Identifiable, Hashable {
 }
 
 /// Agent prompts queued for the user, oldest first. `AgentPromptUIModifier`
-/// presents the first confirmation as a native alert and the first dialog as a sheet.
+/// presents the first expanded confirmation or dialog as a sheet.
 struct AgentPromptState {
     /// `ide__show_confirmation` prompts awaiting the user's decision.
     var confirmations: [AgentConfirmation] = []
@@ -55,21 +58,26 @@ extension AppState {
     }
 
     @MainActor
-    func handleShowConfirmation(arguments: JSONValue) async throws -> JSONValue {
+    func handleShowConfirmation(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
         let request: ConfirmationTool.Request
         do {
             request = try ConfirmationTool.request(from: arguments)
         } catch {
             throw IDEToolError.invalidArguments(error.localizedDescription)
         }
-        let confirmed = await requestAgentConfirmation(request)
+        let confirmed = await requestAgentConfirmation(request, sessionKey: sessionKey)
         return jsonTextResult(ConfirmationTool.result(confirmed: confirmed))
     }
 
     /// Queues `request` for the user and waits for their decision. Returns
     /// `false` when they cancel or the waiting call is cancelled.
-    func requestAgentConfirmation(_ request: ConfirmationTool.Request) async -> Bool {
-        let confirmation = AgentConfirmation(request: request)
+    func requestAgentConfirmation(_ request: ConfirmationTool.Request, sessionKey: String) async -> Bool {
+        let resolved = resolveCurrentSessionId(sessionKey)
+        let projectId = allSessionSummaries.first { resolveCurrentSessionId($0.id) == resolved }?.projectId
+            ?? registeredWindows().first {
+                resolveCurrentSessionId($0.currentSessionId ?? $0.newSessionKey) == resolved
+            }?.selectedProject?.id
+        let confirmation = AgentConfirmation(request: request, sessionKey: sessionKey, projectId: projectId)
         let id = confirmation.id
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
@@ -83,9 +91,19 @@ extension AppState {
         }
     }
 
-    /// Settles the prompt `id` and resumes its waiting tool call. A no-op for
-    /// prompts already settled, so the alert can resolve from both its buttons
-    /// and its dismissal.
+    /// Queue independently per thread, including after a provider renames its session.
+    func agentConfirmations(forSession sessionKey: String) -> [AgentConfirmation] {
+        let resolved = resolveCurrentSessionId(sessionKey)
+        return agentPrompts.confirmations.filter { resolveCurrentSessionId($0.sessionKey) == resolved }
+    }
+
+    /// Changes presentation without resolving the waiting tool call.
+    func setAgentConfirmationMinimized(id: UUID, minimized: Bool) {
+        guard let index = agentPrompts.confirmations.firstIndex(where: { $0.id == id }) else { return }
+        agentPrompts.confirmations[index].isMinimized = minimized
+    }
+
+    /// Settles the prompt `id` and resumes its waiting tool call once.
     func resolveAgentConfirmation(id: UUID, confirmed: Bool) {
         guard let continuation = agentPrompts.continuations.byId.removeValue(forKey: id) else { return }
         agentPrompts.confirmations.removeAll { $0.id == id }

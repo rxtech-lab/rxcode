@@ -190,13 +190,16 @@ struct HistoryListView: View {
 
     private func sessionRow(_ session: DisplaySession) -> some View {
         let projectName = includesAllProjects ? session.projectName : nil
-        return SessionSidebarRow(
-            title: session.title,
-            projectName: projectName,
-            updatedAt: session.updatedAt,
-            isPinned: session.isPinned,
-            isBackgroundStreaming: session.isBackgroundStreaming
-        )
+        return HStack(spacing: 8) {
+            SessionSidebarRow(
+                title: session.title,
+                projectName: projectName,
+                updatedAt: session.updatedAt,
+                isPinned: session.isPinned,
+                isBackgroundStreaming: session.isBackgroundStreaming
+            )
+            AttentionBadge(attention: appState.threadAttention(sessionKey: session.id, in: windowState))
+        }
         .onLongPressGesture(minimumDuration: 0, maximumDistance: 10, pressing: { pressing in
             if pressing {
                 appState.selectSession(id: session.id, inChatTab: opensInChatTab, in: windowState)

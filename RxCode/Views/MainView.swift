@@ -355,6 +355,7 @@ struct MainView: View {
                         RecentChatsSuggestionList()
                     }, aboveInputAccessory: {
                         VStack(spacing: 8) {
+                            AgentConfirmationBanner()
                             PermissionQueueBanner()
                             ThreadDiffBanner()
                             HookBannerHost(surface: .newProject, position: .aboveInputBox)
@@ -575,6 +576,7 @@ struct ProjectTabButton: View {
                 Text(project.name)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .lineLimit(1)
+                AttentionBadge(attention: appState.projectAttention(projectId: project.id, in: windowState))
                 if let phase = appState.cloudSyncPhaseByProjectId[project.id] {
                     ProgressView(value: phase.fractionCompleted)
                         .progressViewStyle(.linear)

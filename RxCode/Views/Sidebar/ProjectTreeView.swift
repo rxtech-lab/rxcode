@@ -236,6 +236,10 @@ struct ProjectTreeView: View {
                             .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                             .lineLimit(1)
 
+                        if route == .chat {
+                            AttentionBadge(attention: appState.projectAttention(projectId: Project.globalChatID, in: windowState))
+                        }
+
                         Spacer(minLength: 4)
                     }
                     .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
@@ -476,6 +480,8 @@ private struct ProjectTreeRow: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                 }
+
+            AttentionBadge(attention: appState.projectAttention(projectId: project.id, in: windowState))
 
             Spacer(minLength: 4)
 

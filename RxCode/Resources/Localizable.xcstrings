@@ -6242,6 +6242,12 @@
         }
       }
     },
+    "Confirmation" : {
+
+    },
+    "Confirmations: %lld" : {
+
+    },
     "Connect any MCP server to give every agent extra tools. You can also skip this and add servers later in Settings → MCP." : {
       "localizations" : {
         "ko" : {
@@ -10159,6 +10165,9 @@
         }
       }
     },
+    "Expand" : {
+
+    },
     "Expand chats" : {
       "localizations" : {
         "ko" : {
@@ -10174,6 +10183,9 @@
           }
         }
       }
+    },
+    "Expand the pending confirmation" : {
+
     },
     "Expected 5 fields (minute hour day month weekday), found %lld." : {
       "extractionState" : "stale",
@@ -14464,6 +14476,12 @@
         }
       }
     },
+    "Minimize" : {
+
+    },
+    "Minimize to the banner above the input box" : {
+
+    },
     "Minute" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18143,6 +18161,9 @@
           }
         }
       }
+    },
+    "Permissions: %lld" : {
+
     },
     "Pick a common schedule" : {
       "extractionState" : "stale",
@@ -22392,6 +22413,9 @@
           }
         }
       }
+    },
+    "Setups: %lld" : {
+
     },
     "SF Symbol" : {
       "extractionState" : "stale",

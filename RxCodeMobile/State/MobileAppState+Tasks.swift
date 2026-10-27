@@ -216,7 +216,7 @@ extension MobileAppState {
     /// Several cards can be in flight at once (a multi-touch drag), so board
     /// snapshots are held back until every move has replied; see
     /// `storeTaskBoardSnapshot`.
-    func moveTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil) async throws {
+    func moveTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil, runAgent: TaskAgentConfig? = nil) async throws {
         let projectID = task.projectId
         beginTaskMove(in: projectID)
         defer { endTaskMove(in: projectID) }
@@ -241,7 +241,8 @@ extension MobileAppState {
                 operation: .moveTask,
                 taskID: task.id,
                 status: status,
-                sortIndex: requestSortIndex
+                sortIndex: requestSortIndex,
+                runAgent: runAgent
             ))
         } catch {
             try? await loadTaskBoard(projectID: task.projectId)

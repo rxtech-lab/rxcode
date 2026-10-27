@@ -94,6 +94,31 @@ public enum JSONUITool {
     - Disclosure { title, expanded? } — collapsible section, collapsed by default
     - Tabs { tabs: string[] } — segmented tabs; child i is the content of tabs[i]
 
+    - Form { title? } — local input group; put create/update/delete forms in a dedicated Sheet or Dialog
+    - Sheet { title? }, Dialog { title? } — hidden until presented, full-height native sheet on Apple platforms
+    - Overlay { title? } — hidden until presented, dismissible status overlay
+
+    Controls:
+    - Button { label, action, role?: destructive, disabled? }
+    - TextField { label, name?, value?: string, placeholder?, required?, disabled? }
+    - TextEditor { label, name?, value?: string, required?, disabled? }
+    - Toggle { label, name?, value?: boolean, disabled? }
+    - Picker { label, name?, options: string[], value?: string, disabled? }
+    - Slider { label, name?, min?: number (0), max?: number (100), step?: number (1), value?: number, disabled? }
+    - Alert { title, message?, confirmLabel?, destructive?, confirmAction? } — native alert
+    - ConfirmationDialog { title, message?, confirmLabel?, destructive?, confirmAction? } — native confirmation
+
+    Inputs share local state by unique name (defaults to element id). An action is an object:
+    { type: "present", target: "element-id" } opens a Sheet, Dialog, Alert, ConfirmationDialog or Overlay;
+    { type: "dismiss" } closes it; { type: "set", name: "field-name", value: ... } updates an input;
+    { type: "reset" } restores defaults; { type: "submit" } checks required text inputs and captures values locally.
+    Submit/reset operate on the enclosing Form, or all inputs outside a Form. An optional target Form id selects a scope.
+    Presentation elements can live outside the root tree; their children follow the same tree rules.
+    Only one presentation opens at a time; dismiss it before opening another. Action status appears in an overlay.
+    These actions do not call tools, execute commands, persist data, or send answers back to the agent.
+    The tool returns immediately. Form values are temporary and reset when the view is recreated.
+    A host may explicitly supply a submission callback; standard chat rendering captures values locally only.
+
     Leaves:
     - Heading { text, level?: 1-3 }
     - Text { text, tone?, size?: small|body|large, weight?: regular|semibold|bold } — Markdown allowed
@@ -113,7 +138,7 @@ public enum JSONUITool {
     - Image { url (https), caption?, aspect?: wide|square|portrait }
     - Gallery { images: [{ url (https), caption? }] }
 
-    Values are strings, numbers or null. `format`: text|number|money|percent|bytes|duration (seconds). \
+    Display values are strings, numbers or null; controls also accept booleans and action objects. `format`: text|number|money|percent|bytes|duration (seconds). \
     Tones: default|muted|accent|positive|negative|warning. At most 300 elements. After the call, don't repeat \
     the view's content in text.
 

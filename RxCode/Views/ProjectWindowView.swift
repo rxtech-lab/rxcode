@@ -179,6 +179,7 @@ struct ProjectWindowView: View {
                         RecentChatsSuggestionList()
                     }, aboveInputAccessory: {
                         VStack(spacing: 8) {
+                            AgentConfirmationBanner()
                             PermissionQueueBanner()
                             ThreadDiffBanner()
                             HookBannerHost(surface: .newProject, position: .aboveInputBox)

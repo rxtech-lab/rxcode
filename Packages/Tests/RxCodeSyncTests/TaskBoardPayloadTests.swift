@@ -37,12 +37,31 @@ struct TaskBoardPayloadTests {
             projectID: projectID,
             operation: .moveTask,
             status: .inProgress,
+            runAgent: TaskAgentConfig(provider: .acp, model: "client:model", planMode: true),
             cloudProjectID: "cloud-project",
             cloudTaskID: "cloud-task"
         )
         let decoded = try JSONDecoder().decode(TaskBoardRequestPayload.self, from: JSONEncoder().encode(request))
         #expect(decoded.cloudProjectID == "cloud-project")
         #expect(decoded.cloudTaskID == "cloud-task")
+        #expect(decoded.runAgent == TaskAgentConfig(provider: .acp, model: "client:model", planMode: true))
+    }
+
+    @Test("local run preserves the selected provider and model", arguments: [AgentProvider.claudeCode, .codex, .acp])
+    func localRunAgentRoundTrips(provider: AgentProvider) throws {
+        let agent = TaskAgentConfig(provider: provider, model: "chosen-model", effort: "high", planMode: true)
+        let request = TaskBoardRequestPayload(
+            projectID: projectID,
+            operation: .moveTask,
+            taskID: UUID(),
+            status: .inProgress,
+            sortIndex: 42,
+            runAgent: agent
+        )
+        let decoded = try JSONDecoder().decode(TaskBoardRequestPayload.self, from: JSONEncoder().encode(request))
+        #expect(decoded.runAgent == agent)
+        #expect(decoded.sortIndex == 42)
+        #expect(decoded.cloudProjectID == nil)
     }
 
     @Test("request from an older phone decodes without cloud IDs")
@@ -54,6 +73,7 @@ struct TaskBoardPayloadTests {
         #expect(decoded.operation == .fetch)
         #expect(decoded.cloudProjectID == nil)
         #expect(decoded.cloudTaskID == nil)
+        #expect(decoded.runAgent == nil)
     }
 
     @Test("task board result carries the board and resolved chat threads")

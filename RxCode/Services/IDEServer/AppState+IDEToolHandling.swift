@@ -50,7 +50,7 @@ extension AppState: IDEToolHandling {
         case JSONUITool.ideName:
             return try await handleShowUI(arguments: arguments, sessionKey: sessionKey)
         case ConfirmationTool.ideName:
-            return try await handleShowConfirmation(arguments: arguments)
+            return try await handleShowConfirmation(arguments: arguments, sessionKey: sessionKey)
         case "ide__update_task":
             return try await handleUpdateTask(arguments: arguments)
         case "ide__delete_task":

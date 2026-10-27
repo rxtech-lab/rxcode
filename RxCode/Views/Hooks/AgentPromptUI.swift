@@ -2,45 +2,55 @@ import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
-/// Agent-driven prompts presented at the window root: `ide__show_confirmation`
-/// as a native alert and `ide__show_ui` views opened with
-/// `presentation: "dialog"` as a sheet. Both queue on `AppState`, so each shows
-/// the oldest pending item and the next one appears when it is settled. Also
-/// lets the chat's dialog cards reopen their view.
+/// Agent confirmations and interactive views share one sheet presentation.
 struct AgentPromptUIModifier: ViewModifier {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
-    func body(content: Content) -> some View {
-        let confirmation = appState.agentPrompts.confirmations.first
-        content
-            .alert(
-                confirmation?.request.title ?? "",
-                isPresented: Binding(
-                    get: { confirmation != nil },
-                    set: { if !$0, let confirmation { appState.resolveAgentConfirmation(id: confirmation.id, confirmed: false) } }
-                ),
-                presenting: confirmation
-            ) { confirmation in
-                Button(confirmation.request.confirmLabel, role: confirmation.request.isDestructive ? .destructive : nil) {
-                    appState.resolveAgentConfirmation(id: confirmation.id, confirmed: true)
-                }
-                .keyboardShortcut(.defaultAction)
-                Button(confirmation.request.cancelLabel, role: .cancel) {
-                    appState.resolveAgentConfirmation(id: confirmation.id, confirmed: false)
-                }
-            } message: { confirmation in
-                if let message = confirmation.request.message {
-                    Text(message)
-                }
+    private enum Prompt: Identifiable {
+        case confirmation(AgentConfirmation)
+        case dialog(AgentUIDialog)
+
+        var id: UUID {
+            switch self {
+            case .confirmation(let item): item.id
+            case .dialog(let item): item.id
             }
-            // The sheet removes its own dialog, so the setter has nothing to do.
+        }
+    }
+
+    private var presentedPrompt: Prompt? {
+        if (windowState.generalRoute == nil || windowState.generalRoute == .chat),
+           let confirmation = appState.agentConfirmations(forSession: windowState.currentSessionId ?? windowState.newSessionKey).first,
+           !confirmation.isMinimized {
+            return .confirmation(confirmation)
+        }
+        return appState.agentPrompts.dialogs.first.map { .dialog($0) }
+    }
+
+    func body(content: Content) -> some View {
+        let prompt = presentedPrompt
+        content
+            .background(WindowAttentionBadge(attention: appState.windowAttention(in: windowState)))
             .sheet(item: Binding(
-                get: { appState.agentPrompts.dialogs.first },
-                set: { _ in }
-            )) { dialog in
-                AgentUIDialogSheet(dialog: dialog) {
-                    appState.dismissAgentUIDialog(id: dialog.id)
+                get: { presentedPrompt },
+                set: { value in
+                    guard value == nil, let prompt else { return }
+                    switch prompt {
+                    case .confirmation(let confirmation):
+                        appState.setAgentConfirmationMinimized(id: confirmation.id, minimized: true)
+                    case .dialog(let dialog):
+                        appState.dismissAgentUIDialog(id: dialog.id)
+                    }
+                }
+            )) { prompt in
+                switch prompt {
+                case .confirmation(let confirmation):
+                    AgentConfirmationSheet(confirmation: confirmation)
+                case .dialog(let dialog):
+                    AgentUIDialogSheet(dialog: dialog) {
+                        appState.dismissAgentUIDialog(id: dialog.id)
+                    }
                 }
             }
             .environment(\.openJSONUIDialog) { payload in
@@ -51,6 +61,73 @@ struct AgentPromptUIModifier: ViewModifier {
                     sessionKey: windowState.currentSessionId ?? windowState.newSessionKey
                 )
             }
+    }
+}
+
+private struct AgentConfirmationSheet: View {
+    @Environment(AppState.self) private var appState
+    let confirmation: AgentConfirmation
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(confirmation.request.title)
+                        .font(.title2.bold())
+                    if let message = confirmation.request.message {
+                        MarkdownContentView(text: message)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle("Confirmation")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Minimize", systemImage: "minus") {
+                        appState.setAgentConfirmationMinimized(id: confirmation.id, minimized: true)
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .help("Minimize to the banner above the input box")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    HStack {
+                        Button(confirmation.request.cancelLabel) {
+                            appState.resolveAgentConfirmation(id: confirmation.id, confirmed: false)
+                        }
+                        Button(confirmation.request.confirmLabel, role: confirmation.request.isDestructive ? .destructive : nil) {
+                            appState.resolveAgentConfirmation(id: confirmation.id, confirmed: true)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 480, idealWidth: 560, maxWidth: .infinity,
+               minHeight: 320, idealHeight: 420, maxHeight: .infinity)
+    }
+}
+
+/// Keeps a minimized confirmation accessible above its originating chat composer.
+struct AgentConfirmationBanner: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+
+    var body: some View {
+        if let confirmation = appState.agentConfirmations(forSession: windowState.currentSessionId ?? windowState.newSessionKey).first, confirmation.isMinimized {
+            PendingActionBanner(
+                icon: "questionmark.circle.fill",
+                title: confirmation.request.title,
+                actionTitle: String(localized: "Expand")
+            ) {
+                appState.setAgentConfirmationMinimized(id: confirmation.id, minimized: false)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .accessibilityIdentifier("agent-confirmation-banner")
+            .help("Expand the pending confirmation")
+        }
     }
 }
 
@@ -83,6 +160,6 @@ private struct AgentUIDialogSheet: View {
 }
 
 extension View {
-    /// Attach the agent confirmation alert and UI dialog sheet.
+    /// Attach the agent confirmation and UI dialog sheets.
     func agentPromptUI() -> some View { modifier(AgentPromptUIModifier()) }
 }

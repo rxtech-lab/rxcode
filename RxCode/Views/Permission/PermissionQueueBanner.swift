@@ -10,7 +10,6 @@ import RxCodeChatKit
 struct PermissionQueueBanner: View {
     @Environment(WindowState.self) private var windowState
     @Environment(ChatBridge.self) private var chatBridge
-    @State private var isHovered: Bool = false
 
     private var pendingRequests: [PermissionRequest] {
         windowState.pendingPermissions.filter {
@@ -78,19 +77,53 @@ struct PermissionQueueBanner: View {
     }
 
     private var content: some View {
-        Button(action: open) {
+        PendingActionBanner(
+            icon: bannerIcon,
+            title: bannerText,
+            actionTitle: actionText,
+            action: open
+        )
+    }
+
+    private func open() {
+        // Prefer surfacing pending plans first — they typically block forward
+        // progress on the conversation while questions/permissions are usually
+        // about a single in-flight tool call.
+        if let plan = pendingPlans.first {
+            windowState.presentedPlanToolCallId = plan.toolCallId
+            return
+        }
+        windowState.presentedPermissionId = pendingRequests.first?.id
+    }
+
+    private func countText(_ count: Int, singular: String, plural: String) -> String {
+        "\(count) \(count == 1 ? singular : plural)"
+    }
+}
+
+/// Shared presentation for pending actions above the chat composer.
+struct PendingActionBanner: View {
+    let icon: String
+    let title: String
+    let actionTitle: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: bannerIcon)
+                Image(systemName: icon)
                     .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.accent)
 
-                Text(bannerText)
+                Text(title)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textPrimary)
 
                 Spacer(minLength: 8)
 
-                Text(actionText)
+                Text(actionTitle)
                     .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
@@ -115,20 +148,5 @@ struct PermissionQueueBanner: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
         .animation(.easeInOut(duration: 0.12), value: isHovered)
-    }
-
-    private func open() {
-        // Prefer surfacing pending plans first — they typically block forward
-        // progress on the conversation while questions/permissions are usually
-        // about a single in-flight tool call.
-        if let plan = pendingPlans.first {
-            windowState.presentedPlanToolCallId = plan.toolCallId
-            return
-        }
-        windowState.presentedPermissionId = pendingRequests.first?.id
-    }
-
-    private func countText(_ count: Int, singular: String, plural: String) -> String {
-        "\(count) \(count == 1 ? singular : plural)"
     }
 }

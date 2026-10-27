@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C93BD2F51A0D4DCA8209E491 /* AgentConfirmationAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3DA07D5F884B7A9F233FD1 /* AgentConfirmationAttentionTests.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
@@ -200,6 +201,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AD3DA07D5F884B7A9F233FD1 /* AgentConfirmationAttentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentConfirmationAttentionTests.swift; sourceTree = "<group>"; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -484,6 +486,7 @@
 				A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */,
 				A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */,
 				101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */,
+				AD3DA07D5F884B7A9F233FD1 /* AgentConfirmationAttentionTests.swift */,
 				4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */,
 				7A5C0001000000000000A001 /* MockAgentBackend.swift */,
 				A4E201000000000000000001 /* CustomMenuModelSelectionTests.swift */,
@@ -1068,6 +1071,7 @@
 				A5E1C0DE0000000000000012 /* ClaudeLoginTests.swift in Sources */,
 				A5E1C0DE0000000000000002 /* MockAppStatePersistence.swift in Sources */,
 				101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */,
+				C93BD2F51A0D4DCA8209E491 /* AgentConfirmationAttentionTests.swift in Sources */,
 				33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */,
 				7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */,
 				A4E201000000000000000002 /* CustomMenuModelSelectionTests.swift in Sources */,

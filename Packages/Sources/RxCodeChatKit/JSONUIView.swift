@@ -7,13 +7,18 @@ import RxCodeCore
 public struct JSONUIRenderer: View {
     let spec: JSONUISpec
 
-    public init(spec: JSONUISpec) {
+    private let onSubmit: (([String: JSONValue]) -> Void)?
+
+    public init(spec: JSONUISpec, onSubmit: (([String: JSONValue]) -> Void)? = nil) {
         self.spec = spec
+        self.onSubmit = onSubmit
     }
 
     public var body: some View {
-        JSONUINode(id: spec.root, spec: spec, depth: 0)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        JSONUIInteractiveHost(spec: spec, onSubmit: onSubmit) { id in
+            AnyView(JSONUINode(id: id, spec: spec, depth: 0))
+        }
+        .id(spec)
     }
 }
 
@@ -104,6 +109,7 @@ private struct JSONUINode: View {
     let depth: Int
     /// A grid cell: boxed elements stretch to the row's tallest cell.
     var fillsCell = false
+    @Environment(\.jsonUIInteraction) private var interaction
 
     var body: some View {
         if depth < JSONUICatalog.maxDepth, let element = spec.elements[id] {
@@ -114,6 +120,18 @@ private struct JSONUINode: View {
     @ViewBuilder
     private func content(_ element: JSONUIElement) -> some View {
         switch element.type {
+        case "Form":
+            VStack(alignment: .leading, spacing: 16) {
+                if let title = element.string("title") { Text(title).font(.headline) }
+                children(of: element)
+            }
+            .environment(\.jsonUIFormID, id)
+        case "Sheet", "Dialog", "Overlay", "Alert", "ConfirmationDialog":
+            EmptyView() // Presented by the host, never stacked into the document.
+        case "Button", "TextField", "TextEditor", "Toggle", "Picker", "Slider":
+            if let interaction {
+                JSONUIControl(id: id, element: element, interaction: interaction)
+            }
         case "Stack":
             let spacing = Self.spacing(element.string("gap"))
             if element.string("direction") == "horizontal" {
@@ -138,7 +156,7 @@ private struct JSONUINode: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
         case "Text":
-            Text(Self.markdown(element.string("text") ?? ""))
+            MarkdownContentView(text: element.string("text") ?? "")
                 .font(Self.textFont(size: element.string("size"), weight: element.string("weight")))
                 .foregroundStyle(JSONUITone.color(element.string("tone")))
                 .fixedSize(horizontal: false, vertical: true)
@@ -243,10 +261,6 @@ private struct JSONUINode: View {
     private static func httpsURL(_ string: String?) -> URL? {
         guard let url = string.flatMap(URL.init(string:)), url.scheme?.lowercased() == "https" else { return nil }
         return url
-    }
-
-    private static func markdown(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
     }
 
     private static func aspectRatio(_ aspect: String?) -> CGFloat {
@@ -498,7 +512,7 @@ private struct JSONUIList: View {
                     Text(ordered ? "\(index + 1)." : "•")
                         .monospacedDigit()
                         .foregroundStyle(ClaudeTheme.textSecondary)
-                    Text((try? AttributedString(markdown: items[index])) ?? AttributedString(items[index]))
+                    MarkdownContentView(text: items[index])
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(.subheadline)
@@ -533,7 +547,7 @@ private struct JSONUISteps: View {
                             .foregroundStyle(status == "pending" ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                         if let detail = item["detail"]?.stringValue {
-                            Text((try? AttributedString(markdown: detail)) ?? AttributedString(detail))
+                            MarkdownContentView(text: detail)
                                 .font(.callout)
                                 .foregroundStyle(ClaudeTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)

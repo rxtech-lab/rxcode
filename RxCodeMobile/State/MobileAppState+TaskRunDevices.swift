@@ -73,8 +73,7 @@ extension MobileAppState {
               !board.column(for: board.resolvedStatus(of: task)).triggersChat,
               !pairedDesktops.isEmpty
         else { return false }
-        // A Mac assigns its default agent to a cloud task it is asked to run.
-        return usesCloudTasks || task.agent.isAssigned
+        return true
     }
 
     /// A Mac-backed board belongs to the active Mac, so only it can run that
@@ -96,16 +95,16 @@ extension MobileAppState {
 
     /// Moves `task` into chat column `status` on `desktop`, which starts its
     /// agent there, and remembers the Mac so the card can open the session.
-    func runTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil, on desktop: PairedDesktop) async throws {
+    func runTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil, on desktop: PairedDesktop, agent: TaskAgentConfig) async throws {
         UserDefaults.standard.set(desktop.id, forKey: Self.lastRunDesktopKey)
         if usesCloudTasks {
-            try await runCloudTask(task, to: status, on: desktop)
+            try await runCloudTask(task, to: status, on: desktop, agent: agent)
             return
         }
         guard desktop.id == activePairedDesktop?.id else {
             throw AutopilotRemoteError.server(String(localized: "Switch to \(desktop.displayName) to run its tasks."))
         }
-        try await moveTask(task, to: status, sortIndex: sortIndex)
+        try await moveTask(task, to: status, sortIndex: sortIndex, runAgent: agent)
         storeTaskRunLink(MobileTaskRunLink(
             desktopID: desktop.id,
             desktopName: desktop.displayName,
@@ -118,7 +117,7 @@ extension MobileAppState {
 
     /// Asks `desktop` to run a cloud task. The Mac moves its own copy into a
     /// chat column and pushes the new status to the cloud.
-    private func runCloudTask(_ task: ProjectTask, to status: TaskStatus, on desktop: PairedDesktop) async throws {
+    private func runCloudTask(_ task: ProjectTask, to status: TaskStatus, on desktop: PairedDesktop, agent: TaskAgentConfig) async throws {
         guard let remoteTaskID = taskSnapshots[task.projectId]?.board.cloudSync?.taskRemoteId(task.id),
               let cloudProjectID = cloudTaskProjects.first(where: { $0.id == task.projectId })?.cloudId
         else {
@@ -130,6 +129,7 @@ extension MobileAppState {
             operation: .moveTask,
             taskID: task.id,
             status: status,
+            runAgent: agent,
             cloudProjectID: cloudProjectID,
             cloudTaskID: remoteTaskID
         ))

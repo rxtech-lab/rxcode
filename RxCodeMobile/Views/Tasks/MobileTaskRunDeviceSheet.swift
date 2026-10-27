@@ -9,6 +9,9 @@ struct MobileTaskRunDeviceSheet: View {
     let request: MobileTaskRunRequest
 
     @State private var selectedID: String?
+    @State private var modelSections: [AgentModelSection] = []
+    @State private var selectedModel: AgentModel?
+    @State private var loadedDesktopID: String?
     @State private var progressMessage: String?
     @State private var errorMessage: String?
 
@@ -39,6 +42,24 @@ struct MobileTaskRunDeviceSheet: View {
                      : "Tasks on this board run on the Mac it belongs to. Tap the card later to open its session.")
             }
 
+            Section {
+                NavigationLink {
+                    modelPicker
+                } label: {
+                    LabeledContent("Model", value: selectedModel?.displayName ?? String(localized: "Choose a Model"))
+                }
+                .disabled(loadedDesktopID != selectedID)
+                .accessibilityIdentifier("task-run-model-picker")
+                if loadedDesktopID == nil, !isWorking {
+                    Button("Reload Models") {
+                        MobileHaptics.buttonTap()
+                        Task { await loadModels() }
+                    }
+                }
+            } header: {
+                Text("Agent")
+            }
+
             if state.usesCloudTasks {
                 Section {
                     Button("Move Without Running") {
@@ -59,7 +80,7 @@ struct MobileTaskRunDeviceSheet: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Run") { run() }
-                    .disabled(selectedDesktop == nil)
+                    .disabled(selectedDesktop == nil || selectedModel == nil || loadedDesktopID != selectedID)
                     .accessibilityIdentifier("task-run-device-confirm")
             }
         }
@@ -74,6 +95,9 @@ struct MobileTaskRunDeviceSheet: View {
         .interactiveDismissDisabled(isWorking)
         .onAppear {
             if selectedID == nil { selectedID = state.defaultRunDesktop()?.id }
+        }
+        .task(id: selectedID) {
+            await loadModels()
         }
         .mobileTaskErrorAlert($errorMessage)
     }
@@ -123,14 +147,84 @@ struct MobileTaskRunDeviceSheet: View {
         return Text("Switches to this Mac")
     }
 
-    private func run() {
+    private var modelPicker: some View {
+        List {
+            ForEach(modelSections) { section in
+                Section(section.title) {
+                    ForEach(section.models, id: \.key) { model in
+                        Button {
+                            selectedModel = model
+                            UISelectionFeedbackGenerator().selectionChanged()
+                        } label: {
+                            HStack {
+                                Text(model.displayName)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if selectedModel?.key == model.key {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .overlay {
+            if modelSections.flatMap(\.models).isEmpty {
+                ContentUnavailableView("No Models Available", systemImage: "cpu", description: Text("Enable an agent on this Mac, then try again."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .navigationTitle("Choose a Model")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Switching Macs clears the previous catalogue. Only show models after
+    /// the chosen Mac has delivered its own settings snapshot.
+    private func loadModels() async {
+        // Keep the choice when returning from the model selection page.
+        if let selectedID, loadedDesktopID == selectedID { return }
+        loadedDesktopID = nil
+        modelSections = []
+        selectedModel = nil
         guard let desktop = selectedDesktop else { return }
+        progressMessage = String(localized: "Loading models from \(desktop.displayName)…")
+        defer { progressMessage = nil }
+        do {
+            try await state.activateDesktop(desktop)
+            try Task.checkCancellation()
+            guard state.activePairedDesktop?.id == desktop.id, state.desktopSettings != nil else {
+                throw AutopilotRemoteError.server(String(localized: "This Mac hasn't shared its models yet. Reconnect and try again."))
+            }
+            modelSections = state.taskModelSections
+            let models = modelSections.flatMap(\.models)
+            selectedModel = models.first {
+                $0.provider == request.task.agent.provider && $0.id == request.task.agent.model
+            } ?? models.first
+            loadedDesktopID = desktop.id
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    private func run() {
+        guard let desktop = selectedDesktop, let model = selectedModel, loadedDesktopID == desktop.id else { return }
         MobileHaptics.buttonTap()
         progressMessage = String(localized: "Starting on \(desktop.displayName)…")
         Task {
             defer { progressMessage = nil }
             do {
-                try await state.runTask(request.task, to: request.status, sortIndex: request.sortIndex, on: desktop)
+                var agent = request.task.agent
+                if agent.provider != model.provider || agent.model != model.id {
+                    agent.effort = nil
+                }
+                agent.provider = model.provider
+                agent.model = model.id
+                try await state.runTask(request.task, to: request.status, sortIndex: request.sortIndex, on: desktop, agent: agent)
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 dismiss()
             } catch {
@@ -168,7 +262,7 @@ struct MobileTaskRunDevicePicker: ViewModifier {
                 MobileTaskRunDeviceSheet(request: request)
                     .environmentObject(state)
             }
-            .mobileSheetPresentation([.medium])
+            .mobileSheetPresentation([.large])
         }
     }
 }

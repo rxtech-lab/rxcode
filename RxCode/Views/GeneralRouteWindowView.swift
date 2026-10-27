@@ -185,6 +185,7 @@ private struct GeneralRouteWindowView: View {
                 }
             }, aboveInputAccessory: {
                 VStack(spacing: 8) {
+                    AgentConfirmationBanner()
                     PermissionQueueBanner()
                     ThreadDiffBanner()
                 }

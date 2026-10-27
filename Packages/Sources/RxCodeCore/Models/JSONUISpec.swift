@@ -63,12 +63,16 @@ public struct JSONUISpec: Codable, Sendable, Hashable {
 
 /// The component catalog shared by the tool's description, validation and the renderer.
 public enum JSONUICatalog {
-    public static let containerTypes: Set<String> = ["Stack", "Grid", "Card", "Disclosure", "Tabs"]
+    public static let containerTypes: Set<String> = ["Stack", "Grid", "Card", "Disclosure", "Tabs", "Form", "Sheet", "Dialog", "Overlay"]
     public static let leafTypes: Set<String> = [
         "Heading", "Text", "Badge", "Stat", "Callout", "KeyValue", "List", "Steps", "Table",
         "BarChart", "Progress", "Code", "Divider", "Link", "Image", "Gallery",
+        "Button", "TextField", "TextEditor", "Toggle", "Picker", "Slider", "Alert", "ConfirmationDialog",
     ]
     public static let elementTypes = containerTypes.union(leafTypes)
+    public static let inputTypes: Set<String> = ["TextField", "TextEditor", "Toggle", "Picker", "Slider"]
+    public static let presentationTypes: Set<String> = ["Sheet", "Dialog", "Overlay", "Alert", "ConfirmationDialog"]
+    public static let actionTypes: Set<String> = ["present", "dismiss", "set", "reset", "submit"]
     public static let tones = ["default", "muted", "accent", "positive", "negative", "warning"]
     public static let maxElements = 300
     public static let maxDepth = 24
@@ -89,23 +93,32 @@ public extension JSONUISpec {
                 issues.append("elements.\(id): only \(JSONUICatalog.containerTypes.sorted().joined(separator: ", ")) have children.")
             }
         }
+        issues += interactionIssues
         guard elements[root] != nil else {
             issues.append("root: unknown element \"\(root)\".")
             return issues
         }
-        // Walk the tree from the root: every child must exist and appear once, which also rules out cycles.
-        var seen: Set<String> = [root]
-        var stack = [root]
-        while let parent = stack.popLast() {
-            for (index, child) in (elements[parent]?.children ?? []).enumerated() {
+        // Presentations can be detached from the root, so validate every tree in the map.
+        var seenChildren: Set<String> = []
+        var uniqueChildren = true
+        for (parent, element) in elements.sorted(by: { $0.key < $1.key }) {
+            for (index, child) in element.children.enumerated() {
                 if elements[child] == nil {
                     issues.append("elements.\(parent).children[\(index)]: unknown element \"\(child)\".")
-                } else if !seen.insert(child).inserted {
+                } else if child == root || !seenChildren.insert(child).inserted {
+                    uniqueChildren = false
                     issues.append("elements.\(parent).children[\(index)]: element \"\(child)\" is used more than once.")
-                } else {
-                    stack.append(child)
                 }
             }
+        }
+        func checkPath(_ id: String, path: Set<String>) -> Bool {
+            guard !path.contains(id), path.count < JSONUICatalog.maxDepth else { return false }
+            var path = path
+            path.insert(id)
+            return (elements[id]?.children ?? []).allSatisfy { checkPath($0, path: path) }
+        }
+        if uniqueChildren && !elements.keys.allSatisfy({ checkPath($0, path: []) }) {
+            issues.append("elements: trees must be acyclic and at most \(JSONUICatalog.maxDepth) levels deep.")
         }
         return issues
     }
@@ -126,8 +139,10 @@ public extension JSONUISpec {
         func visit(_ id: String, depth: Int) {
             guard depth < JSONUICatalog.maxDepth, visited.insert(id).inserted, let element = elements[id] else { return }
             switch element.type {
-            case "Card", "Disclosure":
+            case "Card", "Disclosure", "Form", "Sheet", "Dialog", "Overlay", "Alert", "ConfirmationDialog":
                 if let title = element.string("title") { lines.append(title) }
+            case "Button", "TextField", "TextEditor", "Toggle", "Picker", "Slider":
+                if let label = element.string("label") { lines.append(label) }
             case "Heading", "Text", "Badge":
                 if let text = element.string("text") { lines.append(text) }
             case "Callout":

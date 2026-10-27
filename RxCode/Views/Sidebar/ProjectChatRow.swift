@@ -213,6 +213,8 @@ struct ProjectChatRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            AttentionBadge(attention: appState.threadAttention(sessionKey: summary.id, in: windowState))
+
             if let taskCompletionChip {
                 Text(taskCompletionChip.text)
                     .font(.system(size: ClaudeTheme.size(10), weight: .semibold))

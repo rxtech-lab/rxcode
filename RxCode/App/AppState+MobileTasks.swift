@@ -120,10 +120,14 @@ extension AppState {
             return task.id
 
         case .moveTask:
-            guard let task = requestedTask(request) else { throw MobileTaskBoardError.taskNotFound }
+            guard var task = requestedTask(request) else { throw MobileTaskBoardError.taskNotFound }
             guard let status = request.status else { throw MobileTaskBoardError.missing("status") }
             if isStatusLocked(task), taskBoard(for: projectId).resolvedStatus(of: task) != status {
                 throw MobileTaskBoardError.statusLocked
+            }
+            if let agent = request.runAgent, !isStatusLocked(task) {
+                task.agent = agent
+                upsertTask(task)
             }
             moveTask(task, to: status, sortIndex: request.sortIndex)
             return task.id
@@ -205,7 +209,9 @@ extension AppState {
 
         if !isStatusLocked(task) {
             task.assignedDeviceId = cloudDeviceID
-            if !task.agent.isAssigned {
+            if let agent = request.runAgent {
+                task.agent = agent
+            } else if !task.agent.isAssigned {
                 task.agent = defaultTaskAgent()
             }
             upsertTask(task)

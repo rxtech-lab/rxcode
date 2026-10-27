@@ -172,6 +172,7 @@ class MobileAppState @Inject constructor(
             _state.update {
                 val desktopChanged = it.activeDesktopId != activeCompositeId ||
                     it.activeDesktopPubkey != activeHex
+                if (desktopChanged) app.rxlab.rxcode.widget.UsageWidgetProvider.save(context, app.rxlab.rxcode.proto.UsageDashboard())
                 if (desktopChanged) pendingBriefingContentId = null
                 if (desktopChanged) {
                     runCatching { briefingAssetOutput?.close() }
@@ -185,6 +186,7 @@ class MobileAppState @Inject constructor(
                     activeDesktopPubkey = activeHex,
                     relayUrl = resolvedRelay,
                     hasReceivedInitialSnapshot = if (desktopChanged) false else it.hasReceivedInitialSnapshot,
+                    usageDashboard = if (desktopChanged) app.rxlab.rxcode.proto.UsageDashboard() else it.usageDashboard,
                     briefingDocuments = if (desktopChanged) emptyList() else it.briefingDocuments,
                     briefingContentResult = if (desktopChanged) null else it.briefingContentResult,
                     isLoadingBriefingContent = if (desktopChanged) false else it.isLoadingBriefingContent,
@@ -476,6 +478,7 @@ class MobileAppState @Inject constructor(
                 },
                 branchBriefings = snap.data.branchBriefings ?: current.branchBriefings,
                 briefingDocuments = snap.data.briefingDocuments ?: emptyList(),
+                usageDashboard = snap.data.usageDashboard ?: app.rxlab.rxcode.proto.UsageDashboard(),
                 threadSummaries = snap.data.threadSummaries ?: current.threadSummaries,
                 projectBranches = snap.data.projectBranches
                     ?.associateBy { it.projectId }
@@ -491,6 +494,7 @@ class MobileAppState @Inject constructor(
                 hasReceivedInitialSnapshot = true,
             )
         }
+        app.rxlab.rxcode.widget.UsageWidgetProvider.save(context, _state.value.usageDashboard)
     }
 
     private fun handleMoreMessages(fromHex: String, more: Payload.MoreMessages) {

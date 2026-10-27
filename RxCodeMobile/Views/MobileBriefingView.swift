@@ -39,9 +39,15 @@ struct MobileBriefingView: View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if groups.isEmpty && documents.isEmpty {
+                    ForEach(state.usageDashboard.cards.filter { $0.isVisible }) { card in
+                        if let snapshot = state.usageDashboard.snapshot(for: card),
+                           selectedProjectIds.isEmpty || snapshot.projectID == nil || selectedProjectIds.contains(snapshot.projectID!) {
+                            UsagePluginCard(snapshot: snapshot, configuration: card)
+                        }
+                    }
+                    if groups.isEmpty && documents.isEmpty && state.usageDashboard.cards.isEmpty {
                         emptyState
-                            .frame(maxWidth: .infinity, minHeight: 320)
+                            .frame(maxWidth: .infinity, minHeight: max(0, proxy.size.height - 40), maxHeight: .infinity)
                     } else {
                         GlassEffectContainer(spacing: 16) {
                             LazyVGrid(

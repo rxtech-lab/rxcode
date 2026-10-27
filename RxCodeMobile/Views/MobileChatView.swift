@@ -305,8 +305,8 @@ struct MobileChatView: View {
             .onGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .global)
             } action: { rect in
-                scrollViewHeight = rect.height
-                scrollViewMinY = rect.minY
+                if abs(rect.height - scrollViewHeight) > 0.5 { scrollViewHeight = rect.height }
+                if abs(rect.minY - scrollViewMinY) > 0.5 { scrollViewMinY = rect.minY }
             }
             .onAppear {
                 establishInitialPackageScroll(reason: "onAppear")
@@ -412,6 +412,9 @@ struct MobileChatView: View {
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.frame(in: .global).minY
             } action: { newValue in
+                // Sub-point jitter while the keyboard animates or the field
+                // grows would otherwise re-render the whole thread every frame.
+                guard abs(newValue - composerMinY) > 0.5 else { return }
                 composerMinY = newValue
             }
 

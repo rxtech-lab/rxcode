@@ -44,4 +44,29 @@ final class CustomMenuModelSelectionTests: XCTestCase {
             XCTAssertNil(record.model)
         }
     }
+
+    func testHidingDefaultActionPreservesSiblingAndCustomActions() {
+        let items = [
+            MenuItem(id: "builtin.actionsMenu.project.codeReview.project-a", title: "Localized review"),
+            MenuItem(id: "builtin.actionsMenu.project.commitAll.project-a", title: "Commit"),
+            MenuItem(id: "builtin.customMenu.project.custom-a", title: "Localized review")
+        ]
+        let visible = BuiltInContextMenuAction.visibleItems(
+            items, hiddenIDs: ["builtin.actionsMenu.project.codeReview"]
+        )
+        XCTAssertEqual(visible.map(\.id), Array(items.dropFirst()).map(\.id))
+        XCTAssertEqual(BuiltInContextMenuAction.visibleItems(items, hiddenIDs: []), items)
+    }
+
+    func testVisibilityAppliesAcrossProjectsAndBranchesWithoutHidingThreadAction() {
+        let items = [
+            MenuItem(id: "builtin.actionsMenu.project.codeReview.project-a"),
+            MenuItem(id: "builtin.actionsMenu.project.codeReview.project-b.feature.test"),
+            MenuItem(id: "builtin.actionsMenu.thread.codeReview.session-a")
+        ]
+        XCTAssertEqual(
+            BuiltInContextMenuAction.visibleItems(items, hiddenIDs: ["builtin.actionsMenu.project.codeReview"]).map(\.id),
+            [items[2].id]
+        )
+    }
 }

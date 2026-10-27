@@ -299,6 +299,7 @@ extension AppState {
         await loadScheduledTasksFromDisk()
         startScheduledTaskTimer()
         await loadBriefingNotificationSettings()
+        await startUsagePlugins()
         Task { [weak self] in await self?.refreshACPRegistry(forceRefresh: false) }
 
         await runStartupStoreMaintenance()

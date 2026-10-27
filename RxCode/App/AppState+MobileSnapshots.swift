@@ -171,6 +171,7 @@ extension AppState {
             sessions: mobileSessionSummaries(),
             branchBriefings: mobileBranchBriefings(),
             briefingDocuments: documentBriefings,
+            usageDashboard: usageDashboard,
             threadSummaries: mobileThreadSummaries(),
             ciStatuses: mobileCIStatuses(),
             settings: mobileSettingsSnapshot(),

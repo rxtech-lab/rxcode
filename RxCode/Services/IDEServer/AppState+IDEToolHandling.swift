@@ -79,6 +79,8 @@ extension AppState: IDEToolHandling {
             return try await handleMemoryDelete(arguments: arguments)
         case "ide__send_to_thread":
             return try await handleSendToThread(arguments: arguments)
+        case "ide__usage_cards":
+            return try await handleUsageCards(arguments)
         case "ide__get_usage":
             return await handleGetUsage()
         case "ide__search_docs":

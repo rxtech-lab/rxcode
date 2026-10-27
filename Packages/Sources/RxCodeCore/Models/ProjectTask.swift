@@ -162,6 +162,8 @@ public struct TaskLabel: Identifiable, Codable, Sendable, Hashable {
 public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
     public let id: UUID
     public var projectId: UUID
+    public var assigneeProfiles: [CardAssignee] = []
+    public var assigneeIds: [String] = []
     public var title: String
     public var details: String
     /// Free-form multi-select labels, colored through `TaskBoard.labels`.
@@ -210,6 +212,7 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case assigneeProfiles, assigneeIds
         case id, projectId, title, details, tags, version, milestone, priority, typeId
         case linkedProjectIds, createdAt, updatedAt
     }
@@ -220,6 +223,8 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         projectId = try c.decodeIfPresent(UUID.self, forKey: .projectId) ?? UUID()
+        assigneeProfiles = try c.decodeIfPresent([CardAssignee].self, forKey: .assigneeProfiles) ?? []
+        assigneeIds = try c.decodeIfPresent([String].self, forKey: .assigneeIds) ?? []
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
@@ -274,6 +279,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     }
     /// The Autopilot laptop assigned to this task. Nil means unassigned.
     public var assignedDeviceId: String?
+    public var assigneeProfiles: [CardAssignee] = []
+    public var assigneeIds: [String] = []
     public var title: String
     public var details: String
     public var status: TaskStatus
@@ -361,6 +368,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// default so a board written by an older build keeps loading after new
     /// fields are added.
     private enum CodingKeys: String, CodingKey {
+        case assigneeProfiles, assigneeIds
         case id, projectId, storyId, parentTaskId, parentTaskIds, assignedDeviceId, title, details, status, version, tags
         case milestone, priority, typeId
         case agent, attachments, sessionKey, sourceSessionKey, attentionReason, isQueued, sortIndex, createdAt, updatedAt
@@ -375,6 +383,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         let savedParents = try c.decodeIfPresent([UUID].self, forKey: .parentTaskIds)
         parentTaskIds = Self.uniqueParentIDs(savedParents ?? legacyParent.map { [$0] } ?? [])
         assignedDeviceId = try c.decodeIfPresent(String.self, forKey: .assignedDeviceId)
+        assigneeProfiles = try c.decodeIfPresent([CardAssignee].self, forKey: .assigneeProfiles) ?? []
+        assigneeIds = try c.decodeIfPresent([String].self, forKey: .assigneeIds) ?? []
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
         status = try c.decodeIfPresent(TaskStatus.self, forKey: .status) ?? .pending
@@ -407,6 +417,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         try c.encodeIfPresent(parentTaskId, forKey: .parentTaskId)
         try c.encode(parentTaskIds, forKey: .parentTaskIds)
         try c.encodeIfPresent(assignedDeviceId, forKey: .assignedDeviceId)
+        try c.encode(assigneeProfiles, forKey: .assigneeProfiles)
+        try c.encode(assigneeIds, forKey: .assigneeIds)
         try c.encode(title, forKey: .title)
         try c.encode(details, forKey: .details)
         try c.encode(status, forKey: .status)
@@ -629,6 +641,8 @@ public struct TaskFilterSnapshot: Codable, Sendable, Hashable {
 }
 
 public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
+    /// Per-column sorting syncs with this saved view. Device filters are stored separately.
+    public var columnSorts: [String: TaskColumnSort] = [:]
     public let id: UUID
     public var name: String
     public var layout: TaskViewLayout
@@ -680,6 +694,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, filterSnapshot, storyPanelStatuses, isDefault
+        case columnSorts
         /// Single-value filters written before multi-select existed.
         case version, storyId
     }
@@ -691,6 +706,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        columnSorts = (try? c.decodeIfPresent([String: TaskColumnSort].self, forKey: .columnSorts)) ?? [:]
         layout = (try? c.decodeIfPresent(TaskViewLayout.self, forKey: .layout)) ?? .board
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         if let versions = try? c.decodeIfPresent([String].self, forKey: .versions) {
@@ -720,6 +736,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)
         try c.encode(layout, forKey: .layout)
+        try c.encode(columnSorts, forKey: .columnSorts)
         try c.encode(tags, forKey: .tags)
         try c.encode(versions, forKey: .versions)
         try c.encode(milestones, forKey: .milestones)

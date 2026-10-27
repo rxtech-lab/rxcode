@@ -72,6 +72,7 @@ extension AppState {
         case .accountStatus:
             let status = AutopilotAccountStatus(
                 isSignedIn: isSignedIn,
+                userID: rxUser?.id,
                 name: rxUser?.name,
                 email: rxUser?.email,
                 avatarURL: rxUser?.image

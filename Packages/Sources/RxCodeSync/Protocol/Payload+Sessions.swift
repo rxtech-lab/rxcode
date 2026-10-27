@@ -20,7 +20,7 @@ public enum SessionAttentionKind: String, Codable, Sendable, Equatable {
     case question
 }
 
-public struct SessionSummary: Codable, Sendable, Identifiable {
+public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
     public let id: String
     public let projectId: UUID
     public let title: String

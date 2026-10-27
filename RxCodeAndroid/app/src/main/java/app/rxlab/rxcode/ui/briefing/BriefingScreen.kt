@@ -200,7 +200,7 @@ fun BriefingScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (visibleGroups.isEmpty() && visibleDocuments.isEmpty()) {
+            if (visibleGroups.isEmpty() && visibleDocuments.isEmpty() && state.usageDashboard.cards.none { it.isVisible }) {
                 BriefingEmptyState(
                     hasAnyData = hasAnyData,
                     showAllBranches = showAllBranches,
@@ -216,6 +216,23 @@ fun BriefingScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    items(state.usageDashboard.cards.filter { it.isVisible }, key = { "usage:${it.id}" }) { card ->
+                        state.usageDashboard.snapshots.firstOrNull { it.id == card.integrationID && (selectedProjectIds.isEmpty() || it.projectID == null || selectedProjectIds.any { id -> id.toString().equals(it.projectID, ignoreCase = true) }) }?.let { snapshot ->
+                            ElevatedCard {
+                                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(snapshot.title, style = MaterialTheme.typography.titleMedium)
+                                    Text("${snapshot.scope} · ${snapshot.period}", style = MaterialTheme.typography.labelSmall)
+                                    val metrics = snapshot.metrics.filter { card.metricID == null || it.id == card.metricID }
+                                    val count = when (card.style) { "compact" -> 1; "metrics" -> metrics.size; else -> 3 }
+                                    metrics.take(count).forEach { metric ->
+                                        Text("${metric.title}: ${metric.formattedValue}")
+                                    }
+                                    snapshot.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                                    Text("Updated ${relativeTime(snapshot.fetchedAt)}${if (snapshot.error != null || java.time.Duration.between(snapshot.fetchedAt, java.time.Instant.now()).seconds > 3600) " · Stale" else ""}", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
                     items(visibleDocuments, key = { "document:${it.id}" }) { document ->
                         ElevatedCard(onClick = { selectedDocument = document }) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

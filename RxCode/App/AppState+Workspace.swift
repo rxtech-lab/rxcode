@@ -71,6 +71,9 @@ extension AppState {
         memoryMaxContextItems = workspaceDefaults.int(for: "memoryMaxContextItems", default: 5)
 
         notificationsEnabled = workspaceDefaults.bool(for: "notificationsEnabled", default: true)
+        let hiddenMenuIDs = Set(workspaceDefaults.stringArray(for: "hiddenDefaultContextMenuActionIDs"))
+        hiddenDefaultContextMenuActionIDs = workspaceDefaults.bool(for: "hideDefaultContextMenuActions", default: false)
+            ? hiddenMenuIDs.union(BuiltInContextMenuAction.all.map(\.id)) : hiddenMenuIDs
         enableAutoCIFix = workspaceDefaults.bool(for: "enableAutoCIFix", default: false)
         focusMode = workspaceDefaults.bool(for: "focusMode", default: false)
         hiddenTaskProjectIds = Set(workspaceDefaults.stringArray(for: "hiddenTaskProjectIds").compactMap(UUID.init(uuidString:)))

@@ -1,5 +1,6 @@
 package app.rxlab.rxcode.state
 
+import app.rxlab.rxcode.proto.UsageDashboard
 import app.rxlab.rxcode.proto.ChatMessage
 import app.rxlab.rxcode.proto.DocsSearchHit
 import app.rxlab.rxcode.proto.MobileACPClient
@@ -53,6 +54,7 @@ data class MobileState(
     /** Per-branch briefings keyed by `"<projectId>::<branch>"`. */
     val branchBriefings: List<MobileBranchBriefing> = emptyList(),
     val briefingDocuments: List<MobileBriefingDocument> = emptyList(),
+    val usageDashboard: UsageDashboard = UsageDashboard(),
     val briefingContentResult: BriefingContentResultPayload? = null,
     val isLoadingBriefingContent: Boolean = false,
     val briefingAssetFilePath: String? = null,

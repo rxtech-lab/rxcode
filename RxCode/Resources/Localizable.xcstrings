@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "These tasks start after this one reaches Pending Review or Done." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此任务进入待审核或完成后，这些任务将开始。"
+          }
+        }
+      }
+    },
     "" : {
       "localizations" : {
         "ko" : {
@@ -1777,6 +1787,9 @@
         }
       }
     },
+    "Account / organization / team ID" : {
+
+    },
     "Account email" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2178,6 +2191,12 @@
         }
       }
     },
+    "Add another view…" : {
+
+    },
+    "Add card view" : {
+
+    },
     "Add Column" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2277,6 +2296,9 @@
           }
         }
       }
+    },
+    "Add integration" : {
+
     },
     "Add Item" : {
       "localizations" : {
@@ -2699,6 +2721,7 @@
       }
     },
     "Add your own items to the project, thread, and briefing-card menus. They sync to mobile automatically." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2981,6 +3004,12 @@
         }
       }
     },
+    "AI usage breakdown" : {
+
+    },
+    "AI usage breakdown…" : {
+
+    },
     "All" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3065,6 +3094,9 @@
           }
         }
       }
+    },
+    "All metrics" : {
+
     },
     "All project cards are hidden. Restore them from Project Cards." : {
 
@@ -3394,6 +3426,9 @@
           }
         }
       }
+    },
+    "API key (leave blank to keep existing key)" : {
+
     },
     "API_KEY" : {
       "extractionState" : "stale",
@@ -4732,6 +4767,9 @@
         }
       }
     },
+    "Callback URL" : {
+
+    },
     "Cancel" : {
       "localizations" : {
         "en" : {
@@ -4753,6 +4791,12 @@
           }
         }
       }
+    },
+    "Card style" : {
+
+    },
+    "Card view" : {
+
     },
     "Cards in done columns and finished stories with no updates for this long are hidden from the board. Open work is never hidden. Reveal older items 10 at a time." : {
 
@@ -6520,7 +6564,6 @@
       }
     },
     "Context Menus" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7645,6 +7688,9 @@
         }
       }
     },
+    "Database name (optional)" : {
+
+    },
     "Day" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8066,6 +8112,12 @@
         }
       }
     },
+    "Delete card" : {
+
+    },
+    "Delete card…" : {
+
+    },
     "Delete column “%@”?" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8290,6 +8342,9 @@
           }
         }
       }
+    },
+    "Delete this card view?" : {
+
     },
     "Delete this document?" : {
       "localizations" : {
@@ -9294,6 +9349,9 @@
         }
       }
     },
+    "Edit card…" : {
+
+    },
     "Edit Column…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9319,6 +9377,9 @@
           }
         }
       }
+    },
+    "Edit integration…" : {
+
     },
     "Edit memory" : {
       "localizations" : {
@@ -11543,6 +11604,9 @@
         }
       }
     },
+    "Hidden" : {
+
+    },
     "Hidden (%lld)" : {
       "localizations" : {
         "ko" : {
@@ -12714,6 +12778,12 @@
         }
       }
     },
+    "Integration" : {
+
+    },
+    "Integration could not be updated" : {
+
+    },
     "Interactive View" : {
 
     },
@@ -13822,6 +13892,12 @@
         }
       }
     },
+    "Manage cards" : {
+
+    },
+    "Manage default and custom actions in project, thread, and briefing-card menus." : {
+
+    },
     "Manage Docs" : {
       "localizations" : {
         "ko" : {
@@ -14464,6 +14540,9 @@
           }
         }
       }
+    },
+    "Metric" : {
+
     },
     "Milestone" : {
       "localizations" : {
@@ -15584,6 +15663,7 @@
       }
     },
     "No custom items yet." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -15895,6 +15975,9 @@
           }
         }
       }
+    },
+    "No matching tasks. Change this column’s filters." : {
+
     },
     "No measured tasks in this window yet." : {
       "localizations" : {
@@ -17028,6 +17111,9 @@
           }
         }
       }
+    },
+    "OAuth application" : {
+
     },
     "OAuth client ID (optional)" : {
 
@@ -18881,6 +18967,9 @@
         }
       }
     },
+    "Provider project ID (optional)" : {
+
+    },
     "Providers" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18906,6 +18995,9 @@
           }
         }
       }
+    },
+    "Public client ID" : {
+
     },
     "Publishing Swift filters (step 4 of 5)" : {
 
@@ -19337,6 +19429,9 @@
     "Refreshing catalog..." : {
 
     },
+    "Refreshing usage…" : {
+
+    },
     "Regenerate" : {
       "localizations" : {
         "ko" : {
@@ -19352,6 +19447,9 @@
           }
         }
       }
+    },
+    "Register a public PKCE client with callback rxcode://usage-oauth. Grant read access to usage or billing in the provider console." : {
+
     },
     "Register repositories for semantic-release publishing. Pick which workflow cuts releases, install the RELEASE_TOKEN secret, and trigger releases from RxCode." : {
       "localizations" : {
@@ -19699,6 +19797,12 @@
     "Remove from Views" : {
 
     },
+    "Remove integration" : {
+
+    },
+    "Remove integration…" : {
+
+    },
     "Remove managed runtime?" : {
 
     },
@@ -19799,6 +19903,9 @@
         }
       }
     },
+    "Remove this integration and all its cards?" : {
+
+    },
     "Remove this release repository?" : {
       "localizations" : {
         "ko" : {
@@ -19846,6 +19953,9 @@
           }
         }
       }
+    },
+    "Removing integration…" : {
+
     },
     "Rename" : {
       "localizations" : {
@@ -20044,6 +20154,9 @@
           }
         }
       }
+    },
+    "Repositories (owner/repo, comma separated)" : {
+
     },
     "Repository" : {
       "localizations" : {
@@ -20526,6 +20639,9 @@
         }
       }
     },
+    "Run order shown on cards" : {
+
+    },
     "Run Queue" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20791,6 +20907,9 @@
         }
       }
     },
+    "RxCode project" : {
+
+    },
     "RxCode runs Claude Code or Codex locally. Install one of them to start your first project." : {
       "localizations" : {
         "ko" : {
@@ -21014,6 +21133,9 @@
       }
     },
     "Saving credentials and refreshing models…" : {
+
+    },
+    "Saving…" : {
 
     },
     "Scan frequency" : {
@@ -21259,6 +21381,9 @@
           }
         }
       }
+    },
+    "Scopes" : {
+
     },
     "Script" : {
       "localizations" : {
@@ -22783,6 +22908,9 @@
         }
       }
     },
+    "Show in briefing" : {
+
+    },
     "Show in Finder" : {
       "localizations" : {
         "en" : {
@@ -22804,6 +22932,12 @@
           }
         }
       }
+    },
+    "Show in menu bar" : {
+
+    },
+    "Show in widget" : {
+
     },
     "Show less" : {
       "localizations" : {
@@ -22884,6 +23018,9 @@
           }
         }
       }
+    },
+    "Show or hide individual default and custom actions in project, thread, and briefing-card menus. Some default actions appear only when applicable. Menus sync to mobile automatically." : {
+
     },
     "Show session time by provider and model." : {
       "localizations" : {
@@ -23128,6 +23265,9 @@
         }
       }
     },
+    "Sign in again" : {
+
+    },
     "Sign In to %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -23264,6 +23404,9 @@
           }
         }
       }
+    },
+    "Sign in with %@" : {
+
     },
     "Sign in with GitHub" : {
       "extractionState" : "stale",
@@ -23915,6 +24058,9 @@
           }
         }
       }
+    },
+    "Style" : {
+
     },
     "Subject" : {
       "localizations" : {
@@ -26234,6 +26380,12 @@
         }
       }
     },
+    "Updating card…" : {
+
+    },
+    "Updating integration…" : {
+
+    },
     "Upload" : {
       "localizations" : {
         "ko" : {
@@ -26313,6 +26465,15 @@
           }
         }
       }
+    },
+    "Usage cards" : {
+
+    },
+    "Usage integration" : {
+
+    },
+    "Usage integrations" : {
+
     },
     "Usage limits" : {
       "localizations" : {
@@ -26701,6 +26862,9 @@
         }
       }
     },
+    "Vercel currently gates team API permissions behind private beta. Your app needs Billing: Read Only permission." : {
+
+    },
     "Verification link expired — resend it to try again" : {
       "localizations" : {
         "zh-Hans" : {
@@ -26986,6 +27150,9 @@
 
     },
     "Views an agent opens in a dialog in this thread appear here." : {
+
+    },
+    "Visible" : {
 
     },
     "Wait for the agent to finish responding" : {
@@ -27651,6 +27818,9 @@
           }
         }
       }
+    },
+    "Zone ID (optional; traffic analytics)" : {
+
     }
   },
   "version" : "1.1"

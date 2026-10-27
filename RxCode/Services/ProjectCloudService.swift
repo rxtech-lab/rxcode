@@ -46,7 +46,7 @@ final class ProjectCloudService {
         var cursor: String?
         repeat {
             var components = URLComponents(url: projectsURL, resolvingAgainstBaseURL: false)
-            var items = [URLQueryItem(name: "pageSize", value: "100")]
+            var items = [URLQueryItem(name: "pageSize", value: "100"), URLQueryItem(name: "boardOnly", value: "true")]
             if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
             components?.queryItems = items
             guard let url = components?.url else { throw AutopilotService.ServiceError.invalidResponse }

@@ -21,44 +21,81 @@ struct TaskParentCombo: View {
     /// The dropdown is this much wider than the field that opens it.
     private static let dropdownWidthScale: CGFloat = 1.5
 
+    /// Selected tasks that still exist, in the order they were picked.
+    private var selectedTasks: [ProjectTask] {
+        selection.compactMap { appState.task(id: $0) }
+    }
+
+    private var summary: String {
+        switch selectedTasks.count {
+        case 0: String(localized: "None")
+        case 1: String(localized: "1 task")
+        default: String(localized: "\(selectedTasks.count) tasks")
+        }
+    }
+
+    // Each selected task gets its own form row below the picker, so long
+    // titles stay readable instead of wrapping as chips beside the label.
     var body: some View {
         LabeledContent("Starts after") {
-            VStack(alignment: .leading, spacing: 6) {
-                if !selection.isEmpty {
-                    FlowLayout(spacing: 4) {
-                        ForEach(selection, id: \.self) { id in
-                            if let selected = appState.task(id: id) {
-                                TaskRemovableChip(text: chipTitle(for: selected), icon: "link", tint: ClaudeTheme.accent) {
-                                    selection.removeAll { $0 == id }
-                                }
-                                .frame(maxWidth: 180)
-                                .help(chipTitle(for: selected))
-                            }
-                        }
-                    }
+            Button {
+                isOpen.toggle()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "link")
+                        .foregroundStyle(selectedTasks.isEmpty ? ClaudeTheme.textTertiary : ClaudeTheme.accent)
+                    Text(summary)
+                        .foregroundStyle(selectedTasks.isEmpty ? ClaudeTheme.textTertiary : ClaudeTheme.textPrimary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
-                Button {
-                    isOpen.toggle()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("Search tasks")
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fieldWidth = $0 }
-                .popover(isPresented: $isOpen, arrowEdge: .bottom) {
-                    dropdown
-                }
-                .help("Browse tasks by project and story")
-                .accessibilityLabel("Browse parent tasks")
-                .accessibilityIdentifier("task-parent-search")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fieldWidth = $0 }
+            .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+                dropdown
+            }
+            .help("Browse tasks by project and story")
+            .accessibilityLabel("Browse parent tasks")
+            .accessibilityValue(summary)
+            .accessibilityIdentifier("task-parent-search")
         }
+
+        ForEach(selectedTasks) { selected in
+            selectedRow(selected)
+        }
+    }
+
+    private func selectedRow(_ selected: ProjectTask) -> some View {
+        let selectedBoard = appState.taskBoard(for: selected.projectId)
+        return HStack(spacing: 8) {
+            TaskStatusIcon(status: selected.status, board: selectedBoard, size: 12)
+            Text(chipTitle(for: selected))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 8)
+            Text(selectedBoard.column(for: selected.status).name)
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .lineLimit(1)
+            Button {
+                selection.removeAll { $0 == selected.id }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+            .buttonStyle(.borderless)
+            .help("Remove")
+            .accessibilityLabel("Remove \(selected.title)")
+        }
+        .padding(.leading, 12)
+        .help(chipTitle(for: selected))
+        .accessibilityIdentifier("task-parent-selected-\(selected.id)")
     }
 
     private var dropdown: some View {

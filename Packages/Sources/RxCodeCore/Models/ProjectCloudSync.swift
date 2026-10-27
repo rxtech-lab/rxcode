@@ -62,6 +62,7 @@ public struct CloudProjectListResponse: Decodable, Sendable {
 /// comparison, the remote side, and the last-synced base, so a three-way
 /// comparison can tell which side changed.
 public struct CloudStoryFields: Codable, Sendable, Hashable {
+    public var assigneeIds: [String]
     public var title: String
     public var details: String
     public var tags: [String]
@@ -72,6 +73,7 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
 
     public init(
         title: String,
+        assigneeIds: [String] = [],
         details: String = "",
         tags: [String] = [],
         version: String? = nil,
@@ -79,6 +81,7 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
         priority: String? = nil,
         type: String? = nil
     ) {
+        self.assigneeIds = assigneeIds
         self.title = CloudText.title(title)
         self.details = details
         self.tags = CloudText.tags(tags)
@@ -89,6 +92,7 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case assigneeIds
         case title, details, tags, version, milestone, priority, type
     }
 
@@ -96,6 +100,7 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             title: try c.decodeIfPresent(String.self, forKey: .title) ?? "",
+            assigneeIds: CloudText.decodeTags(c, forKey: .assigneeIds),
             details: try c.decodeIfPresent(String.self, forKey: .details) ?? "",
             tags: CloudText.decodeTags(c, forKey: .tags),
             version: try c.decodeIfPresent(String.self, forKey: .version),
@@ -108,6 +113,7 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
     /// Nil fields are sent as `null` so a PATCH clears them on the server.
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(assigneeIds, forKey: .assigneeIds)
         try c.encode(title, forKey: .title)
         try c.encode(details, forKey: .details)
         try c.encode(tags, forKey: .tags)
@@ -121,6 +127,7 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
 /// The task fields Autopilot stores; see `CloudStoryFields`. Story and parent
 /// ids are Autopilot ids, not local UUIDs.
 public struct CloudTaskFields: Codable, Sendable, Hashable {
+    public var assigneeIds: [String]
     public var title: String
     public var details: String
     public var status: String
@@ -136,6 +143,7 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
 
     public init(
         title: String,
+        assigneeIds: [String] = [],
         details: String = "",
         status: String = TaskStatus.backlog.rawValue,
         priority: String? = nil,
@@ -148,6 +156,7 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
         assignedDeviceId: String? = nil,
         sortIndex: Double = 0
     ) {
+        self.assigneeIds = assigneeIds
         self.title = CloudText.title(title)
         self.details = details
         self.status = CloudText.status(status)
@@ -163,6 +172,7 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case assigneeIds
         case title, details, status, priority, type, tags, version, milestone
         case storyId, parentTaskId, assignedDeviceId, sortIndex
     }
@@ -171,6 +181,7 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             title: try c.decodeIfPresent(String.self, forKey: .title) ?? "",
+            assigneeIds: CloudText.decodeTags(c, forKey: .assigneeIds),
             details: try c.decodeIfPresent(String.self, forKey: .details) ?? "",
             status: try c.decodeIfPresent(String.self, forKey: .status) ?? TaskStatus.backlog.rawValue,
             priority: try c.decodeIfPresent(String.self, forKey: .priority),
@@ -188,6 +199,7 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
     /// Nil fields are sent as `null` so a PATCH clears them on the server.
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(assigneeIds, forKey: .assigneeIds)
         try c.encode(title, forKey: .title)
         try c.encode(details, forKey: .details)
         try c.encode(status, forKey: .status)
@@ -303,6 +315,9 @@ public struct CloudRemoteTask: Identifiable, Decodable, Sendable, Hashable {
 
 /// `GET /api/v1/docs/repositories/{id}/tasks`.
 public struct CloudRemoteBoard: Decodable, Sendable {
+    public var members: [CardAssignee]?
+    public var role: String?
+    public var currentUserId: String?
     public var stories: [CloudRemoteStory]
     public var tasks: [CloudRemoteTask]
 
@@ -349,6 +364,9 @@ public struct CloudItemLink<Fields: Codable & Sendable & Hashable>: Codable, Sen
 /// local story and task id.
 public struct CloudBoardSyncState: Codable, Sendable, Hashable {
     /// Persist failed publication until the user explicitly retries.
+    public var members: [CardAssignee]?
+    public var role: String?
+    public var currentUserId: String?
     public var filterPublicationError: String?
     public var stories: [UUID: CloudItemLink<CloudStoryFields>]
     public var tasks: [UUID: CloudItemLink<CloudTaskFields>]
@@ -370,10 +388,13 @@ public struct CloudBoardSyncState: Codable, Sendable, Hashable {
         self.lastError = lastError
     }
 
-    private enum CodingKeys: String, CodingKey { case stories, tasks, savedViewsBase, lastSyncedAt, lastError, filterPublicationError }
+    private enum CodingKeys: String, CodingKey { case members, role, currentUserId, stories, tasks, savedViewsBase, lastSyncedAt, lastError, filterPublicationError }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        members = try c.decodeIfPresent([CardAssignee].self, forKey: .members)
+        role = try c.decodeIfPresent(String.self, forKey: .role)
+        currentUserId = try c.decodeIfPresent(String.self, forKey: .currentUserId)
         stories = (try? c.decodeIfPresent([UUID: CloudItemLink<CloudStoryFields>].self, forKey: .stories)) ?? [:]
         tasks = (try? c.decodeIfPresent([UUID: CloudItemLink<CloudTaskFields>].self, forKey: .tasks)) ?? [:]
         filterPublicationError = try c.decodeIfPresent(String.self, forKey: .filterPublicationError)
@@ -447,6 +468,7 @@ public extension TaskBoard {
     func cloudFields(for story: ProjectStory) -> CloudStoryFields {
         CloudStoryFields(
             title: story.title,
+            assigneeIds: story.assigneeIds,
             details: story.details,
             tags: story.tags,
             version: story.version,
@@ -459,6 +481,7 @@ public extension TaskBoard {
     func cloudFields(for task: ProjectTask, sync: CloudBoardSyncState) -> CloudTaskFields {
         CloudTaskFields(
             title: task.title,
+            assigneeIds: task.assigneeIds,
             details: task.details,
             status: cloudStatus(for: task.status),
             priority: task.priority?.rawValue,
@@ -482,6 +505,7 @@ public extension TaskBoard {
     /// Copies Autopilot's story fields onto a local story.
     func applying(_ fields: CloudStoryFields, to story: ProjectStory, updatedAt: Date?) -> ProjectStory {
         var story = story
+        story.assigneeIds = fields.assigneeIds
         story.title = fields.title
         story.details = fields.details
         story.tags = fields.tags
@@ -498,6 +522,7 @@ public extension TaskBoard {
     /// and left untouched.
     func applying(_ fields: CloudTaskFields, to task: ProjectTask, sync: CloudBoardSyncState, updatedAt: Date?) -> ProjectTask {
         var task = task
+        task.assigneeIds = fields.assigneeIds
         task.title = fields.title
         task.details = fields.details
         task.status = localStatus(forCloud: fields.status, current: task.status)

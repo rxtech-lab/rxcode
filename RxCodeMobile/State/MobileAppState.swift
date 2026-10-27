@@ -94,6 +94,7 @@ final class MobileAppState: ObservableObject {
     @Published var projects: [Project] = []
     @Published var sessions: [SessionSummary] = []
     @Published var branchBriefings: [MobileBranchBriefing] = []
+    @Published var usageDashboard = UsageDashboard()
     @Published var briefingDocuments: [MobileBriefingDocument] = []
     @Published var briefingContentResult: BriefingContentResultPayload?
     @Published var isLoadingBriefingContent = false
@@ -288,6 +289,13 @@ final class MobileAppState: ObservableObject {
     /// Reset to `nil` on unpair / desktop switch so the next first-snapshot
     /// from a fresh desktop is always accepted.
     var lastAppliedSnapshotSeq: UInt64?
+    /// When the last `request_snapshot` went out. Requests arriving within
+    /// `snapshotRequestCoalesceInterval` of it are folded into one trailing
+    /// request, so connection churn can't flood the desktop (and this device)
+    /// with full snapshots.
+    var lastSnapshotRequestAt: Date?
+    var trailingSnapshotRequestTask: Task<Void, Never>?
+    static let snapshotRequestCoalesceInterval: TimeInterval = 1.0
     var pendingSearchID: UUID?
     var searchDebounceTask: Task<Void, Never>?
 

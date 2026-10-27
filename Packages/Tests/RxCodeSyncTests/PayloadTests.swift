@@ -5,6 +5,15 @@ import RxCodeCore
 
 @Suite("Mobile sync payloads")
 struct PayloadTests {
+    @Test("paired account identity supports older hosts and preserves assignment defaults")
+    func accountAssigneeIdentity() throws {
+        let legacy = try JSONDecoder().decode(AutopilotAccountStatus.self, from: Data(#"{"isSignedIn":true,"name":"Member"}"#.utf8))
+        #expect(legacy.userID == nil)
+        let account = AutopilotAccountStatus(isSignedIn: true, userID: "member", name: "Member")
+        let restored = try JSONDecoder().decode(AutopilotAccountStatus.self, from: JSONEncoder().encode(account))
+        #expect(restored.userID == "member")
+    }
+
     @Test("document briefings and on-demand content round trip")
     func documentBriefingSyncRoundTrip() throws {
         let id = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!

@@ -58,6 +58,10 @@
                 <data android:scheme="rxcode-pair" />
             </intent-filter>
         </activity>
+        <receiver android:name=".widget.UsageWidgetProvider" android:exported="false" android:label="Usage integrations">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/usage_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

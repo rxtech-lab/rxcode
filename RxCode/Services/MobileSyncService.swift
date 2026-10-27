@@ -194,6 +194,7 @@ final class MobileSyncService: ObservableObject {
     var projectNameResolver: (@MainActor (UUID) -> String?)?
     /// Supplies the current Claude Code / Codex usage for the widget
     /// background push. Set by `AppState`; `nil` before that.
+    var usageCardsProvider: (@MainActor () -> [UsageWidgetCardPayload])?
     var usageSnapshotProvider: (@MainActor () -> (
         cc: Double?,
         ccWeekly: Double?,

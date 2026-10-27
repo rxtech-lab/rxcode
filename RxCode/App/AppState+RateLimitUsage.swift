@@ -61,6 +61,7 @@ extension AppState {
             break
         }
         recordRateLimitSample(usage, for: provider)
+        refreshLocalUsagePlugins()
         scheduleDesktopWidgetUpdate()
         // Refresh the mobile home-screen widget's usage figures.
         MobileSyncService.shared.pushWidgetUpdate()

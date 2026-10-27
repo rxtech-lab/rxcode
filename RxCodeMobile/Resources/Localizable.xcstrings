@@ -1183,6 +1183,9 @@
     "Allow %@?" : {
 
     },
+    "another device" : {
+
+    },
     "Answer" : {
       "localizations" : {
         "en" : {
@@ -1970,6 +1973,9 @@
           }
         }
       }
+    },
+    "Change this column’s filters or add a task." : {
+
     },
     "Changes" : {
       "localizations" : {
@@ -3049,6 +3055,9 @@
           }
         }
       }
+    },
+    "Couldn't Start Thread" : {
+
     },
     "CPU" : {
       "localizations" : {
@@ -4876,6 +4885,9 @@
           }
         }
       }
+    },
+    "Failed to reach your Mac: %@" : {
+
     },
     "Failed to request agents: %@" : {
       "localizations" : {
@@ -7048,9 +7060,6 @@
           }
         }
       }
-    },
-    "Move Without Running" : {
-
     },
     "Moving task…" : {
 
@@ -9393,6 +9402,9 @@
         }
       }
     },
+    "Reconnecting…" : {
+
+    },
     "Recorded audio waveform" : {
 
     },
@@ -10005,6 +10017,9 @@
           }
         }
       }
+    },
+    "Run on First Available Mac" : {
+
     },
     "Run on Mac" : {
 
@@ -11952,6 +11967,9 @@
         }
       }
     },
+    "The first Mac with this project open picks the task up. Other Macs leave it alone and show where it runs." : {
+
+    },
     "The Mac could not complete the request." : {
       "localizations" : {
         "ko" : {
@@ -12497,6 +12515,9 @@
           }
         }
       }
+    },
+    "This task is running on %@. It moves on when that run finishes." : {
+
     },
     "This task wasn't run from this device." : {
 
@@ -13471,6 +13492,9 @@
     "Vulnerabilities (%lld)" : {
 
     },
+    "Waiting for %@" : {
+
+    },
     "Waiting for Host Sync" : {
 
     },
@@ -13713,6 +13737,9 @@
         }
       }
     },
+    "your Mac" : {
+
+    },
     "Your Mac declined the pairing request." : {
       "localizations" : {
         "en" : {
@@ -13734,6 +13761,9 @@
           }
         }
       }
+    },
+    "Your Mac didn't confirm the new thread. It may still appear in the thread list in a moment." : {
+
     },
     "Your Mac didn't respond. Make sure RxCode is open and connected, then try again." : {
       "localizations" : {
@@ -13766,6 +13796,9 @@
           }
         }
       }
+    },
+    "Your message couldn't be sent to your Mac. Check that RxCode is running on your Mac and try again." : {
+
     },
     "Your project cards will appear here." : {
 

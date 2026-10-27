@@ -96,11 +96,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Merge into the existing snapshot so a job-count-only push doesn't
         // wipe the usage figures (and vice versa).
         var stored = RxCodeWidgetStore.load()
+        guard snapshot.updatedAt >= stored.updatedAt else { return .noData }
         if let jobs = snapshot.jobs { stored.jobCount = jobs }
         if let cc = snapshot.cc { stored.ccUsagePercent = cc }
         if let ccWeekly = snapshot.ccWeekly { stored.ccWeeklyUsagePercent = ccWeekly }
         if let codex = snapshot.codex { stored.codexUsagePercent = codex }
         if let codexWeekly = snapshot.codexWeekly { stored.codexWeeklyUsagePercent = codexWeekly }
+        if let cards = snapshot.usageCards {
+            stored.usageCards = cards.map { RxCodeWidgetUsageCard(id: $0.id, title: $0.title, value: $0.value, detail: $0.detail, fetchedAt: $0.fetchedAt) }
+        }
         stored.updatedAt = snapshot.updatedAt
         RxCodeWidgetStore.save(stored)
         logger.info("[Widget] background push applied jobs=\(stored.jobCount, privacy: .public)")
@@ -219,6 +223,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         guard let resolved = resolveEncryptedEnvelope(from: userInfo, key: "encWidget", context: context) else {
             return nil
         }
+        let activeKey = mobileState?.pairedDesktopPubkey
+            ?? UserDefaults.standard.string(forKey: MobileAppState.activeDesktopPubkeyKey)
+        guard let activeKey, !activeKey.isEmpty,
+              resolved.envelope.from.caseInsensitiveCompare(activeKey) == .orderedSame else { return nil }
         do {
             return try APNsCrypto.openWidget(envelope: resolved.envelope,
                                              recipient: resolved.recipient,

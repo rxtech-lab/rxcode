@@ -90,11 +90,13 @@ extension TaskFormSheet {
     /// Step two: the model's draft, editable before it is created.
     @ViewBuilder
     var reviewSections: some View {
+        // The draft comes first: it's what the step is for.
         if isStory {
             storyDraftSections
         } else {
             taskDraftSection
         }
+        assigneesSection
     }
 
     @ViewBuilder
@@ -561,7 +563,7 @@ extension TaskFormSheet {
         guard !story.title.isEmpty,
               storyTaskDrafts.allSatisfy({ !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         else { return }
-        appState.upsertStory(story)
+        appState.upsertStory(story, defaultAssignee: false)
         if !isExistingRecord {
             AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "ai_composed"])
         }

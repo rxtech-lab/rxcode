@@ -35,7 +35,11 @@ extension MobileAppState {
     func sendUserMessage(_ text: String, sessionID: String) async {
         guard isPaired else { return }
         let payload = UserMessagePayload(sessionID: resolveSessionID(sessionID), text: text)
-        try? await client.send(.userMessage(payload), toHex: pairedDesktopPubkey)
+        do {
+            try await client.send(.userMessage(payload), toHex: pairedDesktopPubkey)
+        } catch {
+            logger.error("[Chat] user message send failed session=\(payload.sessionID, privacy: .public) connection=\(String(describing: self.connectionState), privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func cancelStream(sessionID: String) async {
@@ -88,6 +92,9 @@ extension MobileAppState {
     /// non-default model was dropped in favor of the project default. ACP client
     /// and effort have no mobile picker, so they ride along from the last synced
     /// desktop settings.
+    /// Returns `false` when the request could not be sent (not paired or the
+    /// transport rejected it), so the caller can stop waiting for the thread.
+    @discardableResult
     func requestNewSession(
         projectID: UUID,
         initialText: String? = nil,
@@ -95,8 +102,11 @@ extension MobileAppState {
         model: String? = nil,
         permissionMode: PermissionMode? = nil,
         planMode: Bool = false
-    ) async {
-        guard isPaired else { return }
+    ) async -> Bool {
+        guard isPaired else {
+            logger.error("[NewThread] request dropped: mobile is not paired project=\(projectID.uuidString, privacy: .public)")
+            return false
+        }
         let payload = NewSessionRequestPayload(
             projectID: projectID,
             initialText: initialText,
@@ -107,7 +117,14 @@ extension MobileAppState {
             permissionMode: permissionMode,
             planMode: planMode
         )
-        try? await client.send(.newSessionRequest(payload), toHex: pairedDesktopPubkey)
+        do {
+            try await client.send(.newSessionRequest(payload), toHex: pairedDesktopPubkey)
+            logger.info("[NewThread] request sent id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) connection=\(String(describing: self.connectionState), privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
+            return true
+        } catch {
+            logger.error("[NewThread] request send failed project=\(projectID.uuidString, privacy: .public) connection=\(String(describing: self.connectionState), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return false
+        }
     }
 
     func requestRemoteFolder(path: String? = nil, includeFiles: Bool = false) async {
@@ -312,8 +329,7 @@ extension MobileAppState {
             operation: .switchExisting,
             branch: branch
         )
-        inFlightBranchOps.insert(request.clientRequestID)
-        try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
+        await sendBranchOp(request)
     }
 
     /// Tell the desktop to create a new branch off the current branch. When
@@ -329,8 +345,7 @@ extension MobileAppState {
             branch: branch,
             useWorktree: useWorktree
         )
-        inFlightBranchOps.insert(request.clientRequestID)
-        try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
+        await sendBranchOp(request)
     }
 
     /// Tell the desktop to run `git init` at the project's root. The eventual
@@ -342,8 +357,21 @@ extension MobileAppState {
             operation: .initGit,
             branch: ""
         )
+        await sendBranchOp(request)
+    }
+
+    /// Send a branch op and track it until the desktop acknowledges it. A failed
+    /// send is untracked right away; otherwise its spinner (and the new-thread
+    /// sheet's wait for pending branch ops) would never clear.
+    private func sendBranchOp(_ request: BranchOpRequestPayload) async {
         inFlightBranchOps.insert(request.clientRequestID)
-        try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
+        do {
+            try await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
+        } catch {
+            inFlightBranchOps.remove(request.clientRequestID)
+            lastBranchOpError = String(localized: "Failed to reach your Mac: \(error.localizedDescription)")
+            logger.error("[Branch] op send failed operation=\(String(describing: request.operation), privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func clearBranchOpError() {

@@ -268,6 +268,10 @@ final class AppState {
     /// an app restart.
     var customMenuItemsRevision: Int = 0
 
+    var hiddenDefaultContextMenuActionIDs: Set<String> = [] {
+        didSet { persistHiddenDefaultContextMenuActions() }
+    }
+
     /// Enabled custom menu rows, cached per `customMenuItemsRevision`. Menu
     /// content is built eagerly inside row `body`s, so without this every
     /// sidebar re-render ran a SwiftData fetch per project/thread row.
@@ -448,6 +452,7 @@ final class AppState {
     var branchBriefingRevision = 0
     /// Bumped whenever a finished turn is folded into the persisted usage
     /// buckets, so the briefing statistics panel re-reads its summary.
+    let usagePlugins = UsagePluginState()
     var usageStatsRevision = 0
     /// Bumped when a usage-limit sample or task cost is persisted, so the
     /// briefing usage-limit panel re-reads its history.

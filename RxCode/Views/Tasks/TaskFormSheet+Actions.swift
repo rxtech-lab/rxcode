@@ -1,3 +1,4 @@
+import RxAuthSwift
 import RxCodeCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -30,6 +31,15 @@ extension TaskFormSheet {
             }
             storyDraftAgent = appState.defaultTaskAgent()
         }
+        if !isExistingRecord, let user = appState.rxUser {
+            if isStory, story.assigneeIds.isEmpty {
+                story.assigneeIds = [user.id]
+                story.assigneeProfiles = appState.cardAssigneeMembers(projectID: currentProjectId).filter { $0.id == user.id }
+            } else if !isStory, task.assigneeIds.isEmpty {
+                task.assigneeIds = [user.id]
+                task.assigneeProfiles = appState.cardAssigneeMembers(projectID: currentProjectId).filter { $0.id == user.id }
+            }
+        }
         creationMode = .resolved(
             isExistingRecord: isExistingRecord,
             isStory: isStory,
@@ -43,7 +53,7 @@ extension TaskFormSheet {
     func newStoryTask() {
         if !isExistingRecord {
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            appState.upsertStory(story)
+            appState.upsertStory(story, defaultAssignee: false)
             AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "form"])
             isExistingRecord = true
         }
@@ -161,13 +171,13 @@ extension TaskFormSheet {
             }
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let story = story
-            Task { await appState.saveStory(story) }
+            Task { await appState.saveStory(story, defaultAssignee: false) }
             if !isExistingRecord {
                 AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "form"])
             }
         } else {
             task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            appState.upsertTask(task)
+            appState.upsertTask(task, defaultAssignee: false)
             if !isExistingRecord {
                 AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "form"])
             }

@@ -277,6 +277,7 @@ public actor PeerConnectionManager {
     }
 
     private func promote(_ transport: DirectTransport, pathKind: ConnectionPathKind, rttMillis: Int?) {
+        let previousPath = activePath
         active = transport
         activePath = pathKind
         lastRTTMillis = rttMillis
@@ -293,15 +294,23 @@ public actor PeerConnectionManager {
         } else {
             logger.info("[PeerConn] promoted \(String(describing: pathKind), privacy: .public) peer=\(String(self.peerHex.prefix(12)), privacy: .public)")
         }
+        guard previousPath != pathKind else { return }
         emit(.pathChanged(peerHex: peerHex, path: pathKind, rttMillis: rttMillis))
     }
 
     private func demote() {
         let dropped = active
+        let previousPath = activePath
         active = nil
         activePath = .relay
         lastRTTMillis = nil
-        emit(.pathChanged(peerHex: peerHex, path: .relay, rttMillis: nil))
+        // Only report a real transition. `networkChanged()` demotes even while
+        // already on the relay; emitting then made the app re-request a full
+        // snapshot on every network-path callback.
+        if previousPath != .relay {
+            logger.info("[PeerConn] demoted \(String(describing: previousPath), privacy: .public) -> relay peer=\(String(self.peerHex.prefix(12)), privacy: .public)")
+            emit(.pathChanged(peerHex: peerHex, path: .relay, rttMillis: nil))
+        }
         Task { await dropped?.disconnect() }
     }
 

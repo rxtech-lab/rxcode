@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 import UIKit
 import RxCodeCore
@@ -8,6 +9,8 @@ import TipKit
 /// (branch, model, permission mode), fires `requestNewSession` on submit, then
 /// watches the session list for the freshly-created summary and dismisses,
 /// handing the new session ID back to the caller so it can navigate.
+private let newThreadLogger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "NewThread")
+
 struct NewThreadSheet: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
@@ -22,6 +25,10 @@ struct NewThreadSheet: View {
     @State private var text: String = ""
     @State private var isSubmitting = false
     @State private var awaitingFromSessionIDs: Set<String>?
+    /// Re-requests a snapshot, then gives up, when the Mac never reports the
+    /// new thread — so the send button can't spin forever.
+    @State private var submitWatchdog: Task<Void, Never>?
+    @State private var submitError: String?
     @FocusState private var isFocused: Bool
 
     // Per-thread agent config. Seeded once from the desktop's current settings,
@@ -89,6 +96,21 @@ struct NewThreadSheet: View {
         }
         .onChange(of: state.sessions.map(\.id)) { _, _ in
             attemptJumpToNewSession()
+        }
+        .onDisappear {
+            submitWatchdog?.cancel()
+            submitWatchdog = nil
+        }
+        .alert(
+            "Couldn't Start Thread",
+            isPresented: Binding(
+                get: { submitError != nil },
+                set: { if !$0 { submitError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { submitError = nil }
+        } message: {
+            Text(submitError ?? "")
         }
     }
 
@@ -212,13 +234,14 @@ struct NewThreadSheet: View {
                 .map { $0.id }
         )
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        newThreadLogger.info("[NewThread] submit project=\(projectID.uuidString, privacy: .public) knownSessions=\(awaitingFromSessionIDs?.count ?? 0, privacy: .public) pendingBranchOps=\(state.inFlightBranchOps.count, privacy: .public) connection=\(String(describing: state.connectionState), privacy: .public)")
         Task {
             // Make sure the desktop has parked the picked branch's worktree
             // before the new session spawns; otherwise the two payloads race
             // and the thread lands on the project root instead of the
             // selected branch's worktree.
             await state.waitForPendingBranchOps()
-            await state.requestNewSession(
+            let sent = await state.requestNewSession(
                 projectID: projectID,
                 initialText: body,
                 agentProvider: selectedProvider,
@@ -226,7 +249,43 @@ struct NewThreadSheet: View {
                 permissionMode: selectedPermissionMode,
                 planMode: planModeEnabled
             )
+            guard sent else {
+                failSubmit(String(localized: "Your message couldn't be sent to your Mac. Check that RxCode is running on your Mac and try again."))
+                return
+            }
+            startSubmitWatchdog()
         }
+    }
+
+    private func startSubmitWatchdog() {
+        submitWatchdog?.cancel()
+        submitWatchdog = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(8))
+            } catch {
+                return
+            }
+            guard awaitingFromSessionIDs != nil else { return }
+            newThreadLogger.warning("[NewThread] no new thread after 8s; requesting snapshot connection=\(String(describing: state.connectionState), privacy: .public)")
+            await state.requestSnapshot(reason: "new_thread_watchdog")
+            do {
+                try await Task.sleep(for: .seconds(22))
+            } catch {
+                return
+            }
+            guard awaitingFromSessionIDs != nil else { return }
+            newThreadLogger.error("[NewThread] gave up waiting for the new thread after 30s connection=\(String(describing: state.connectionState), privacy: .public)")
+            failSubmit(String(localized: "Your Mac didn't confirm the new thread. It may still appear in the thread list in a moment."))
+        }
+    }
+
+    private func failSubmit(_ message: String) {
+        submitWatchdog?.cancel()
+        submitWatchdog = nil
+        awaitingFromSessionIDs = nil
+        isSubmitting = false
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        submitError = message
     }
 
     private func attemptJumpToNewSession() {
@@ -235,6 +294,9 @@ struct NewThreadSheet: View {
             .filter { $0.projectId == projectID && !existing.contains($0.id) }
             .max(by: { $0.updatedAt < $1.updatedAt })
         guard let newest else { return }
+        newThreadLogger.info("[NewThread] thread created session=\(newest.id, privacy: .public) project=\(projectID.uuidString, privacy: .public)")
+        submitWatchdog?.cancel()
+        submitWatchdog = nil
         awaitingFromSessionIDs = nil
         AnalyticsService.shared.log(.threadCreated, parameters: [
             "project_id": projectID.uuidString,

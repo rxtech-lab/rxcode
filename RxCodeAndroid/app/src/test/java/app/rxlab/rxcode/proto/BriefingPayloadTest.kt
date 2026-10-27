@@ -44,3 +44,14 @@ class BriefingPayloadTest {
         assertEquals(1024L, decodedChunk.data.assetTotalBytes)
     }
 }
+
+class UsageDashboardPayloadTest {
+    @Test
+    fun swiftUsageSnapshotDecodesWithUnknownFields() {
+        val payload = RxJson.decodeFromString<Payload>("""{"type":"snapshot","data":{"projects":[],"sessions":[],"usageDashboard":{"version":1,"integrations":[{"id":"a","oauth":{"clientID":"public"}}],"cards":[{"id":"card","integrationID":"a","style":"future-style"}],"snapshots":[{"id":"a","pluginID":"ai-usage","title":"AI","scope":"All projects","period":"Last 7 days","fetchedAt":0,"metrics":[{"id":"tokens","title":"Tokens","value":120,"unit":"tokens"}]}]}}}""") as Payload.Snapshot
+        assertEquals(120.0, payload.data.usageDashboard?.snapshots?.single()?.metrics?.single()?.value)
+        assertEquals("future-style", payload.data.usageDashboard?.cards?.single()?.style)
+        val old = RxJson.decodeFromString<Payload>("""{"type":"snapshot","data":{"projects":[],"sessions":[]}}""") as Payload.Snapshot
+        assertEquals(null, old.data.usageDashboard)
+    }
+}

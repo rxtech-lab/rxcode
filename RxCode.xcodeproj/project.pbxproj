@@ -11,7 +11,6 @@
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
 		36596E0C1F1F03A76E8EAC44 /* TaskRunQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */; };
-		A7C1D2E3F4051627384950A1 /* TaskRunClaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C1D2E3F4051627384950A2 /* TaskRunClaimTests.swift */; };
 		4DB3FD78155F4469BBFB353C /* MCPAppConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535C9B55985741FE9A80AF27 /* MCPAppConnectionTests.swift */; };
 		54F5577C2A9B42D393384D6E /* MCPOAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F2EE0EE87F4F36B534FDDA /* MCPOAuthTests.swift */; };
 		5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */; };
@@ -34,6 +33,7 @@
 		A5E1C0DE0000000000000002 /* MockAppStatePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */; };
 		A5E1C0DE0000000000000012 /* ClaudeLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */; };
 		A5E1C0DE0000000000000022 /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000021 /* GlobalSessionPersistenceTests.swift */; };
+		A7C1D2E3F4051627384950A1 /* TaskRunClaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C1D2E3F4051627384950A2 /* TaskRunClaimTests.swift */; };
 		A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */; };
 		AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */; };
 		AC1900000000000000000100 /* RxCode/Services/RxAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */; };
@@ -220,12 +220,12 @@
 		7A5C0001000000000000A001 /* MockAgentBackend.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAgentBackend.swift; sourceTree = "<group>"; };
 		7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossProjectSendConcurrencyTests.swift; sourceTree = "<group>"; };
 		82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunQueueTests.swift; sourceTree = "<group>"; };
-		A7C1D2E3F4051627384950A2 /* TaskRunClaimTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunClaimTests.swift; sourceTree = "<group>"; };
 		85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
 		A4E201000000000000000001 /* CustomMenuModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CustomMenuModelSelectionTests.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000021 /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
+		A7C1D2E3F4051627384950A2 /* TaskRunClaimTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunClaimTests.swift; sourceTree = "<group>"; };
 		A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PermissionSessionAllowTests.swift; sourceTree = "<group>"; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ACPServiceSuggestionTests.swift; sourceTree = "<group>"; };

@@ -356,6 +356,7 @@ public struct SnapshotPayload: Codable, Sendable {
     public let sessions: [SessionSummary]
     public let branchBriefings: [MobileBranchBriefing]?
     public let briefingDocuments: [MobileBriefingDocument]?
+    public let usageDashboard: UsageDashboard?
     public let threadSummaries: [MobileThreadSummary]?
     /// Current GitHub Actions CI status per desktop project. `nil` when the
     /// desktop predates CI-status sync.
@@ -400,6 +401,7 @@ public struct SnapshotPayload: Codable, Sendable {
         sessions: [SessionSummary],
         branchBriefings: [MobileBranchBriefing]? = nil,
         briefingDocuments: [MobileBriefingDocument]? = nil,
+        usageDashboard: UsageDashboard? = nil,
         threadSummaries: [MobileThreadSummary]? = nil,
         ciStatuses: [MobileProjectCIStatus]? = nil,
         settings: MobileSettingsSnapshot? = nil,
@@ -418,6 +420,7 @@ public struct SnapshotPayload: Codable, Sendable {
         self.sessions = sessions
         self.branchBriefings = branchBriefings
         self.briefingDocuments = briefingDocuments
+        self.usageDashboard = usageDashboard
         self.threadSummaries = threadSummaries
         self.ciStatuses = ciStatuses
         self.settings = settings
@@ -434,7 +437,7 @@ public struct SnapshotPayload: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case projects, sessions, branchBriefings, briefingDocuments, threadSummaries, ciStatuses, settings
+        case projects, sessions, branchBriefings, briefingDocuments, usageDashboard, threadSummaries, ciStatuses, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
         case usage, hostMetrics, runProfiles, runTasks, webProxy, seq
     }
@@ -445,6 +448,7 @@ public struct SnapshotPayload: Codable, Sendable {
         sessions = try c.decode([SessionSummary].self, forKey: .sessions)
         branchBriefings = try c.decodeIfPresent([MobileBranchBriefing].self, forKey: .branchBriefings)
         briefingDocuments = try c.decodeIfPresent([MobileBriefingDocument].self, forKey: .briefingDocuments)
+        usageDashboard = try c.decodeIfPresent(UsageDashboard.self, forKey: .usageDashboard)
         threadSummaries = try c.decodeIfPresent([MobileThreadSummary].self, forKey: .threadSummaries)
         ciStatuses = try c.decodeIfPresent([MobileProjectCIStatus].self, forKey: .ciStatuses)
         settings = try c.decodeIfPresent(MobileSettingsSnapshot.self, forKey: .settings)

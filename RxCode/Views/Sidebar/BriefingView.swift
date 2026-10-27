@@ -417,7 +417,7 @@ struct BriefingView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         hero(entries: entries)
                         filterBar
-                        BriefingUsageStatsView(projectIds: selectedProjectIds)
+                        UsageDashboardView(projectIds: selectedProjectIds)
                     }
                     .padding(.top, 24)
                     .briefingTimelineRowInsets()

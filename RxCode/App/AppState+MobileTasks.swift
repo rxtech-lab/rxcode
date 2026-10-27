@@ -90,6 +90,15 @@ extension AppState {
     /// identically. Returns the task the operation created or touched.
     private func applyMobileTaskBoardOperation(_ request: TaskBoardRequestPayload) async throws -> UUID? {
         let projectId = request.projectID
+        let board = taskBoard(for: projectId)
+        if request.operation != .fetch && request.operation != .fetchRuns {
+            if let task = board.tasks.first(where: { $0.id == (request.taskID ?? request.task?.id) }), !canEditCard(task) {
+                throw MobileTaskBoardError.missing("permission to edit this card")
+            }
+            if let story = board.stories.first(where: { $0.id == (request.storyID ?? request.story?.id) }), !canEditCard(story) {
+                throw MobileTaskBoardError.missing("permission to edit this card")
+            }
+        }
         switch request.operation {
         case .fetch, .fetchRuns:
             return nil

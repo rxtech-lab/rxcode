@@ -80,6 +80,7 @@ struct TaskCardView: View {
                 TaskCardActivityControls(task: task)
             }
 
+            CardAssigneesView(ids: task.assigneeIds, profiles: task.assigneeProfiles)
             Text(task.title.isEmpty ? String(localized: "Untitled task") : task.title)
                 .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 .foregroundStyle(ClaudeTheme.textPrimary)
@@ -141,7 +142,7 @@ struct TaskCardView: View {
             storyTint: story?.tint,
             fixedHighlight: task.attentionReason != nil ? ClaudeTheme.statusWarning : nil
         ))
-        .onTapGesture(perform: onOpen)
+        .onTapGesture { if appState.canEditCard(task) { onOpen() } }
         .contextMenu {
             TaskContextMenuItems(task: task, onEdit: onOpen, onDelete: {
                 pendingDeletion = .task(task)
@@ -240,6 +241,7 @@ struct StoryCardView: View {
                 }
             }
 
+            CardAssigneesView(ids: story.assigneeIds, profiles: story.assigneeProfiles)
             Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
                 .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 .foregroundStyle(ClaudeTheme.textPrimary)
@@ -263,7 +265,7 @@ struct StoryCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(TaskCardChrome(stripe: story.tint, storyId: story.id, storyTint: story.tint))
         .onHover { hover?.update(hovering: $0, storyId: story.id) }
-        .onTapGesture(perform: onOpen)
+        .onTapGesture { if appState.canEditCard(story) { onOpen() } }
         .contextMenu {
             StoryContextMenuItems(story: story, onEdit: onOpen, onDelete: {
                 pendingDeletion = .story(story)

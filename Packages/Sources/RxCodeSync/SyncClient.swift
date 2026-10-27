@@ -32,6 +32,12 @@ public actor SyncClient: PeerManagerHost {
     private var browser: BonjourBrowser?
     private var pathMonitor: NWPathMonitor?
     private var hasReceivedNetworkPath = false
+    /// Signature of the last network path we acted on. `NWPathMonitor` fires for
+    /// changes that don't affect reachability (AWDL / peer-to-peer interfaces
+    /// toggled by Bonjour, Handoff or AirDrop, `isExpensive` flips, ...). Acting
+    /// on each one tore down the relay socket in a loop, so only a change to
+    /// this signature counts as a real network transition.
+    private var lastNetworkPathSignature: String?
     private let portMapper = PortMapper()
     private var currentWANMapping: PortMapping?
     private var wanRenewTask: Task<Void, Never>?
@@ -69,6 +75,7 @@ public actor SyncClient: PeerManagerHost {
         wanRenewTask?.cancel(); wanRenewTask = nil
         pathMonitor?.cancel(); pathMonitor = nil
         hasReceivedNetworkPath = false
+        lastNetworkPathSignature = nil
         await advertiser?.stop()
         await browser?.stop()
         // Drop the per-peer managers. Their event pumps were just cancelled and
@@ -220,9 +227,10 @@ public actor SyncClient: PeerManagerHost {
         guard pathMonitor == nil else { return }
         let monitor = NWPathMonitor()
         pathMonitor = monitor
-        monitor.pathUpdateHandler = { [weak self, weak monitor] _ in
+        monitor.pathUpdateHandler = { [weak self, weak monitor] path in
             guard let monitor else { return }
-            Task { await self?.handlePathChange(from: monitor) }
+            let signature = Self.networkPathSignature(path)
+            Task { await self?.handlePathChange(from: monitor, signature: signature) }
         }
         monitor.start(queue: DispatchQueue(label: "com.idealapp.RxCodeSync.pathmonitor"))
     }
@@ -251,13 +259,33 @@ public actor SyncClient: PeerManagerHost {
         emitUp(event)
     }
 
-    private func handlePathChange(from monitor: NWPathMonitor) async {
+    /// Reachability-relevant description of a network path: its status plus the
+    /// physical interfaces (Wi-Fi, cellular, wired) it can use. Virtual
+    /// interfaces (`.other`: awdl, llw, utun, ...) and loopback are excluded.
+    nonisolated static func networkPathSignature(_ path: NWPath) -> String {
+        let interfaces = path.availableInterfaces
+            .filter { $0.type == .wifi || $0.type == .cellular || $0.type == .wiredEthernet }
+            .map { "\($0.name):\($0.type)" }
+            .sorted()
+            .joined(separator: ",")
+        return "\(path.status)|\(interfaces)"
+    }
+
+    private func handlePathChange(from monitor: NWPathMonitor, signature: String) async {
         guard pathMonitor === monitor else { return }
         // The first callback describes startup, not a network transition.
         guard hasReceivedNetworkPath else {
             hasReceivedNetworkPath = true
+            lastNetworkPathSignature = signature
+            logger.info("[SyncClient] initial network path=\(signature, privacy: .public)")
             return
         }
+        guard signature != lastNetworkPathSignature else {
+            logger.debug("[SyncClient] ignoring network path update with unchanged signature=\(signature, privacy: .public)")
+            return
+        }
+        logger.info("[SyncClient] network path changed from=\(self.lastNetworkPathSignature ?? "<nil>", privacy: .public) to=\(signature, privacy: .public) — reconnecting relay and re-gathering candidates")
+        lastNetworkPathSignature = signature
         currentWANMapping = nil
         for manager in managers.values {
             await manager.networkChanged()

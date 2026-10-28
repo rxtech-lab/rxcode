@@ -358,11 +358,22 @@ extension AppState {
                 throw CloudProjectUnavailable()
             }
             guard isCloudLinked(projectId, to: cloudId) else { return }
+            sync.members = remote.members
+            sync.role = remote.role
+            sync.currentUserId = remote.currentUserId
             cloudSyncPhaseByProjectId[projectId] = .syncingStories
             try await syncStories(remote.stories, cloudId: cloudId, projectId: projectId, sync: &sync)
             cloudSyncPhaseByProjectId[projectId] = .syncingTasks
             try await syncTasks(remote.tasks, cloudId: cloudId, projectId: projectId, sync: &sync, remoteStarts: &remoteStarts)
             try await syncSavedViews(cloudId: cloudId, projectId: projectId, sync: &sync)
+            editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
+                for index in board.tasks.indices {
+                    board.tasks[index].assigneeProfiles = (remote.members ?? []).filter { board.tasks[index].assigneeIds.contains($0.userId) }
+                }
+                for index in board.stories.indices {
+                    board.stories[index].assigneeProfiles = (remote.members ?? []).filter { board.stories[index].assigneeIds.contains($0.userId) }
+                }
+            }
             cloudSyncPhaseByProjectId[projectId] = .savingChanges
             sync.lastSyncedAt = Date()
             sync.lastError = sync.filterPublicationError
@@ -509,7 +520,12 @@ extension AppState {
             guard !fields.title.isEmpty else { continue }
             let created = try await projectCloud.createStory(projectId: cloudId, fields: fields)
             sync.stories[story.id] = CloudItemLink(remoteId: created.id, base: created.fields)
-            editCloudBoard(projectId, cloudId: cloudId, sync: sync)
+            editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
+                if let index = board.stories.firstIndex(where: { $0.id == story.id }),
+                   board.stories[index].assigneeIds == fields.assigneeIds {
+                    board.stories[index].assigneeIds = created.fields.assigneeIds
+                }
+            }
         }
 
         // New in the cloud: add locally.
@@ -601,7 +617,12 @@ extension AppState {
                 let fields = taskBoard(for: projectId).cloudFields(for: current, sync: sync)
                 let created = try await projectCloud.createTask(projectId: cloudId, fields: fields)
                 sync.tasks[task.id] = CloudItemLink(remoteId: created.id, base: created.fields)
-                editCloudBoard(projectId, cloudId: cloudId, sync: sync)
+                editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
+                    if let index = board.tasks.firstIndex(where: { $0.id == task.id }),
+                       board.tasks[index].assigneeIds == fields.assigneeIds {
+                        board.tasks[index].assigneeIds = created.fields.assigneeIds
+                    }
+                }
             }
             let readyIds = Set(ready.map(\.id))
             pending.removeAll { readyIds.contains($0.id) }

@@ -322,6 +322,7 @@ struct DesktopWidgetBundle: WidgetBundle {
         ProjectTasksWidget()
         OngoingTasksWidget()
         AgentUsageWidget()
+        IntegrationUsageWidget()
     }
 }
 
@@ -359,3 +360,33 @@ extension DesktopWidgetEntry {
 #Preview(as: .systemExtraLarge) { ProjectTasksWidget() } timeline: { DesktopWidgetEntry.preview }
 @available(macOS 27.0, *)
 #Preview(as: .systemExtraLargePortrait) { ProjectTasksWidget() } timeline: { DesktopWidgetEntry.preview }
+
+struct IntegrationUsageWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "RxCodeIntegrationUsage", provider: DesktopWidgetProvider()) { entry in
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Usage integrations").font(.headline)
+                let dashboard = entry.snapshot.usageDashboard ?? UsageDashboard()
+                let cards = dashboard.cards.filter(\.showInWidget)
+                if cards.isEmpty { Text("Select cards in Briefing → Manage cards").foregroundStyle(.secondary) }
+                ForEach(Array(cards.prefix(3))) { card in
+                    if let snapshot = dashboard.snapshot(for: card) {
+                        VStack(alignment: .leading) {
+                            Text(snapshot.title).font(.caption.bold())
+                            if let metric = snapshot.metrics.first(where: { card.metricID == nil || $0.id == card.metricID }) {
+                                Text("\(metric.title): \(metric.formattedValue)").font(.caption)
+                            }
+                            Text(snapshot.isStale(at: entry.date) ? "Stale" : snapshot.period).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .containerBackground(.fill.tertiary, for: .widget)
+            .widgetURL(entry.snapshot.url(usage: true))
+        }
+        .configurationDisplayName("Usage integrations")
+        .description("Pinned billing, cloud consumption, AI usage, and CI wait times.")
+        .supportedFamilies([.systemMedium, .systemLarge])
+    }
+}

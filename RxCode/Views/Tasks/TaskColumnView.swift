@@ -13,6 +13,7 @@ struct TaskColumnView: View {
     let column: TaskColumn
     let tasks: [ProjectTask]
     let board: TaskBoard
+    let view: TaskSavedView
     /// Every story's progress and column, computed once for the whole board.
     let storyRollups: [UUID: StoryRollup]
     let onOpen: (TaskBoardSheet) -> Void
@@ -29,6 +30,16 @@ struct TaskColumnView: View {
 
     private var status: TaskStatus { column.id }
 
+    @AppStorage(TaskColumnFilter.storageKey) private var savedFilters = Data()
+
+    private var filterScope: String {
+        TaskColumnFilter.scope(project: projectId.uuidString, viewID: view.id, columnID: column.id)
+    }
+
+    private var localFilter: TaskColumnFilter {
+        TaskColumnFilter.load(from: savedFilters, scope: filterScope)
+    }
+
     @State private var isTargeted = false
     @State private var isColumnTargeted = false
     @State private var revealedOlderTaskCount = 0
@@ -37,16 +48,17 @@ struct TaskColumnView: View {
     var body: some View {
         // Only finished cards age out; open work stays on the board however
         // long it sits untouched.
+        let filteredTasks = tasks.filter(localFilter.matches)
         let cutoff = currentDate.addingTimeInterval(-Double(appState.taskCardRetentionDays) * 24 * 60 * 60)
-        let recentTasks = column.countsAsDone ? tasks.filter { $0.updatedAt >= cutoff } : tasks
+        let recentTasks = column.countsAsDone ? filteredTasks.filter { $0.updatedAt >= cutoff } : filteredTasks
         let olderTasks = column.countsAsDone
-            ? tasks.filter { $0.updatedAt < cutoff }.sorted { $0.updatedAt > $1.updatedAt }
+            ? filteredTasks.filter { $0.updatedAt < cutoff }.sorted { $0.updatedAt > $1.updatedAt }
             : []
-        let shownTasks = recentTasks + Array(olderTasks.prefix(revealedOlderTaskCount))
+        let shownTasks = view.sort(for: status).sorted(recentTasks + Array(olderTasks.prefix(revealedOlderTaskCount)))
         let hiddenCount = max(0, olderTasks.count - revealedOlderTaskCount)
         // Queued cards are never aged out: the queue's order is what the user
         // arranges, so all of it stays on screen, below the running cards.
-        let queuedTasks = column.triggersChat ? tasks.filter(\.isQueued) : []
+        let queuedTasks = column.triggersChat ? view.sort(for: status).sorted(filteredTasks.filter(\.isQueued)) : []
         let visibleTasks = shownTasks.filter { !$0.isQueued || !column.triggersChat }
 
         TaskKanbanColumnContent {
@@ -75,7 +87,7 @@ struct TaskColumnView: View {
                         task: task,
                         board: board,
                         storyRollup: task.storyId.flatMap { storyRollups[$0] },
-                        queuePosition: offset + 1
+                        queuePosition: (board.tasks(in: status).filter(\.isQueued).firstIndex { $0.id == task.id } ?? offset) + 1
                     ) {
                         onOpen(.task(task))
                     }
@@ -99,7 +111,7 @@ struct TaskColumnView: View {
                 .padding(.vertical, 8)
                 .accessibilityIdentifier("task-column-show-more-\(status.rawValue)")
             }
-            if tasks.isEmpty {
+            if filteredTasks.isEmpty {
                 emptyHint
                     .transition(.opacity)
             }
@@ -159,6 +171,7 @@ struct TaskColumnView: View {
             // A queued card dropped on its own column's body goes to the back
             // of the queue.
             if task.isQueued, board.resolvedStatus(of: task) == status {
+                guard view.sort(for: status).field == .manual else { continue }
                 appState.reorderQueuedTask(task.id, before: nil)
                 didMove = true
                 continue
@@ -180,6 +193,7 @@ struct TaskColumnView: View {
         for raw in items {
             guard let id = UUID(uuidString: raw), let task = appState.task(id: id) else { continue }
             if task.isQueued, board.resolvedStatus(of: task) == status {
+                guard view.sort(for: status).field == .manual else { continue }
                 appState.reorderQueuedTask(task.id, before: targetId)
                 didMove = true
             } else {
@@ -197,7 +211,7 @@ struct TaskColumnView: View {
             Text("Queued (\(count))")
                 .fontWeight(.semibold)
             Spacer(minLength: 0)
-            Text("Drag to reorder")
+            Text(view.sort(for: status).field == .manual ? "Drag to reorder" : "Run order shown on cards")
         }
         .font(.system(size: ClaudeTheme.size(11)))
         .foregroundStyle(ClaudeTheme.textTertiary)
@@ -237,6 +251,12 @@ struct TaskColumnView: View {
                     .help("Drag onto another column header to reorder the board")
 
                 Spacer(minLength: 0)
+
+                TaskColumnOptionsButton(column: column, board: board, sort: view.sort(for: status), filterScope: filterScope) { sort in
+                    var updated = appState.taskBoard(for: projectId).effectiveViews.first { $0.id == view.id } ?? view
+                    updated.columnSorts[status.rawValue] = sort
+                    appState.upsertSavedView(updated, projectId: projectId)
+                }
 
                 Menu {
                     Button("Edit Column…", action: onEditColumn)
@@ -296,7 +316,7 @@ struct TaskColumnView: View {
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
-            TaskCountBadge(count: tasks.count)
+            TaskCountBadge(count: tasks.filter(localFilter.matches).count)
             if column.triggersChat {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: ClaudeTheme.size(10)))
@@ -307,10 +327,11 @@ struct TaskColumnView: View {
     }
 
     private var emptyHint: some View {
-        Text(status == board.firstColumn.id ? "New tasks land here." : "Drag a card here.")
+        Text(!localFilter.isEmpty ? "No matching tasks. Change this column’s filters." : (status == board.firstColumn.id ? "New tasks land here." : "Drag a card here."))
             .font(.system(size: ClaudeTheme.size(11)))
             .foregroundStyle(ClaudeTheme.textTertiary)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .containerRelativeFrame(.vertical)
             .padding(.vertical, 12)
     }
 }
@@ -387,11 +408,14 @@ private struct TaskQueueDropTarget: ViewModifier {
 /// Makes a card draggable unless its status is locked. `.disabled` can't be
 /// used for this: it would also block tapping the card open.
 private struct TaskCardDrag: ViewModifier {
+    @Environment(AppState.self) private var appState
     let isLocked: Bool
     let task: ProjectTask
 
     func body(content: Content) -> some View {
-        if isLocked {
+        if !appState.canEditCard(task) {
+            content
+        } else if isLocked {
             content.help("The agent is working on this task")
         } else {
             content.draggable(task.id.uuidString)

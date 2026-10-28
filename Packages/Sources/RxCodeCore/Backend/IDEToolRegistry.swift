@@ -32,6 +32,7 @@ public struct IDETool: Sendable {
 
 public enum IDEToolRegistry {
     public static let allTools: [IDETool] = [
+        usageCardsTool,
         IDETool(
             name: "ide__ask_user",
             description: "Ask the user a question and wait for their selection. Use when you need clarification or a decision the user must make.",

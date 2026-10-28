@@ -257,6 +257,17 @@ struct TaskFormSheet: View {
         }
     }
 
+    var assigneesSection: some View {
+        Section {
+            CardAssigneePicker(
+                ids: field(\.assigneeIds, \.assigneeIds),
+                profiles: field(\.assigneeProfiles, \.assigneeProfiles),
+                members: appState.cardAssigneeMembers(projectID: currentProjectId)
+            )
+            .disabled(isExistingRecord && (isStory ? !appState.canEditCard(story) : !appState.canEditCard(task)))
+        }
+    }
+
     var detailsForm: some View {
         Form {
             detailsSection
@@ -265,6 +276,7 @@ struct TaskFormSheet: View {
             } else if isExistingRecord && !linkedChildren.isEmpty {
                 linkedTasksSection
             }
+            assigneesSection
             classificationSection
             tagsSection
             if !isStory {
@@ -469,78 +481,6 @@ struct TaskFormSheet: View {
             .help("Show this story on other projects' boards")
             .accessibilityIdentifier("story-form-shared-projects")
         }
-    }
-
-    var storyTasksSection: some View {
-        Section {
-            // Tasks from every project the saved story is shared with.
-            let stored = isExistingRecord ? appState.taskBoard(for: story.projectId).story(id: story.id) : nil
-            let existing = stored.map { appState.tasks(inStory: $0).sorted { $0.sortIndex < $1.sortIndex } } ?? []
-            let showsProject = stored?.isShared ?? false
-            ForEach(existing) { task in
-                let taskBoard = appState.taskBoard(for: task.projectId)
-                Button {
-                    childTask = .task(task)
-                } label: {
-                    HStack(spacing: 8) {
-                        TaskStatusIcon(status: task.status, board: taskBoard, size: 12)
-                        Text(task.title.isEmpty ? String(localized: "Untitled task") : task.title)
-                            .foregroundStyle(ClaudeTheme.textPrimary)
-                            .lineLimit(1)
-                        Spacer()
-                        if showsProject, let project = appState.projects.first(where: { $0.id == task.projectId }) {
-                            Text(project.name)
-                                .font(.system(size: ClaudeTheme.size(11)))
-                                .foregroundStyle(ClaudeTheme.textSecondary)
-                                .lineLimit(1)
-                        }
-                        Text(taskBoard.column(for: task.status).name)
-                            .font(.system(size: ClaudeTheme.size(11)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button(action: newStoryTask) {
-                Label("New Task…", systemImage: "plus")
-            }
-            .disabled(!canSave)
-            .accessibilityIdentifier("story-form-new-task")
-        } header: {
-            Text("Tasks")
-        } footer: {
-            if !isExistingRecord {
-                Text("Adding a task saves this story first, so the task has a story to belong to.")
-            }
-        }
-    }
-
-    var linkedTasksSection: some View {
-        Section("Linked Tasks") {
-            ForEach(linkedChildren) { child in
-                Button {
-                    childTask = .task(child)
-                } label: {
-                    HStack {
-                        TaskStatusIcon(status: child.status, board: appState.taskBoard(for: child.projectId), size: 12)
-                        Text(child.title)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    /// Tasks in any project that start after this one.
-    var linkedChildren: [ProjectTask] {
-        appState.allTasks().filter { $0.parentTaskIds.contains(task.id) }
     }
 
     var currentProjectId: UUID { isStory ? story.projectId : task.projectId }

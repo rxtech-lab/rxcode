@@ -241,7 +241,7 @@ struct MobileTaskDetailView: View {
                     Text("The agent is working on this task; it moves on when the turn finishes.")
                 }
             }
-            .disabled(isWorking)
+            .disabled(isWorking || !state.canEditCard(task))
 
             Section {
                 LabeledContent("Created", value: task.createdAt.formatted(date: .abbreviated, time: .shortened))
@@ -252,11 +252,12 @@ struct MobileTaskDetailView: View {
                 Button("Delete Task", role: .destructive) {
                     showingDeleteConfirm = true
                 }
+                .disabled(!state.canEditCard(task))
             }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Edit") { editingTask = task }
+                Button("Edit") { editingTask = task }.disabled(!state.canEditCard(task))
             }
         }
         .overlay {
@@ -404,6 +405,7 @@ struct MobileStoryDetailView: View {
                 Button("Delete Story", role: .destructive) {
                     showingDeleteConfirm = true
                 }
+                .disabled(!state.canEditCard(story))
             } footer: {
                 Text("Tasks in this story are kept and moved to the board root.")
             }
@@ -429,6 +431,7 @@ struct MobileStoryDetailView: View {
                     } label: {
                         Label("Edit Story", systemImage: "pencil")
                     }
+                    .disabled(!state.canEditCard(story))
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }

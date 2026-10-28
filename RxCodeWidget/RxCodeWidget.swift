@@ -261,3 +261,27 @@ struct RxCodeWidget: Widget {
         )
     )
 }
+
+struct RxCodeUsageWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "RxCodeUsageIntegrations", provider: RxCodeWidgetProvider()) { entry in
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Usage integrations").font(.headline)
+                let cards = entry.data.usageCards ?? []
+                if cards.isEmpty { Text("Select cards in Briefing on your Mac").font(.caption).foregroundStyle(.secondary) }
+                ForEach(Array(cards.prefix(3))) { card in
+                    VStack(alignment: .leading) {
+                        Text(card.title).font(.caption.bold())
+                        Text(card.value).font(.caption)
+                        Text((card.fetchedAt.map { entry.date.timeIntervalSince1970 - $0 > 3600 } ?? true) ? "\(card.detail) · Stale" : card.detail).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Usage integrations")
+        .description("Cloud, AI, and CI usage synced from your Mac.")
+        .supportedFamilies([.systemMedium, .systemLarge])
+    }
+}

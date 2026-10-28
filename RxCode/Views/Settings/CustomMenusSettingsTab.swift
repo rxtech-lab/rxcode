@@ -1,25 +1,66 @@
 import SwiftUI
 import RxCodeCore
 
-/// "Custom Context Menus" section embedded in the General settings tab for
-/// creating and managing user-defined context-menu items.
-/// Items are persisted on the desktop (`CustomMenuItemRecord`) and surfaced by
-/// `CustomMenuHook` on the project / thread / briefing menus — and, because they
-/// ride the existing `MenuItem` relay, on mobile too.
+/// Context-menu settings for default action visibility and custom items.
+/// Desktop preferences also apply to menus returned over the mobile relay.
 struct CustomMenusSettingsSection: View {
+    @State private var showingManager = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Context Menus")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Manage default and custom actions in project, thread, and briefing-card menus.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Button("Manage…") { showingManager = true }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("manage-context-menus")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(isPresented: $showingManager) {
+            ContextMenusManagerSheet()
+        }
+    }
+}
+
+private struct ContextMenusManagerSheet: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     @State private var items: [CustomMenuItemRecord] = []
     @State private var editing: CustomMenuDraft?
     @State private var pendingRemoval: CustomMenuItemRecord?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 0) {
             header
-            placeholderHint
-            listSection
+                .padding(20)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    placeholderHint
+                    listSection
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 680, height: 680)
         .onAppear(perform: reload)
         .sheet(item: $editing) { draft in
             CustomMenuEditorSheet(draft: draft, projects: appState.projects) { result in
@@ -51,9 +92,9 @@ struct CustomMenusSettingsSection: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Custom Context Menus")
+                Text("Context Menus")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text("Add your own items to the project, thread, and briefing-card menus. They sync to mobile automatically.")
+                Text("Show or hide individual default and custom actions in project, thread, and briefing-card menus. Some default actions appear only when applicable. Menus sync to mobile automatically.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -87,33 +128,32 @@ struct CustomMenusSettingsSection: View {
     // MARK: - List
 
     private var listSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if items.isEmpty {
-                Text("No custom items yet.")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(items) { record in
-                        CustomMenuRow(
-                            record: record,
-                            projectName: projectName(for: record.projectId),
-                            onEdit: { editing = CustomMenuDraft(record: record) },
-                            onToggle: { enabled in
-                                record.isEnabled = enabled
-                                appState.threadStore.upsertCustomMenuItem(record)
-                                appState.customMenuItemsRevision += 1
-                                reload()
-                            },
-                            onRemove: { pendingRemoval = record }
-                        )
+        VStack(spacing: 6) {
+            ForEach(BuiltInContextMenuAction.all) { action in
+                BuiltInMenuRow(action: action, isVisible: Binding(
+                    get: { !appState.hiddenDefaultContextMenuActionIDs.contains(action.id) },
+                    set: { visible in
+                        if visible {
+                            appState.hiddenDefaultContextMenuActionIDs.remove(action.id)
+                        } else {
+                            appState.hiddenDefaultContextMenuActionIDs.insert(action.id)
+                        }
                     }
-                }
+                ))
+            }
+            ForEach(items) { record in
+                CustomMenuRow(
+                    record: record,
+                    projectName: projectName(for: record.projectId),
+                    onEdit: { editing = CustomMenuDraft(record: record) },
+                    onToggle: { enabled in
+                        record.isEnabled = enabled
+                        appState.threadStore.upsertCustomMenuItem(record)
+                        appState.customMenuItemsRevision += 1
+                        reload()
+                    },
+                    onRemove: { pendingRemoval = record }
+                )
             }
         }
     }
@@ -125,6 +165,47 @@ struct CustomMenusSettingsSection: View {
 
     private var removalBinding: Binding<Bool> {
         Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
+    }
+}
+
+// MARK: - Default Action Row
+
+private struct BuiltInMenuRow: View {
+    let action: BuiltInContextMenuAction
+    @Binding var isVisible: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: action.systemImage)
+                .font(.system(size: ClaudeTheme.size(13)))
+                .foregroundStyle(ClaudeTheme.accent)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(LocalizedStringKey(action.title))
+                    .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                HStack(spacing: 6) {
+                    Text("Default")
+                    ForEach(action.surfaces, id: \.self) { surface in
+                        Text(LocalizedStringKey(surface.rawValue.capitalized))
+                    }
+                }
+                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Toggle(isOn: $isVisible) { Text(LocalizedStringKey(action.title)) }
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+        )
     }
 }
 

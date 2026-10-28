@@ -1,3 +1,4 @@
+import RxAuthSwift
 import Foundation
 import RxCodeCore
 import RxCodeSync
@@ -10,11 +11,52 @@ extension MobileAppState {
     /// config timeout.
     static let taskBoardTimeout: Duration = .seconds(30)
 
+    func cardAssigneeMembers(projectID: UUID) -> [CardAssignee] {
+        var members = taskBoard(for: projectID).cloudSync?.members ?? []
+        let current: CardAssignee?
+        if usesCloudTasks, let user = taskCloud?.auth.user {
+            current = CardAssignee(userId: user.id, name: user.name, email: user.email, image: user.image)
+        } else if let account = autopilotAccount, account.isSignedIn, let id = account.userID {
+            current = CardAssignee(userId: id, name: account.name, email: account.email, image: account.avatarURL)
+        } else { current = nil }
+        if let current, !members.contains(where: { $0.id == current.id }) { members.append(current) }
+        return members.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+    }
+
+    func defaultCardAssigneeID(projectID: UUID) -> String? {
+        if usesCloudTasks { return taskCloud?.accountID }
+        return taskBoard(for: projectID).cloudSync?.currentUserId
+            ?? (autopilotAccount?.isSignedIn == true ? autopilotAccount?.userID : nil)
+    }
+
+    func canEditCard(_ task: ProjectTask) -> Bool {
+        let board = taskBoard(for: task.projectId)
+        return board.canEditCard(assigneeIds: (board.tasks.first { $0.id == task.id } ?? task).assigneeIds,
+                                 userID: usesCloudTasks ? taskCloud?.accountID : board.cloudSync?.currentUserId)
+    }
+
+    func canEditCard(_ story: ProjectStory) -> Bool {
+        let board = taskBoard(for: story.projectId)
+        return board.canEditCard(assigneeIds: (board.story(id: story.id) ?? story).assigneeIds,
+                                 userID: usesCloudTasks ? taskCloud?.accountID : board.cloudSync?.currentUserId)
+    }
+
     /// Sends one task-board operation to the active desktop and awaits its
     /// reply. The returned board is applied before this returns, so callers
     /// only need to handle errors.
     @discardableResult
     func taskBoardCall(_ payload: TaskBoardRequestPayload) async throws -> TaskBoardResultPayload {
+        let board = taskBoard(for: payload.projectID)
+        let taskID = payload.taskID ?? payload.task?.id
+        let storyID = payload.storyID ?? payload.story?.id
+        if payload.operation != .fetch && payload.operation != .fetchRuns {
+            if let task = board.tasks.first(where: { $0.id == taskID }), !canEditCard(task) {
+                throw AutopilotRemoteError.server("Only project owners and card assignees can change this card.")
+            }
+            if let story = board.stories.first(where: { $0.id == storyID }), !canEditCard(story) {
+                throw AutopilotRemoteError.server("Only project owners and card assignees can change this card.")
+            }
+        }
         if usesCloudTasks { return try await cloudTaskBoardCall(payload) }
         return try await desktopTaskBoardCall(payload)
     }
@@ -217,6 +259,7 @@ extension MobileAppState {
     /// snapshots are held back until every move has replied; see
     /// `storeTaskBoardSnapshot`.
     func moveTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil, runAgent: TaskAgentConfig? = nil) async throws {
+        guard canEditCard(task) else { throw AutopilotRemoteError.server("Only project owners and card assignees can change this card.") }
         let projectID = task.projectId
         beginTaskMove(in: projectID)
         defer { endTaskMove(in: projectID) }

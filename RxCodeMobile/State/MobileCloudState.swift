@@ -23,7 +23,12 @@ final class MobileCloudState {
     }
     @ObservationIgnored private lazy var service = ProjectCloudService(rxAuth: auth)
 
-    var accountID: String? { auth.user?.id }
+    var accountID: String? {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-uitest-cloud") { return CloudUITestProtocol.userID }
+        #endif
+        return auth.user?.id
+    }
 
     var isSignedIn: Bool {
         #if DEBUG

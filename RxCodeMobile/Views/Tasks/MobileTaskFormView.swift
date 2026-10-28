@@ -94,6 +94,12 @@ struct MobileTaskFormView: View {
                 }
             }
 
+            Section {
+                CardAssigneePicker(ids: $task.assigneeIds, profiles: $task.assigneeProfiles,
+                                   members: state.cardAssigneeMembers(projectID: task.projectId))
+                    .disabled(!isNew && !state.canEditCard(task))
+            }
+
             MobileTaskClassificationSection(
                 board: board,
                 priority: $task.priority,
@@ -117,6 +123,15 @@ struct MobileTaskFormView: View {
                 }
             } else {
                 agentSection
+            }
+        }
+        .task {
+            if !state.usesCloudTasks, state.autopilotAccount == nil, state.isPaired {
+                _ = try? await state.loadAutopilotAccount()
+            }
+            if isNew, task.assigneeIds.isEmpty, let id = state.defaultCardAssigneeID(projectID: task.projectId) {
+                task.assigneeIds = [id]
+                task.assigneeProfiles = state.cardAssigneeMembers(projectID: task.projectId).filter { $0.id == id }
             }
         }
         .navigationTitle(isNew ? "New Task" : "Edit Task")
@@ -305,6 +320,12 @@ struct MobileStoryFormView: View {
                     .lineLimit(3...10)
             }
 
+            Section {
+                CardAssigneePicker(ids: $story.assigneeIds, profiles: $story.assigneeProfiles,
+                                   members: state.cardAssigneeMembers(projectID: story.projectId))
+                    .disabled(!isNew && !state.canEditCard(story))
+            }
+
             MobileTaskClassificationSection(
                 board: board,
                 priority: $story.priority,
@@ -313,6 +334,15 @@ struct MobileStoryFormView: View {
                 milestone: $story.milestone,
                 tags: $story.tags
             )
+        }
+        .task {
+            if !state.usesCloudTasks, state.autopilotAccount == nil, state.isPaired {
+                _ = try? await state.loadAutopilotAccount()
+            }
+            if isNew, story.assigneeIds.isEmpty, let id = state.defaultCardAssigneeID(projectID: story.projectId) {
+                story.assigneeIds = [id]
+                story.assigneeProfiles = state.cardAssigneeMembers(projectID: story.projectId).filter { $0.id == id }
+            }
         }
         .navigationTitle(isNew ? "New Story" : "Edit Story")
         .navigationBarTitleDisplayMode(.inline)

@@ -50,6 +50,7 @@ struct MobileTaskBoardView: View {
     @State private var showingColumnOrder = false
     @State private var runRequest: MobileTaskRunRequest?
     @State private var taskMovesInFlight = 0
+    @AppStorage(TaskColumnFilter.storageKey) private var savedColumnFilters = Data()
     @AppStorage("mobile.tasks.columnOrder") private var savedColumnOrders = Data()
 
     // Column arrangement is a mobile presentation preference, scoped to the
@@ -73,6 +74,30 @@ struct MobileTaskBoardView: View {
             let right = ranks[$1.element.id] ?? Int.max
             return left == right ? $0.offset < $1.offset : left < right
         }.map(\.element)
+    }
+
+    private func filterScope(_ column: TaskColumn) -> String {
+        TaskColumnFilter.scope(project: columnOrderScope, viewID: currentView.id, columnID: column.id)
+    }
+
+    private func localFilter(_ column: TaskColumn) -> TaskColumnFilter {
+        TaskColumnFilter.load(from: savedColumnFilters, scope: filterScope(column))
+    }
+
+    private func columnTasks(_ column: TaskColumn) -> [ProjectTask] {
+        let filter = localFilter(column)
+        return currentView.sort(for: column.id).sorted(board.tasks(in: column.id).filter {
+            snapshotContains($0.id, story: false) && currentView.matches($0)
+                && $0.matches(keyword: searchText) && filter.matches($0)
+        })
+    }
+
+    private func columnOptions(_ column: TaskColumn) -> some View {
+        TaskColumnOptionsButton(column: column, board: board, sort: currentView.sort(for: column.id), filterScope: filterScope(column)) { sort in
+            var view = currentView
+            view.columnSorts[column.id.rawValue] = sort
+            try await state.saveView(view, projectID: projectID)
+        }
     }
 
     private var project: Project? {
@@ -110,9 +135,7 @@ struct MobileTaskBoardView: View {
     /// Track placement only, so polling metadata does not animate every card.
     private var taskCardLayout: [[UUID]] {
         visibleColumns.map { column in
-            board.tasks(in: column.id)
-                .filter { snapshotContains($0.id, story: false) && currentView.matches($0) && $0.matches(keyword: searchText) }
-                .map(\.id)
+            columnTasks(column).map(\.id)
         }
     }
 
@@ -298,7 +321,7 @@ struct MobileTaskBoardView: View {
     }
 
     private func kanbanColumn(_ column: TaskColumn, height: CGFloat) -> some View {
-        let tasks = board.tasks(in: column.id).filter { snapshotContains($0.id, story: false) && currentView.matches($0) && $0.matches(keyword: searchText) }
+        let tasks = columnTasks(column)
         return TaskKanbanColumnContent(
             headerSpacing: 0,
             cardInsets: EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8)
@@ -313,6 +336,7 @@ struct MobileTaskBoardView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                 Spacer()
+                columnOptions(column)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -320,6 +344,11 @@ struct MobileTaskBoardView: View {
             .accessibilityIdentifier("task-column-\(column.id.rawValue)")
 
         } cards: {
+            if tasks.isEmpty {
+                ContentUnavailableView("No Matching Tasks", systemImage: "line.3.horizontal.decrease.circle",
+                    description: Text("Change this column’s filters or add a task."))
+                    .frame(maxWidth: .infinity, minHeight: max(0, height - 80))
+            }
             ForEach(tasks) { task in
                 MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
                     MobileTaskRow(task: task, board: board)
@@ -347,12 +376,12 @@ struct MobileTaskBoardView: View {
                     onError: { errorMessage = $0 },
                     nativeReordering: true
                 ))
-                .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task)))
+                .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task) && state.canEditCard(task)))
                 .mobileLegacyDrop { items, _ in
                     drop(items, before: task, in: column.id)
                 }
                 .mobileReorderItem()
-                .moveDisabled(board.isStatusLocked(task))
+                .moveDisabled(board.isStatusLocked(task) || currentView.sort(for: column.id).field != .manual)
             }
             .mobileReorderable()
         }
@@ -397,8 +426,8 @@ struct MobileTaskBoardView: View {
     @ViewBuilder
     private var taskSections: some View {
         ForEach(visibleColumns) { column in
-            let tasks = board.tasks(in: column.id).filter { snapshotContains($0.id, story: false) && currentView.matches($0) && $0.matches(keyword: searchText) }
-            if !tasks.isEmpty || searchText.isEmpty {
+            let tasks = columnTasks(column)
+            if !tasks.isEmpty || searchText.isEmpty || !localFilter(column).isEmpty {
                 Section {
                     if !collapsedColumns.contains(column.id) {
                         ForEach(tasks) { task in
@@ -414,12 +443,12 @@ struct MobileTaskBoardView: View {
                                 onError: { errorMessage = $0 },
                                 nativeReordering: true
                             ))
-                            .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task)))
+                            .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task) && state.canEditCard(task)))
                             .mobileLegacyDrop { items, _ in
                                 drop(items, before: task, in: column.id)
                             }
                             .mobileReorderItem()
-                            .moveDisabled(board.isStatusLocked(task))
+                            .moveDisabled(board.isStatusLocked(task) || currentView.sort(for: column.id).field != .manual)
                         }
                         .mobileReorderable(collectionID: column.id)
                     }
@@ -434,31 +463,34 @@ struct MobileTaskBoardView: View {
     }
 
     private func columnHeader(_ column: TaskColumn, count: Int) -> some View {
-        Button {
-            withAnimation {
-                if collapsedColumns.contains(column.id) {
-                    collapsedColumns.remove(column.id)
-                } else {
-                    collapsedColumns.insert(column.id)
+        HStack {
+            Button {
+                withAnimation {
+                    if collapsedColumns.contains(column.id) {
+                        collapsedColumns.remove(column.id)
+                    } else {
+                        collapsedColumns.insert(column.id)
+                    }
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: column.systemImage)
+                        .foregroundStyle(column.tint)
+                    Text(column.name)
+                    Text("\(count)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(collapsedColumns.contains(column.id) ? 0 : 90))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.footnote.weight(.semibold))
             }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: column.systemImage)
-                    .foregroundStyle(column.tint)
-                Text(column.name)
-                Text("\(count)")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(collapsedColumns.contains(column.id) ? 0 : 90))
-                    .foregroundStyle(.secondary)
-            }
-            .font(.footnote.weight(.semibold))
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("task-column-\(column.id.rawValue)")
+        columnOptions(column)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("task-column-\(column.id.rawValue)")
     }
 
     // MARK: - Stories
@@ -752,10 +784,14 @@ struct MobileTaskBoardView: View {
     }
 
     private func reorderTasks(_ sources: [UUID], before target: UUID?, in status: TaskStatus) {
-        let destination = target.flatMap { id in board.tasks.first { $0.id == id } }
+        let isManual = currentView.sort(for: status).field == .manual
+        let destination = isManual ? target.flatMap { id in board.tasks.first { $0.id == id } } : nil
+        guard isManual || sources.allSatisfy({ id in
+            board.tasks.first { $0.id == id }.map { board.resolvedStatus(of: $0) != status } ?? false
+        }) else { return }
         guard !sources.isEmpty,
               board.effectiveColumns.contains(where: { $0.id == status }),
-              target == nil || destination.map({ board.resolvedStatus(of: $0) == status }) == true,
+              !isManual || target == nil || destination.map({ board.resolvedStatus(of: $0) == status }) == true,
               !sources.contains(where: { $0 == target }),
               sources.allSatisfy({ id in
                   board.tasks.first { $0.id == id }.map { !board.isStatusLocked($0) } ?? false
@@ -799,17 +835,19 @@ struct MobileTaskBoardView: View {
               let task = board.tasks.first(where: { $0.id == taskID })
         else { return false }
         guard task.id != target?.id, !board.isStatusLocked(task) else { return false }
+        guard currentView.sort(for: status).field == .manual || board.resolvedStatus(of: task) != status else { return false }
         if state.moveStartsRun(task, to: status) {
             MobileHaptics.buttonTap()
             // Dropping into a run column asks which Mac runs it first.
             runRequest = MobileTaskRunRequest(
                 task: task,
                 status: status,
-                sortIndex: state.dropSortIndex(taskID, projectID: projectID, before: target, in: status)
+                sortIndex: state.dropSortIndex(taskID, projectID: projectID,
+                    before: currentView.sort(for: status).field == .manual ? target : nil, in: status)
             )
             return true
         }
-        moveTasks([taskID], before: target, in: status)
+        moveTasks([taskID], before: currentView.sort(for: status).field == .manual ? target : nil, in: status)
         return true
     }
 

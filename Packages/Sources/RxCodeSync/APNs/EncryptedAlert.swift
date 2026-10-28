@@ -55,7 +55,28 @@ public struct AlertPlaintext: Codable, Sendable {
 /// fields the desktop pushes for `RxCodeWidgetData`. Every field except
 /// `updatedAt` is optional so a usage-only or job-count-only push still merges
 /// cleanly into the device's stored snapshot.
+public struct UsageWidgetCardPayload: Codable, Sendable {
+    public var id: String
+    public var title: String
+    public var value: String
+    public var detail: String
+    public var fetchedAt: Double
+    public init(id: String, title: String, value: String, detail: String, fetchedAt: Double) {
+        self.id = id; self.title = title; self.value = value; self.detail = detail; self.fetchedAt = fetchedAt
+    }
+    /// Account for JSON and double base64 overhead in the encrypted APNs envelope.
+    public static func bounded(_ input: [Self]) -> [Self] {
+        var cards = Array(input.prefix(3))
+        while !cards.isEmpty && ((try? JSONEncoder().encode(cards).count) ?? Int.max) > 1500 {
+            cards.removeLast()
+        }
+        return cards
+    }
+
+}
+
 public struct WidgetSnapshotPayload: Codable, Sendable {
+    public let usageCards: [UsageWidgetCardPayload]?
     /// Number of in-progress jobs, or `nil` to leave the stored value untouched.
     public let jobs: Int?
     /// Claude Code 5-hour utilization (0...100), or `nil` to leave untouched.
@@ -70,6 +91,7 @@ public struct WidgetSnapshotPayload: Codable, Sendable {
     public let updatedAt: Double
 
     public init(
+        usageCards: [UsageWidgetCardPayload]? = nil,
         jobs: Int? = nil,
         cc: Double? = nil,
         ccWeekly: Double? = nil,
@@ -77,6 +99,7 @@ public struct WidgetSnapshotPayload: Codable, Sendable {
         codexWeekly: Double? = nil,
         updatedAt: Double
     ) {
+        self.usageCards = usageCards
         self.jobs = jobs
         self.cc = cc
         self.ccWeekly = ccWeekly

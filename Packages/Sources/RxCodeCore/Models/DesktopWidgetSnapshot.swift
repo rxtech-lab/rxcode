@@ -8,14 +8,16 @@ public struct DesktopWidgetSnapshot: Codable, Equatable, Sendable {
     public var agents: [WidgetAgentUsage]
     public var updatedAt: Date
     public var threads: [WidgetThread]?
+    public var usageDashboard: UsageDashboard?
 
-    public init(workspaceID: String, workspaceName: String, projects: [WidgetProject], agents: [WidgetAgentUsage], updatedAt: Date = .now, threads: [WidgetThread] = []) {
+    public init(workspaceID: String, workspaceName: String, projects: [WidgetProject], agents: [WidgetAgentUsage], updatedAt: Date = .now, threads: [WidgetThread] = [], usageDashboard: UsageDashboard? = nil) {
         self.workspaceID = workspaceID
         self.workspaceName = workspaceName
         self.projects = projects
         self.agents = agents
         self.updatedAt = updatedAt
         self.threads = threads
+        self.usageDashboard = usageDashboard
     }
 
     public static let empty = Self(workspaceID: "", workspaceName: "RxCode", projects: [], agents: [], updatedAt: .distantPast)

@@ -181,6 +181,16 @@ struct MenuBarContentView: View {
 
             Divider()
 
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(appState.usageDashboard.cards.filter(\.showInMenuBar)) { card in
+                        if let snapshot = appState.usageDashboard.snapshot(for: card) {
+                            UsagePluginCard(snapshot: snapshot, configuration: card)
+                        }
+                    }
+                }
+            }.frame(maxHeight: appState.usageDashboard.cards.contains(where: \.showInMenuBar) ? 260 : 0)
+
             chatActivitySection
 
             if !ciStatusRows.isEmpty {

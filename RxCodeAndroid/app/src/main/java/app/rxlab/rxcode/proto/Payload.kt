@@ -236,6 +236,7 @@ data class SnapshotPayload(
     val sessions: List<SessionSummary> = emptyList(),
     val branchBriefings: List<MobileBranchBriefing>? = null,
     val briefingDocuments: List<MobileBriefingDocument>? = null,
+    val usageDashboard: UsageDashboard? = null,
     val threadSummaries: List<MobileThreadSummary>? = null,
     val projectBranches: List<ProjectBranchInfo>? = null,
     val ciStatuses: List<MobileProjectCIStatus>? = null,

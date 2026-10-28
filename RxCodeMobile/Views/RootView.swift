@@ -35,6 +35,15 @@ struct RemoteWorkspaceView: View {
     @State private var tasksPath = NavigationPath()
     @State private var minimumLoadingTimeElapsed = false
     @State private var connectionTimedOut = false
+    /// Set once the workspace has been shown for the current desktop. From then
+    /// on a transient relay drop must not unmount it: tearing the whole tree
+    /// down dismissed the keyboard, wiped the composer, re-subscribed the open
+    /// thread and re-rendered everything on each flap. A small overlay reports
+    /// the reconnect instead. Reset when the desktop mirror is cleared.
+    @State private var hasShownWorkspace = false
+    /// Shown only after the connection has been down for a moment, so a brief
+    /// socket hiccup doesn't flash the reconnect overlay.
+    @State private var showReconnectOverlay = false
 
     var body: some View {
         Group {
@@ -112,9 +121,11 @@ struct RemoteWorkspaceView: View {
 
     /// Whether the loading splash should be dismissed (data loaded AND minimum time elapsed, but NOT timed out)
     private var shouldShowContent: Bool {
-        let result = state.isDesktopTaskSyncReady && minimumLoadingTimeElapsed && !connectionTimedOut
-        logger.debug("shouldShowContent: \(result) (hasSnapshot: \(state.hasReceivedInitialSnapshot), minTimeElapsed: \(minimumLoadingTimeElapsed), timedOut: \(connectionTimedOut))")
-        return result
+        hasShownWorkspace || isInitialSyncComplete
+    }
+
+    private var isInitialSyncComplete: Bool {
+        state.isDesktopTaskSyncReady && minimumLoadingTimeElapsed && !connectionTimedOut
     }
 
     private var paired: some View {
@@ -123,6 +134,22 @@ struct RemoteWorkspaceView: View {
             // task views must not issue requests or present alerts behind the cloud sheet.
             if shouldShowContent {
                 mainContent
+                    .overlay(alignment: .top) {
+                        if showReconnectOverlay {
+                            MobileReconnectOverlay(
+                                desktopName: state.activePairedDesktop?.displayName,
+                                isUnavailable: state.desktopTaskUnavailable,
+                                isRetrying: isRetryingConnection,
+                                onRetry: {
+                                    MobileHaptics.buttonTap()
+                                    Task { await retryConnection() }
+                                }
+                            )
+                            .padding(.top, 6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                    .animation(.spring(duration: 0.3), value: showReconnectOverlay)
             }
 
             // Loading splash - shown until first snapshot AND minimum 2 seconds
@@ -173,10 +200,33 @@ struct RemoteWorkspaceView: View {
             await initialLoad()
         }
         .onChange(of: state.isDesktopTaskSyncReady) { _, ready in
+            logger.info("Desktop sync ready changed: \(ready, privacy: .public) hasShownWorkspace=\(hasShownWorkspace, privacy: .public) connection=\(String(describing: state.connectionState), privacy: .public) unavailable=\(state.desktopTaskUnavailable, privacy: .public)")
             if ready {
                 connectionTimedOut = false
                 minimumLoadingTimeElapsed = true
             }
+        }
+        .onChange(of: isInitialSyncComplete) { _, complete in
+            if complete, !hasShownWorkspace {
+                logger.info("Workspace shown; later reconnects keep it mounted")
+                hasShownWorkspace = true
+            }
+        }
+        .task(id: hasShownWorkspace && !state.isDesktopTaskSyncReady) {
+            guard hasShownWorkspace, !state.isDesktopTaskSyncReady else {
+                if showReconnectOverlay {
+                    logger.info("Reconnect overlay hidden")
+                }
+                showReconnectOverlay = false
+                return
+            }
+            do {
+                try await Task.sleep(for: .seconds(1.5))
+            } catch {
+                return
+            }
+            logger.info("Reconnect overlay shown connection=\(String(describing: state.connectionState), privacy: .public) unavailable=\(state.desktopTaskUnavailable, privacy: .public)")
+            showReconnectOverlay = true
         }
         .onChange(of: state.activeSessionID) { _, newValue in
             openActiveSession(newValue)
@@ -187,6 +237,9 @@ struct RemoteWorkspaceView: View {
         .onChange(of: state.hasReceivedInitialSnapshot) { oldValue, newValue in
             // Reset states when snapshot state resets (e.g., switching paired desktops)
             if oldValue && !newValue {
+                logger.info("Desktop mirror cleared; showing sync splash again")
+                hasShownWorkspace = false
+                showReconnectOverlay = false
                 minimumLoadingTimeElapsed = false
                 connectionTimedOut = false
                 Task {

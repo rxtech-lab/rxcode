@@ -15,7 +15,7 @@ extension MobileAppState {
         case .stateChanged(let state):
             logger.info("[Relay] connection state changed: \(String(describing: state), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
             let previous = connectionState
-            connectionState = state
+            if previous != state { connectionState = state }
             triggerConnectionFeedback(from: previous, to: state)
             switch state {
             case .connected:
@@ -28,18 +28,29 @@ extension MobileAppState {
                 // We stopped the relay ourselves on backgrounding.
                 break
             case .disconnected, .reconnecting:
+                if !desktopTaskUnavailable {
+                    logger.warning("[MobileSync] desktop marked unavailable: relay state=\(String(describing: state), privacy: .public) previous=\(String(describing: previous), privacy: .public)")
+                }
                 desktopTaskUnavailable = true
             }
         case .deliveryFailed(let toHex):
-            if toHex == pairedDesktopPubkey { desktopTaskUnavailable = true }
+            if toHex == pairedDesktopPubkey {
+                if !desktopTaskUnavailable {
+                    logger.warning("[MobileSync] desktop marked unavailable: relay could not deliver to active desktop")
+                }
+                desktopTaskUnavailable = true
+            }
             logger.warning("[Relay] delivery failed to desktopKey=\(String(toHex.prefix(12)), privacy: .public)")
         case .inbound(let inbound):
             handleInbound(inbound)
         case .pathChanged(let peerHex, let path, let rttMillis):
-            logger.info("[Direct] active path for desktopKey=\(String(peerHex.prefix(12)), privacy: .public) is now \(String(describing: path), privacy: .public)")
-            activePathByDesktop[peerHex] = path
-            directRTTByDesktop[peerHex] = rttMillis
-            if peerHex == pairedDesktopPubkey {
+            let previousPath = activePathByDesktop[peerHex]
+            logger.info("[Direct] active path for desktopKey=\(String(peerHex.prefix(12)), privacy: .public) is now \(String(describing: path), privacy: .public) previous=\(previousPath.map { String(describing: $0) } ?? "<nil>", privacy: .public)")
+            if previousPath != path { activePathByDesktop[peerHex] = path }
+            if directRTTByDesktop[peerHex] != rttMillis { directRTTByDesktop[peerHex] = rttMillis }
+            // Re-sync only on a real path switch: data in flight on the old
+            // path may have been lost.
+            if peerHex == pairedDesktopPubkey, previousPath != path {
                 Task { await self.requestSnapshot(reason: "connection_path_changed") }
             }
         }
@@ -99,43 +110,53 @@ extension MobileAppState {
             let profileProjectCount = snap.runProfiles?.count ?? 0
             let profileTotal = snap.runProfiles?.reduce(0) { $0 + $1.profiles.count } ?? 0
             logger.info("[MobileSync] applying snapshot seq=\(snap.seq ?? 0, privacy: .public) projects=\(snap.projects.count, privacy: .public) sessions=\(snap.sessions.count, privacy: .public) runProfileProjects=\(profileProjectCount, privacy: .public) runProfileTotal=\(profileTotal, privacy: .public) runTasks=\(snap.runTasks?.count ?? 0, privacy: .public) from desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
-            projects = snap.projects
-            sessions = snap.sessions
-            branchBriefings = snap.branchBriefings ?? []
-            briefingDocuments = snap.briefingDocuments ?? []
-            threadSummaries = snap.threadSummaries ?? []
-            ciStatusByProject = Dictionary(uniqueKeysWithValues: (snap.ciStatuses ?? []).map { ($0.projectId, $0.status) })
-            desktopSettings = snap.settings
-            desktopUsage = snap.usage
-            desktopHostMetrics = snap.hostMetrics
-            desktopWebProxy = snap.webProxy
+            // Every @Published write re-renders all views observing this
+            // object, so only write values the snapshot actually changed.
+            let applyStart = Date()
+            var changedFields: [String] = []
+            func apply<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<MobileAppState, T>, _ value: T, _ name: String) {
+                guard self[keyPath: keyPath] != value else { return }
+                self[keyPath: keyPath] = value
+                changedFields.append(name)
+            }
+            apply(\.projects, snap.projects, "projects")
+            apply(\.sessions, snap.sessions, "sessions")
+            apply(\.branchBriefings, snap.branchBriefings ?? [], "branchBriefings")
+            apply(\.briefingDocuments, snap.briefingDocuments ?? [], "briefingDocuments")
+            apply(\.usageDashboard, snap.usageDashboard ?? UsageDashboard(), "usageDashboard")
+            apply(\.threadSummaries, snap.threadSummaries ?? [], "threadSummaries")
+            apply(\.ciStatusByProject, Dictionary(uniqueKeysWithValues: (snap.ciStatuses ?? []).map { ($0.projectId, $0.status) }), "ciStatuses")
+            apply(\.desktopSettings, snap.settings, "settings")
+            apply(\.desktopUsage, snap.usage, "usage")
+            apply(\.desktopHostMetrics, snap.hostMetrics, "hostMetrics")
+            apply(\.desktopWebProxy, snap.webProxy, "webProxy")
             if let webProxy = snap.webProxy {
                 logger.info("[WebBrowserSync] snapshot web proxy host=\(webProxy.host, privacy: .public) port=\(webProxy.port, privacy: .public)")
             } else {
                 logger.warning("[WebBrowserSync] snapshot missing web proxy info")
             }
             if let runProfiles = snap.runProfiles {
-                runProfilesByProject = Dictionary(
+                apply(\.runProfilesByProject, Dictionary(
                     uniqueKeysWithValues: runProfiles.map { ($0.projectId, $0.profiles) }
-                )
+                ), "runProfiles")
             }
             if let tasks = snap.runTasks {
-                runTasks = tasks.sorted { $0.startedAt > $1.startedAt }
+                apply(\.runTasks, tasks.sorted { $0.startedAt > $1.startedAt }, "runTasks")
             }
             if let branches = snap.projectBranches {
-                projectBranches = Dictionary(uniqueKeysWithValues: branches.map { ($0.projectId, $0.currentBranch) })
-                availableBranchesByProject = Dictionary(
+                apply(\.projectBranches, Dictionary(uniqueKeysWithValues: branches.map { ($0.projectId, $0.currentBranch) }), "projectBranches")
+                apply(\.availableBranchesByProject, Dictionary(
                     uniqueKeysWithValues: branches.compactMap { info -> (UUID, [String])? in
                         guard let list = info.availableBranches else { return nil }
                         return (info.projectId, list)
                     }
-                )
-                projectDirtyByProject = Dictionary(
+                ), "availableBranches")
+                apply(\.projectDirtyByProject, Dictionary(
                     uniqueKeysWithValues: branches.compactMap { info -> (UUID, Bool)? in
                         guard let dirty = info.hasUncommittedChanges else { return nil }
                         return (info.projectId, dirty)
                     }
-                )
+                ), "projectDirty")
             }
             if let active = snap.activeSessionID {
                 if let messages = snap.activeSessionMessages {
@@ -148,20 +169,23 @@ extension MobileAppState {
                     // guard for any future code path that might send [].)
                     let existing = messagesBySession[active]?.count ?? 0
                     if !messages.isEmpty || existing == 0 {
-                        messagesBySession[active] = messages
+                        if messagesBySession[active] != messages {
+                            messagesBySession[active] = messages
+                            changedFields.append("activeSessionMessages")
+                        }
                         if snap.activeSessionHasMore == true {
-                            sessionsWithMoreMessages.insert(active)
-                        } else {
+                            if !sessionsWithMoreMessages.contains(active) { sessionsWithMoreMessages.insert(active) }
+                        } else if sessionsWithMoreMessages.contains(active) {
                             sessionsWithMoreMessages.remove(active)
                         }
-                        loadingMoreSessions.remove(active)
+                        if loadingMoreSessions.contains(active) { loadingMoreSessions.remove(active) }
                     } else {
                         logger.warning("[MobileSync] refused to overwrite \(existing) messages with empty page for session=\(active, privacy: .public)")
                     }
                 } else if messagesBySession[active] == nil {
                     messagesBySession[active] = []
                 }
-                loadingThreadMessageSessions.remove(active)
+                if loadingThreadMessageSessions.contains(active) { loadingThreadMessageSessions.remove(active) }
                 // The snapshot's activeSessionID is metadata that labels the
                 // carried activeSessionMessages — it must not be treated as a
                 // navigation command. Only adopt it when our local selection
@@ -173,11 +197,18 @@ extension MobileAppState {
                     activeSessionID = active
                 }
             }
-            desktopTaskUnavailable = false
-            hasReceivedInitialSnapshot = true
-            cachedDesktopTaskProjects = []
-            scheduleTaskCacheSave()
-            refreshWidgetData()
+            if desktopTaskUnavailable {
+                logger.info("[MobileSync] desktop available again after snapshot")
+                desktopTaskUnavailable = false
+            }
+            if !hasReceivedInitialSnapshot { hasReceivedInitialSnapshot = true }
+            if !cachedDesktopTaskProjects.isEmpty { cachedDesktopTaskProjects = [] }
+            let applyMillis = Int(Date().timeIntervalSince(applyStart) * 1000)
+            logger.info("[MobileSync] applied snapshot seq=\(snap.seq ?? 0, privacy: .public) in \(applyMillis, privacy: .public)ms changed=[\(changedFields.joined(separator: ","), privacy: .public)]")
+            if !changedFields.isEmpty {
+                scheduleTaskCacheSave()
+                refreshWidgetData()
+            }
         case .moreMessages(let page):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "more_messages") else { return }
             applyMoreMessages(page)
@@ -620,6 +651,29 @@ extension MobileAppState {
             logger.info("[MobileSync] snapshot request skipped reason=\(reason, privacy: .public): mobile is not paired")
             return
         }
+        // Coalesce bursts (relay reconnect + path change + view refreshes all
+        // asking at once). The trailing request carries the latest
+        // activeSessionID, so nothing a caller needed is lost.
+        if let last = lastSnapshotRequestAt {
+            let elapsed = Date().timeIntervalSince(last)
+            if elapsed < Self.snapshotRequestCoalesceInterval {
+                guard trailingSnapshotRequestTask == nil else {
+                    logger.debug("[MobileSync] snapshot request coalesced reason=\(reason, privacy: .public) elapsed=\(Int(elapsed * 1000), privacy: .public)ms (trailing request already scheduled)")
+                    return
+                }
+                let delay = Self.snapshotRequestCoalesceInterval - elapsed
+                logger.info("[MobileSync] snapshot request deferred reason=\(reason, privacy: .public) by \(Int(delay * 1000), privacy: .public)ms")
+                trailingSnapshotRequestTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(Int(delay * 1000)))
+                    guard let self, !Task.isCancelled else { return }
+                    self.trailingSnapshotRequestTask = nil
+                    self.lastSnapshotRequestAt = nil
+                    await self.requestSnapshot(reason: "\(reason)+coalesced")
+                }
+                return
+            }
+        }
+        lastSnapshotRequestAt = Date()
         let payload = RequestSnapshotPayload(activeSessionID: activeSessionID)
         do {
             try await client.send(.requestSnapshot(payload), toHex: pairedDesktopPubkey)

@@ -198,12 +198,14 @@ public struct AutopilotResultPayload: Codable, Sendable {
 // MARK: - Account
 
 public struct AutopilotAccountStatus: Codable, Sendable {
+    public let userID: String?
     public let isSignedIn: Bool
     public let name: String?
     public let email: String?
     public let avatarURL: String?
 
-    public init(isSignedIn: Bool, name: String? = nil, email: String? = nil, avatarURL: String? = nil) {
+    public init(isSignedIn: Bool, userID: String? = nil, name: String? = nil, email: String? = nil, avatarURL: String? = nil) {
+        self.userID = userID
         self.isSignedIn = isSignedIn
         self.name = name
         self.email = email

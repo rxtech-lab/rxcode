@@ -1,4 +1,5 @@
 import Foundation
+import RxAuthSwift
 import os
 import RxCodeCore
 
@@ -430,11 +431,16 @@ extension AppState {
     /// Inserts or replaces a task. New tasks land at the end of their column.
     /// Creating a task in a chat column, or editing one into it, starts its
     /// assigned agent just as moving a card there does.
-    func upsertTask(_ task: ProjectTask) {
+    func upsertTask(_ task: ProjectTask, defaultAssignee: Bool = true) {
+        guard self.task(id: task.id) == nil || canEditCard(task) else { return }
         var stamped = task
         stamped.updatedAt = Date()
         let currentBoard = taskBoard(for: task.projectId)
         let stored = currentBoard.tasks.first { $0.id == task.id }
+        if defaultAssignee, stored == nil, stamped.assigneeIds.isEmpty, let userID = rxAuth.user?.id {
+            stamped.assigneeIds = [userID]
+            stamped.assigneeProfiles = [CardAssignee(userId: userID, name: rxAuth.user?.name, email: rxAuth.user?.email, image: rxAuth.user?.image)]
+        }
         var seenParents = Set<UUID>()
         stamped.parentTaskIds = stamped.parentTaskIds.filter {
             seenParents.insert($0).inserted && canLinkTask(stamped.id, to: $0)
@@ -482,6 +488,7 @@ extension AppState {
     }
 
     func deleteTask(_ task: ProjectTask) {
+        guard canEditCard(task) else { return }
         updateBoard(task.projectId) { board in
             board.tasks.removeAll { $0.id == task.id }
             for index in board.tasks.indices {
@@ -502,6 +509,7 @@ extension AppState {
     /// until the turn finishes and the column's session-stop trigger moves it
     /// on (`applyTaskTrigger`), so user moves out of that column are ignored.
     func moveTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil) {
+        guard canEditCard(task) else { return }
         let stored = self.task(id: task.id) ?? task
         let board = taskBoard(for: task.projectId)
         guard !board.isStatusLocked(stored) || board.resolvedStatus(of: stored) == status else { return }
@@ -545,8 +553,14 @@ extension AppState {
     /// The link list is owned by `linkStory` / `unlinkStory`: an edit keeps the
     /// stored links, so a form or an older mobile client that doesn't know
     /// about links can't drop them.
-    func upsertStory(_ story: ProjectStory) {
+    func upsertStory(_ story: ProjectStory, defaultAssignee: Bool = true) {
+        guard taskBoard(for: story.projectId).story(id: story.id) == nil || canEditCard(story) else { return }
         var stamped = story
+        if defaultAssignee, taskBoard(for: story.projectId).story(id: story.id) == nil,
+           stamped.assigneeIds.isEmpty, let userID = rxAuth.user?.id {
+            stamped.assigneeIds = [userID]
+            stamped.assigneeProfiles = [CardAssignee(userId: userID, name: rxAuth.user?.name, email: rxAuth.user?.email, image: rxAuth.user?.image)]
+        }
         stamped.updatedAt = Date()
         if let stored = taskBoard(for: story.projectId).story(id: story.id) {
             stamped.linkedProjectIds = stored.linkedProjectIds
@@ -558,9 +572,10 @@ extension AppState {
     /// links. `upsertStory` keeps stored links, so the difference is applied
     /// here through `linkStory` / `unlinkStory`. A new story's links are
     /// written by `upsertStory` directly.
-    func saveStory(_ story: ProjectStory) async {
+    func saveStory(_ story: ProjectStory, defaultAssignee: Bool = true) async {
+        guard taskBoard(for: story.projectId).story(id: story.id) == nil || canEditCard(story) else { return }
         let stored = taskBoard(for: story.projectId).story(id: story.id)
-        upsertStory(story)
+        upsertStory(story, defaultAssignee: defaultAssignee)
         guard let stored else { return }
         let removed = stored.linkedProjectIds.filter { !story.linkedProjectIds.contains($0) }
         let added = story.linkedProjectIds.filter { !stored.linkedProjectIds.contains($0) }
@@ -581,6 +596,7 @@ extension AppState {
     /// orphaned back to the board root rather than deleted — losing tracked
     /// work to a container delete would be surprising.
     func deleteStory(_ story: ProjectStory) {
+        guard canEditCard(story) else { return }
         let stored = taskBoard(for: story.projectId).story(id: story.id) ?? story
         for projectId in stored.projectGroup {
             removeStoryCopy(story.id, from: projectId)

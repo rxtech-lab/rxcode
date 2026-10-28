@@ -187,30 +187,35 @@ struct MobileTaskActions: ViewModifier {
         return state.moveStartsRun(task, to: chatColumn.id)
     }
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        taskContent(content)
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                if canRun {
-                    Button {
-                        requestRun()
-                    } label: {
-                        Label("Run", systemImage: "play.fill")
+        if !state.canEditCard(task) {
+            content
+        } else {
+            taskContent(content)
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    if canRun {
+                        Button {
+                            requestRun()
+                        } label: {
+                            Label("Run", systemImage: "play.fill")
+                        }
+                        .tint(.green)
                     }
-                    .tint(.green)
                 }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(role: .destructive) {
-                    perform { try await state.deleteTask(task) }
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        perform { try await state.deleteTask(task) }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    Button(action: onEdit) {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .tint(.blue)
                 }
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .tint(.blue)
-            }
-            .mobileTaskRunDevicePicker($runRequest)
+                .mobileTaskRunDevicePicker($runRequest)
+        }
     }
 
     @ViewBuilder

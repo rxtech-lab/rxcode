@@ -459,6 +459,14 @@ extension MobileAppState {
     func refreshWidgetData() {
         let jobCount = sessions.filter { $0.isStreaming }.count
         let snapshot = RxCodeWidgetData(
+            usageCards: usageDashboard.cards.filter(\.showInWidget).compactMap { card in
+                guard let snapshot = usageDashboard.snapshot(for: card) else { return nil }
+                let metric = snapshot.metrics.first { card.metricID == nil || $0.id == card.metricID }
+                return RxCodeWidgetUsageCard(id: card.id.uuidString, title: snapshot.title,
+                    value: metric.map { "\($0.title): \($0.formattedValue)" } ?? "No data",
+                    detail: "\(snapshot.period) · \(snapshot.isStale() ? "Stale" : "Updated")",
+                    fetchedAt: snapshot.fetchedAt.timeIntervalSince1970)
+            },
             jobCount: jobCount,
             ccUsagePercent: desktopUsage?.claudeCode?.fiveHourPercent,
             ccWeeklyUsagePercent: desktopUsage?.claudeCode?.sevenDayPercent,
@@ -526,11 +534,19 @@ extension MobileAppState {
     }
 
     func clearDesktopMirror() {
+        logger.info("[MobileSync] clearing desktop mirror desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
         hasReceivedInitialSnapshot = false
+        // The next desktop's first snapshot request must not wait out the
+        // coalescing window of the previous desktop's requests.
+        trailingSnapshotRequestTask?.cancel()
+        trailingSnapshotRequestTask = nil
+        lastSnapshotRequestAt = nil
         projects = []
         sessions = []
         branchBriefings = []
         briefingDocuments = []
+        usageDashboard = UsageDashboard()
+        RxCodeWidgetStore.save(.empty)
         briefingContentResult = nil
         pendingBriefingContentID = nil
         isLoadingBriefingContent = false

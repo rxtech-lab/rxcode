@@ -32,6 +32,7 @@ extension AppState {
         )
         threadStore.recordUsage(sample, at: now)
         usageStatsRevision += 1
+        refreshLocalUsagePlugins()
     }
 
     /// Aggregated usage for the briefing statistics panel.

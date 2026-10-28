@@ -41,6 +41,7 @@ struct MobileTaskRow: View {
                         .font(.system(size: 7))
                         .foregroundStyle(type.tint)
                 }
+            CardAssigneesView(ids: task.assigneeIds, profiles: task.assigneeProfiles)
                 Text(task.title.isEmpty ? String(localized: "Untitled Task") : task.title)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
@@ -183,6 +184,7 @@ struct MobileStoryRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Image(systemName: "rectangle.stack")
                     .foregroundStyle(.secondary)
+            CardAssigneesView(ids: story.assigneeIds, profiles: story.assigneeProfiles)
                 Text(story.title.isEmpty ? String(localized: "Untitled Story") : story.title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)

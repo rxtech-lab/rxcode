@@ -20,6 +20,17 @@ extension AppState {
         MobileSyncService.shared.projectNameResolver = { [weak self] id in
             self?.projects.first { $0.id == id }?.name
         }
+        MobileSyncService.shared.usageCardsProvider = { [weak self] in
+            guard let self else { return [] }
+            // Keep encrypted APNs envelopes comfortably below the size limit.
+            return self.usageDashboard.cards.filter(\.showInWidget).prefix(3).compactMap { card in
+                guard let snapshot = self.usageDashboard.snapshot(for: card) else { return nil }
+                let metric = snapshot.metrics.first { card.metricID == nil || $0.id == card.metricID }
+                return UsageWidgetCardPayload(id: card.id.uuidString, title: String(snapshot.title.prefix(60)),
+                    value: String((metric.map { "\($0.title): \($0.formattedValue)" } ?? "No data").prefix(100)),
+                    detail: String((snapshot.error ?? snapshot.period).prefix(100)), fetchedAt: snapshot.fetchedAt.timeIntervalSince1970)
+            }
+        }
         MobileSyncService.shared.usageSnapshotProvider = { [weak self] in
             (
                 cc: self?.latestRateLimitUsage?.fiveHourPercent,

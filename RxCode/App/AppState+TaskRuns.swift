@@ -117,6 +117,7 @@ extension AppState {
     /// A chat column already running as many tasks as its concurrency limit
     /// allows queues the task instead; `dispatchQueuedTasks` starts it later.
     func startTask(_ task: ProjectTask) async {
+        guard canEditCard(task) else { return }
         // Releases the run slot `admitTaskRun` (or `dispatchQueuedTasks`)
         // reserved, on every exit — by then the thread is live or never will
         // be. A run that bailed out frees its slot for the next queued task.

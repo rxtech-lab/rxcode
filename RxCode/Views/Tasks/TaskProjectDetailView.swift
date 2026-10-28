@@ -765,6 +765,7 @@ struct TaskBoardLayoutView: View {
                                 column: column,
                                 tasks: (tasksByStatus[column.id] ?? []).sorted { $0.sortIndex < $1.sortIndex },
                                 board: board,
+                                view: view,
                                 storyRollups: rollups,
                                 onOpen: onOpen,
                                 onAddTask: { onAddTask(column.id, $0) },

@@ -26,7 +26,8 @@ extension AppState {
                     return WidgetThread(id: summary.id, projectID: project.id, projectName: project.name,
                         title: summary.title, isOngoing: self.sessionActivity[summary.id]?.isStreaming ?? false,
                         updatedAt: summary.updatedAt)
-                }
+                },
+                usageDashboard: self.usageDashboard
             )
             await DesktopWidgetPublisher.shared.publish(snapshot)
         }
@@ -60,7 +61,7 @@ private actor DesktopWidgetPublisher {
     func publish(_ snapshot: DesktopWidgetSnapshot) {
         do {
             try DesktopWidgetStore.save(snapshot)
-            for kind in ["RxCodeProjectTasks", "RxCodeOngoingTasks", "RxCodeAgentUsage"] {
+            for kind in ["RxCodeProjectTasks", "RxCodeOngoingTasks", "RxCodeAgentUsage", "RxCodeIntegrationUsage"] {
                 WidgetCenter.shared.reloadTimelines(ofKind: kind)
             }
         } catch {

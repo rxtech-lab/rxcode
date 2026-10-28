@@ -6,6 +6,9 @@ public extension TaskBoard {
     func replacingCloudRows(_ remote: CloudRemoteBoard, projectID: UUID) -> TaskBoard {
         var board = self
         var sync = cloudSync ?? CloudBoardSyncState()
+        sync.members = remote.members
+        sync.role = remote.role
+        sync.currentUserId = remote.currentUserId
         let storyIDs = Set(remote.stories.map(\.id))
         let taskIDs = Set(remote.tasks.map(\.id))
         sync.stories = sync.stories.filter { storyIDs.contains($0.value.remoteId) }
@@ -26,12 +29,16 @@ public extension TaskBoard {
         board.stories = remote.stories.map { row in
             let id = sync.localStoryId(forRemote: row.id)!
             let existing = stories.first { $0.id == id } ?? ProjectStory(id: id, projectId: projectID, title: row.fields.title)
-            return board.applying(row.fields, to: existing, updatedAt: row.updatedAt)
+            var card = board.applying(row.fields, to: existing, updatedAt: row.updatedAt)
+            card.assigneeProfiles = (remote.members ?? []).filter { card.assigneeIds.contains($0.userId) }
+            return card
         }
         board.tasks = remote.tasks.map { row in
             let id = sync.localTaskId(forRemote: row.id)!
             let existing = tasks.first { $0.id == id } ?? ProjectTask(id: id, projectId: projectID, title: row.fields.title)
-            return board.applying(row.fields, to: existing, sync: sync, updatedAt: row.updatedAt)
+            var card = board.applying(row.fields, to: existing, sync: sync, updatedAt: row.updatedAt)
+            card.assigneeProfiles = (remote.members ?? []).filter { card.assigneeIds.contains($0.userId) }
+            return card
         }
         board.cloudSync = sync
         return board

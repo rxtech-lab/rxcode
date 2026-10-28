@@ -7,6 +7,20 @@ import RxCodeCore
 struct TaskBoardPayloadTests {
     private let projectID = UUID(uuidString: "11111111-AAAA-BBBB-CCCC-000000000001")!
 
+    @Test("column sorting travels from phone mutation to desktop board update")
+    func columnSortRoundTrips() throws {
+        var view = TaskSavedView.defaultView
+        view.columnSorts["pending"] = TaskColumnSort(field: .priority, descending: true)
+        let request = TaskBoardRequestPayload(projectID: projectID, operation: .upsertView, view: view)
+        let received = try JSONDecoder().decode(TaskBoardRequestPayload.self, from: JSONEncoder().encode(request))
+        #expect(received.view?.columnSorts == view.columnSorts)
+        let update = TaskBoardUpdatePayload(snapshot: MobileTaskBoardSnapshot(
+            projectID: projectID, board: TaskBoard(savedViews: [view])
+        ))
+        let decoded = try JSONDecoder().decode(TaskBoardUpdatePayload.self, from: JSONEncoder().encode(update))
+        #expect(decoded.snapshot.board.defaultView.columnSorts == view.columnSorts)
+    }
+
     @Test("task board request round trips a task mutation")
     func requestRoundTrips() throws {
         let task = ProjectTask(projectId: projectID, title: "Ship tasks", details: "On iOS", status: .inProgress, tags: ["Mobile"])

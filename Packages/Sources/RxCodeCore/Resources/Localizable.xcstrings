@@ -1,8 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ and %lld others" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 等 %2$lld 人"
+          }
+        }
+      }
+    },
     "·" : {
 
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
     },
     "%@ · ~%lld tasks left" : {
       "localizations" : {
@@ -63,11 +83,43 @@
     "ACP" : {
 
     },
+    "All" : {
+
+    },
     "Amber (Yellow)" : {
+
+    },
+    "Apply" : {
+
+    },
+    "Applying column options…" : {
+
+    },
+    "Ascending" : {
 
     },
     "Ask" : {
 
+    },
+    "Assign People" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指派成员"
+          }
+        }
+      }
+    },
+    "Assignees" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "负责人"
+          }
+        }
+      }
     },
     "At this pace the 5-hour limit runs out about %@ before it resets." : {
       "localizations" : {
@@ -116,6 +168,16 @@
     "Calling…" : {
 
     },
+    "Cancel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
     "Changes" : {
 
     },
@@ -128,14 +190,33 @@
     "Claude Code" : {
 
     },
+    "Clear Filters" : {
+
+    },
     "Codex" : {
+
+    },
+    "Created date" : {
 
     },
     "Creating pull request…" : {
 
     },
-    "Done" : {
+    "Descending" : {
 
+    },
+    "Direction" : {
+
+    },
+    "Done" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成"
+          }
+        }
+      }
     },
     "Enter a cron expression." : {
 
@@ -158,6 +239,22 @@
     "Feature" : {
 
     },
+    "Filters apply only to this column in this view on this device. Tasks must match every selected tag and any selection within each other property." : {
+
+    },
+    "Filters on This Device" : {
+
+    },
+    "Find a project member" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找项目成员"
+          }
+        }
+      }
+    },
     "First day of the month at 9:00" : {
 
     },
@@ -165,6 +262,9 @@
 
     },
     "High" : {
+
+    },
+    "Highest priority first" : {
 
     },
     "HTTP" : {
@@ -211,16 +311,54 @@
         }
       }
     },
+    "Lowest priority first" : {
+
+    },
+    "Manual order" : {
+
+    },
     "Medium" : {
 
     },
     "Midnight (Indigo)" : {
 
     },
+    "Milestone" : {
+
+    },
+    "No Matching Members" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的成员"
+          }
+        }
+      }
+    },
+    "No Options" : {
+
+    },
+    "No Project Members" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有项目成员"
+          }
+        }
+      }
+    },
+    "No usage data for this period" : {
+
+    },
     "Ocean (Blue)" : {
 
     },
     "Off" : {
+
+    },
+    "OK" : {
 
     },
     "On" : {
@@ -287,6 +425,9 @@
     "Plan" : {
 
     },
+    "Priority" : {
+
+    },
     "Project" : {
 
     },
@@ -332,6 +473,31 @@
 
     },
     "Shared via .mcp.json" : {
+
+    },
+    "Show profile for %@" : {
+
+    },
+    "Sign in and refresh the project to load its team members." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录并刷新项目以加载团队成员。"
+          }
+        }
+      }
+    },
+    "Sort and filter %@" : {
+
+    },
+    "Sort by" : {
+
+    },
+    "Sorting" : {
+
+    },
+    "Sorting syncs across devices for this column in this view. Manual order controls the run queue." : {
 
     },
     "SSE" : {
@@ -423,13 +589,45 @@
     "This thread" : {
 
     },
+    "Title" : {
+
+    },
+    "Unable to Apply Column Options" : {
+
+    },
+    "Unassigned" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未分配"
+          }
+        }
+      }
+    },
     "Unsupported macro %@." : {
+
+    },
+    "Updated %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Updated %1$@%2$@"
+          }
+        }
+      }
+    },
+    "Updated date" : {
 
     },
     "Urgent" : {
 
     },
     "User" : {
+
+    },
+    "Version" : {
 
     },
     "Views" : {

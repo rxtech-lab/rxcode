@@ -51,6 +51,7 @@ struct TaskContextMenuItems: View {
             onAction: perform
         )
         .equatable()
+        .disabled(!appState.canEditCard(currentTask))
     }
 
     private func perform(_ action: TaskContextMenuAction) {

@@ -12,6 +12,7 @@ import SwiftUI
 struct RxCodeWidgetBundle: WidgetBundle {
     var body: some Widget {
         RxCodeWidget()
+        RxCodeUsageWidget()
         RxCodeWidgetLiveActivity()
     }
 }

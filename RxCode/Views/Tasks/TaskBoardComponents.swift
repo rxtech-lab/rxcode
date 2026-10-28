@@ -766,11 +766,12 @@ struct StoryContextMenuItems: View {
         Button("New Task") {
             onNewTask(appState.newTaskDraft(inStory: story))
         }
-        Button("Edit…", action: onEdit)
+        Button("Edit…", action: onEdit).disabled(!appState.canEditCard(story))
         Divider()
         Button("Delete", role: .destructive) {
             onDelete()
         }
+        .disabled(!appState.canEditCard(story))
     }
 }
 

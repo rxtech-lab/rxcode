@@ -304,6 +304,7 @@ extension MobileSyncService {
         guard !devices.isEmpty else { return }
         let usage = usageSnapshotProvider?()
         let snapshot = WidgetSnapshotPayload(
+            usageCards: usageCardsProvider.map { UsageWidgetCardPayload.bounded($0()) },
             jobs: jobCount,
             cc: usage?.cc,
             ccWeekly: usage?.ccWeekly,

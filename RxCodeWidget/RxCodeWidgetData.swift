@@ -17,6 +17,7 @@ import WidgetKit
 /// the agents' rate-limit usage, mirrored from the desktop menubar.
 struct RxCodeWidgetData: Codable, Equatable {
     /// Number of in-progress jobs (streaming chat sessions).
+    var usageCards: [RxCodeWidgetUsageCard]? = nil
     var jobCount: Int
     /// Claude Code 5-hour utilization, 0...100. `nil` when not signed in.
     var ccUsagePercent: Double?
@@ -70,4 +71,12 @@ enum RxCodeWidgetStore {
         WidgetCenter.shared.reloadAllTimelines()
         #endif
     }
+}
+
+struct RxCodeWidgetUsageCard: Codable, Equatable, Identifiable {
+    var id: String
+    var title: String
+    var value: String
+    var detail: String
+    var fetchedAt: Double? = nil
 }

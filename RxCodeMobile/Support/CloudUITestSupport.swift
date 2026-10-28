@@ -4,6 +4,8 @@ import Foundation
 /// In-process HTTP fixture used only by the cloud UI test launch mode.
 /// It exercises the production cloud client and editors with no desktop connection.
 final class CloudUITestProtocol: URLProtocol, @unchecked Sendable {
+    /// Signed-in fixture account; it owns the board so cards stay editable.
+    static let userID = "ui-test-user"
     private static let lock = NSLock()
     nonisolated(unsafe) private static var tasks: [[String: Any]] = []
     nonisolated(unsafe) private static var stories: [[String: Any]] = []
@@ -56,7 +58,11 @@ final class CloudUITestProtocol: URLProtocol, @unchecked Sendable {
             }
             object = row
         } else {
-            object = ["stories": Self.stories, "tasks": Self.tasks]
+            object = [
+                "stories": Self.stories, "tasks": Self.tasks,
+                "members": [["userId": Self.userID, "name": "UI Test"]],
+                "role": "owner", "currentUserId": Self.userID
+            ]
         }
         let data = try! JSONSerialization.data(withJSONObject: object)
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)

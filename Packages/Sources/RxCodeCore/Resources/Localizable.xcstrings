@@ -1,16 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "%@ and %lld others" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ 等 %2$lld 人"
-          }
-        }
-      }
-    },
     "·" : {
 
     },
@@ -34,6 +24,16 @@
         }
       }
     },
+    "%@ and %lld others" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 等 %2$lld 人"
+          }
+        }
+      }
+    },
     "%@ of 5h per task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -50,6 +50,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每个任务消耗 7 天限额的 %@"
+          }
+        }
+      }
+    },
+    "%@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
           }
         }
       }
@@ -202,6 +212,36 @@
     "Creating pull request…" : {
 
     },
+    "Deadline: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止时间：%@"
+          }
+        }
+      }
+    },
+    "Delayed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已延期"
+          }
+        }
+      }
+    },
+    "Delayed ×%lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已延期 ×%lld"
+          }
+        }
+      }
+    },
     "Descending" : {
 
     },
@@ -214,6 +254,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "完成"
+          }
+        }
+      }
+    },
+    "Due soon: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将到期：%@"
           }
         }
       }
@@ -235,6 +285,26 @@
     },
     "Expected 5 fields (minute hour day month weekday), found %lld." : {
 
+    },
+    "Extra Large" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "特大"
+          }
+        }
+      }
+    },
+    "Extra Small" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "特小"
+          }
+        }
+      }
     },
     "Feature" : {
 
@@ -292,6 +362,16 @@
         }
       }
     },
+    "Large" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大"
+          }
+        }
+      }
+    },
     "Lavender (Purple)" : {
 
     },
@@ -318,6 +398,16 @@
 
     },
     "Medium" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中"
+          }
+        }
+      }
+    },
+    "Metric" : {
 
     },
     "Midnight (Indigo)" : {
@@ -349,7 +439,10 @@
         }
       }
     },
-    "No usage data for this period" : {
+    "No selected usage data for this period" : {
+
+    },
+    "No usage data" : {
 
     },
     "Ocean (Blue)" : {
@@ -416,6 +509,16 @@
         }
       }
     },
+    "Overdue since %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自 %@ 起逾期"
+          }
+        }
+      }
+    },
     "Pending" : {
 
     },
@@ -444,6 +547,9 @@
         }
       }
     },
+    "Refresh this integration to collect its metrics." : {
+
+    },
     "Resets in %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -459,6 +565,16 @@
     },
     "Review" : {
 
+    },
+    "Reviewed by %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由 %@ 审核"
+          }
+        }
+      }
     },
     "Run" : {
 
@@ -484,6 +600,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录并刷新项目以加载团队成员。"
+          }
+        }
+      }
+    },
+    "Size: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规模：%@"
+          }
+        }
+      }
+    },
+    "Small" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小"
           }
         }
       }
@@ -625,6 +761,9 @@
 
     },
     "User" : {
+
+    },
+    "Value" : {
 
     },
     "Version" : {

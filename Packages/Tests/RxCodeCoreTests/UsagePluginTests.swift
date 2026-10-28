@@ -4,6 +4,24 @@ import Testing
 
 @Suite("Usage plugins")
 struct UsagePluginTests {
+    @Test func multipleMetricSelectionPreservesLegacyCards() throws {
+        let legacy = UsageCardConfiguration(integrationID: UUID(), metricID: "tokens")
+        var card = try JSONDecoder().decode(UsageCardConfiguration.self, from: JSONEncoder().encode(legacy))
+        #expect(card.selectedMetricIDs == ["tokens"])
+        #expect(card.includesMetric("tokens"))
+        #expect(!card.includesMetric("time"))
+        card.selectMetrics(["tokens", "time", "tokens"])
+        let encoded = try JSONEncoder().encode(card)
+        let decoded = try JSONDecoder().decode(UsageCardConfiguration.self, from: encoded)
+        #expect(decoded.selectedMetricIDs == ["tokens", "time"])
+        #expect(decoded.includesMetric("time"))
+        #expect(!decoded.includesMetric("turns"))
+        #expect(decoded.metricID == "tokens")
+        card.selectMetrics([])
+        #expect(card.metricID == nil)
+        #expect(card.includesMetric("new-metric"))
+        #expect(try JSONDecoder().decode(UsageCardConfiguration.self, from: JSONEncoder().encode(card)).selectedMetricIDs.isEmpty)
+    }
     @Test func vercelPreservesCurrenciesAndProjectScope() throws {
         let rows = """
         {"BilledCost":"1.25","BillingCurrency":"USD","ServiceName":"Compute","Tags":{"ProjectId":"a"}}
@@ -57,5 +75,24 @@ struct UsagePluginTests {
         let snapshot = UsagePluginSnapshot(id: UUID(), pluginID: "neon", title: "Neon", scope: "org", period: "month", fetchedAt: .distantPast, metrics: [])
         #expect(snapshot.isStale())
         #expect(UsageMetric("x", "x", value: nil, unit: "USD").formattedValue == "Unavailable")
+    }
+
+    @Test func visibleCardsMatchRenderedProjectScope() {
+        let project = UUID()
+        let otherProject = UUID()
+        let globalID = UUID()
+        let projectID = UUID()
+        let global = UsageCardConfiguration(integrationID: globalID)
+        let scoped = UsageCardConfiguration(integrationID: projectID)
+        let hidden = UsageCardConfiguration(integrationID: globalID, isVisible: false)
+        let pending = UsageCardConfiguration(integrationID: UUID())
+        let dashboard = UsageDashboard(cards: [global, scoped, hidden, pending], snapshots: [
+            .init(id: globalID, pluginID: "ai-usage", title: "AI", scope: "All projects", period: "Week", metrics: []),
+            .init(id: projectID, pluginID: "neon", title: "Neon", projectID: project, scope: "Project", period: "Month", metrics: [])
+        ])
+        #expect(dashboard.visibleCards() == [global, scoped])
+        #expect(dashboard.visibleCards(projectIDs: [project]) == [global, scoped])
+        #expect(dashboard.visibleCards(projectIDs: [otherProject]) == [global])
+        #expect(UsageDashboard(cards: [hidden, pending]).visibleCards().isEmpty)
     }
 }

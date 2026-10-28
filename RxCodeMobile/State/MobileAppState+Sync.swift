@@ -461,7 +461,7 @@ extension MobileAppState {
         let snapshot = RxCodeWidgetData(
             usageCards: usageDashboard.cards.filter(\.showInWidget).compactMap { card in
                 guard let snapshot = usageDashboard.snapshot(for: card) else { return nil }
-                let metric = snapshot.metrics.first { card.metricID == nil || $0.id == card.metricID }
+                let metric = snapshot.metrics.first { card.includesMetric($0.id) }
                 return RxCodeWidgetUsageCard(id: card.id.uuidString, title: snapshot.title,
                     value: metric.map { "\($0.title): \($0.formattedValue)" } ?? "No data",
                     detail: "\(snapshot.period) · \(snapshot.isStale() ? "Stale" : "Updated")",

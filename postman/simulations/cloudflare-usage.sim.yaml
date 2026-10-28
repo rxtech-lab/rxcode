@@ -1,0 +1,6 @@
+simulation: cloudflare-usage
+routing: path
+mocks:
+  - name: cloudflare-usage
+    routeKey: cloudflare
+    path: postman/mocks/cloudflare-usage/config.yaml

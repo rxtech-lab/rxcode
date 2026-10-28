@@ -185,7 +185,7 @@ struct MenuBarContentView: View {
                 VStack(spacing: 8) {
                     ForEach(appState.usageDashboard.cards.filter(\.showInMenuBar)) { card in
                         if let snapshot = appState.usageDashboard.snapshot(for: card) {
-                            UsagePluginCard(snapshot: snapshot, configuration: card)
+                            UsageDashboardCard(snapshot: snapshot, configuration: card)
                         }
                     }
                 }

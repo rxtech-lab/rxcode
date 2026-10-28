@@ -24,7 +24,14 @@ extension AppState {
                 guard UsageCardConfiguration.styles.contains(style) else { throw IDEToolError.invalidArguments("Unsupported card style.") }
                 card.style = style
             }
-            if let metric = arguments["metric_id"]?.stringValue { card.metricID = metric.isEmpty ? nil : metric }
+            if let raw = arguments["metric_ids"] {
+                guard let values = raw.arrayValue, values.allSatisfy({ $0.stringValue?.isEmpty == false }) else {
+                    throw IDEToolError.invalidArguments("metric_ids must be an array of nonempty metric IDs; use [] for all metrics.")
+                }
+                card.selectMetrics(values.compactMap(\.stringValue))
+            } else if let metric = arguments["metric_id"]?.stringValue {
+                card.selectMetrics(metric.isEmpty ? [] : [metric])
+            }
             if let visible = arguments["visible"]?.boolValue { card.isVisible = visible }
             if let menu = arguments["menu_bar"]?.boolValue { card.showInMenuBar = menu }
             if let widget = arguments["widget"]?.boolValue { card.showInWidget = widget }

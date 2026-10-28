@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Versioned, credential-free contract shared by plugins, sync, and widgets.
 public struct UsageMetric: Codable, Sendable, Equatable, Identifiable {
@@ -42,13 +43,26 @@ public struct UsageCardConfiguration: Codable, Sendable, Equatable, Identifiable
     /// Strings allow older clients to fall back when a new style arrives.
     public var style: String
     public var metricID: String?
+    /// Nil decodes legacy single-metric cards; an empty array selects all metrics.
+    public private(set) var metricIDs: [String]?
+    public var selectedMetricIDs: [String] { metricIDs ?? metricID.map { [$0] } ?? [] }
+    public func includesMetric(_ id: String) -> Bool {
+        selectedMetricIDs.isEmpty || selectedMetricIDs.contains(id)
+    }
+    public mutating func selectMetrics(_ ids: [String]) {
+        var seen = Set<String>()
+        metricIDs = ids.filter { !$0.isEmpty && seen.insert($0).inserted }
+        // Older paired clients display the first selection instead of every metric.
+        metricID = metricIDs?.first
+    }
     public var isVisible: Bool
     public var showInMenuBar: Bool
     public var showInWidget: Bool
     public init(id: UUID = UUID(), integrationID: UUID, style: String = "summary", metricID: String? = nil,
-                isVisible: Bool = true, showInMenuBar: Bool = false, showInWidget: Bool = false) {
+                isVisible: Bool = true, showInMenuBar: Bool = false, showInWidget: Bool = false, metricIDs: [String]? = nil) {
         self.id = id; self.integrationID = integrationID; self.style = style; self.metricID = metricID
         self.isVisible = isVisible; self.showInMenuBar = showInMenuBar; self.showInWidget = showInWidget
+        if let metricIDs { selectMetrics(metricIDs) }
     }
     public static let styles = ["summary", "compact", "metrics"]
 }
@@ -88,6 +102,16 @@ public struct UsageDashboard: Codable, Sendable, Equatable {
     public func snapshot(for card: UsageCardConfiguration) -> UsagePluginSnapshot? {
         snapshots.first { $0.id == card.integrationID }
     }
+
+    /// Use the same selection for rendering and empty states. Integrations
+    /// without a snapshot do not produce a visible card yet.
+    public func visibleCards(projectIDs: Set<UUID> = []) -> [UsageCardConfiguration] {
+        cards.filter { card in
+            guard card.isVisible, let snapshot = snapshot(for: card) else { return false }
+            guard let projectID = snapshot.projectID else { return true }
+            return projectIDs.isEmpty || projectIDs.contains(projectID)
+        }
+    }
 }
 
 public struct UsagePluginDescriptor: Sendable, Identifiable {
@@ -105,6 +129,13 @@ public struct UsagePluginDescriptor: Sendable, Identifiable {
 public protocol UsagePlugin: Sendable {
     var descriptor: UsagePluginDescriptor { get }
     func fetch(configuration: UsageIntegration, credential: String, now: Date) async throws -> UsagePluginSnapshot
+    @MainActor func detailView(snapshot: UsagePluginSnapshot, configuration: UsageCardConfiguration) -> AnyView
+}
+
+public extension UsagePlugin {
+    @MainActor func detailView(snapshot: UsagePluginSnapshot, configuration: UsageCardConfiguration) -> AnyView {
+        AnyView(UsagePluginDetailView(snapshot: snapshot, configuration: configuration))
+    }
 }
 
 public enum UsagePluginError: LocalizedError {

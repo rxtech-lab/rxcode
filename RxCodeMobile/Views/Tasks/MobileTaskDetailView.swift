@@ -109,7 +109,8 @@ struct MobileTaskDetailView: View {
                         priority: task.priority,
                         version: task.version,
                         milestone: task.milestone,
-                        tags: task.tags
+                        tags: task.tags,
+                        schedule: TaskSchedulePills(task: task, board: board)
                     )
                     if state.isTaskAgentRunning(task) {
                         Label("Agent is working on this task", systemImage: "bolt.fill")
@@ -368,7 +369,8 @@ struct MobileStoryDetailView: View {
                         priority: story.priority,
                         version: story.version,
                         milestone: story.milestone,
-                        tags: story.tags
+                        tags: story.tags,
+                        schedule: TaskSchedulePills(story: story, progress: progress)
                     )
                 }
                 .padding(.vertical, 4)

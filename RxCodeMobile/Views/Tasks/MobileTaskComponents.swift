@@ -78,7 +78,8 @@ struct MobileTaskRow: View {
                 priority: task.priority,
                 version: task.version,
                 milestone: task.milestone,
-                tags: task.tags
+                tags: task.tags,
+                schedule: TaskSchedulePills(task: task, board: board)
             )
         }
         .padding(.vertical, 2)
@@ -113,9 +114,11 @@ struct MobileTaskPills: View {
     var version: String?
     var milestone: String?
     var tags: [String] = []
+    var schedule: TaskSchedulePills?
 
     private var isEmpty: Bool {
         column == nil && story == nil && priority == nil && version == nil && milestone == nil && tags.isEmpty
+            && !(schedule?.hasContent ?? false)
     }
 
     var body: some View {
@@ -140,8 +143,32 @@ struct MobileTaskPills: View {
                 ForEach(tags, id: \.self) { tag in
                     TaskPill(text: tag, tint: board.labelTint(for: tag))
                 }
+                if let schedule {
+                    schedule
+                }
             }
         }
+    }
+}
+
+extension TaskSchedulePills {
+    init(task: ProjectTask, board: TaskBoard) {
+        self.init(
+            deadline: task.deadline,
+            isDone: board.column(for: task.status).countsAsDone,
+            size: task.size,
+            delays: task.delays,
+            reviewer: task.reviewer
+        )
+    }
+
+    init(story: ProjectStory, progress: StoryProgress?) {
+        self.init(
+            deadline: story.deadline,
+            isDone: progress.map { $0.total > 0 && $0.done == $0.total } ?? false,
+            size: story.size,
+            delays: story.delays
+        )
     }
 }
 
@@ -199,7 +226,8 @@ struct MobileStoryRow: View {
                 priority: story.priority,
                 version: story.version,
                 milestone: story.milestone,
-                tags: story.tags
+                tags: story.tags,
+                schedule: TaskSchedulePills(story: story, progress: rollup?.progress)
             )
         }
         .padding(.vertical, 2)

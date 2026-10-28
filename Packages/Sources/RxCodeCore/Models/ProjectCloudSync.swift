@@ -70,6 +70,9 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
     public var milestone: String?
     public var priority: String?
     public var type: String?
+    public var deadline: Date?
+    public var size: String?
+    public var delays: [CloudDelay]
 
     public init(
         title: String,
@@ -79,7 +82,10 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
         version: String? = nil,
         milestone: String? = nil,
         priority: String? = nil,
-        type: String? = nil
+        type: String? = nil,
+        deadline: Date? = nil,
+        size: String? = nil,
+        delays: [CloudDelay] = []
     ) {
         self.assigneeIds = assigneeIds
         self.title = CloudText.title(title)
@@ -89,11 +95,15 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
         self.milestone = CloudText.optional(milestone)
         self.priority = CloudText.priority(priority)
         self.type = CloudText.optional(type)
+        self.deadline = deadline.map(CloudDate.wholeSeconds)
+        self.size = CloudText.size(size)
+        self.delays = delays
     }
 
     private enum CodingKeys: String, CodingKey {
         case assigneeIds
         case title, details, tags, version, milestone, priority, type
+        case deadline, size, delays
     }
 
     public init(from decoder: Decoder) throws {
@@ -106,7 +116,10 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
             version: try c.decodeIfPresent(String.self, forKey: .version),
             milestone: try c.decodeIfPresent(String.self, forKey: .milestone),
             priority: try c.decodeIfPresent(String.self, forKey: .priority),
-            type: try c.decodeIfPresent(String.self, forKey: .type)
+            type: try c.decodeIfPresent(String.self, forKey: .type),
+            deadline: CloudDate.decode(c, forKey: .deadline),
+            size: try? c.decodeIfPresent(String.self, forKey: .size),
+            delays: CloudDelay.decodeList(c, forKey: .delays)
         )
     }
 
@@ -121,6 +134,9 @@ public struct CloudStoryFields: Codable, Sendable, Hashable {
         try c.encode(milestone, forKey: .milestone)
         try c.encode(priority, forKey: .priority)
         try c.encode(type, forKey: .type)
+        try c.encode(deadline.map(CloudDate.format), forKey: .deadline)
+        try c.encode(size, forKey: .size)
+        try c.encode(delays, forKey: .delays)
     }
 }
 
@@ -140,6 +156,12 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
     public var parentTaskId: String?
     public var assignedDeviceId: String?
     public var sortIndex: Double
+    public var deadline: Date?
+    public var size: String?
+    public var delays: [CloudDelay]
+    /// Set by Autopilot when the task moves from Pending Review to done; the
+    /// server ignores it in requests.
+    public var reviewerId: String?
 
     public init(
         title: String,
@@ -154,7 +176,11 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
         storyId: String? = nil,
         parentTaskId: String? = nil,
         assignedDeviceId: String? = nil,
-        sortIndex: Double = 0
+        sortIndex: Double = 0,
+        deadline: Date? = nil,
+        size: String? = nil,
+        delays: [CloudDelay] = [],
+        reviewerId: String? = nil
     ) {
         self.assigneeIds = assigneeIds
         self.title = CloudText.title(title)
@@ -169,12 +195,17 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
         self.parentTaskId = parentTaskId
         self.assignedDeviceId = assignedDeviceId
         self.sortIndex = sortIndex
+        self.deadline = deadline.map(CloudDate.wholeSeconds)
+        self.size = CloudText.size(size)
+        self.delays = delays
+        self.reviewerId = CloudText.optional(reviewerId)
     }
 
     private enum CodingKeys: String, CodingKey {
         case assigneeIds
         case title, details, status, priority, type, tags, version, milestone
         case storyId, parentTaskId, assignedDeviceId, sortIndex
+        case deadline, size, delays, reviewerId
     }
 
     public init(from decoder: Decoder) throws {
@@ -192,7 +223,11 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
             storyId: try c.decodeIfPresent(String.self, forKey: .storyId),
             parentTaskId: try c.decodeIfPresent(String.self, forKey: .parentTaskId),
             assignedDeviceId: try c.decodeIfPresent(String.self, forKey: .assignedDeviceId),
-            sortIndex: try c.decodeIfPresent(Double.self, forKey: .sortIndex) ?? 0
+            sortIndex: try c.decodeIfPresent(Double.self, forKey: .sortIndex) ?? 0,
+            deadline: CloudDate.decode(c, forKey: .deadline),
+            size: try? c.decodeIfPresent(String.self, forKey: .size),
+            delays: CloudDelay.decodeList(c, forKey: .delays),
+            reviewerId: try? c.decodeIfPresent(String.self, forKey: .reviewerId)
         )
     }
 
@@ -212,6 +247,71 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
         try c.encode(parentTaskId, forKey: .parentTaskId)
         try c.encode(assignedDeviceId, forKey: .assignedDeviceId)
         try c.encode(sortIndex, forKey: .sortIndex)
+        try c.encode(deadline.map(CloudDate.format), forKey: .deadline)
+        try c.encode(size, forKey: .size)
+        try c.encode(delays, forKey: .delays)
+        try c.encode(reviewerId, forKey: .reviewerId)
+    }
+}
+
+/// A delay as Autopilot stores it. Ids are lowercased and times are whole
+/// seconds, so a delay that round-trips through the server compares equal.
+public struct CloudDelay: Codable, Sendable, Hashable {
+    public var id: String
+    public var reason: String
+    public var createdAt: Date
+    /// Autopilot stamps the requesting user on delays it has not seen before.
+    public var authorId: String?
+
+    public init(id: String, reason: String, createdAt: Date, authorId: String? = nil) {
+        self.id = id.lowercased()
+        self.reason = String(reason.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1000))
+        self.createdAt = CloudDate.wholeSeconds(createdAt)
+        self.authorId = CloudText.optional(authorId)
+    }
+
+    public init(_ delay: TaskDelay) {
+        self.init(id: delay.id.uuidString, reason: delay.reason, createdAt: delay.createdAt, authorId: delay.author?.userId)
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, reason, createdAt, authorId }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString,
+            reason: try c.decodeIfPresent(String.self, forKey: .reason) ?? "",
+            createdAt: CloudDate.decode(c, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0),
+            authorId: try? c.decodeIfPresent(String.self, forKey: .authorId)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(reason, forKey: .reason)
+        try c.encode(CloudDate.format(createdAt), forKey: .createdAt)
+        try c.encode(authorId, forKey: .authorId)
+    }
+
+    /// The local delay, with its author resolved from the board's members.
+    public func localDelay(members: [CardAssignee]?) -> TaskDelay {
+        TaskDelay(
+            id: UUID(uuidString: id) ?? UUID(),
+            reason: reason,
+            createdAt: createdAt,
+            author: authorId.map { id in members?.first { $0.userId == id } ?? CardAssignee(userId: id) }
+        )
+    }
+
+    fileprivate static func decodeList<K: CodingKey>(_ c: KeyedDecodingContainer<K>, forKey key: K) -> [CloudDelay] {
+        if let delays = try? c.decodeIfPresent([CloudDelay].self, forKey: key) { return delays }
+        if let text = try? c.decodeIfPresent(String.self, forKey: key),
+           let data = text.data(using: .utf8),
+           let delays = try? JSONDecoder().decode([CloudDelay].self, from: data) {
+            return delays
+        }
+        return []
     }
 }
 
@@ -248,6 +348,11 @@ public enum CloudText {
 
     public static func priority(_ value: String?) -> String? {
         guard let value, TaskPriority(rawValue: value) != nil else { return nil }
+        return value
+    }
+
+    public static func size(_ value: String?) -> String? {
+        guard let value, TaskSize(rawValue: value) != nil else { return nil }
         return value
     }
 
@@ -336,6 +441,16 @@ enum CloudDate {
             return Date(timeIntervalSince1970: millis / 1000)
         }
         return nil
+    }
+
+    /// Autopilot stores milliseconds and JSON carries ISO text; whole seconds
+    /// survive both exactly.
+    static func wholeSeconds(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: date.timeIntervalSince1970.rounded())
+    }
+
+    static func format(_ date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
     }
 
     static func parse(_ text: String) -> Date? {
@@ -474,7 +589,10 @@ public extension TaskBoard {
             version: story.version,
             milestone: story.milestone,
             priority: story.priority?.rawValue,
-            type: itemType(id: story.typeId)?.name
+            type: itemType(id: story.typeId)?.name,
+            deadline: story.deadline,
+            size: story.size?.rawValue,
+            delays: story.delays.map(CloudDelay.init)
         )
     }
 
@@ -492,7 +610,11 @@ public extension TaskBoard {
             storyId: sync.storyRemoteId(task.storyId),
             parentTaskId: task.parentTaskIds.compactMap { sync.taskRemoteId($0) }.first,
             assignedDeviceId: task.assignedDeviceId,
-            sortIndex: task.sortIndex
+            sortIndex: task.sortIndex,
+            deadline: task.deadline,
+            size: task.size?.rawValue,
+            delays: task.delays.map(CloudDelay.init),
+            reviewerId: task.reviewer?.userId
         )
     }
 
@@ -513,6 +635,9 @@ public extension TaskBoard {
         story.milestone = fields.milestone
         story.priority = fields.priority.flatMap(TaskPriority.init(rawValue:))
         story.typeId = itemTypeId(named: fields.type)
+        story.deadline = fields.deadline
+        story.size = fields.size.flatMap(TaskSize.init(rawValue:))
+        story.delays = fields.delays.map { $0.localDelay(members: cloudSync?.members) }
         story.updatedAt = updatedAt ?? Date()
         return story
     }
@@ -544,6 +669,12 @@ public extension TaskBoard {
         task.parentTaskIds.append(contentsOf: retainedParents)
         task.assignedDeviceId = fields.assignedDeviceId
         task.sortIndex = fields.sortIndex
+        task.deadline = fields.deadline
+        task.size = fields.size.flatMap(TaskSize.init(rawValue:))
+        task.delays = fields.delays.map { $0.localDelay(members: sync.members) }
+        task.reviewer = fields.reviewerId.map { id in
+            sync.members?.first { $0.userId == id } ?? CardAssignee(userId: id)
+        }
         task.updatedAt = updatedAt ?? Date()
         return task
     }

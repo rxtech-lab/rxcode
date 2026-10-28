@@ -8,15 +8,17 @@ struct FileInspectorView: View {
     let fileName: String
     @State private var content: String?
     @State private var highlightedContent: NSAttributedString?
-    @State private var lineCount = 0
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isCopied = false
+    @State private var showsRawText = false
+    @State private var usesNativePreview = false
     @State private var isEditing = false
     @State private var editingContent = ""
     @State private var isSaving = false
     @State private var saveError: String?
-    @Environment(AppState.self) private var appState
+    @State private var sourceEncoding = String.Encoding.utf8
+    @State private var sourceBOM = Data()
     @Environment(WindowState.self) private var windowState
 
     private var isDirty: Bool {
@@ -32,17 +34,19 @@ struct FileInspectorView: View {
                 loadingView
             } else if let error = errorMessage {
                 errorView(error)
-            } else if isEditing {
-                editingView
-            } else if let content {
-                if fileExtension == "md" || fileExtension == "markdown" {
-                    MarkdownPreviewView(
-                        content: content,
-                        baseURL: URL(fileURLWithPath: filePath).deletingLastPathComponent()
-                    )
+            } else if usesNativePreview || (format == .native && !showsRawText) {
+                NativeFilePreviewView(fileURL: fileURL)
+                    .id(filePath + String(content?.hashValue ?? 0))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
+            } else if let content {
+                if showsRawText || !format.hasRenderedPreview {
                     codeContentView(content)
+                } else if format == .markdown {
+                    MarkdownPreviewView(content: content, baseURL: fileURL.deletingLastPathComponent())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if format == .html {
+                    HTMLFilePreviewView(fileURL: fileURL, content: content)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
@@ -66,6 +70,38 @@ struct FileInspectorView: View {
             .keyboardShortcut(.escape, modifiers: [])
             .opacity(0)
             .allowsHitTesting(false)
+        }
+        .sheet(isPresented: $isEditing) {
+            NavigationStack {
+                editingView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .navigationTitle("Edit \(fileName)")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { isEditing = false }
+                                .disabled(isSaving)
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") { Task { await saveFile() } }
+                                .keyboardShortcut("s", modifiers: .command)
+                                .disabled(!isDirty || isSaving)
+                        }
+                    }
+            }
+            .frame(minWidth: 640, minHeight: 480)
+            .interactiveDismissDisabled(isDirty || isSaving)
+            .overlay {
+                if isSaving {
+                    ProgressView("Saving…")
+                        .padding()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .alert("Unable to Save", isPresented: Binding(
+                get: { saveError != nil }, set: { if !$0 { saveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveError = nil }
+            } message: { Text(saveError ?? "") }
         }
         .task(id: filePath) {
             isEditing = false
@@ -98,6 +134,16 @@ struct FileInspectorView: View {
                 .padding(.vertical, 2)
                 .background(ClaudeTheme.surfaceSecondary, in: Capsule())
 
+            if content != nil && format.hasRenderedPreview {
+                Picker("View", selection: $showsRawText) {
+                    Text("Preview").tag(false)
+                    Text("Raw Text").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+                .accessibilityIdentifier("file-preview-mode")
+            }
+
             if content != nil {
                 Button {
                     if !isEditing {
@@ -128,6 +174,10 @@ struct FileInspectorView: View {
             }
 
             Menu {
+                Button("Open in Default App", systemImage: "arrow.up.forward.app") {
+                    NSWorkspace.shared.open(fileURL)
+                }
+                Divider()
                 let editors = ExternalEditorService.shared.detectedEditors
                 if editors.isEmpty {
                     Text("No editors detected")
@@ -183,20 +233,6 @@ struct FileInspectorView: View {
 
     private var editingView: some View {
         VStack(spacing: 0) {
-            if let error = saveError {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: ClaudeTheme.size(11)))
-                    Text(error)
-                        .font(.system(size: ClaudeTheme.size(11)))
-                }
-                .foregroundStyle(ClaudeTheme.statusError)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(ClaudeTheme.statusError.opacity(0.1))
-                ClaudeThemeDivider()
-            }
             TextEditor(text: $editingContent)
                 .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
                 .scrollContentBackground(.hidden)
@@ -204,9 +240,6 @@ struct FileInspectorView: View {
                 .padding(.leading, 10)
                 .padding(.trailing, 4)
                 .padding(.vertical, 8)
-                .onChange(of: editingContent) { _, newValue in
-                    lineCount = 1 + newValue.reduce(0) { $1 == "\n" ? $0 + 1 : $0 }
-                }
         }
         .background(ClaudeTheme.codeBackground)
     }
@@ -217,7 +250,7 @@ struct FileInspectorView: View {
             ProgressView().controlSize(.small)
             Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func errorView(_ message: String) -> some View {
@@ -232,20 +265,26 @@ struct FileInspectorView: View {
                 .multilineTextAlignment(.center)
             Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - File Saving
 
     private func saveFile() async {
+        guard isDirty, !isSaving else { return }
         isSaving = true
         saveError = nil
         let textToSave = editingContent
         let path = filePath
+        let encoding = sourceEncoding
+        let bom = sourceBOM
         do {
             try await Task.detached {
                 let url = URL(fileURLWithPath: path)
-                try textToSave.write(to: url, atomically: true, encoding: .utf8)
+                guard let encoded = textToSave.data(using: encoding) else {
+                    throw CocoaError(.fileWriteInapplicableStringEncoding)
+                }
+                try (bom + encoded).write(to: url, options: .atomic)
             }.value
             content = textToSave
             let ext = fileExtension
@@ -264,6 +303,17 @@ struct FileInspectorView: View {
         content = nil
         highlightedContent = nil
         errorMessage = nil
+        showsRawText = false
+        sourceEncoding = .utf8
+        sourceBOM = Data()
+        usesNativePreview = !format.canReadSource(fileName: fileName)
+        if usesNativePreview {
+            if !FileManager.default.isReadableFile(atPath: filePath) {
+                errorMessage = "The file cannot be read. It may have been moved or deleted."
+            }
+            isLoading = false
+            return
+        }
 
         do {
             let data = try await Task.detached { [filePath] in
@@ -276,14 +326,27 @@ struct FileInspectorView: View {
                 return try Data(contentsOf: url)
             }.value
 
-            if let text = String(data: data, encoding: .utf8) {
+            try Task.checkCancellation()
+            if let text = FilePreviewFormat.decodeSource(data) {
                 let ext = fileExtension
+                let highlighted = await SyntaxHighlighter.highlightNSAsync(text, language: ext)
+                try Task.checkCancellation()
                 content = text
-                highlightedContent = await SyntaxHighlighter.highlightNSAsync(text, language: ext)
-                lineCount = text.components(separatedBy: "\n").count
+                highlightedContent = highlighted
+                if data.starts(with: [0xFF, 0xFE]) {
+                    sourceEncoding = .utf16LittleEndian
+                    sourceBOM = Data([0xFF, 0xFE])
+                } else if data.starts(with: [0xFE, 0xFF]) {
+                    sourceEncoding = .utf16BigEndian
+                    sourceBOM = Data([0xFE, 0xFF])
+                } else if data.starts(with: [0xEF, 0xBB, 0xBF]) {
+                    sourceBOM = Data([0xEF, 0xBB, 0xBF])
+                }
             } else {
-                errorMessage = "Binary file — preview not available"
+                usesNativePreview = true
             }
+        } catch is CancellationError {
+            return
         } catch is FileInspectorError {
             errorMessage = "File is too large (>5MB)"
         } catch {
@@ -293,6 +356,10 @@ struct FileInspectorView: View {
     }
 
     // MARK: - Helpers
+
+    private var fileURL: URL { URL(fileURLWithPath: filePath) }
+
+    private var format: FilePreviewFormat { FilePreviewFormat(fileName: fileName) }
 
     private var fileExtension: String {
         (fileName as NSString).pathExtension.lowercased()

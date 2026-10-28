@@ -7,8 +7,11 @@ import CoreFoundation
 public actor CloudUsagePlugin: UsagePlugin {
     public nonisolated let descriptor: UsagePluginDescriptor
     private let session: URLSession
-    public init(id: String, session: URLSession = .shared) {
+    private let cloudflareAnalyticsEndpoint: URL
+    public init(id: String, session: URLSession = .shared,
+                cloudflareAnalyticsEndpoint: URL = URL(string: "https://api.cloudflare.com/client/v4/graphql")!) {
         self.session = session
+        self.cloudflareAnalyticsEndpoint = cloudflareAnalyticsEndpoint
         let names = ["vercel": "Vercel", "neon": "Neon", "turso": "Turso", "cloudflare": "Cloudflare", "github-ci": "GitHub CI"]
         descriptor = .init(id: id, title: names[id] ?? id,
                            authentication: ["vercel", "cloudflare"].contains(id) ? "OAuth" : "API key",
@@ -48,9 +51,15 @@ public actor CloudUsagePlugin: UsagePlugin {
             metrics = totals.sorted { $0.key < $1.key }.map { .init($0.key, $0.key.replacingOccurrences(of: "_", with: " "), value: $0.value, unit: $0.key == "compute_unit_seconds" ? "CU seconds" : ($0.key == "root_branch_bytes_month" ? "byte-hours" : "bytes")) }
             period = "Last 30 days · daily granularity"
         case "cloudflare":
-            // Billing metrics are account-wide. Zone-specific traffic uses the
-            // documented zone analytics endpoint rather than inventing project totals.
-            if c.resource.isEmpty {
+            let scope = CloudflareUsageScope(resource: c.resource)
+            if scope == .worker || scope == .r2 {
+                var request = try CloudflareResourceUsage.request(account: c.account, resource: c.resource,
+                    now: now, endpoint: cloudflareAnalyticsEndpoint)
+                request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
+                let data = try await send(request)
+                metrics = try CloudflareResourceUsage.metrics(data, resource: c.resource)
+                period = "Last 24 hours · analytics"
+            } else if c.resource.isEmpty {
                 let data = try await request("https://api.cloudflare.com/client/v4/accounts/\(try component(c.account))/billing/usage",
                     query: ["since": from, "until": to, "time_delta": "day", "limit": "1000"], token: credential)
                 metrics = try UsageResponseParser.cloudflare(data)
@@ -75,6 +84,9 @@ public actor CloudUsagePlugin: UsagePlugin {
         var request = URLRequest(url: url.url!)
         request.timeoutInterval = 45
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try await send(request)
+    }
+    private func send(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw UsagePluginError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw UsagePluginError.http(http.statusCode) }

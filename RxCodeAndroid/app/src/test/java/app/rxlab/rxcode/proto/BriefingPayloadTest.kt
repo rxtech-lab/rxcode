@@ -47,6 +47,17 @@ class BriefingPayloadTest {
 
 class UsageDashboardPayloadTest {
     @Test
+    fun multipleMetricsAndLegacySelectionDecode() {
+        val legacy = RxJson.decodeFromString<UsageCardConfiguration>("""{"id":"c","integrationID":"i","metricID":"tokens"}""")
+        assertTrue(legacy.includesMetric("tokens"))
+        assertEquals(false, legacy.includesMetric("time"))
+        val multiple = RxJson.decodeFromString<UsageCardConfiguration>("""{"id":"c","integrationID":"i","metricID":"tokens","metricIDs":["tokens","time"]}""")
+        assertTrue(multiple.includesMetric("time"))
+        assertEquals(false, multiple.includesMetric("turns"))
+        val all = RxJson.decodeFromString<UsageCardConfiguration>("""{"id":"c","integrationID":"i","metricID":"tokens","metricIDs":[]}""")
+        assertTrue(all.includesMetric("future-metric"))
+    }
+    @Test
     fun swiftUsageSnapshotDecodesWithUnknownFields() {
         val payload = RxJson.decodeFromString<Payload>("""{"type":"snapshot","data":{"projects":[],"sessions":[],"usageDashboard":{"version":1,"integrations":[{"id":"a","oauth":{"clientID":"public"}}],"cards":[{"id":"card","integrationID":"a","style":"future-style"}],"snapshots":[{"id":"a","pluginID":"ai-usage","title":"AI","scope":"All projects","period":"Last 7 days","fetchedAt":0,"metrics":[{"id":"tokens","title":"Tokens","value":120,"unit":"tokens"}]}]}}}""") as Payload.Snapshot
         assertEquals(120.0, payload.data.usageDashboard?.snapshots?.single()?.metrics?.single()?.value)

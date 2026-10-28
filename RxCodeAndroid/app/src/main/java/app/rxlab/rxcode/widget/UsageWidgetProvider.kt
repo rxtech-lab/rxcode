@@ -20,7 +20,7 @@ class UsageWidgetProvider : AppWidgetProvider() {
         val dashboard = saved?.let { runCatching { RxJson.decodeFromString<UsageDashboard>(it) }.getOrNull() } ?: UsageDashboard()
         val rows = dashboard.cards.filter { it.showInWidget }.take(3).mapNotNull { card ->
             dashboard.snapshots.firstOrNull { it.id == card.integrationID }?.let { snapshot ->
-                val metric = snapshot.metrics.firstOrNull { card.metricID == null || it.id == card.metricID }
+                val metric = snapshot.metrics.firstOrNull { card.includesMetric(it.id) }
                 val stale = snapshot.error != null || Duration.between(snapshot.fetchedAt, Instant.now()).seconds > 3600
                 "${snapshot.title}\n${metric?.let { "${it.title}: ${it.formattedValue}" } ?: "No data"}\n${snapshot.period}${if (stale) " · Stale" else ""}"
             }

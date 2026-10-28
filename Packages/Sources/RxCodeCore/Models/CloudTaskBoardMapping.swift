@@ -26,6 +26,8 @@ public extension TaskBoard {
             if board.itemTypes.isEmpty { board.itemTypes = board.effectiveTypes }
             board.itemTypes.append(TaskItemType(name: name))
         }
+        // Delay authors and reviewers resolve against the fresh member list.
+        board.cloudSync = sync
         board.stories = remote.stories.map { row in
             let id = sync.localStoryId(forRemote: row.id)!
             let existing = stories.first { $0.id == id } ?? ProjectStory(id: id, projectId: projectID, title: row.fields.title)

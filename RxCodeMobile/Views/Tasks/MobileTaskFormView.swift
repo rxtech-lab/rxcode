@@ -109,6 +109,14 @@ struct MobileTaskFormView: View {
                 tags: $task.tags
             )
 
+            MobileTaskScheduleSection(
+                deadline: $task.deadline,
+                size: $task.size,
+                delays: $task.delays,
+                reviewer: task.reviewer,
+                actor: state.cardActor(projectID: task.projectId)
+            )
+
             if state.usesCloudTasks {
                 Section("Assigned Mac") {
                     Picker("Laptop", selection: $task.assignedDeviceId) {
@@ -333,6 +341,13 @@ struct MobileStoryFormView: View {
                 version: $story.version,
                 milestone: $story.milestone,
                 tags: $story.tags
+            )
+
+            MobileTaskScheduleSection(
+                deadline: $story.deadline,
+                size: $story.size,
+                delays: $story.delays,
+                actor: state.cardActor(projectID: story.projectId)
             )
         }
         .task {

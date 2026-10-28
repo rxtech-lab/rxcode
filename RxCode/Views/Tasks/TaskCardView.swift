@@ -120,6 +120,7 @@ struct TaskCardView: View {
                         .help("Waiting for a free run slot in this column. Drag queued cards to change their order.")
                     }
                     TaskClassificationPills(task: task, board: board)
+                    schedulePills
                     if task.agent.planMode {
                         TaskPill(text: String(localized: "Plan"), icon: "eye", tint: ClaudeTheme.statusWarning)
                     }
@@ -153,8 +154,19 @@ struct TaskCardView: View {
         }
     }
 
+    private var schedulePills: TaskSchedulePills {
+        TaskSchedulePills(
+            deadline: task.deadline,
+            isDone: board.column(for: task.status).countsAsDone,
+            size: task.size,
+            delays: task.delays,
+            reviewer: task.reviewer
+        )
+    }
+
     private var hasPills: Bool {
         TaskClassificationPills(task: task, board: board).hasContent
+            || schedulePills.hasContent
             || task.isQueued || task.agent.planMode || !task.attachments.isEmpty
     }
 }
@@ -248,11 +260,22 @@ struct StoryCardView: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
+            let schedule = TaskSchedulePills(
+                deadline: story.deadline,
+                isDone: progress.total > 0 && progress.done == progress.total,
+                size: story.size,
+                delays: story.delays
+            )
             if let board {
                 let pills = TaskClassificationPills(story: story, board: board)
-                if pills.hasContent {
-                    FlowLayout(spacing: 4) { pills }
+                if pills.hasContent || schedule.hasContent {
+                    FlowLayout(spacing: 4) {
+                        pills
+                        schedule
+                    }
                 }
+            } else if schedule.hasContent {
+                FlowLayout(spacing: 4) { schedule }
             }
 
             if let board {

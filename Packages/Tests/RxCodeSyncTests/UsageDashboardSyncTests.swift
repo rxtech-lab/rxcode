@@ -11,7 +11,7 @@ struct UsageDashboardSyncTests {
     }
     @Test func cardsAndAIStatsRoundTrip() throws {
         let id = UUID()
-        let dashboard = UsageDashboard(cards: [.init(integrationID: id)], snapshots: [
+        let dashboard = UsageDashboard(cards: [.init(integrationID: id, metricIDs: ["tokens", "time"])], snapshots: [
             .init(id: id, pluginID: "ai-usage", title: "AI", scope: "All projects", period: "Last 7 days", metrics: [.init("tokens", "Tokens", value: 120, unit: "tokens")])
         ])
         let payload = SnapshotPayload(projects: [], sessions: [], usageDashboard: dashboard)

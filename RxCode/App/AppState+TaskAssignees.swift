@@ -12,6 +12,16 @@ extension AppState {
         return members.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 
+    /// The person acting on this Mac: the signed-in account, or the macOS
+    /// user when signed out. Recorded as a delay's author and a task's reviewer.
+    var cardActor: CardAssignee {
+        if let user = rxAuth.user {
+            return CardAssignee(userId: user.id, name: user.name, email: user.email, image: user.image)
+        }
+        let fullName = NSFullUserName()
+        return CardAssignee(userId: "local:\(NSUserName())", name: fullName.isEmpty ? NSUserName() : fullName)
+    }
+
     func canEditCard(_ task: ProjectTask) -> Bool {
         let board = taskBoard(for: task.projectId)
         let stored = board.tasks.first { $0.id == task.id } ?? task

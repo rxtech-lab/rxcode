@@ -373,7 +373,7 @@ struct IntegrationUsageWidget: Widget {
                     if let snapshot = dashboard.snapshot(for: card) {
                         VStack(alignment: .leading) {
                             Text(snapshot.title).font(.caption.bold())
-                            if let metric = snapshot.metrics.first(where: { card.metricID == nil || $0.id == card.metricID }) {
+                            if let metric = snapshot.metrics.first(where: { card.includesMetric($0.id) }) {
                                 Text("\(metric.title): \(metric.formattedValue)").font(.caption)
                             }
                             Text(snapshot.isStale(at: entry.date) ? "Stale" : snapshot.period).font(.caption2).foregroundStyle(.secondary)

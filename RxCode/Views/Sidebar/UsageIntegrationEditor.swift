@@ -11,6 +11,8 @@ struct UsageIntegrationEditor: View {
     @State private var error: String?
     @State private var signedIn = false
     @State private var signIn = UsageOAuthSignIn()
+    @State private var cloudflareScope = CloudflareUsageScope.account
+    @State private var cloudflareResource = ""
     private var local: Bool { integration.pluginID.hasPrefix("ai-") }
     private var usesOAuth: Bool { ["vercel", "cloudflare"].contains(integration.pluginID) }
     var body: some View {
@@ -26,7 +28,18 @@ struct UsageIntegrationEditor: View {
                 }
                 if !local {
                     TextField(integration.pluginID == "github-ci" ? "Repositories (owner/repo, comma separated)" : "Account / organization / team ID", text: $integration.account)
-                    if integration.pluginID != "github-ci" {
+                    if integration.pluginID == "cloudflare" {
+                        Picker("Usage scope", selection: $cloudflareScope) {
+                            ForEach(CloudflareUsageScope.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }
+                        if cloudflareScope != .account {
+                            TextField(cloudflareScope == .zone ? "Zone ID" : (cloudflareScope == .worker ? "Worker script name" : "Bucket name (include jurisdiction prefix if applicable)"), text: $cloudflareResource)
+                        }
+                        if cloudflareScope == .worker || cloudflareScope == .r2 {
+                            Text("Shows the last 24 hours of resource analytics, not billed cost. R2 storage uses the latest sample. Grant Account Analytics read access.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else if integration.pluginID != "github-ci" {
                         TextField(integration.pluginID == "turso" ? "Database name (optional)" : (integration.pluginID == "cloudflare" ? "Zone ID (optional; traffic analytics)" : "Provider project ID (optional)"), text: $integration.resource)
                     }
                     if usesOAuth {
@@ -56,17 +69,24 @@ struct UsageIntegrationEditor: View {
             .navigationTitle("Usage integration")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(busy || integration.title.isEmpty || (!local && integration.account.isEmpty)) }
+                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(busy || integration.title.isEmpty || (!local && integration.account.isEmpty) || (integration.pluginID == "cloudflare" && cloudflareScope != .account && cloudflareResource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)) }
             }
         }
         .frame(minWidth: 580, idealWidth: 640, minHeight: 540, maxHeight: .infinity)
-        .onAppear { oauth = integration.oauth ?? .init(scopes: integration.pluginID == "vercel" ? "openid offline_access" : "") }
+        .onAppear {
+            oauth = integration.oauth ?? .init(scopes: integration.pluginID == "vercel" ? "openid offline_access" : "")
+            cloudflareScope = .init(resource: integration.resource)
+            cloudflareResource = cloudflareScope.name(in: integration.resource)
+        }
         .overlay { if busy { ProgressView("Updating integration…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
         .alert("Integration could not be updated", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") { error = nil } } message: { Text(error ?? "") }
     }
     private func save() {
         busy = true
         if usesOAuth { integration.oauth = oauth }
+        if integration.pluginID == "cloudflare" {
+            integration.resource = cloudflareScope.resource(named: cloudflareResource.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
         Task {
             defer { busy = false }
             do {

@@ -1,0 +1,9 @@
+version: 1
+name: cloudflare-usage
+slug: cloudflare-usage
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

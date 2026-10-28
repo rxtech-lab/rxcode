@@ -16,10 +16,14 @@ data class UsageCardConfiguration(
     val integrationID: String,
     val style: String = "summary",
     val metricID: String? = null,
+    val metricIDs: List<String>? = null,
     val isVisible: Boolean = true,
     val showInMenuBar: Boolean = false,
     val showInWidget: Boolean = false,
-)
+) {
+    val selectedMetricIDs: List<String> get() = metricIDs ?: listOfNotNull(metricID)
+    fun includesMetric(id: String): Boolean = selectedMetricIDs.isEmpty() || id in selectedMetricIDs
+}
 
 @Serializable
 data class UsagePluginSnapshot(

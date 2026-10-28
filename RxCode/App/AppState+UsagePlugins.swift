@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import RxCodeCore
 
 extension AppState {
@@ -32,7 +33,10 @@ extension AppState {
         }
         await usagePluginRegistry.register(GitHubCIUsagePlugin())
         for id in ["ai-usage", "ai-limits"] {
-            await usagePluginRegistry.register(LocalUsagePlugin(id: id, title: id) { [weak self] configuration in
+            await usagePluginRegistry.register(LocalUsagePlugin(id: id, title: id, details: { snapshot, card in
+                if id == "ai-usage" { return AnyView(AIUsagePluginDetail(snapshot: snapshot, configuration: card)) }
+                return AnyView(AILimitsPluginDetail(configuration: card))
+            }) { [weak self] configuration in
                 guard let self else { throw UsagePluginError.invalidConfiguration }
                 return await self.localUsageSnapshot(configuration)
             })

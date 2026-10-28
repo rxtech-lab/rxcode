@@ -25,7 +25,7 @@ extension AppState {
             // Keep encrypted APNs envelopes comfortably below the size limit.
             return self.usageDashboard.cards.filter(\.showInWidget).prefix(3).compactMap { card in
                 guard let snapshot = self.usageDashboard.snapshot(for: card) else { return nil }
-                let metric = snapshot.metrics.first { card.metricID == nil || $0.id == card.metricID }
+                let metric = snapshot.metrics.first { card.includesMetric($0.id) }
                 return UsageWidgetCardPayload(id: card.id.uuidString, title: String(snapshot.title.prefix(60)),
                     value: String((metric.map { "\($0.title): \($0.formattedValue)" } ?? "No data").prefix(100)),
                     detail: String((snapshot.error ?? snapshot.period).prefix(100)), fetchedAt: snapshot.fetchedAt.timeIntervalSince1970)

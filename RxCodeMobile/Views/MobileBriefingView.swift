@@ -35,17 +35,20 @@ struct MobileBriefingView: View {
     /// When false (default), only show briefings for each project's current branch.
     @State private var showAllBranches: Bool = false
 
+    private var visibleUsageCards: [UsageCardConfiguration] {
+        state.usageDashboard.visibleCards(projectIDs: selectedProjectIds)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    ForEach(state.usageDashboard.cards.filter { $0.isVisible }) { card in
-                        if let snapshot = state.usageDashboard.snapshot(for: card),
-                           selectedProjectIds.isEmpty || snapshot.projectID == nil || selectedProjectIds.contains(snapshot.projectID!) {
+                    ForEach(visibleUsageCards) { card in
+                        if let snapshot = state.usageDashboard.snapshot(for: card) {
                             UsagePluginCard(snapshot: snapshot, configuration: card)
                         }
                     }
-                    if groups.isEmpty && documents.isEmpty && state.usageDashboard.cards.isEmpty {
+                    if groups.isEmpty && documents.isEmpty && visibleUsageCards.isEmpty {
                         emptyState
                             .frame(maxWidth: .infinity, minHeight: max(0, proxy.size.height - 40), maxHeight: .infinity)
                     } else {
@@ -204,11 +207,13 @@ struct MobileBriefingView: View {
     /// True when at least one briefing or summary exists, regardless of filters.
     private var hasAnyData: Bool {
         !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty || !state.briefingDocuments.isEmpty
+            || !state.usageDashboard.visibleCards().isEmpty
     }
 
     /// Projects that actually have at least one briefing or summary recorded.
     private var projectsWithData: [Project] {
-        let ids = Set(allGroups.map(\.projectId) + state.briefingDocuments.compactMap(\.projectId))
+        let ids = Set(allGroups.map(\.projectId) + state.briefingDocuments.compactMap(\.projectId)
+            + state.usageDashboard.snapshots.compactMap(\.projectID))
         return state.projects.filter { ids.contains($0.id) }
     }
 

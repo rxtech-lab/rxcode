@@ -446,6 +446,8 @@ extension AppState {
             seenParents.insert($0).inserted && canLinkTask(stamped.id, to: $0)
         }
         let previousStatus = stored?.status
+        stamped.delays = stamped.delays.stampingAuthors(cardActor)
+        stamped = currentBoard.stampingReviewer(stamped, from: previousStatus, actor: cardActor)
         if !currentBoard.column(for: stamped.status).triggersChat || !stamped.agent.isAssigned {
             stamped.isQueued = false
         }
@@ -517,6 +519,7 @@ extension AppState {
         guard !isRunningOnOtherDevice(stored) || board.resolvedStatus(of: stored) == status else { return }
         var moved = task
         moved.status = status
+        moved = board.stampingReviewer(moved, from: stored.status, actor: cardActor)
         moved.updatedAt = Date()
         if board.resolvedStatus(of: stored) != status {
             moved.isQueued = false
@@ -561,6 +564,7 @@ extension AppState {
             stamped.assigneeIds = [userID]
             stamped.assigneeProfiles = [CardAssignee(userId: userID, name: rxAuth.user?.name, email: rxAuth.user?.email, image: rxAuth.user?.image)]
         }
+        stamped.delays = stamped.delays.stampingAuthors(cardActor)
         stamped.updatedAt = Date()
         if let stored = taskBoard(for: story.projectId).story(id: story.id) {
             stamped.linkedProjectIds = stored.linkedProjectIds

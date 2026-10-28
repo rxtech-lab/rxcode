@@ -37,6 +37,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -130,13 +131,24 @@ fun BriefingScreen(
     val visibleDocuments = state.briefingDocuments
         .filter { selectedProjectIds.isEmpty() || it.projectId in selectedProjectIds }
         .sortedByDescending { it.createdAt }
-    val projectsWithData by remember(allGroups, state.projects, state.briefingDocuments) {
+    val visibleUsageCards = state.usageDashboard.cards.filter { card ->
+        card.isVisible && state.usageDashboard.snapshots.any { snapshot ->
+            snapshot.id == card.integrationID && (selectedProjectIds.isEmpty() || snapshot.projectID == null ||
+                selectedProjectIds.any { it.toString().equals(snapshot.projectID, ignoreCase = true) })
+        }
+    }
+    val projectsWithData by remember(allGroups, state.projects, state.briefingDocuments, state.usageDashboard) {
         derivedStateOf {
             val ids = (allGroups.map { it.projectId } + state.briefingDocuments.mapNotNull { it.projectId }).toSet()
-            state.projects.filter { it.id in ids }
+            state.projects.filter { project ->
+                project.id in ids || state.usageDashboard.snapshots.any {
+                    project.id.toString().equals(it.projectID, ignoreCase = true)
+                }
+            }
         }
     }
     val hasAnyData = state.branchBriefings.isNotEmpty() || state.threadSummaries.isNotEmpty() || state.briefingDocuments.isNotEmpty()
+        || state.usageDashboard.cards.any { card -> card.isVisible && state.usageDashboard.snapshots.any { it.id == card.integrationID } }
     val isFilterActive = showAllBranches || selectedProjectIds.isNotEmpty()
 
     Scaffold(
@@ -200,7 +212,7 @@ fun BriefingScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (visibleGroups.isEmpty() && visibleDocuments.isEmpty() && state.usageDashboard.cards.none { it.isVisible }) {
+            if (visibleGroups.isEmpty() && visibleDocuments.isEmpty() && visibleUsageCards.isEmpty()) {
                 BriefingEmptyState(
                     hasAnyData = hasAnyData,
                     showAllBranches = showAllBranches,
@@ -216,16 +228,56 @@ fun BriefingScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(state.usageDashboard.cards.filter { it.isVisible }, key = { "usage:${it.id}" }) { card ->
-                        state.usageDashboard.snapshots.firstOrNull { it.id == card.integrationID && (selectedProjectIds.isEmpty() || it.projectID == null || selectedProjectIds.any { id -> id.toString().equals(it.projectID, ignoreCase = true) }) }?.let { snapshot ->
+                    items(visibleUsageCards, key = { "usage:${it.id}" }) { card ->
+                        state.usageDashboard.snapshots.firstOrNull { it.id == card.integrationID }?.let { snapshot ->
                             ElevatedCard {
                                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(snapshot.title, style = MaterialTheme.typography.titleMedium)
                                     Text("${snapshot.scope} · ${snapshot.period}", style = MaterialTheme.typography.labelSmall)
-                                    val metrics = snapshot.metrics.filter { card.metricID == null || it.id == card.metricID }
-                                    val count = when (card.style) { "compact" -> 1; "metrics" -> metrics.size; else -> 3 }
-                                    metrics.take(count).forEach { metric ->
-                                        Text("${metric.title}: ${metric.formattedValue}")
+                                    val metrics = snapshot.metrics.filter { card.includesMetric(it.id) }
+                                    when (card.style) {
+                                        "compact" -> metrics.firstOrNull()?.let { metric ->
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text(metric.title, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                                                Text(metric.formattedValue, style = MaterialTheme.typography.titleMedium)
+                                            }
+                                        }
+                                        "metrics" -> {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Metric", style = MaterialTheme.typography.labelSmall)
+                                                Text("Value", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            HorizontalDivider()
+                                            metrics.forEach { metric ->
+                                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                    Text(metric.title, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                                    Text(metric.formattedValue, style = MaterialTheme.typography.bodyMedium)
+                                                }
+                                                metric.detail?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+                                                if (metric.unit == "%" && metric.value?.isFinite() == true) {
+                                                    LinearProgressIndicator(progress = { (metric.value / 100).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                                                }
+                                                HorizontalDivider()
+                                            }
+                                        }
+                                        else -> {
+                                            metrics.firstOrNull()?.let { metric ->
+                                                Text(metric.title, style = MaterialTheme.typography.labelMedium)
+                                                Text(metric.formattedValue, style = MaterialTheme.typography.headlineLarge)
+                                                metric.detail?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+                                            }
+                                            if (metrics.size > 1) {
+                                                HorizontalDivider()
+                                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                                    metrics.drop(1).take(2).forEach { metric ->
+                                                        Column(Modifier.weight(1f)) {
+                                                            Text(metric.title, style = MaterialTheme.typography.labelSmall)
+                                                            Text(metric.formattedValue, style = MaterialTheme.typography.titleMedium)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     snapshot.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                                     Text("Updated ${relativeTime(snapshot.fetchedAt)}${if (snapshot.error != null || java.time.Duration.between(snapshot.fetchedAt, java.time.Instant.now()).seconds > 3600) " · Stale" else ""}", style = MaterialTheme.typography.labelSmall)

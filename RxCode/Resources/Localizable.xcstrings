@@ -1,16 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "These tasks start after this one reaches Pending Review or Done." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此任务进入待审核或完成后，这些任务将开始。"
-          }
-        }
-      }
-    },
     "" : {
       "localizations" : {
         "ko" : {
@@ -1930,6 +1920,9 @@
         }
       }
     },
+    "Add a card view to choose a metric, style, and where it appears." : {
+
+    },
     "Add a Code Review hook and a second agent reviews every change before you ship it." : {
       "localizations" : {
         "ko" : {
@@ -2203,6 +2196,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加列"
+          }
+        }
+      }
+    },
+    "Add Delay" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지연 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加延期"
           }
         }
       }
@@ -3004,12 +3013,6 @@
         }
       }
     },
-    "AI usage breakdown" : {
-
-    },
-    "AI usage breakdown…" : {
-
-    },
     "All" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3446,6 +3449,9 @@
           }
         }
       }
+    },
+    "Appearance" : {
+
     },
     "Apple Foundation Model" : {
       "localizations" : {
@@ -4627,6 +4633,9 @@
         }
       }
     },
+    "Bucket name (include jurisdiction prefix if applicable)" : {
+
+    },
     "build" : {
       "localizations" : {
         "ko" : {
@@ -4795,9 +4804,6 @@
     "Card style" : {
 
     },
-    "Card view" : {
-
-    },
     "Cards in done columns and finished stories with no updates for this long are hidden from the board. Open work is never hidden. Reveal older items 10 at a time." : {
 
     },
@@ -4810,6 +4816,9 @@
           }
         }
       }
+    },
+    "Changes appear here as you edit. Click the card to preview its details." : {
+
     },
     "Changes apply to every story and task in this project." : {
       "localizations" : {
@@ -5029,6 +5038,9 @@
           }
         }
       }
+    },
+    "Choose an integration" : {
+
     },
     "Choose Claude Code, Codex, or an ACP registry client." : {
 
@@ -6520,6 +6532,9 @@
         }
       }
     },
+    "Connection" : {
+
+    },
     "connection lost" : {
       "comment" : "Fallback MCP disconnect detail when no error message is available.",
       "localizations" : {
@@ -6834,6 +6849,9 @@
         }
       }
     },
+    "Could not save card" : {
+
+    },
     "Could not start pairing. Pick a different relay server or add a new one." : {
       "localizations" : {
         "ko" : {
@@ -6849,6 +6867,9 @@
           }
         }
       }
+    },
+    "Could not update integration" : {
+
     },
     "Couldn't Create Pull Request" : {
       "localizations" : {
@@ -7721,6 +7742,39 @@
         }
       }
     },
+    "Deadline" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마감"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止时间"
+          }
+        }
+      }
+    },
+    "Deadline: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마감: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止时间：%@"
+          }
+        }
+      }
+    },
     "Debug" : {
       "localizations" : {
         "ko" : {
@@ -7948,6 +8002,56 @@
         }
       }
     },
+    "Delayed" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지연됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已延期"
+          }
+        }
+      }
+    },
+    "Delayed ×%lld" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지연됨 ×%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已延期 ×%lld"
+          }
+        }
+      }
+    },
+    "Delays" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지연 기록"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "延期记录"
+          }
+        }
+      }
+    },
     "Delete" : {
       "localizations" : {
         "en" : {
@@ -8115,7 +8219,7 @@
     "Delete card" : {
 
     },
-    "Delete card…" : {
+    "Delete card view…" : {
 
     },
     "Delete column “%@”?" : {
@@ -9236,6 +9340,39 @@
         }
       }
     },
+    "Due" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마감일"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止"
+          }
+        }
+      }
+    },
+    "Due soon: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "곧 마감: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将到期：%@"
+          }
+        }
+      }
+    },
     "Duplicate Hook" : {
       "localizations" : {
         "ko" : {
@@ -9311,6 +9448,9 @@
     "Each run of this task and the agent's log will show here." : {
 
     },
+    "Each view has its own style, metric, and visibility." : {
+
+    },
     "Edit" : {
       "localizations" : {
         "en" : {
@@ -9333,6 +9473,12 @@
         }
       }
     },
+    "Edit %@" : {
+
+    },
+    "Edit %@ card view" : {
+
+    },
     "Edit ACP Client" : {
       "localizations" : {
         "ko" : {
@@ -9348,6 +9494,9 @@
           }
         }
       }
+    },
+    "Edit card view" : {
+
     },
     "Edit card…" : {
 
@@ -9378,7 +9527,7 @@
         }
       }
     },
-    "Edit integration…" : {
+    "Edit connection…" : {
 
     },
     "Edit memory" : {
@@ -9533,6 +9682,9 @@
         }
       }
     },
+    "Edit this card view" : {
+
+    },
     "Edit View" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9542,6 +9694,9 @@
           }
         }
       }
+    },
+    "Edit view…" : {
+
     },
     "Edit View…" : {
       "localizations" : {
@@ -10386,6 +10541,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "额外说明（可选）"
+          }
+        }
+      }
+    },
+    "Extra Large" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아주 큼"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "特大"
+          }
+        }
+      }
+    },
+    "Extra Small" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아주 작음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "特小"
           }
         }
       }
@@ -11604,9 +11793,6 @@
         }
       }
     },
-    "Hidden" : {
-
-    },
     "Hidden (%lld)" : {
       "localizations" : {
         "ko" : {
@@ -12784,6 +12970,9 @@
     "Integration could not be updated" : {
 
     },
+    "Integrations" : {
+
+    },
     "Interactive View" : {
 
     },
@@ -13023,6 +13212,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "笔记本电脑"
+          }
+        }
+      }
+    },
+    "Large" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "큼"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大"
           }
         }
       }
@@ -13440,6 +13646,9 @@
           }
         }
       }
+    },
+    "Live preview" : {
+
     },
     "Load from .env file" : {
       "localizations" : {
@@ -13895,6 +14104,9 @@
     "Manage cards" : {
 
     },
+    "Manage cards to add an integration or show a card for these projects." : {
+
+    },
     "Manage default and custom actions in project, thread, and briefing-card menus." : {
 
     },
@@ -14146,6 +14358,9 @@
           }
         }
       }
+    },
+    "Manage usage cards" : {
+
     },
     "Manage Versions…" : {
       "localizations" : {
@@ -14409,6 +14624,12 @@
     },
     "Medium" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보통"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -14448,6 +14669,9 @@
           }
         }
       }
+    },
+    "Menu bar" : {
+
     },
     "Menu Bar" : {
       "localizations" : {
@@ -14541,7 +14765,7 @@
         }
       }
     },
-    "Metric" : {
+    "Metrics" : {
 
     },
     "Milestone" : {
@@ -14628,6 +14852,9 @@
         }
       }
     },
+    "Model and provider breakdowns appear after agent activity." : {
+
+    },
     "Model Context Protocol servers expose tools and resources to every agent. Optional — you can skip this step." : {
       "localizations" : {
         "ko" : {
@@ -14643,6 +14870,9 @@
           }
         }
       }
+    },
+    "Model estimates" : {
+
     },
     "Model Picker" : {
       "localizations" : {
@@ -14822,6 +15052,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移到最右侧"
+          }
+        }
+      }
+    },
+    "Moved this task from Pending Review to done" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업을 검토 대기에서 완료로 옮긴 사람"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此任务从待审核移至完成的人"
           }
         }
       }
@@ -15537,6 +15783,9 @@
         }
       }
     },
+    "No AI usage yet" : {
+
+    },
     "No archived chats" : {
       "localizations" : {
         "ko" : {
@@ -15552,6 +15801,9 @@
           }
         }
       }
+    },
+    "No card views" : {
+
     },
     "No changes" : {
       "localizations" : {
@@ -16063,6 +16315,9 @@
           }
         }
       }
+    },
+    "No preview data yet" : {
+
     },
     "No profiles for this project" : {
       "localizations" : {
@@ -16739,6 +16994,9 @@
         }
       }
     },
+    "No usage cards" : {
+
+    },
     "No usage-limit history in this window yet." : {
       "localizations" : {
         "zh-Hans" : {
@@ -17317,6 +17575,9 @@
         }
       }
     },
+    "Open in Default App" : {
+
+    },
     "Open in Editor" : {
       "localizations" : {
         "ko" : {
@@ -17821,6 +18082,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输出加入上下文"
+          }
+        }
+      }
+    },
+    "Overdue since %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@부터 기한 초과"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自 %@ 起逾期"
           }
         }
       }
@@ -19194,6 +19472,9 @@
         }
       }
     },
+    "Raw Text" : {
+
+    },
     "Re-run %@" : {
       "localizations" : {
         "ko" : {
@@ -19262,6 +19543,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "准备就绪。"
+          }
+        }
+      }
+    },
+    "Reason" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사유"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原因"
           }
         }
       }
@@ -19778,6 +20075,22 @@
         }
       }
     },
+    "Remove Delay" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지연 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除延期"
+          }
+        }
+      }
+    },
     "Remove Documentation Repository" : {
       "localizations" : {
         "ko" : {
@@ -19883,6 +20196,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除任务"
+          }
+        }
+      }
+    },
+    "Remove this delay?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 지연 기록을 삭제할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除此延期记录？"
           }
         }
       }
@@ -20513,6 +20842,39 @@
         }
       }
     },
+    "Reviewed by %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 님이 검토함"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由 %@ 审核"
+          }
+        }
+      }
+    },
+    "Reviewer" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검토자"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审核人"
+          }
+        }
+      }
+    },
     "Revise" : {
       "localizations" : {
         "zh-Hans" : {
@@ -21057,6 +21419,9 @@
           }
         }
       }
+    },
+    "Save the connection and refresh its usage to preview this card." : {
+
     },
     "Saved" : {
       "localizations" : {
@@ -21814,6 +22179,9 @@
         }
       }
     },
+    "Select a connection or add one to create your usage cards." : {
+
+    },
     "Select a dispatchable release workflow first (re-add the repo to rescan if needed)." : {
       "localizations" : {
         "ko" : {
@@ -21981,6 +22349,9 @@
           }
         }
       }
+    },
+    "Select one or more metrics. All metrics also includes new metrics when they become available." : {
+
     },
     "Select or add a hook to edit" : {
       "localizations" : {
@@ -22626,6 +22997,9 @@
     "Show" : {
 
     },
+    "Show %@ details" : {
+
+    },
     "Show %lld code review(s)" : {
       "localizations" : {
         "ko" : {
@@ -22908,9 +23282,6 @@
         }
       }
     },
-    "Show in briefing" : {
-
-    },
     "Show in Finder" : {
       "localizations" : {
         "en" : {
@@ -22932,12 +23303,6 @@
           }
         }
       }
-    },
-    "Show in menu bar" : {
-
-    },
-    "Show in widget" : {
-
     },
     "Show less" : {
       "localizations" : {
@@ -23248,6 +23613,9 @@
           }
         }
       }
+    },
+    "Shows the last 24 hours of resource analytics, not billed cost. R2 storage uses the latest sample. Grant Account Analytics read access." : {
+
     },
     "Sign In" : {
       "localizations" : {
@@ -23576,6 +23944,39 @@
         }
       }
     },
+    "Size" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "크기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规模"
+          }
+        }
+      }
+    },
+    "Size: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "크기: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规模：%@"
+          }
+        }
+      }
+    },
     "sk-..." : {
       "localizations" : {
         "ko" : {
@@ -23681,6 +24082,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Slug（例如 architecture/overview）"
+          }
+        }
+      }
+    },
+    "Small" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小"
           }
         }
       }
@@ -24432,6 +24850,9 @@
         }
       }
     },
+    "Task costs" : {
+
+    },
     "Task details" : {
       "localizations" : {
         "zh-Hans" : {
@@ -24875,6 +25296,22 @@
         }
       }
     },
+    "The delay is recorded with your name and the current time." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지연 기록에는 이름과 현재 시간이 함께 저장됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "延期记录会附上你的名字和当前时间。"
+          }
+        }
+      }
+    },
     "The description is locked once a task leaves Pending, so it keeps matching what the agent was asked to do." : {
       "localizations" : {
         "zh-Hans" : {
@@ -25042,6 +25479,9 @@
           }
         }
       }
+    },
+    "The preview uses the latest saved usage. Widget layouts adapt to the widget size." : {
+
     },
     "The project was added on this Mac, but it couldn't be synced to the cloud: %@" : {
       "localizations" : {
@@ -25319,6 +25759,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这些说明会附带到每轮智能体对话中。项目说明会添加在全局说明之后。"
+          }
+        }
+      }
+    },
+    "These tasks start after this one reaches Pending Review or Done." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此任务进入待审核或完成后，这些任务将开始。"
           }
         }
       }
@@ -26194,6 +26644,9 @@
         }
       }
     },
+    "Unable to Save" : {
+
+    },
     "Unarchive" : {
       "localizations" : {
         "ko" : {
@@ -26469,10 +26922,10 @@
     "Usage cards" : {
 
     },
-    "Usage integration" : {
+    "Usage details" : {
 
     },
-    "Usage integrations" : {
+    "Usage integration" : {
 
     },
     "Usage limits" : {
@@ -26484,6 +26937,9 @@
           }
         }
       }
+    },
+    "Usage scope" : {
+
     },
     "Usage-limit history" : {
       "localizations" : {
@@ -27152,9 +27608,6 @@
     "Views an agent opens in a dialog in this thread appear here." : {
 
     },
-    "Visible" : {
-
-    },
     "Wait for the agent to finish responding" : {
 
     },
@@ -27212,6 +27665,9 @@
       }
     },
     "Waiting for sign-in… Complete it in your browser if one opened." : {
+
+    },
+    "Waiting for usage data" : {
 
     },
     "Waits for %@ to finish before starting" : {
@@ -27502,6 +27958,25 @@
         }
       }
     },
+    "Why is this delayed?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "왜 지연되었나요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为什么延期？"
+          }
+        }
+      }
+    },
+    "Widget" : {
+
+    },
     "Will overwrite the existing %@." : {
       "localizations" : {
         "ko" : {
@@ -27549,6 +28024,9 @@
           }
         }
       }
+    },
+    "Worker script name" : {
+
     },
     "Workflow" : {
       "localizations" : {
@@ -27818,6 +28296,9 @@
           }
         }
       }
+    },
+    "Zone ID" : {
+
     },
     "Zone ID (optional; traffic analytics)" : {
 

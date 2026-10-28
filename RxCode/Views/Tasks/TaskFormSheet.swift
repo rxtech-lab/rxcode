@@ -40,6 +40,10 @@ struct TaskFormSheet: View {
     /// The fields manager, opened scrolled to one section.
     @State var fieldsSheet: TaskFieldsSheet.Field?
     @State var versionInput = ""
+    /// The Add Delay sheet is open.
+    @State var addingDelay = false
+    /// A delay waiting for removal to be confirmed.
+    @State var pendingDelayRemoval: TaskDelay?
     @State var milestoneInput = ""
     @State var isAutoFilling = false
     @State var isGeneratingTitle = false
@@ -278,6 +282,7 @@ struct TaskFormSheet: View {
             }
             assigneesSection
             classificationSection
+            scheduleSection
             tagsSection
             if !isStory {
                 if appState.projects.first(where: { $0.id == currentProjectId })?.isCloud == true {

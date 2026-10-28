@@ -13,6 +13,7 @@ extension IDEToolRegistry {
                 "integration_id": .object(["type": .string("string")]),
                 "style": .object(["type": .string("string"), "enum": .array(UsageCardConfiguration.styles.map(JSONValue.string))]),
                 "metric_id": .object(["type": .string("string"), "description": .string("Empty string selects all metrics.")]),
+                "metric_ids": .object(["type": .string("array"), "items": .object(["type": .string("string")]), "description": .string("Select multiple metric IDs. Empty array selects all metrics. Takes precedence over metric_id.")]),
                 "visible": .object(["type": .string("boolean")]),
                 "menu_bar": .object(["type": .string("boolean")]),
                 "widget": .object(["type": .string("boolean")])

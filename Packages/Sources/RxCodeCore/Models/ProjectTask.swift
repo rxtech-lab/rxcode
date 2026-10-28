@@ -175,6 +175,12 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
     public var priority: TaskPriority?
     /// A `TaskItemType.id` from the owning board.
     public var typeId: UUID?
+    /// When the story should be finished.
+    public var deadline: Date?
+    /// The estimated amount of work.
+    public var size: TaskSize?
+    /// Every recorded slip, oldest first.
+    public var delays: [TaskDelay] = []
     /// Other projects that share this story. A linked story is mirrored, under
     /// the same id, onto every linked project's board, so each board groups
     /// and rolls up its own tasks under it; shared fields stay in sync across
@@ -214,6 +220,7 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case assigneeProfiles, assigneeIds
         case id, projectId, title, details, tags, version, milestone, priority, typeId
+        case deadline, size, delays
         case linkedProjectIds, createdAt, updatedAt
     }
 
@@ -232,6 +239,9 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
         milestone = try c.decodeIfPresent(String.self, forKey: .milestone)
         priority = (try? c.decodeIfPresent(TaskPriority.self, forKey: .priority)) ?? nil
         typeId = try c.decodeIfPresent(UUID.self, forKey: .typeId)
+        deadline = try? c.decodeIfPresent(Date.self, forKey: .deadline)
+        size = (try? c.decodeIfPresent(TaskSize.self, forKey: .size)) ?? nil
+        delays = (try? c.decodeIfPresent([TaskDelay].self, forKey: .delays)) ?? []
         linkedProjectIds = (try? c.decodeIfPresent([UUID].self, forKey: .linkedProjectIds)) ?? []
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
@@ -293,6 +303,15 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     public var priority: TaskPriority?
     /// A `TaskItemType.id` from the owning board.
     public var typeId: UUID?
+    /// When the task should be finished.
+    public var deadline: Date?
+    /// The estimated amount of work.
+    public var size: TaskSize?
+    /// Every recorded slip, oldest first.
+    public var delays: [TaskDelay] = []
+    /// Who moved the task from Pending Review to done. Set by
+    /// `TaskBoard.stampingReviewer` (or Autopilot for cloud boards).
+    public var reviewer: CardAssignee?
     public var agent: TaskAgentConfig
     /// Persisted through `Attachment.DTO` because `Attachment` itself is not `Codable`.
     public var attachments: [Attachment.DTO]
@@ -371,6 +390,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         case assigneeProfiles, assigneeIds
         case id, projectId, storyId, parentTaskId, parentTaskIds, assignedDeviceId, title, details, status, version, tags
         case milestone, priority, typeId
+        case deadline, size, delays, reviewer
         case agent, attachments, sessionKey, sourceSessionKey, attentionReason, isQueued, sortIndex, createdAt, updatedAt
     }
 
@@ -393,6 +413,10 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         milestone = try c.decodeIfPresent(String.self, forKey: .milestone)
         priority = (try? c.decodeIfPresent(TaskPriority.self, forKey: .priority)) ?? nil
         typeId = try c.decodeIfPresent(UUID.self, forKey: .typeId)
+        deadline = try? c.decodeIfPresent(Date.self, forKey: .deadline)
+        size = (try? c.decodeIfPresent(TaskSize.self, forKey: .size)) ?? nil
+        delays = (try? c.decodeIfPresent([TaskDelay].self, forKey: .delays)) ?? []
+        reviewer = try? c.decodeIfPresent(CardAssignee.self, forKey: .reviewer)
         agent = try c.decodeIfPresent(TaskAgentConfig.self, forKey: .agent) ?? TaskAgentConfig()
         attachments = try c.decodeIfPresent([Attachment.DTO].self, forKey: .attachments) ?? []
         sessionKey = try c.decodeIfPresent(String.self, forKey: .sessionKey)
@@ -427,6 +451,10 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         try c.encodeIfPresent(milestone, forKey: .milestone)
         try c.encodeIfPresent(priority, forKey: .priority)
         try c.encodeIfPresent(typeId, forKey: .typeId)
+        try c.encodeIfPresent(deadline, forKey: .deadline)
+        try c.encodeIfPresent(size, forKey: .size)
+        if !delays.isEmpty { try c.encode(delays, forKey: .delays) }
+        try c.encodeIfPresent(reviewer, forKey: .reviewer)
         try c.encode(agent, forKey: .agent)
         try c.encode(attachments, forKey: .attachments)
         try c.encodeIfPresent(sessionKey, forKey: .sessionKey)
@@ -483,6 +511,12 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         if let milestone, !milestone.isEmpty {
             context.append("- **Milestone:** \(milestone)")
         }
+        if let size {
+            context.append("- **Size:** \(size.displayNameText)")
+        }
+        if let deadline {
+            context.append("- **Deadline:** \(deadline.formatted(date: .abbreviated, time: .shortened))")
+        }
         if let fixPrompt = checkErrorFixPrompt {
             blocks.append(fixPrompt)
         }
@@ -498,301 +532,6 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         guard let reason = attentionReason?.trimmingCharacters(in: .whitespacesAndNewlines),
               !reason.isEmpty else { return nil }
         return "Fix the issue found by the task completion check, then verify the task again:\n\n\(reason)"
-    }
-}
-
-// MARK: - TaskPromptContent
-
-/// A thread's user message split back into its parts, so the Run tab and the
-/// chat message list can show a dispatched task as a card instead of raw
-/// Markdown.
-///
-/// Understands the `ProjectTask.agentPrompt` layout and the attachment lines
-/// `buildPromptWithAttachments` puts in front of it. Anything else (a typed
-/// follow-up) parses with a nil `title` and the whole text as `body`.
-public struct TaskPromptContent: Sendable, Hashable {
-    public struct Field: Sendable, Hashable {
-        public var label: String
-        public var value: String
-    }
-
-    public struct Reference: Sendable, Hashable {
-        public enum Kind: String, Sendable, Hashable {
-            case file, image, link
-        }
-
-        public var kind: Kind
-        public var value: String
-    }
-
-    /// Files and links attached to the message.
-    public var references: [Reference]
-    /// The task title, when the message is a dispatched task.
-    public var title: String?
-    /// The description, or a follow-up's full text. Markdown.
-    public var body: String
-    /// The trailing `- **Label:** value` context list.
-    public var fields: [Field]
-
-    public static func parse(_ text: String) -> TaskPromptContent {
-        var lines = text.components(separatedBy: "\n")[...]
-        var references: [Reference] = []
-        while let line = lines.first, let reference = Self.reference(in: line) {
-            references.append(reference)
-            lines = lines.dropFirst()
-        }
-
-        let rest = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        var blocks = rest.components(separatedBy: "\n\n")
-
-        let titlePrefix = "**Task:** "
-        guard let first = blocks.first, first.hasPrefix(titlePrefix), !first.contains("\n") else {
-            return TaskPromptContent(references: references, title: nil, body: rest, fields: [])
-        }
-        let title = String(first.dropFirst(titlePrefix.count)).trimmingCharacters(in: .whitespaces)
-        blocks.removeFirst()
-
-        var fields: [Field] = []
-        if let last = blocks.last {
-            let parsed = last.components(separatedBy: "\n").map(Self.field(in:))
-            if !parsed.isEmpty, parsed.allSatisfy({ $0 != nil }) {
-                fields = parsed.compactMap { $0 }
-                blocks.removeLast()
-            }
-        }
-
-        let body = blocks.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        return TaskPromptContent(references: references, title: title, body: body, fields: fields)
-    }
-
-    /// The parse of `text` when it is a dispatched task message — a
-    /// `**Task:**` heading followed by its context list — and `nil` for
-    /// anything else, such as a typed follow-up that happens to use Markdown.
-    /// Callers use this to decide between the task card and plain Markdown.
-    public static func task(in text: String) -> TaskPromptContent? {
-        let content = parse(text)
-        return content.title == nil ? nil : content
-    }
-
-    /// `[Attached image: /path]`, `[Attached file: /path]` or `[Link: url]`.
-    private static func reference(in line: String) -> Reference? {
-        guard line.hasPrefix("["), line.hasSuffix("]") else { return nil }
-        let inner = line.dropFirst().dropLast()
-        if inner.hasPrefix("Link: ") {
-            return Reference(kind: .link, value: String(inner.dropFirst("Link: ".count)))
-        }
-        guard inner.hasPrefix("Attached "), let colon = inner.range(of: ": ") else { return nil }
-        let type = inner[inner.index(inner.startIndex, offsetBy: "Attached ".count)..<colon.lowerBound]
-        return Reference(kind: type == "image" ? .image : .file, value: String(inner[colon.upperBound...]))
-    }
-
-    /// `- **Label:** value`.
-    private static func field(in line: String) -> Field? {
-        guard line.hasPrefix("- **"), let end = line.range(of: ":** ") else { return nil }
-        let label = line[line.index(line.startIndex, offsetBy: 4)..<end.lowerBound]
-        let value = line[end.upperBound...].trimmingCharacters(in: .whitespaces)
-        guard !label.isEmpty else { return nil }
-        return Field(label: String(label), value: value)
-    }
-}
-
-// MARK: - TaskViewLayout
-
-/// How a saved view renders its items — the GitHub Projects "Board" / "Table"
-/// layouts.
-public enum TaskViewLayout: String, Codable, Sendable, CaseIterable, Hashable {
-    case board
-    case table
-
-    public var displayName: LocalizedStringResource {
-        switch self {
-        case .board: return "Board"
-        case .table: return "Table"
-        }
-    }
-
-    public var systemImage: String {
-        switch self {
-        case .board: return "rectangle.split.3x1"
-        case .table: return "tablecells"
-        }
-    }
-}
-
-// MARK: - TaskSavedView
-
-/// A customizable per-project view, shown as a tab on the project's task page
-/// (the GitHub Projects "Backlog", "Priority board", "Team items" tabs).
-///
-/// Conditions are conjunctive — a task must pass every one that is set — and
-/// multi-value conditions match any of their values: a task in any selected
-/// story, targeting any selected version or milestone, and sitting in one of
-/// the visible statuses. Tags are the exception: a task must carry every
-/// selected tag.
-public struct TaskFilterSnapshot: Codable, Sendable, Hashable {
-    public var source: String
-    public var tasks: [String]
-    public var stories: [String]
-    public init(source: String, tasks: [String], stories: [String]) {
-        self.source = source
-        self.tasks = tasks
-        self.stories = stories
-    }
-}
-
-public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
-    /// Per-column sorting syncs with this saved view. Device filters are stored separately.
-    public var columnSorts: [String: TaskColumnSort] = [:]
-    public let id: UUID
-    public var name: String
-    public var layout: TaskViewLayout
-    public var tags: [String]
-    /// Limits the view to these versions. Empty means every version.
-    public var versions: [String]
-    /// Limits the view to these milestones. Empty means every milestone.
-    public var milestones: [String]
-    /// Limits the view to these stories' tasks. Empty means every story.
-    public var storyIds: [UUID]
-    /// Visible statuses — board columns, or table rows. Empty means all.
-    public var statuses: [TaskStatus]
-    /// Agent-written Swift that further narrows the view; see
-    /// `TaskFilterScript`. `nil` means no script.
-    public var filterSnapshot: TaskFilterSnapshot?
-    public var filterScript: String?
-    /// Statuses the board's story panel shows, matched against each story's
-    /// rolled-up status. Empty means every status the view's columns allow.
-    public var storyPanelStatuses: [TaskStatus]
-    /// The view a project opens on, and the one its dashboard card previews.
-    /// At most one view per board carries it; see `TaskBoard.defaultView`.
-    public var isDefault: Bool
-
-    public init(
-        id: UUID = UUID(),
-        name: String,
-        layout: TaskViewLayout = .board,
-        tags: [String] = [],
-        versions: [String] = [],
-        milestones: [String] = [],
-        storyIds: [UUID] = [],
-        statuses: [TaskStatus] = [],
-        filterScript: String? = nil,
-        storyPanelStatuses: [TaskStatus] = [],
-        isDefault: Bool = false
-    ) {
-        self.id = id
-        self.name = name
-        self.layout = layout
-        self.tags = tags
-        self.versions = versions
-        self.milestones = milestones
-        self.storyIds = storyIds
-        self.statuses = statuses
-        self.filterScript = filterScript
-        self.storyPanelStatuses = storyPanelStatuses
-        self.isDefault = isDefault
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, filterSnapshot, storyPanelStatuses, isDefault
-        case columnSorts
-        /// Single-value filters written before multi-select existed.
-        case version, storyId
-    }
-
-    /// Tolerant decoding: views written before `layout` / `statuses` existed
-    /// decode as an unfiltered board, and the legacy single `version` /
-    /// `storyId` filters become one-element lists.
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
-        columnSorts = (try? c.decodeIfPresent([String: TaskColumnSort].self, forKey: .columnSorts)) ?? [:]
-        layout = (try? c.decodeIfPresent(TaskViewLayout.self, forKey: .layout)) ?? .board
-        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
-        if let versions = try? c.decodeIfPresent([String].self, forKey: .versions) {
-            self.versions = versions
-        } else {
-            let legacy = (try? c.decodeIfPresent(String.self, forKey: .version)) ?? nil
-            versions = legacy.flatMap { $0.isEmpty ? nil : [$0] } ?? []
-        }
-        milestones = (try? c.decodeIfPresent([String].self, forKey: .milestones)) ?? []
-        if let storyIds = try? c.decodeIfPresent([UUID].self, forKey: .storyIds) {
-            self.storyIds = storyIds
-        } else {
-            let legacy = (try? c.decodeIfPresent(UUID.self, forKey: .storyId)) ?? nil
-            storyIds = legacy.map { [$0] } ?? []
-        }
-        statuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .statuses)) ?? []
-        filterSnapshot = try? c.decodeIfPresent(TaskFilterSnapshot.self, forKey: .filterSnapshot)
-        filterScript = try? c.decodeIfPresent(String.self, forKey: .filterScript)
-        storyPanelStatuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .storyPanelStatuses)) ?? []
-        isDefault = (try? c.decodeIfPresent(Bool.self, forKey: .isDefault)) ?? false
-    }
-
-    /// Also writes the legacy single-value keys when a list holds exactly one
-    /// value, so an older build reading a synced view keeps that filter.
-    public func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(id, forKey: .id)
-        try c.encode(name, forKey: .name)
-        try c.encode(layout, forKey: .layout)
-        try c.encode(columnSorts, forKey: .columnSorts)
-        try c.encode(tags, forKey: .tags)
-        try c.encode(versions, forKey: .versions)
-        try c.encode(milestones, forKey: .milestones)
-        try c.encode(storyIds, forKey: .storyIds)
-        try c.encode(statuses, forKey: .statuses)
-        try c.encodeIfPresent(filterSnapshot, forKey: .filterSnapshot)
-        try c.encodeIfPresent(filterScript, forKey: .filterScript)
-        try c.encode(storyPanelStatuses, forKey: .storyPanelStatuses)
-        if isDefault { try c.encode(isDefault, forKey: .isDefault) }
-        if versions.count == 1 { try c.encode(versions[0], forKey: .version) }
-        if storyIds.count == 1 { try c.encode(storyIds[0], forKey: .storyId) }
-    }
-
-    /// Stable id of the implicit view every project shows before the user
-    /// creates one. Editing it persists it under the same id.
-    public static let defaultViewId = UUID(uuidString: "00000000-0000-0000-0000-00000000B0A7")!
-
-    public static var defaultView: TaskSavedView {
-        TaskSavedView(id: defaultViewId, name: String(localized: "Board"), layout: .board)
-    }
-
-    /// A view with no constraints matches everything.
-    public var isEmpty: Bool {
-        tags.isEmpty && versions.isEmpty && milestones.isEmpty && storyIds.isEmpty && statuses.isEmpty
-    }
-
-    /// Columns the view shows, in board order. A view whose every chosen
-    /// column was deleted shows the whole board rather than nothing.
-    public func visibleColumns(in columns: [TaskColumn]) -> [TaskColumn] {
-        let filtered = columns.filter { statuses.contains($0.id) }
-        return statuses.isEmpty || filtered.isEmpty ? columns : filtered
-    }
-
-    /// Whether the board's story panel shows a story with this rolled-up status.
-    public func storyPanelShows(_ rolledUpStatus: TaskStatus) -> Bool {
-        storyPanelStatuses.isEmpty || storyPanelStatuses.contains(rolledUpStatus)
-    }
-
-    public func matches(_ task: ProjectTask) -> Bool {
-        if !versions.isEmpty, !versions.contains(task.version ?? "") { return false }
-        if !milestones.isEmpty, !milestones.contains(task.milestone ?? "") { return false }
-        if !tags.isEmpty, !tags.allSatisfy(task.tags.contains) { return false }
-        if !storyIds.isEmpty, !(task.storyId.map(storyIds.contains) ?? false) { return false }
-        if !statuses.isEmpty, !statuses.contains(task.status) { return false }
-        return true
-    }
-
-    /// Stories match on their own tags, version and milestone, like tasks;
-    /// their status is the one rolled up from their children.
-    public func matches(_ story: ProjectStory, rolledUpStatus: TaskStatus) -> Bool {
-        if !versions.isEmpty, !versions.contains(story.version ?? "") { return false }
-        if !milestones.isEmpty, !milestones.contains(story.milestone ?? "") { return false }
-        if !tags.isEmpty, !tags.allSatisfy(story.tags.contains) { return false }
-        if !storyIds.isEmpty, !storyIds.contains(story.id) { return false }
-        if !statuses.isEmpty, !statuses.contains(rolledUpStatus) { return false }
-        return true
     }
 }
 
@@ -1096,30 +835,5 @@ public extension TaskBoard {
     /// The `sortIndex` that appends to the end of `status`.
     func appendSortIndex(for status: TaskStatus) -> Double {
         (tasks(in: status).last?.sortIndex ?? 0) + 1
-    }
-}
-
-// MARK: - Attachment persistence
-
-public extension Attachment {
-    /// The same attachment with inlined bytes dropped, for storing in a task
-    /// board. `AttachmentFactory.fromFileURL` eagerly reads image data into
-    /// memory, and persisting that as base64 would bloat the board JSON for no
-    /// benefit — the file is still on disk and is re-read at send time.
-    ///
-    /// Attachments with no `path` (a pasted clipboard image, which exists only
-    /// in memory until `resolvingClipboardImages` writes it out) are returned
-    /// unchanged, since dropping their data would lose the image entirely.
-    func persistableInTaskBoard() -> Attachment {
-        guard !path.isEmpty else { return self }
-        return Attachment(
-            id: id,
-            type: type,
-            name: name,
-            path: path,
-            fileSize: fileSize,
-            textContent: textContent,
-            imageData: nil
-        )
     }
 }

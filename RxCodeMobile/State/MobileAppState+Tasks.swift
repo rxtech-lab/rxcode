@@ -29,6 +29,12 @@ extension MobileAppState {
             ?? (autopilotAccount?.isSignedIn == true ? autopilotAccount?.userID : nil)
     }
 
+    /// The signed-in person on this phone, recorded as a new delay's author.
+    func cardActor(projectID: UUID) -> CardAssignee? {
+        guard let id = defaultCardAssigneeID(projectID: projectID) else { return nil }
+        return cardAssigneeMembers(projectID: projectID).first { $0.id == id } ?? CardAssignee(userId: id)
+    }
+
     func canEditCard(_ task: ProjectTask) -> Bool {
         let board = taskBoard(for: task.projectId)
         return board.canEditCard(assigneeIds: (board.tasks.first { $0.id == task.id } ?? task).assigneeIds,

@@ -13,9 +13,32 @@ public struct UsageMetric: Codable, Sendable, Equatable, Identifiable {
     }
     public var formattedValue: String {
         guard let value, value.isFinite else { return "Unavailable" }
-        if unit == "seconds" { return "\((value / 60).formatted(.number.precision(.fractionLength(1)))) min" }
+        switch unit {
+        case "seconds":
+            if abs(value) >= 3600 { return Self.quantity(value / 3600, unit: "hrs") }
+            return Self.quantity(value / 60, unit: "min")
+        case "CU seconds":
+            return Self.quantity(value / 3600, unit: "CU hrs")
+        case "bytes", "byte-hours":
+            // Decimal storage units match GB/MB labels; preserve integrated storage's time dimension.
+            let units = ["bytes", "KB", "MB", "GB", "TB", "PB"]
+            var scaled = value
+            var index = 0
+            while abs(scaled) >= 1000, index < units.count - 1 {
+                scaled /= 1000
+                index += 1
+            }
+            let suffix = unit == "byte-hours" ? (index == 0 ? "byte-hours" : "\(units[index])-hrs") : units[index]
+            return Self.quantity(scaled, unit: suffix)
+        default:
+            break
+        }
         if unit == "%" { return "\(value.formatted(.number.precision(.fractionLength(1))))%" }
         return "\(value.formatted(.number.notation(.compactName).precision(.fractionLength(0...2)))) \(unit)"
+    }
+
+    private static func quantity(_ value: Double, unit: String) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0...2)))) \(unit)"
     }
 }
 
@@ -58,13 +81,54 @@ public struct UsageCardConfiguration: Codable, Sendable, Equatable, Identifiable
     public var isVisible: Bool
     public var showInMenuBar: Bool
     public var showInWidget: Bool
+    /// Widget-style briefing size. Nil means "Default", which follows the style.
+    public var size: String?
     public init(id: UUID = UUID(), integrationID: UUID, style: String = "summary", metricID: String? = nil,
-                isVisible: Bool = true, showInMenuBar: Bool = false, showInWidget: Bool = false, metricIDs: [String]? = nil) {
+                isVisible: Bool = true, showInMenuBar: Bool = false, showInWidget: Bool = false, metricIDs: [String]? = nil,
+                size: String? = nil) {
         self.id = id; self.integrationID = integrationID; self.style = style; self.metricID = metricID
         self.isVisible = isVisible; self.showInMenuBar = showInMenuBar; self.showInWidget = showInWidget
+        self.size = size
         if let metricIDs { selectMetrics(metricIDs) }
     }
     public static let styles = ["summary", "compact", "metrics"]
+    public var cardSize: UsageCardSize {
+        size.flatMap(UsageCardSize.init(rawValue:)) ?? UsageCardSize.defaultSize(forStyle: style)
+    }
+}
+
+/// Briefing card footprint in grid cells, mirroring macOS widget families.
+public enum UsageCardSize: String, CaseIterable, Sendable, Identifiable {
+    case small, medium, large, xlarge
+    public var id: String { rawValue }
+    /// Raw values accepted by `UsageCardConfiguration.size`; "default" clears it.
+    public static let optionValues = ["default"] + allCases.map(\.rawValue)
+    public static func defaultSize(forStyle style: String) -> UsageCardSize {
+        switch style {
+        case "compact": .small
+        case "metrics": .large
+        default: .medium
+        }
+    }
+    public var title: String {
+        switch self {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
+        case .xlarge: "Extra Large"
+        }
+    }
+    public var columns: Int { self == .small ? 1 : (self == .xlarge ? 4 : 2) }
+    public var rows: Int { self == .small || self == .medium ? 1 : 2 }
+    /// Metrics that fit before the card shows a "+N more" note.
+    public var metricCapacity: Int {
+        switch self {
+        case .small: 1
+        case .medium: 3
+        case .large: 6
+        case .xlarge: 12
+        }
+    }
 }
 
 /// Configuration deliberately has no token or client-secret field.
@@ -140,12 +204,18 @@ public extension UsagePlugin {
 
 public enum UsagePluginError: LocalizedError {
     case invalidConfiguration, invalidResponse, http(Int), paginationLimit
+    /// A provider OAuth error (`error` / `error_description`) from a token request.
+    case oauth(String)
+    /// An HTTP failure with the provider's own explanation from the response body.
+    case provider(Int, String)
     public var errorDescription: String? {
         switch self {
         case .invalidConfiguration: "Complete the integration account and resource settings."
         case .invalidResponse: "The provider returned an unsupported usage response."
         case .http(let code): "Usage request failed (HTTP \(code)). Check credentials, permissions, and plan eligibility."
         case .paginationLimit: "The provider returned too many pages. Narrow the integration scope."
+        case .oauth(let message): "Sign-in failed: \(message)"
+        case .provider(let code, let message): "Usage request failed (HTTP \(code)): \(message)"
         }
     }
 }

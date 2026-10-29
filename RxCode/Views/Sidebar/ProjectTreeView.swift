@@ -481,6 +481,8 @@ private struct ProjectTreeRow: View {
                     .padding(.vertical, 6)
                 }
 
+            ProjectInProgressBadge(count: appState.taskBoard(for: project.id).inProgressTaskCount)
+
             AttentionBadge(attention: appState.projectAttention(projectId: project.id, in: windowState))
 
             Spacer(minLength: 4)

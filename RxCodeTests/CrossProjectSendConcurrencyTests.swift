@@ -249,6 +249,49 @@ final class CrossProjectSendConcurrencyTests: XCTestCase {
         XCTAssertLessThan(elapsed, 0.5, "session-rename waiter took \(elapsed)s — should be near-instant")
     }
 
+    func testSendingInOldThreadPromotesItBeforeAssistantResponds() async throws {
+        let project = makeProject("sidebar-recency")
+        appState.projects = [project]
+        let oldDate = Date(timeIntervalSince1970: 100)
+        let old = ChatSession(
+            id: "old-\(UUID().uuidString)", projectId: project.id, title: "Old task chat",
+            messages: [], updatedAt: oldDate, agentProvider: .codex, origin: .codexAppServer
+        ).summary
+        let recent = ChatSession(
+            id: "recent-\(UUID().uuidString)", projectId: project.id, title: "Recent chat",
+            messages: [], updatedAt: Date().addingTimeInterval(-60)
+        ).summary
+        appState.allSessionSummaries = [recent, old]
+        appState.threadStore.upsert(old)
+        let window = WindowState()
+        window.selectedProject = project
+        window.currentSessionId = old.id
+        window.sessionAgentProvider = .codex
+        var state = SessionStreamState()
+        state.agentProvider = .codex
+        state.messages = [ChatMessage(role: .assistant, content: "Old reply", timestamp: oldDate)]
+        appState.sessionStates[old.id] = state
+        await mockBackend.enqueueScript([
+            .assistantText("New reply", delay: 2),
+            .result(sessionId: old.id, delay: 0.01)
+        ], forCwd: project.path)
+
+        let startedAt = Date()
+        let maybeStreamId = await appState.sendPrompt("Continue", includeIDEMCP: false, in: window)
+        let streamId = try XCTUnwrap(maybeStreamId)
+        let visible = HistoryListView.filteredSummaries(
+            from: appState.allSessionSummaries, projectId: project.id, showArchived: false
+        )
+        XCTAssertEqual(visible.first?.id, old.id)
+        XCTAssertTrue(appState.stateForSession(old.id).isStreaming)
+        XCTAssertEqual(appState.stateForSession(old.id).messages.last?.role, .user)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(appState.threadStore.fetch(id: old.id)).updatedAt, startedAt)
+        _ = await appState.awaitStreamCompletion(streamId: streamId, timeout: 5, acceptsPartial: false)
+        XCTAssertEqual(HistoryListView.filteredSummaries(
+            from: appState.allSessionSummaries, projectId: project.id, showArchived: false
+        ).first?.id, old.id)
+    }
+
     // MARK: - Provider-native session ids
 
     /// When a user switches providers inside an existing thread, the new provider

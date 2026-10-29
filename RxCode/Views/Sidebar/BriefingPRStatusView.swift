@@ -22,6 +22,7 @@ struct BriefingPRStatusView: View {
     }
 
     var body: some View {
+        let _ = BriefingPerformanceLog.log("PR status body\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "") \(branch)")
         let _ = appState.ciStatusRevision
         let status = appState.ciStatus(forProjectId: projectId, branch: branch)
         Group {
@@ -89,7 +90,7 @@ struct BriefingPRStatusView: View {
     /// pick a model from the "Create with Model" submenu (remembered for next time).
     private func createPRButton(project: Project) -> some View {
         let remembered = appState.rememberedPullRequestModel
-        return Menu {
+        return BriefingDeferredMenu {
             Button {
                 startCreatePR(project: project)
             } label: {

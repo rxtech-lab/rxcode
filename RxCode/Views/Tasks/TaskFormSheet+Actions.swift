@@ -125,13 +125,14 @@ extension TaskFormSheet {
         let wasStory = isStory
         let storyDraft = story
         let taskDraft = task
+        let model = suggestionAgent
         Task {
             defer { isAutoFilling = false }
             let suggestion: TaskClassification?
             if wasStory {
-                suggestion = await appState.suggestClassification(for: storyDraft)
+                suggestion = await appState.suggestClassification(for: storyDraft, model: model)
             } else {
-                suggestion = await appState.suggestClassification(for: taskDraft)
+                suggestion = await appState.suggestClassification(for: taskDraft, model: model)
             }
             guard let suggestion, isStory == wasStory else { return }
             if wasStory, story.id == storyDraft.id, story.projectId == storyDraft.projectId {

@@ -21,6 +21,7 @@ struct BriefingDocumentCard: View {
     @State private var showSendNotification = false
 
     var body: some View {
+        let _ = BriefingPerformanceLog.log("document card body\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "") \(document.id.uuidString) (\(document.format == .html ? "html" : "markdown"))")
         VStack(alignment: .leading, spacing: 12) {
             BriefingDocumentHeader(document: document, project: project) {
                 sendNotificationButton
@@ -34,16 +35,23 @@ struct BriefingDocumentCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
+            // Shadow the card shape only; shadowing the whole card makes SwiftUI
+            // shadow every text run and chip, which is slow to draw while scrolling.
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
                 .fill(ClaudeTheme.surfacePrimary)
+                .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
         )
         .overlay(
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
                 .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
         .task(id: document.updatedAt) {
+            let start = DispatchTime.now().uptimeNanoseconds
             content = await appState.briefingDocumentContent(document)
+            BriefingPerformanceLog.log(
+                "loaded document content \(document.id.uuidString) (\(content?.count ?? 0) chars) "
+                + "in \(BriefingPerformanceLog.format(BriefingPerformanceLog.milliseconds(since: start)))ms"
+            )
         }
         .sheet(isPresented: $showSendNotification) {
             SendBriefingNotificationSheet(document: document)
@@ -65,7 +73,11 @@ struct BriefingDocumentCard: View {
     @ViewBuilder
     private var preview: some View {
         if let content {
-            let text = document.format == .html ? BriefingHTMLText.plainText(from: content) : content
+            let text = document.format == .html
+                ? BriefingPerformanceLog.measure("html plain text for \(document.id.uuidString) (\(content.count) chars)") {
+                    BriefingHTMLText.plainText(from: content)
+                }
+                : content
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("This briefing has no content yet.")
                     .font(.system(size: 12))

@@ -25,13 +25,26 @@ extension AppState {
         set { usagePlugins.refreshTask = newValue }
     }
 
-    static let usagePluginIDs = ["ai-usage", "ai-limits", "vercel", "neon", "turso", "cloudflare", "github-ci"]
+    static let usagePluginIDs = ["acp-opencode", "acp-antigravity", "ai-usage", "ai-limits", "vercel", "neon", "turso", "cloudflare", "github-ci"]
 
     func startUsagePlugins() async {
         for id in ["vercel", "neon", "turso", "cloudflare"] {
-            await usagePluginRegistry.register(CloudUsagePlugin(id: id))
+            await usagePluginRegistry.register(CloudUsagePlugin(id: id, gatewayCredential: { integrationID in
+                await UsageDashboardStore.shared.gatewayCredential(for: integrationID)
+            }, billingCredential: { integrationID in
+                await UsageDashboardStore.shared.billingCredential(for: integrationID)
+            }))
         }
         await usagePluginRegistry.register(GitHubCIUsagePlugin())
+        for provider in ACPUsageProvider.allCases {
+            await usagePluginRegistry.register(LocalUsagePlugin(id: provider.pluginID, title: provider.title) { [weak self] integration in
+                guard let self,
+                      let client = await self.acpClients.first(where: { $0.id == integration.resource }) else {
+                    throw ACPUsageError.unavailable
+                }
+                return try await ACPUsageService.shared.fetch(client: client, integration: integration)
+            })
+        }
         for id in ["ai-usage", "ai-limits"] {
             await usagePluginRegistry.register(LocalUsagePlugin(id: id, title: id, details: { snapshot, card in
                 if id == "ai-usage" { return AnyView(AIUsagePluginDetail(snapshot: snapshot, configuration: card)) }
@@ -54,6 +67,7 @@ extension AppState {
                 ])
             }
         } catch { usageDashboardError = "Could not load usage cards: \(error.localizedDescription)"; return }
+        reconcileACPUsageIntegrations()
         usagePluginRefreshTask?.cancel()
         usagePluginRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -64,11 +78,24 @@ extension AppState {
         }
     }
 
+    /// Only supported installed runtimes receive an automatic usage connection.
+    func reconcileACPUsageIntegrations() {
+        for client in acpClients where client.enabled {
+            guard let provider = ACPUsageProvider.provider(for: client),
+                  !usageDashboard.integrations.contains(where: { $0.pluginID == provider.pluginID && $0.resource == client.id }) else { continue }
+            let integration = UsageIntegration(pluginID: provider.pluginID, title: "\(client.displayName) usage", resource: client.id)
+            usageDashboard.integrations.append(integration)
+            usageDashboard.cards.append(.init(integrationID: integration.id, style: "metrics"))
+        }
+    }
+
     func refreshUsagePlugins() async {
         guard !usagePluginsRefreshing else { usagePluginsRefreshPending = true; return }
         usagePluginsRefreshing = true
+        usagePlugins.refreshingIntegrationIDs = Set(usageDashboard.integrations.map(\.id))
         defer {
             usagePluginsRefreshing = false
+            usagePlugins.refreshingIntegrationIDs = []
             if usagePluginsRefreshPending {
                 usagePluginsRefreshPending = false
                 Task { await refreshUsagePlugins() }
@@ -78,8 +105,10 @@ extension AppState {
             let snapshot: UsagePluginSnapshot
             do {
                 var token = ""
-                if !integration.pluginID.hasPrefix("ai-") {
-                    let oauthToken = try await UsageOAuthTokens.shared.accessToken(integration)
+                if !integration.pluginID.hasPrefix("ai-") && !integration.pluginID.hasPrefix("acp-") {
+                    // Vercel OAuth is hidden (see VercelUsageOAuth.isEnabled); ignore any stale tokens.
+                    let oauthToken = integration.pluginID == "vercel" && !VercelUsageOAuth.isEnabled
+                        ? nil : try await UsageOAuthTokens.shared.accessToken(integration)
                     let apiKey = await UsageDashboardStore.shared.credential(for: integration.id)
                     token = oauthToken ?? apiKey ?? ""
                 }
@@ -88,9 +117,12 @@ extension AppState {
                 var previous = usageDashboard.snapshots.first { $0.id == integration.id }
                     ?? .init(id: integration.id, pluginID: integration.pluginID, title: integration.title,
                              projectID: integration.projectID, scope: integration.account, period: "", metrics: [])
-                previous.error = (error as? UsagePluginError)?.localizedDescription ?? "Unable to refresh usage. Check the connection and credentials."
+                previous.title = integration.title
+                previous.projectID = integration.projectID
+                previous.error = (error as? ACPUsageError)?.localizedDescription ?? (error as? ACPUsageFetchError)?.localizedDescription ?? (error as? UsagePluginError)?.localizedDescription ?? "Unable to refresh usage. Check the connection and credentials."
                 snapshot = previous
             }
+            usagePlugins.refreshingIntegrationIDs.remove(integration.id)
             // A deleted or edited integration must not be resurrected by an in-flight fetch.
             guard usageDashboard.integrations.contains(integration) else { continue }
             usageDashboard.snapshots.removeAll { $0.id == integration.id }

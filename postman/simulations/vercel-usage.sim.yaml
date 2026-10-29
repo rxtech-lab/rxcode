@@ -1,0 +1,6 @@
+simulation: vercel-usage
+routing: path
+mocks:
+  - name: vercel-usage
+    routeKey: usage
+    path: postman/mocks/vercel-usage/config.yaml

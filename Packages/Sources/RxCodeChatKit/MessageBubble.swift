@@ -109,8 +109,8 @@ struct MessageBubble: View {
                                 } else {
                                     ToolResultView(toolCall: toolCall, isMessageStreaming: siblingStreaming)
                                 }
-                            case .transientTools(let id, let tools):
-                                transientToolSummary(groupId: id, tools: tools)
+                            case .transientTools(_, let tools):
+                                ChatTransientToolSummaryView(tools: tools, isStreaming: siblingStreaming)
                             }
                         }
                         .transition(blockFadeTransition)
@@ -419,15 +419,7 @@ struct MessageBubble: View {
 
     // MARK: - Transient Tool Helpers
 
-    /// Read, Grep, Glob, Bash etc. are collapsed into a summary after streaming completes
-    private func isTransientTool(_ toolCall: ToolCall) -> Bool {
-        let cat = ToolCategory(toolName: toolCall.name)
-        return cat == .readOnly || cat == .execution
-    }
-
-    /// Builds the assistant render list in source order. Completed transient
-    /// tools are folded into contiguous collapsed groups, while edit/write/plan
-    /// cards remain inline between those groups.
+    /// Collapse consecutive ordinary tool calls while preserving dedicated interactive cards.
     private func assistantRenderBlocks() -> [AssistantRenderBlock] {
         var result: [AssistantRenderBlock] = []
         var pendingTransientTools: [ToolCall] = []
@@ -450,7 +442,7 @@ struct MessageBubble: View {
             guard !pendingTransientTools.isEmpty else { return }
             let startId = pendingTransientGroupStartId ?? pendingTransientTools[0].id
             result.append(.transientTools(
-                id: "transient-tools-\(startId)-\(pendingTransientTools.count)",
+                id: "transient-tools-\(startId)",
                 tools: pendingTransientTools
             ))
             pendingTransientTools = []
@@ -483,14 +475,7 @@ struct MessageBubble: View {
                 allMessages: chatBridge.messages
             ) { continue }
 
-            if message.isStreaming {
-                flushTransientTools()
-                result.append(.tool(toolCall))
-                continue
-            }
-
-            if isTransientTool(toolCall) {
-                guard toolCall.result != nil || toolCall.isError else { continue }
+            if chatCanGroupTool(toolCall) {
                 if pendingTransientGroupStartId == nil {
                     pendingTransientGroupStartId = toolCall.id
                 }
@@ -498,7 +483,7 @@ struct MessageBubble: View {
                 continue
             }
 
-            if toolCall.isKeepAlways || toolCall.result != nil || toolCall.isError {
+            if message.isStreaming || toolCall.isKeepAlways || toolCall.result != nil || toolCall.isError {
                 flushTransientTools()
                 result.append(.tool(toolCall))
             }
@@ -506,57 +491,6 @@ struct MessageBubble: View {
 
         flushTransientTools()
         return result
-    }
-
-    @State private var expandedTransientGroupIds: Set<String> = []
-
-    private func transientToolSummary(groupId: String, tools: [ToolCall]) -> some View {
-        let isExpanded = expandedTransientGroupIds.contains(groupId)
-        return VStack(alignment: .leading, spacing: 14) {
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    if expandedTransientGroupIds.contains(groupId) {
-                        expandedTransientGroupIds.remove(groupId)
-                    } else {
-                        expandedTransientGroupIds.insert(groupId)
-                    }
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: ClaudeTheme.messageSize(13)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text(String(format: String(localized: "%lld tools executed", bundle: .module), tools.count))
-                        .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(tools, id: \.id) { toolCall in
-                        ToolResultView(toolCall: toolCall, isMessageStreaming: false)
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity
-                            ))
-                    }
-                }
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .move(edge: .top)),
-                    removal: .opacity.combined(with: .move(edge: .top))
-                ))
-            }
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isExpanded)
     }
 
     private var bubbleShape: UnevenRoundedRectangle {

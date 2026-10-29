@@ -6,6 +6,50 @@ import Synchronization
 
 @MainActor
 final class MCPOAuthTests: XCTestCase {
+    func testCloudflareDefaultScopesReachAuthorizationRequest() throws {
+        for saved in [nil, UsageOAuthConfiguration(),
+                      UsageOAuthConfiguration(clientID: CloudflareUsageOAuth.clientID, scopes: " \n"),
+                      UsageOAuthConfiguration(clientID: CloudflareUsageOAuth.clientID,
+                                              scopes: "account-analytics.read workers-r2.read zone.read")] {
+            let config = CloudflareUsageOAuth.configuration(saved)
+            let request = UsageOAuthSignIn.authorizeURL("https://dash.cloudflare.com/oauth2/auth", config: config)
+            let components = try XCTUnwrap(URLComponents(url: request.url, resolvingAgainstBaseURL: false))
+            XCTAssertEqual(components.queryItems?.first { $0.name == "scope" }?.value,
+                           "account-analytics.read workers-r2.read zone.read memberships.read")
+        }
+    }
+
+    func testCloudflarePreservesExplicitScopesAndCustomClients() {
+        let custom = UsageOAuthConfiguration(clientID: "custom", callbackURL: CloudflareUsageOAuth.callbackURL)
+        XCTAssertEqual(CloudflareUsageOAuth.configuration(custom), custom)
+        let explicit = UsageOAuthConfiguration(clientID: CloudflareUsageOAuth.clientID,
+                                              callbackURL: CloudflareUsageOAuth.callbackURL, scopes: "zone.read")
+        XCTAssertEqual(CloudflareUsageOAuth.configuration(explicit), explicit)
+    }
+
+    func testCloudflareMigratesLegacyCallbackWithoutChangingClientOrScopes() {
+        var saved = UsageOAuthConfiguration(clientID: "client", scopes: "account:read")
+        let migrated = CloudflareUsageOAuth.configuration(saved)
+        XCTAssertEqual(migrated.callbackURL, "http://localhost:47616/oauth/callback")
+        XCTAssertEqual(migrated.clientID, saved.clientID)
+        XCTAssertEqual(migrated.scopes, saved.scopes)
+        saved.callbackURL = "http://127.0.0.1:49152/oauth/callback"
+        XCTAssertEqual(CloudflareUsageOAuth.configuration(saved), saved)
+    }
+
+    func testCloudflareOnlyAcceptsExplicitHTTPCallbackPortsOnLoopback() {
+        XCTAssertEqual(CloudflareUsageOAuth.callbackPort(CloudflareUsageOAuth.callbackURL), 47616)
+        XCTAssertEqual(CloudflareUsageOAuth.callbackPort("http://127.0.0.1:49152/oauth/callback"), 49152)
+        for invalid in ["rxcode://usage-oauth", "https://localhost:47616/oauth/callback",
+                        "http://example.com:47616/oauth/callback", "http://localhost/oauth/callback",
+                        "http://localhost:0/oauth/callback", "http://localhost:47616/other",
+                        "http://user@localhost:47616/oauth/callback",
+                        "http://localhost:47616/oauth/callback?code=forged",
+                        "http://localhost:47616/oauth/callback#fragment"] {
+            XCTAssertNil(CloudflareUsageOAuth.callbackPort(invalid), invalid)
+        }
+    }
+
     private let resource = "https://refresh-fixture.example/mcp"
 
     private func refreshFixture(expiry: Date? = nil, refreshToken: String? = "refresh-original") -> (MCPOAuthService, OAuthMemoryStorage) {
@@ -231,6 +275,27 @@ final class MCPOAuthTests: XCTestCase {
         let callback = URL(string: redirect.absoluteString + "?state=expected-state&code=secret")!
         let delivery = Task {
             try await server.wait(for: authorization) { true }
+        }
+        await Task.yield()
+        let session = URLSession(configuration: .ephemeral)
+        let (_, rejected) = try await session.data(from: URL(string: redirect.absoluteString + "?state=wrong&code=secret")!)
+        XCTAssertEqual((rejected as? HTTPURLResponse)?.statusCode, 400)
+        let (_, accepted) = try await session.data(from: callback)
+        XCTAssertEqual((accepted as? HTTPURLResponse)?.statusCode, 200)
+        let received = try await delivery.value
+        XCTAssertEqual(received, callback)
+    }
+
+    func testFixedPortReceiverServesRegisteredLocalhostRedirect() async throws {
+        let server = MCPOAuthCallbackServer()
+        defer { server.stop() }
+        let redirect = try await server.start(port: 47_616)
+        XCTAssertEqual(redirect.absoluteString, "http://localhost:47616/oauth/callback")
+        let callback = URL(string: redirect.absoluteString + "?state=expected&code=secret")!
+        let delivery = Task {
+            try await server.wait(redirectURI: redirect.absoluteString, accepts: {
+                URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value == "expected"
+            }) { true }
         }
         await Task.yield()
         let session = URLSession(configuration: .ephemeral)

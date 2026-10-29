@@ -366,7 +366,6 @@
       }
     },
     "%@ (%@)" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1148,6 +1147,9 @@
         }
       }
     },
+    "%lld tasks in progress" : {
+
+    },
     "%lld tasks measured" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1767,6 +1769,9 @@
         }
       }
     },
+    "Access token (leave blank to keep existing token)" : {
+
+    },
     "Account" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1777,9 +1782,6 @@
         }
       }
     },
-    "Account / organization / team ID" : {
-
-    },
     "Account email" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1789,6 +1791,9 @@
           }
         }
       }
+    },
+    "Account ID" : {
+
     },
     "ACP Clients" : {
       "localizations" : {
@@ -2713,6 +2718,9 @@
         }
       }
     },
+    "Add usage integration" : {
+
+    },
     "Add Variable" : {
       "localizations" : {
         "ko" : {
@@ -2964,6 +2972,12 @@
           }
         }
       }
+    },
+    "AI Gateway API key (leave blank to keep existing key)" : {
+
+    },
+    "AI Gateway credits" : {
+
     },
     "AI generate" : {
       "localizations" : {
@@ -3681,6 +3695,7 @@
       }
     },
     "Ask the selected model to fill in empty properties" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3994,6 +4009,9 @@
           }
         }
       }
+    },
+    "Auto-fill Properties" : {
+
     },
     "Auto-fill properties for quick-added tasks" : {
       "extractionState" : "stale",
@@ -4323,6 +4341,27 @@
           }
         }
       }
+    },
+    "Billing API token" : {
+
+    },
+    "Billing API token (leave blank to keep existing token)" : {
+
+    },
+    "Billing API token (optional)" : {
+
+    },
+    "Billing API token saved" : {
+
+    },
+    "Billing charges require an Owner, Member, Developer, Security, Billing, or Enterprise Viewer role on the team, and the RxCode Vercel app must be granted the Team and Billing read permissions. Vercel returns HTTP 403 when either is missing." : {
+
+    },
+    "Billing charges require an Owner, Member, Developer, Security, Billing, or Enterprise Viewer role on the team. Vercel returns HTTP 403 when the token's scope or role doesn't allow it." : {
+
+    },
+    "Billing team" : {
+
     },
     "Binary found: %@, but version check failed" : {
       "localizations" : {
@@ -4776,9 +4815,6 @@
         }
       }
     },
-    "Callback URL" : {
-
-    },
     "Cancel" : {
       "localizations" : {
         "en" : {
@@ -4800,6 +4836,9 @@
           }
         }
       }
+    },
+    "Card size" : {
+
     },
     "Card style" : {
 
@@ -5006,6 +5045,9 @@
         }
       }
     },
+    "Choose a client" : {
+
+    },
     "Choose a frequency to replace this custom expression." : {
       "localizations" : {
         "zh-Hans" : {
@@ -5015,6 +5057,9 @@
           }
         }
       }
+    },
+    "Choose a model to fill in empty properties" : {
+
     },
     "Choose a project from the workspace most recently used in RxCode." : {
 
@@ -5028,6 +5073,9 @@
           }
         }
       }
+    },
+    "Choose an account" : {
+
     },
     "Choose an existing value" : {
       "localizations" : {
@@ -5765,6 +5813,9 @@
           }
         }
       }
+    },
+    "Cloudflare account" : {
+
     },
     "Code Review" : {
       "localizations" : {
@@ -7970,6 +8021,9 @@
         }
       }
     },
+    "Default team" : {
+
+    },
     "Default template" : {
       "localizations" : {
         "ko" : {
@@ -9685,6 +9739,9 @@
     "Edit this card view" : {
 
     },
+    "Edit usage integration" : {
+
+    },
     "Edit View" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10091,6 +10148,9 @@
           }
         }
       }
+    },
+    "Enter the repositories whose workflow queue times you want to monitor." : {
+
     },
     "Env File" : {
       "localizations" : {
@@ -10807,6 +10867,9 @@
         }
       }
     },
+    "Fill empty properties using the selected model." : {
+
+    },
     "Filling in properties…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10817,6 +10880,9 @@
           }
         }
       }
+    },
+    "Filling properties…" : {
+
     },
     "Filter" : {
       "extractionState" : "stale",
@@ -12905,6 +12971,9 @@
         }
       }
     },
+    "Installed ACP client" : {
+
+    },
     "Installed skills are managed by RxCode, sourced from OpenAI Agent Skills and compatible catalogs, and enabled for Claude Code, Codex, and ACP agents where supported." : {
       "localizations" : {
         "ko" : {
@@ -13403,6 +13472,9 @@
     "Leave blank to register automatically when the server supports it." : {
 
     },
+    "Leave the database blank for organization usage in the current billing period, or enter a database for its usage over the last 30 days." : {
+
+    },
     "Left in 5h" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13474,6 +13546,9 @@
           }
         }
       }
+    },
+    "Like widgets, cards take 1 to 4 grid cells and the briefing arranges them to fill gaps." : {
+
     },
     "Limit" : {
       "localizations" : {
@@ -13697,6 +13772,15 @@
           }
         }
       }
+    },
+    "Load teams" : {
+
+    },
+    "Load teams from Vercel" : {
+
+    },
+    "Loading accounts…" : {
+
     },
     "Loading catalog..." : {
       "localizations" : {
@@ -17370,9 +17454,6 @@
         }
       }
     },
-    "OAuth application" : {
-
-    },
     "OAuth client ID (optional)" : {
 
     },
@@ -18026,6 +18107,15 @@
           }
         }
       }
+    },
+    "Organization" : {
+
+    },
+    "Organization ID" : {
+
+    },
+    "Organization name" : {
+
     },
     "Original link (optional)" : {
       "localizations" : {
@@ -18989,6 +19079,9 @@
         }
       }
     },
+    "Project ID (optional)" : {
+
+    },
     "Project menu" : {
       "localizations" : {
         "ko" : {
@@ -19274,9 +19367,6 @@
         }
       }
     },
-    "Public client ID" : {
-
-    },
     "Publishing Swift filters (step 4 of 5)" : {
 
     },
@@ -19521,6 +19611,12 @@
         }
       }
     },
+    "Reads Antigravity quota windows using the agy login in macOS Keychain. Open Antigravity or agy to refresh an expired login." : {
+
+    },
+    "Reads OpenCode Go usage limits using this client's existing login or OPENCODE_API_KEY. Other providers and prepaid balances are not reported." : {
+
+    },
     "Ready for review: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19726,9 +19822,6 @@
     "Refreshing catalog..." : {
 
     },
-    "Refreshing usage…" : {
-
-    },
     "Regenerate" : {
       "localizations" : {
         "ko" : {
@@ -19744,9 +19837,6 @@
           }
         }
       }
-    },
-    "Register a public PKCE client with callback rxcode://usage-oauth. Grant read access to usage or billing in the provider console." : {
-
     },
     "Register repositories for semantic-release publishing. Pick which workflow cuts releases, install the RELEASE_TOKEN secret, and trigger releases from RxCode." : {
       "localizations" : {
@@ -19974,6 +20064,9 @@
           }
         }
       }
+    },
+    "Reload accounts" : {
+
     },
     "Reload your Flowcy projects" : {
       "localizations" : {
@@ -20436,6 +20529,9 @@
         }
       }
     },
+    "Renaming applies to every card view of this integration." : {
+
+    },
     "Replace RELEASE_TOKEN secret" : {
       "localizations" : {
         "ko" : {
@@ -20483,6 +20579,9 @@
           }
         }
       }
+    },
+    "Repositories" : {
+
     },
     "Repositories (owner/repo, comma separated)" : {
 
@@ -21746,9 +21845,6 @@
           }
         }
       }
-    },
-    "Scopes" : {
-
     },
     "Script" : {
       "localizations" : {
@@ -23588,6 +23684,9 @@
         }
       }
     },
+    "Shows consumption over the last 30 days. Leave the project blank to include all projects in the organization." : {
+
+    },
     "Shows in-progress chat counts and Claude Code usage limits in the macOS menu bar." : {
       "localizations" : {
         "ko" : {
@@ -23603,6 +23702,9 @@
           }
         }
       }
+    },
+    "Shows metered consumption for the current billing period, not an invoice total. Worker script and R2 bucket scopes use resource analytics." : {
+
     },
     "Shows tasks with any selected tag. Active filters are combined." : {
       "localizations" : {
@@ -23895,6 +23997,12 @@
     "Sign-in Failed" : {
 
     },
+    "Sign-in opens your browser and returns to RxCode through a local callback on port %@." : {
+
+    },
+    "Sign-in opens your browser and returns to RxCode. Credentials are stored only in Keychain." : {
+
+    },
     "Sign-out Failed" : {
 
     },
@@ -23933,6 +24041,12 @@
           }
         }
       }
+    },
+    "Signed in with %@" : {
+
+    },
+    "Signed in with Vercel" : {
+
     },
     "Signing In…" : {
       "localizations" : {
@@ -25071,6 +25185,12 @@
           }
         }
       }
+    },
+    "Team" : {
+
+    },
+    "Team ID or slug (blank for default team)" : {
+
     },
     "Templates of GitHub merge settings and an optional branch ruleset. Your default template is applied automatically to new repositories." : {
       "localizations" : {
@@ -26925,7 +27045,7 @@
     "Usage details" : {
 
     },
-    "Usage integration" : {
+    "Usage is read from the agent connections already configured in RxCode." : {
 
     },
     "Usage limits" : {
@@ -26951,6 +27071,9 @@
         }
       }
     },
+    "Use a %@ API key with read access to the selected scope. Stored only in Keychain." : {
+
+    },
     "Use a GitHub repository that exposes .claude-plugin/marketplace.json." : {
       "localizations" : {
         "ko" : {
@@ -26966,6 +27089,9 @@
           }
         }
       }
+    },
+    "Use an AI Gateway key from the selected Vercel team. Shows the team's remaining USD balance, even when billable usage is filtered by project. Stored only in Keychain." : {
+
     },
     "Use default Makefile lookup" : {
       "localizations" : {
@@ -27212,6 +27338,9 @@
         }
       }
     },
+    "Uses existing agent connections" : {
+
+    },
     "Uses the default task agent from the Tasks tab (%@)." : {
       "localizations" : {
         "zh-Hans" : {
@@ -27317,9 +27446,6 @@
           }
         }
       }
-    },
-    "Vercel currently gates team API permissions behind private beta. Your app needs Billing: Read Only permission." : {
-
     },
     "Verification link expired — resend it to try again" : {
       "localizations" : {
@@ -27653,6 +27779,9 @@
           }
         }
       }
+    },
+    "Waiting for browser sign-in…" : {
+
     },
     "Waiting for confirmation — check that inbox for the link" : {
       "localizations" : {
@@ -28298,9 +28427,6 @@
       }
     },
     "Zone ID" : {
-
-    },
-    "Zone ID (optional; traffic analytics)" : {
 
     }
   },

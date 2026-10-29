@@ -45,6 +45,7 @@ final class WorkspaceManager {
             try state.threadStore.clearCachedRecords()
             await state.searchService.clearCachedIndex()
             state.branchBriefingRevision &+= 1
+            state.threadSummaryRevision &+= 1
         }
         try await CacheStorageService.shared.clearFileCaches(
             workspaceURLs: allWorkspaces.map(\.storageURL)

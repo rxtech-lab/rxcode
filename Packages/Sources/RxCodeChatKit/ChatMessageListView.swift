@@ -92,7 +92,7 @@ struct ChatTransientGroupSummaryView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             #if os(macOS)
-            ChatTransientToolSummaryView(tools: allToolCalls)
+            ChatTransientToolSummaryView(tools: allToolCalls, isStreaming: messages.contains(where: \.isStreaming))
             #else
             ToolActivityGroupView(tools: allToolCalls, isStreaming: messages.contains(where: \.isStreaming))
             #endif
@@ -103,6 +103,7 @@ struct ChatTransientGroupSummaryView: View {
 
 struct ChatTransientToolSummaryView: View {
     let tools: [ToolCall]
+    var isStreaming = false
     @State private var isExpanded = false
 
     var body: some View {
@@ -116,7 +117,12 @@ struct ChatTransientToolSummaryView: View {
                     Image(systemName: "eye.slash")
                         .font(.system(size: ClaudeTheme.messageSize(13)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text(String(format: String(localized: "%lld tools executed", bundle: .module), tools.count))
+                    Text(tools.last?.name ?? "Tool calls")
+                        .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(tools.count == 1 ? "1 tool call" : "\(tools.count) tool calls")
                         .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Image(systemName: "chevron.down")
@@ -129,11 +135,13 @@ struct ChatTransientToolSummaryView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("tool-calls-toggle")
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(tools, id: \.id) { toolCall in
-                        ToolResultView(toolCall: toolCall, isMessageStreaming: false)
+                        ToolResultView(toolCall: toolCall, isMessageStreaming: isStreaming)
                             .transition(.asymmetric(
                                 insertion: .opacity.combined(with: .move(edge: .top)),
                                 removal: .opacity

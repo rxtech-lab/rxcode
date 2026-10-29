@@ -250,6 +250,23 @@ actor PermissionServer {
         return await resolveNewlyAutoApprovedPending()
     }
 
+    /// Deny every request still waiting for this session, so a cancelled turn
+    /// doesn't leave entries behind that later requests could collide with.
+    /// Returns the ids that were resolved so the UI can drop them.
+    @discardableResult
+    func cancelPending(sessionId: String) -> [String] {
+        let ids = pending.compactMap { $0.value.sessionId == sessionId ? $0.key : nil }
+        for id in ids {
+            guard let entry = pending.removeValue(forKey: id) else { continue }
+            logger.info("Denying pending \(entry.toolName) \(id): turn cancelled")
+            let outcome = DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil)
+            for continuation in entry.continuations {
+                continuation.resume(returning: outcome)
+            }
+        }
+        return ids
+    }
+
     /// After a broad grant, approve every still-pending request the grant now covers.
     private func resolveNewlyAutoApprovedPending() async -> [String] {
         var resolvedIds: [String] = []

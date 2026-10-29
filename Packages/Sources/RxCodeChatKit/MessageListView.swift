@@ -664,38 +664,18 @@ struct StreamingMessageView: View {
     var body: some View {
         let messages = chatBridge.messages
         let activeMessages = activeResponseMessages(from: messages)
-        let (settledActive, streamingActive) = chatPartitionByStreaming(activeMessages)
         Group {
-            if !activeMessages.isEmpty {
-
-                if !streamingActive.isEmpty {
-                    // Collapse completed transient tool calls (even a single one) the moment
-                    // the next streaming message begins, so only the current message stays visible.
-                    let groups = chatMessageGroups(settledActive, minGroupSize: 1)
-                    ForEach(groups) { group in
-                        if group.isTransientGroup {
-                            ChatTransientGroupSummaryView(messages: group.messages)
-                                .id(group.id)
-                                .transition(streamFadeTransition(role: .assistant))
-                        } else if let message = group.messages.first {
-                            ChatMessageBubble(message: message)
-                                .id(message.id)
-                                .transition(streamFadeTransition(role: message.role))
-                        }
-                    }
-                } else {
-                    // Nothing streaming yet — show each settled message individually.
-                    ForEach(settledActive, id: \.id) { message in
-                        ChatMessageBubble(message: message)
-                            .id(message.id)
-                            .transition(streamFadeTransition(role: message.role))
-                    }
-                }
-
-                ForEach(streamingActive, id: \.id) { message in
+            // Group the entire response so completed and streaming tool calls share
+            // one disclosure while text and interactive cards remain separate.
+            ForEach(chatMessageGroups(activeMessages, minGroupSize: 1)) { group in
+                if group.isTransientGroup {
+                    ChatTransientGroupSummaryView(messages: group.messages)
+                        .id(group.id)
+                        .transition(streamFadeTransition(role: .assistant))
+                } else if let message = group.messages.first {
                     ChatMessageBubble(message: message)
                         .id(message.id)
-                        .transition(streamFadeTransition(role: .assistant))
+                        .transition(streamFadeTransition(role: message.role))
                 }
             }
         }

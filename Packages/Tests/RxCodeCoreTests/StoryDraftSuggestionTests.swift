@@ -34,6 +34,22 @@ struct StoryDraftSuggestionTests {
         #expect(draft?.tasks[3].details == "")
     }
 
+    @Test("Parses each task's size and drops unknown or malformed sizes")
+    func parsesSize() {
+        let raw = #"""
+        {"title":"Search","tasks":[
+          {"title":"A","size":" L "},
+          {"title":"B","size":"xs"},
+          {"title":"C","size":"huge"},
+          {"title":"D","size":3},
+          {"title":"E"}
+        ]}
+        """#
+        let draft = StoryDraftSuggestion.parse(raw)
+        #expect(draft?.tasks.map(\.size) == [.l, .xs, nil, nil, nil])
+        #expect(StoryDraftSuggestion.prompt(source: "x").contains("[xs, s, m, l, xl]"))
+    }
+
     @Test("Prompt asks for sequential starts-after links")
     func promptMentionsStartsAfter() {
         #expect(StoryDraftSuggestion.prompt(source: "x").contains("starts_after"))

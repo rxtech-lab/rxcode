@@ -47,10 +47,12 @@ public struct ToolActivityGroupView: View {
                 HStack(spacing: 12) {
                     ToolActivityBadge(status: overallStatus, systemImage: "wrench.and.screwdriver.fill", size: 32)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(tools.count == 1 ? "1 tool call" : "\(tools.count) tool calls")
+                        Text(tools.last?.name ?? "Tool calls")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        Text(summary)
+                        Text("\(tools.count == 1 ? "1 tool call" : "\(tools.count) tool calls") · \(summary)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .contentTransition(.numericText())

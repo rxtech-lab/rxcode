@@ -20,7 +20,7 @@ public struct LocalFileLink: Sendable, Equatable, Identifiable {
 
     public static func parsePathString(_ value: String) -> LocalFileLink? {
         let decoded = value.removingPercentEncoding ?? value
-        let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = unwrappedMarkdownPath(decoded.trimmingCharacters(in: .whitespacesAndNewlines))
         guard trimmed.hasPrefix("/") else { return nil }
 
         let parsed = stripLocationSuffix(from: trimmed)
@@ -30,6 +30,21 @@ public struct LocalFileLink: Sendable, Equatable, Identifiable {
             .standardizedFileURL
             .path
         return LocalFileLink(path: standardized, line: parsed.line, column: parsed.column)
+    }
+
+    /// Some Markdown renderers resolve `<...>` destinations as relative file
+    /// URLs before delivering them, producing `/base/</absolute/path>`.
+    /// Recover only a complete wrapper around an absolute path, never a lone
+    /// angle bracket that could legitimately be part of the filename.
+    private static func unwrappedMarkdownPath(_ value: String) -> String {
+        guard value.hasSuffix(">") else { return value }
+        if value.hasPrefix("</") {
+            return String(value.dropFirst().dropLast())
+        }
+        if let wrapper = value.range(of: "/</") {
+            return "/" + String(value[wrapper.upperBound...].dropLast())
+        }
+        return value
     }
 
     private static func localPathString(from url: URL) -> String? {

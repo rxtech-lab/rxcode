@@ -356,6 +356,11 @@ extension AppState {
             )
             allSessionSummaries.insert(placeholder.summary, at: 0)
             threadStore.upsert(placeholder.summary)
+        } else if let index = allSessionSummaries.firstIndex(where: { $0.id == sessionKey }) {
+            // Bring resumed task chats back into the visible sidebar immediately,
+            // before streaming defers summary updates until completion.
+            allSessionSummaries[index].updatedAt = lastResponseDate(from: stateForSession(sessionKey).messages)
+            threadStore.upsert(allSessionSummaries[index])
         }
 
         // Kick off LLM title generation as soon as the first user message lands —

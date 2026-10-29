@@ -8,6 +8,7 @@ struct UsageCardEditor: View {
     @State private var deleting = false
     @State private var saving = false
     @State private var error: String?
+    @State private var name = ""
 
     private var snapshot: UsagePluginSnapshot? { appState.usageDashboard.snapshot(for: card) }
     private var existing: Bool { appState.usageDashboard.cards.contains { $0.id == card.id } }
@@ -16,11 +17,23 @@ struct UsageCardEditor: View {
         NavigationStack {
             HStack(spacing: 0) {
                 Form {
+                    Section("Integration") {
+                        TextField("Name", text: $name)
+                        Text("Renaming applies to every card view of this integration.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Section("Appearance") {
                         Picker("Style", selection: $card.style) {
                             ForEach(UsageCardConfiguration.styles, id: \.self) { Text($0.capitalized).tag($0) }
                         }
                         Text(styleDescription).font(.caption).foregroundStyle(.secondary)
+                        Picker("Size", selection: Binding(get: { card.size ?? "default" },
+                                                          set: { card.size = $0 == "default" ? nil : $0 })) {
+                            Text("Default (\(UsageCardSize.defaultSize(forStyle: card.style).title))").tag("default")
+                            ForEach(UsageCardSize.allCases) { Text($0.title).tag($0.rawValue) }
+                        }
+                        Text("Like widgets, cards take 1 to 4 grid cells and the briefing arranges them to fill gaps.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     Section("Metrics") {
                         Toggle("All metrics", isOn: Binding(
@@ -55,9 +68,13 @@ struct UsageCardEditor: View {
                     Text("Changes appear here as you edit. Click the card to preview its details.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     if let snapshot {
-                        ScrollView {
-                            UsageDashboardCard(snapshot: snapshot, configuration: card, allowsEditing: false)
-                                .frame(maxWidth: 420).frame(maxWidth: .infinity)
+                        ScrollView([.horizontal, .vertical]) {
+                            UsageCardGridLayout(maximumColumns: card.cardSize.columns) {
+                                UsageDashboardCard(snapshot: snapshot, configuration: card, allowsEditing: false)
+                                    .usageCardSize(card.cardSize)
+                            }
+                            .frame(width: previewWidth)
+                            .frame(maxWidth: .infinity)
                         }
                         Text("The preview uses the latest saved usage. Widget layouts adapt to the widget size.")
                             .font(.caption).foregroundStyle(.secondary)
@@ -75,12 +92,16 @@ struct UsageCardEditor: View {
             .navigationTitle(existing ? "Edit card view" : "Add card view")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save(remove: false) } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save(remove: false) }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
             .disabled(saving)
         }
         .frame(minWidth: 820, idealWidth: 900, minHeight: 560, idealHeight: 620, maxHeight: .infinity)
         .interactiveDismissDisabled(saving)
+        .onAppear { name = appState.usageDashboard.integrations.first { $0.id == card.integrationID }?.title ?? "" }
         .confirmationDialog("Delete this card view?", isPresented: $deleting) {
             Button("Delete card", role: .destructive) { save(remove: true) }
         }
@@ -94,10 +115,16 @@ struct UsageCardEditor: View {
 
     private var styleDescription: String {
         switch card.style {
-        case "compact": "A short card with one inline metric and minimal detail."
-        case "metrics": "A detailed table of all selected metrics, with usage bars for percentages."
-        default: "A large headline value with up to two supporting metrics."
+        case "compact": "Shows only the first selected metric. Defaults to the small size."
+        case "metrics": "A table of the selected metrics, with usage bars for percentages. Defaults to the large size."
+        default: "A headline value with supporting metrics. Defaults to the medium size."
         }
+    }
+
+    /// Matches the card's footprint on a briefing grid with 160 pt cells.
+    private var previewWidth: CGFloat {
+        let columns = CGFloat(card.cardSize.columns)
+        return columns * 160 + (columns - 1) * 12
     }
 
     private var availableMetricIDs: [String] {
@@ -124,6 +151,13 @@ struct UsageCardEditor: View {
         if let index = dashboard.cards.firstIndex(where: { $0.id == card.id }) {
             if remove { dashboard.cards.remove(at: index) } else { dashboard.cards[index] = card }
         } else if !remove { dashboard.cards.append(card) }
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !remove, !title.isEmpty, let index = dashboard.integrations.firstIndex(where: { $0.id == card.integrationID }) {
+            dashboard.integrations[index].title = title
+            for i in dashboard.snapshots.indices where dashboard.snapshots[i].id == card.integrationID {
+                dashboard.snapshots[i].title = title
+            }
+        }
         Task {
             let saved = await appState.updateUsageDashboard(dashboard)
             saving = false

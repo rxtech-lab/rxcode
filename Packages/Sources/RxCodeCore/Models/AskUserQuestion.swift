@@ -104,6 +104,23 @@ public struct AskUserQuestion: Sendable, Equatable {
         return lines.joined(separator: "\n")
     }
 
+    /// The answers written as a chat message, pairing each answered question with
+    /// its answer. Used when the turn that asked has already ended, so the agent
+    /// gets the answers as a new message rather than as the tool result.
+    public static func followUpPrompt(questions: [Question], answers: [Int: Answer]) -> String {
+        var lines: [String] = []
+        for (index, question) in questions.enumerated() {
+            guard let answer = answers[index] else { continue }
+            let value: String
+            switch answer {
+            case .single(let label): value = label
+            case .multi(let labels): value = labels.joined(separator: ", ")
+            }
+            lines.append("You asked: \(question.question)\nMy answer: \(value)")
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
     /// Decode from the raw `[String: JSONValue]` tool-use input.
     /// Returns nil if the payload is not shaped like an AskUserQuestion input.
     public init?(input: [String: JSONValue]) {

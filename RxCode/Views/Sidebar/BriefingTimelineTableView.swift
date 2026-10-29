@@ -19,6 +19,70 @@ struct BriefingTimelineSectionAnchor {
     let rowId: String
 }
 
+/// Whether the timeline is scrolling. Only hover effects read it, and it
+/// changes once when scrolling starts and once when it settles.
+@MainActor
+@Observable
+final class BriefingTimelineScrollActivity {
+    private(set) var isScrolling = false
+    @ObservationIgnored private var settleWork: DispatchWorkItem?
+
+    /// Mirrors `isScrolling` for performance logs without registering an
+    /// observation dependency.
+    @ObservationIgnored static var isAnyScrolling = false
+
+    // Per-scroll-session frame stats for PERFORMANCE logs.
+    @ObservationIgnored private var sessionStart: UInt64 = 0
+    @ObservationIgnored private var lastScrollTime: UInt64 = 0
+    @ObservationIgnored private var frameCount = 0
+    @ObservationIgnored private var maxGap: Double = 0
+    @ObservationIgnored private var hitchCount = 0
+    @ObservationIgnored private var startOffset: CGFloat = 0
+    @ObservationIgnored private var lastOffset: CGFloat = 0
+
+    func noteScroll(offset: CGFloat) {
+        let now = DispatchTime.now().uptimeNanoseconds
+        if !isScrolling {
+            isScrolling = true
+            Self.isAnyScrolling = true
+            sessionStart = now
+            frameCount = 0
+            maxGap = 0
+            hitchCount = 0
+            startOffset = offset
+            BriefingPerformanceLog.log("scroll began at offset \(Int(offset))")
+        } else {
+            let gap = Double(now - lastScrollTime) / 1_000_000
+            maxGap = max(maxGap, gap)
+            if gap > 33 {
+                hitchCount += 1
+                BriefingPerformanceLog.log("scroll hitch: \(BriefingPerformanceLog.format(gap))ms between scroll updates at offset \(Int(offset))")
+            }
+        }
+        frameCount += 1
+        lastScrollTime = now
+        lastOffset = offset
+        settleWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.endScroll() }
+        }
+        settleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    private func endScroll() {
+        isScrolling = false
+        Self.isAnyScrolling = false
+        let duration = Double(lastScrollTime - sessionStart) / 1_000_000
+        let fps = duration > 0 ? Double(frameCount - 1) / (duration / 1000) : 0
+        BriefingPerformanceLog.log(
+            "scroll ended: \(frameCount) updates over \(BriefingPerformanceLog.format(duration))ms "
+            + "(~\(Int(fps)) updates/s), max gap \(BriefingPerformanceLog.format(maxGap))ms, "
+            + "\(hitchCount) hitches >33ms, offset \(Int(startOffset)) -> \(Int(lastOffset))"
+        )
+    }
+}
+
 /// AppKit-backed briefing timeline. SwiftUI's `ScrollView` re-evaluated card
 /// bodies while scrolling; here each row is an `NSHostingView` inside an
 /// `NSTableView`, so scrolling only moves the clip view and rows are created
@@ -91,18 +155,24 @@ struct BriefingTimelineTableView: NSViewRepresentable {
         private var onWidthChange: (CGFloat) -> Void = { _ in }
         private var appState: AppState?
         private var windowState: WindowState?
+        private let scrollActivity = BriefingTimelineScrollActivity()
 
         private var rows: [BriefingTimelineRow] = []
         private var rowIndexById: [String: Int] = [:]
         private var anchors: [BriefingTimelineSectionAnchor] = []
 
-        private var hostingViews: [String: NSHostingView<AnyView>] = [:]
+        private var hostingViews: [String: BriefingTimelineHostingView] = [:]
         /// Cached rows whose content changed while they were off screen.
         private var staleRowIds: Set<String> = []
         private var measuredHeights: [String: CGFloat] = [:]
         private var pendingHeights: [String: CGFloat] = [:]
         private var isHeightFlushScheduled = false
         private var lastWidth: CGFloat = 0
+        /// Last values written to `metrics`. Compared instead of reading
+        /// `metrics` itself: `update` runs inside `updateNSView`, so reading the
+        /// observable there would re-run `updateNSView` on every scroll frame.
+        private var lastMetricsValue: BriefingTimelineScrollMetrics.Value?
+        private var lastMarkers: [BriefingTimelineMarker]?
 
         func configure(from view: BriefingTimelineTableView) {
             appState = view.appState
@@ -110,6 +180,8 @@ struct BriefingTimelineTableView: NSViewRepresentable {
             onWidthChange = view.onWidthChange
             if metrics !== view.metrics {
                 metrics = view.metrics
+                lastMetricsValue = nil
+                lastMarkers = nil
                 view.metrics.scrollHandler = { [weak self] offset in
                     self?.scroll(to: offset)
                 }
@@ -148,6 +220,17 @@ struct BriefingTimelineTableView: NSViewRepresentable {
         // MARK: Updates
 
         func update(rows newRows: [BriefingTimelineRow], anchors newAnchors: [BriefingTimelineSectionAnchor]) {
+            let updateStart = DispatchTime.now().uptimeNanoseconds
+            var refreshedVisible: [String] = []
+            var markedStale = 0
+            defer {
+                BriefingPerformanceLog.log(
+                    "table update\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : ""): "
+                    + "\(rows.count) rows, \(hostingViews.count) cached hosting views, "
+                    + "refreshed \(refreshedVisible.count) visible rows \(refreshedVisible), marked \(markedStale) stale, "
+                    + "took \(BriefingPerformanceLog.format(BriefingPerformanceLog.milliseconds(since: updateStart)))ms"
+                )
+            }
             let oldIds = rows.map(\.id)
             let newIds = newRows.map(\.id)
             rows = newRows
@@ -161,6 +244,7 @@ struct BriefingTimelineTableView: NSViewRepresentable {
 
             guard let tableView else { return }
             if oldIds != newIds {
+                BriefingPerformanceLog.log("table structural change: \(oldIds.count) -> \(newIds.count) rows")
                 applyStructuralChanges(from: oldIds, to: newIds, in: tableView)
             }
 
@@ -170,8 +254,10 @@ struct BriefingTimelineTableView: NSViewRepresentable {
                 guard let index = rowIndexById[id] else { continue }
                 if tableView.view(atColumn: 0, row: index, makeIfNecessary: false) === hostingView {
                     hostingView.rootView = rootView(for: rows[index])
+                    refreshedVisible.append(id)
                 } else {
                     staleRowIds.insert(id)
+                    markedStale += 1
                 }
             }
             refreshMarkers()
@@ -191,6 +277,7 @@ struct BriefingTimelineTableView: NSViewRepresentable {
             // when a column-count change regroups every card row.
             guard !oldIds.isEmpty, tableView.window != nil,
                   removals.count + insertions.count <= Self.maximumAnimatedChanges else {
+                BriefingPerformanceLog.log("table reloadData (\(removals.count) removals, \(insertions.count) insertions)")
                 tableView.reloadData()
                 return
             }
@@ -207,13 +294,13 @@ struct BriefingTimelineTableView: NSViewRepresentable {
         private func rootView(for row: BriefingTimelineRow) -> AnyView {
             let id = row.id
             var root = AnyView(
-                BriefingTimelineRowRoot(content: row.content) { [weak self] height in
+                BriefingTimelineRowRoot(id: id, content: row.content) { [weak self] height in
                     self?.rowHeightDidChange(id: id, height: height)
                 }
             )
             if let appState { root = AnyView(root.environment(appState)) }
             if let windowState { root = AnyView(root.environment(windowState)) }
-            return root
+            return AnyView(root.environment(scrollActivity))
         }
 
         // MARK: Row heights
@@ -259,6 +346,10 @@ struct BriefingTimelineTableView: NSViewRepresentable {
                 }
             }
             guard !changed.isEmpty else { return }
+            BriefingPerformanceLog.log(
+                "row heights changed\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : ""): "
+                + "\(changed.count) rows \(changed.map { rows[$0].id }), anchor delta \(anchorDelta)"
+            )
 
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0
@@ -292,7 +383,8 @@ struct BriefingTimelineTableView: NSViewRepresentable {
                 offset: scrollView.contentView.bounds.minY + scrollView.contentInsets.top,
                 maxOffset: maxOffset(in: scrollView)
             )
-            if metrics.value != value {
+            if lastMetricsValue != value {
+                lastMetricsValue = value
                 metrics.value = value
             }
         }
@@ -304,7 +396,8 @@ struct BriefingTimelineTableView: NSViewRepresentable {
                 return BriefingTimelineMarker(id: anchor.id, date: anchor.date, offset: tableView.rect(ofRow: index).minY)
             }
             .sorted { $0.offset < $1.offset }
-            if metrics.markers != markers {
+            if lastMarkers != markers {
+                lastMarkers = markers
                 metrics.markers = markers
             }
         }
@@ -318,6 +411,9 @@ struct BriefingTimelineTableView: NSViewRepresentable {
         }
 
         @objc private func clipBoundsDidChange(_ notification: Notification) {
+            if let scrollView {
+                scrollActivity.noteScroll(offset: scrollView.contentView.bounds.minY)
+            }
             refreshScrollMetrics()
         }
 
@@ -325,6 +421,7 @@ struct BriefingTimelineTableView: NSViewRepresentable {
             guard let scrollView, let tableView else { return }
             let width = scrollView.contentView.bounds.width
             if abs(width - lastWidth) >= 0.5 {
+                BriefingPerformanceLog.log("timeline width changed \(Int(lastWidth)) -> \(Int(width))")
                 lastWidth = width
                 tableView.tableColumns.first?.width = width
                 let onWidthChange = self.onWidthChange
@@ -350,11 +447,22 @@ struct BriefingTimelineTableView: NSViewRepresentable {
             let timelineRow = rows[row]
             if let hostingView = hostingViews[timelineRow.id] {
                 if staleRowIds.remove(timelineRow.id) != nil {
+                    BriefingPerformanceLog.log(
+                        "refreshing stale row \(timelineRow.id)\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "")"
+                    )
                     hostingView.rootView = rootView(for: timelineRow)
                 }
                 return hostingView
             }
-            let hostingView = NSHostingView(rootView: rootView(for: timelineRow))
+            let creationStart = DispatchTime.now().uptimeNanoseconds
+            defer {
+                BriefingPerformanceLog.log(
+                    "created hosting view for row \(timelineRow.id)\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "") "
+                    + "in \(BriefingPerformanceLog.format(BriefingPerformanceLog.milliseconds(since: creationStart)))ms"
+                )
+            }
+            let hostingView = BriefingTimelineHostingView(rootView: rootView(for: timelineRow))
+            hostingView.rowId = timelineRow.id
             // The table owns the frame; the row reports its natural height itself.
             hostingView.sizingOptions = []
             // Rows scroll under the transparent titlebar. With safe areas on, the
@@ -378,14 +486,36 @@ struct BriefingTimelineTableView: NSViewRepresentable {
 /// Lays a row out at its natural height and reports that height so the table
 /// can size the row to match.
 private struct BriefingTimelineRowRoot: View {
+    let id: String
     let content: @MainActor () -> AnyView
     let onHeightChange: (CGFloat) -> Void
 
     var body: some View {
-        content()
+        BriefingPerformanceLog.measure(
+            "row body \(id)\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "")"
+        ) {
+            content()
+        }
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHeightChange($0) }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// Row hosting view that logs slow layout passes (PERFORMANCE logs).
+private final class BriefingTimelineHostingView: NSHostingView<AnyView> {
+    var rowId = ""
+
+    override func layout() {
+        let start = DispatchTime.now().uptimeNanoseconds
+        super.layout()
+        let elapsed = BriefingPerformanceLog.milliseconds(since: start)
+        if elapsed >= 2 {
+            BriefingPerformanceLog.log(
+                "row layout \(rowId)\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "") "
+                + "took \(BriefingPerformanceLog.format(elapsed))ms (size \(Int(bounds.width))x\(Int(bounds.height)))"
+            )
+        }
     }
 }
 

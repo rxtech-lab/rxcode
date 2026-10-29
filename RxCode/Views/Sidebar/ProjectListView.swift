@@ -155,6 +155,7 @@ struct ProjectListView: View {
                         .font(.body)
                         .foregroundStyle(ClaudeTheme.textPrimary)
                         .lineLimit(1)
+                    ProjectInProgressBadge(count: appState.taskBoard(for: project.id).inProgressTaskCount)
                 }
 
                 Text(truncatedPath(project.path))
@@ -195,6 +196,27 @@ struct ProjectListView: View {
 
         Task {
             await appState.addProjectFromFolder(url, in: windowState)
+        }
+    }
+}
+
+/// A project-wide count, kept separate from permission and chat attention badges.
+struct ProjectInProgressBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(count, format: .number)
+                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(ClaudeTheme.statusWarning)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(ClaudeTheme.statusWarning.opacity(0.14), in: Capsule())
+                .fixedSize()
+                .help(Text("\(count) tasks in progress"))
+                .accessibilityLabel(Text("\(count) tasks in progress"))
+                .accessibilityIdentifier("project-in-progress-count")
         }
     }
 }

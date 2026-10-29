@@ -1,14 +1,21 @@
 {
   "fill" : {
-    "solid" : "extended-srgb:1.00000,0.55294,0.15686,1.00000"
+    "solid" : "extended-srgb:0.02353,0.08627,0.21961,1.00000"
   },
   "groups" : [
     {
       "layers" : [
         {
-          "glass" : true,
-          "image-name" : "image 2.png",
-          "name" : "image 2"
+          "image-name" : "layer-teal.png",
+          "name" : "layer-teal"
+        },
+        {
+          "image-name" : "layer-mint.png",
+          "name" : "layer-mint"
+        },
+        {
+          "image-name" : "layer-ice-blue.png",
+          "name" : "layer-ice-blue"
         }
       ],
       "shadow" : {

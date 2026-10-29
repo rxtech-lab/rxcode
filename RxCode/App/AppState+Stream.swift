@@ -518,6 +518,9 @@ extension AppState {
         window.showError = false
         window.errorMessage = nil
 
+        let cancelledPermissionIds = await permission.cancelPending(sessionId: key)
+        clearAutoResolvedPermissions(cancelledPermissionIds)
+
         if let streamToCancel {
             let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
             await backend(for: provider).cancel(streamId: streamToCancel)
@@ -661,6 +664,8 @@ extension AppState {
         in window: WindowState
     ) async {
         let key = window.currentSessionId ?? window.newSessionKey
+        let turnEnded = !isSessionTurnRunning(key)
+        var followUp: String?
 
         var updatedInput = JSONValue.object([
             "questions": .array([]),
@@ -680,6 +685,7 @@ extension AppState {
                 )
                 let summary = AskUserQuestion.summary(questions: parsed.questions, answers: answers)
                 state.messages[i].setToolResult(id: toolUseId, result: summary, isError: false)
+                followUp = AskUserQuestion.followUpPrompt(questions: parsed.questions, answers: answers)
                 return
             }
         }
@@ -695,6 +701,7 @@ extension AppState {
                 questions: parsed.questions,
                 answers: answers
             )
+            followUp = AskUserQuestion.followUpPrompt(questions: parsed.questions, answers: answers)
         }
 
         window.pendingPermissions.removeAll { $0.id == toolUseId }
@@ -708,6 +715,12 @@ extension AppState {
         broadcastMobileQuestionQueue()
 
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
+
+        // The turn that asked already ended, so nothing reads the tool result —
+        // send the answers as a new message to continue the thread.
+        if turnEnded, let followUp, !followUp.isEmpty {
+            await sendLatePromptAnswer(followUp, sessionKey: key)
+        }
     }
 
     /// User dismissed the question sheet without answering — resolve the hook as deny so
@@ -753,6 +766,7 @@ extension AppState {
             answers: answers
         )
         let summary = AskUserQuestion.summary(questions: parsed.questions, answers: answers)
+        let turnEnded = request.sessionId.map { !isSessionTurnRunning($0) } ?? false
 
         if let sessionId = request.sessionId {
             updateState(sessionId) { state in
@@ -766,6 +780,13 @@ extension AppState {
 
         clearPendingQuestion(toolUseId: toolUseId, sessionId: request.sessionId)
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
+
+        if turnEnded, let sessionId = request.sessionId {
+            let followUp = AskUserQuestion.followUpPrompt(questions: parsed.questions, answers: answers)
+            if !followUp.isEmpty {
+                await sendLatePromptAnswer(followUp, sessionKey: sessionId)
+            }
+        }
     }
 
     /// Apply a plan decision that arrived from a paired mobile device. Builds a

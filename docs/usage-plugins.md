@@ -60,11 +60,21 @@ accepted by the agent tool or sent in mobile/widget snapshots.
 
 ## Providers
 
-- Vercel: OAuth public PKCE client; callback `rxcode://usage-oauth`. Request
-  `openid offline_access` and configure **Billing: Read Only** in the provider
-  app. Vercel documents team API permissions as private beta. Uses
-  `GET /v1/billing/charges`, parses JSONL, sums BilledCost by currency/service,
-  and optionally filters `Tags.ProjectId`. Window: last 30 days.
+- Vercel: uses a Vercel access token and optional team ID/slug. OAuth is
+  hidden while team/billing permissions remain restricted. A blank team resolves
+  to the token user's default team. `GET /v1/billing/charges` streams FOCUS JSONL;
+  billable usage sums `BilledCost` separately for each currency, with optional
+  `Tags.ProjectId` filtering. Service metric IDs remain available for custom views
+  and details. The default summary emphasizes billable usage and AI Gateway credits.
+  Billing covers the last 30 days, not the dashboard's billing cycle. This view
+  does not derive included-credit limits or on-demand charges from plan prices.
+  The integration sheet accepts a separate optional AI Gateway key from the same
+  team, stored only in Keychain. `GET https://ai-gateway.vercel.sh/v1/credits`
+  supplies the remaining USD balance; `total_used` is labeled lifetime spend.
+  Gateway balance is team-wide even when billing is filtered to a project.
+  Missing, denied, or malformed credit data shows Unavailable with guidance while
+  successful billing data remains visible. Empty billing exports remain unavailable.
+  Credentials never enter snapshots, sync, widgets, or agent tools.
 - Neon: organization ID and management API key. Uses
   `/api/v2/consumption_history/v2/projects`, daily granularity, follows project
   cursors. Optional provider project ID; omitted means all projects in that
@@ -74,8 +84,34 @@ accepted by the agent tool or sent in mobile/widget snapshots.
   Organization usage uses the current billing period. Optional database name
   uses `/databases/{name}/usage` over 30 days. Reads aggregate totals once.
 - Cloudflare: public OAuth PKCE client and explicit scopes configured in the
-  application. Account billing usage reports product consumption, not invoice
-  cost. The usage scope picker supports account consumption, zone traffic,
+  application. The bundled RxCode client defaults empty scope settings to
+  `account-analytics.read workers-r2.read zone.read memberships.read`. The previous
+  bundled default scope list is upgraded to include membership discovery; other
+  explicitly configured scopes and custom clients are preserved. Cloudflare only displays permissions requested
+  in the authorization URL, so changing the client registration alone does not
+  fix an empty consent screen. Custom clients must specify their registered scopes.
+  The sign-in UI uses the existing app configuration without exposing OAuth setup.
+  After sign-in, `GET /memberships` discovers accepted account memberships using
+  `memberships.read`. A sole account is selected when no account ID is saved;
+  multiple accounts use a picker. Discovery failure retains manual ID entry.
+  Existing tokens may need a fresh sign-in to grant membership read access.
+  Register `http://localhost:47616/oauth/callback` as the redirect URL
+  (or configure another explicit HTTP loopback port with `/oauth/callback`). Use
+  Authorization Code with PKCE S256 and token authentication method `none`.
+  RxCode receives the browser redirect on a temporary loopback HTTP listener;
+  legacy `rxcode://usage-oauth` configurations default to the HTTP callback. Account billing usage uses `/accounts/{account_id}/billable-usage` for the
+  current billing period and sums FOCUS `ConsumedQuantity` by `ServiceName` and
+  `ConsumedUnit`, without summing cumulative pricing fields. The first metric,
+  `billable|<currency>`, sums per-charge-period `BilledCost` by `BillingCurrency`
+  (never `CumulatedContractedCost`) so cards and widgets lead with the current
+  period's usage-based charges. Plan subscription fees are not included, and
+  Cloudflare updates the data daily. Cloudflare OAuth apps cannot request Billing
+  Read (no billing scope exists in the OAuth catalogue), so account consumption
+  accepts an optional Cloudflare API token with Account > Billing > Read. The token
+  is stored only in Keychain (`com.rxlab.RxCode.usage.billing`), used only for
+  `/billable-usage`, and replaces the OAuth token for that request. Without it, a
+  billing 403 asks for the token or suggests resource analytics; with it, a 403
+  asks the user to check the token's Billing Read permission. The usage scope picker supports account consumption, zone traffic,
   a Worker script, or an R2 bucket. Resource analytics use the GraphQL API:
   Workers report requests/errors; R2 reports operations and the latest sampled
   object data bytes, metadata bytes, and object count. The analytics window is
@@ -154,3 +190,33 @@ Provider references:
 - https://developers.cloudflare.com/fundamentals/oauth/integrate-with-cloudflare/
 - https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/configuration/observability/
 - https://developers.cloudflare.com/r2/platform/metrics-analytics/
+
+## Installed ACP client reports
+
+OpenCode and Antigravity receive usage integrations automatically when installed
+and enabled in RxCode. Each integration targets one installed client. The usage
+manager's existing full-height connection sheet allows editing its title,
+client, and card views. Removing a client removes its usage integration and cards.
+Disabled or missing clients do not make provider requests.
+
+- **OpenCode Go**: GET `https://opencode.ai/inference/go/v1/usage`, using the
+  client's `OPENCODE_API_KEY`, active OpenCode SQLite credential, or legacy
+  `opencode-go` entry in `auth.json` under `XDG_DATA_HOME/opencode`. Reports
+  rolling, weekly, and monthly percentages when supplied by the API. It does
+  not report arbitrary OpenCode upstream accounts or prepaid Zen balances.
+- **Antigravity**: POST `{}` to
+  `https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary`,
+  using the existing `gemini` / `antigravity` macOS Keychain login. Reports
+  enabled quota buckets as percent used, with provider reset times. This is an
+  internal Google API and may deny quota access for some accounts. Unsupported
+  responses remain unavailable rather than being interpreted as zero usage.
+
+RxCode reads credentials on each refresh; the clients retain responsibility for
+login and token refresh. Expired or denied credentials produce a visible error;
+previous snapshots keep their original timestamp and become stale. Credentials
+are never added to dashboard persistence, sync, widgets, or agent tool output.
+Snapshots use the existing normalized dashboard sync contract.
+
+Local HTTP verification is documented in
+`postman/simulations/acp-usage.context.md`. Live credentials, provider accuracy,
+native UI, and paired-device delivery remain unverified.

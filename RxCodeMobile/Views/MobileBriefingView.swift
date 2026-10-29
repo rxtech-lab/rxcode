@@ -43,9 +43,14 @@ struct MobileBriefingView: View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    ForEach(visibleUsageCards) { card in
-                        if let snapshot = state.usageDashboard.snapshot(for: card) {
-                            UsagePluginCard(snapshot: snapshot, configuration: card)
+                    if !visibleUsageCards.isEmpty {
+                        UsageCardGridLayout(minimumColumnWidth: 150, rowHeight: 170, spacing: 16) {
+                            ForEach(visibleUsageCards) { card in
+                                if let snapshot = state.usageDashboard.snapshot(for: card) {
+                                    UsagePluginCard(snapshot: snapshot, configuration: card)
+                                        .usageCardSize(card.cardSize)
+                                }
+                            }
                         }
                     }
                     if groups.isEmpty && documents.isEmpty && visibleUsageCards.isEmpty {

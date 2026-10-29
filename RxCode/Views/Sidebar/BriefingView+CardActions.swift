@@ -115,7 +115,7 @@ extension BriefingView {
     }
 
     func cardMenu(for group: BriefingGroup, project: Project) -> some View {
-        Menu {
+        BriefingDeferredMenu {
             Button {
                 if windowState.selectedProject?.id != project.id {
                     appState.selectProject(project, in: windowState)

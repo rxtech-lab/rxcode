@@ -107,6 +107,16 @@
         }
       }
     },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
     "%@ %@" : {
       "localizations" : {
         "en" : {
@@ -235,6 +245,7 @@
 
     },
     "%lld tools executed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1135,6 +1146,9 @@
         }
       }
     },
+    "Click to preview" : {
+
+    },
     "Client: %@" : {
       "localizations" : {
         "ko" : {
@@ -1786,6 +1800,9 @@
           }
         }
       }
+    },
+    "Couldn't show image" : {
+
     },
     "Create a branch of current conversation" : {
       "localizations" : {
@@ -2824,6 +2841,9 @@
     "Generated image" : {
 
     },
+    "Generating image" : {
+
+    },
     "Generating image…" : {
 
     },
@@ -2870,6 +2890,9 @@
           }
         }
       }
+    },
+    "Image generation failed" : {
+
     },
     "Image not available" : {
       "localizations" : {
@@ -4005,6 +4028,9 @@
       }
     },
     "Open MCP App" : {
+
+    },
+    "Open preview" : {
 
     },
     "Open the plan to accept or reject" : {

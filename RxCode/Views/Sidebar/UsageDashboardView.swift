@@ -11,6 +11,7 @@ struct UsageDashboardView: View {
         appState.usageDashboard.visibleCards(projectIDs: projectIds)
     }
     var body: some View {
+        let _ = BriefingPerformanceLog.log("usage dashboard body\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : ""): \(visibleCards.count) visible cards")
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Usage").font(.headline)
@@ -19,15 +20,23 @@ struct UsageDashboardView: View {
                 Button("Refresh", systemImage: "arrow.clockwise") { Task { await appState.refreshUsagePlugins() } }
                     .disabled(appState.usagePluginsRefreshing)
             }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), alignment: .top)], alignment: .leading) {
+            UsageCardGridLayout {
                 ForEach(visibleCards) { card in
                     if let snapshot = appState.usageDashboard.snapshot(for: card) {
-                        UsageDashboardCard(snapshot: snapshot, configuration: card)
+                        UsageDashboardCard(snapshot: snapshot, configuration: card,
+                                           isRefreshing: appState.usagePlugins.refreshingIntegrationIDs.contains(card.integrationID))
+                            .usageCardSize(card.cardSize)
                             .contextMenu {
                                 Button("Edit card…") { editingCard = card }
                                 Menu("Card style") {
                                     ForEach(UsageCardConfiguration.styles, id: \.self) { style in
-                                        Button(style.capitalized) { setStyle(style, card: card) }
+                                        Button(style.capitalized) { update(card) { $0.style = style } }
+                                    }
+                                }
+                                Menu("Card size") {
+                                    Button("Default") { update(card) { $0.size = nil } }
+                                    ForEach(UsageCardSize.allCases) { size in
+                                        Button(size.title) { update(card) { $0.size = size.rawValue } }
                                     }
                                 }
                                 Button("Add another view…") {
@@ -37,13 +46,13 @@ struct UsageDashboardView: View {
                     }
                 }
             }
+            .animation(.snappy, value: visibleCards)
             if visibleCards.isEmpty {
                 ContentUnavailableView("No usage cards", systemImage: "chart.bar",
                     description: Text("Manage cards to add an integration or show a card for these projects."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .overlay { if appState.usagePluginsRefreshing { ProgressView("Refreshing usage…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
         .overlay { if updatingStyle { ProgressView("Updating card…").padding().background(.regularMaterial) } }
         .sheet(isPresented: $managing) { UsageDashboardManager() }
         .sheet(item: $editingCard) { UsageCardEditor(card: $0) }
@@ -51,10 +60,10 @@ struct UsageDashboardView: View {
             Button("OK") { appState.usageDashboardError = nil }
         } message: { Text(appState.usageDashboardError ?? "") }
     }
-    private func setStyle(_ style: String, card: UsageCardConfiguration) {
+    private func update(_ card: UsageCardConfiguration, _ change: (inout UsageCardConfiguration) -> Void) {
         var dashboard = appState.usageDashboard
         guard let index = dashboard.cards.firstIndex(where: { $0.id == card.id }) else { return }
-        dashboard.cards[index].style = style
+        change(&dashboard.cards[index])
         updatingStyle = true
         Task { _ = await appState.updateUsageDashboard(dashboard); updatingStyle = false }
     }

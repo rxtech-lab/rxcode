@@ -24,6 +24,10 @@ extension AppState {
                 guard UsageCardConfiguration.styles.contains(style) else { throw IDEToolError.invalidArguments("Unsupported card style.") }
                 card.style = style
             }
+            if let size = arguments["size"]?.stringValue {
+                guard UsageCardSize.optionValues.contains(size) else { throw IDEToolError.invalidArguments("Unsupported card size.") }
+                card.size = size == "default" ? nil : size
+            }
             if let raw = arguments["metric_ids"] {
                 guard let values = raw.arrayValue, values.allSatisfy({ $0.stringValue?.isEmpty == false }) else {
                     throw IDEToolError.invalidArguments("metric_ids must be an array of nonempty metric IDs; use [] for all metrics.")

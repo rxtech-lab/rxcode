@@ -96,6 +96,9 @@ extension TaskFormSheet {
         } else {
             taskDraftSection
         }
+        // Deadline, size and delays the model filled in, editable like the
+        // rest of the draft.
+        scheduleSection
         assigneesSection
     }
 
@@ -156,6 +159,16 @@ extension TaskFormSheet {
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(ClaudeTheme.textTertiary)
                             .lineLimit(2)
+                    }
+                    if let size = draft.size {
+                        Label {
+                            Text("\(size.shortName) · \(size.displayNameText)")
+                        } icon: {
+                            Image(systemName: "ruler")
+                        }
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .lineLimit(1)
                     }
                     if let parent = storyTaskDrafts.first(where: { $0.id == draft.startsAfter }) {
                         Label {
@@ -472,9 +485,14 @@ extension TaskFormSheet {
         isGeneratingDraft = true
         draftError = nil
         defer { isGeneratingDraft = false }
-        let draft = await appState.suggestStoryDraft(source: String(source.prefix(30_000)), projectId: projectId)
+        var candidate = story
+        candidate.details = source
+        async let outline = appState.suggestStoryDraft(source: String(source.prefix(30_000)), projectId: projectId)
+        async let classification = appState.suggestClassification(for: candidate)
+        let (draft, suggestion) = await (outline, classification)
         guard isStory, draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines) == source,
               story.projectId == projectId else { return }
+        suggestion?.apply(to: &story, board: board)
         guard let draft else {
             let title = TaskTitleSuggestion.fallback(from: source)
             story.title = title
@@ -487,7 +505,8 @@ extension TaskFormSheet {
         story.details = source
         var drafts = draft.tasks.prefix(12).map {
             StoryTaskDraft(title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines),
-                           details: $0.details.trimmingCharacters(in: .whitespacesAndNewlines))
+                           details: $0.details.trimmingCharacters(in: .whitespacesAndNewlines),
+                           size: $0.size)
         }
         // Parsed links always point at an earlier task, so they stay inside
         // the kept prefix and can't form a cycle.
@@ -576,6 +595,9 @@ extension TaskFormSheet {
             task.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
             task.details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
             task.agent = storyDraftAgent
+            task.size = draft.size
+            // The story's deadline applies to all of its work.
+            task.deadline = story.deadline
             tasksByDraft[draft.id] = task
         }
         var saved: Set<UUID> = []
@@ -619,6 +641,13 @@ private struct StoryTaskDraftSheet: View {
                         .multilineTextAlignment(.leading)
                         .lineLimit(4...12)
                         .accessibilityIdentifier("story-draft-task-details")
+                    Picker("Size", selection: $draft.size) {
+                        Text("None").tag(TaskSize?.none)
+                        ForEach(TaskSize.allCases, id: \.self) { size in
+                            Text("\(size.shortName) · \(size.displayNameText)").tag(TaskSize?.some(size))
+                        }
+                    }
+                    .accessibilityIdentifier("story-draft-task-size")
                     if !startsAfterOptions.isEmpty {
                         Picker("Starts after", selection: $draft.startsAfter) {
                             Text("None").tag(UUID?.none)
@@ -651,7 +680,7 @@ private struct StoryTaskDraftSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 460, height: 400)
+        .frame(width: 460, height: 440)
     }
 }
 

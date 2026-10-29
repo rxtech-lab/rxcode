@@ -23,5 +23,20 @@ actor UsageDashboardStore {
     }
     func deleteCredential(id: UUID) throws {
         try KeychainHelper.delete(service: "com.rxlab.RxCode.usage", account: id.uuidString)
+        try KeychainHelper.delete(service: "com.rxlab.RxCode.usage.gateway", account: id.uuidString)
+        try KeychainHelper.delete(service: "com.rxlab.RxCode.usage.billing", account: id.uuidString)
+    }
+    func gatewayCredential(for id: UUID) -> String? {
+        KeychainHelper.readString(service: "com.rxlab.RxCode.usage.gateway", account: id.uuidString)
+    }
+    func saveGatewayCredential(_ value: String, id: UUID) throws {
+        try KeychainHelper.save(Data(value.utf8), service: "com.rxlab.RxCode.usage.gateway", account: id.uuidString)
+    }
+    /// Cloudflare OAuth apps cannot request Billing Read, so account billing usage uses a separate API token.
+    func billingCredential(for id: UUID) -> String? {
+        KeychainHelper.readString(service: "com.rxlab.RxCode.usage.billing", account: id.uuidString)
+    }
+    func saveBillingCredential(_ value: String, id: UUID) throws {
+        try KeychainHelper.save(Data(value.utf8), service: "com.rxlab.RxCode.usage.billing", account: id.uuidString)
     }
 }

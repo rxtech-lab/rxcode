@@ -32,7 +32,7 @@ extension AppState {
 
     /// The selected model's suggested properties for `task`, which may be an
     /// unsaved draft. `nil` when no agent could answer.
-    func suggestClassification(for task: ProjectTask) async -> TaskClassification? {
+    func suggestClassification(for task: ProjectTask, model: GeneralAIModel? = nil) async -> TaskClassification? {
         let board = taskBoard(for: task.projectId)
         let prompt = TaskClassification.prompt(
             title: task.title,
@@ -41,10 +41,10 @@ extension AppState {
             board: board,
             startsAfterCandidates: TaskClassification.startsAfterCandidates(for: task, board: board).map(\.title)
         )
-        return await parseTaskClassification(prompt: prompt, projectId: task.projectId)
+        return await parseTaskClassification(prompt: prompt, projectId: task.projectId, model: model)
     }
 
-    func suggestClassification(for story: ProjectStory) async -> TaskClassification? {
+    func suggestClassification(for story: ProjectStory, model: GeneralAIModel? = nil) async -> TaskClassification? {
         let prompt = TaskClassification.prompt(
             title: story.title,
             details: story.details,
@@ -52,11 +52,11 @@ extension AppState {
             board: taskBoard(for: story.projectId),
             isStory: true
         )
-        return await parseTaskClassification(prompt: prompt, projectId: story.projectId)
+        return await parseTaskClassification(prompt: prompt, projectId: story.projectId, model: model)
     }
 
-    private func parseTaskClassification(prompt: String, projectId: UUID) async -> TaskClassification? {
-        guard let raw = await runTaskAgentCompletion(prompt: prompt, projectId: projectId) else {
+    private func parseTaskClassification(prompt: String, projectId: UUID, model: GeneralAIModel?) async -> TaskClassification? {
+        guard let raw = await runTaskAgentCompletion(prompt: prompt, projectId: projectId, model: model) else {
             logger.warning("[Tasks] no classification response")
             return nil
         }

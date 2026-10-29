@@ -64,6 +64,19 @@
         }
       }
     },
+    "%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@%2$@"
+          }
+        }
+      }
+    },
+    "+%lld more" : {
+
+    },
     "│" : {
 
     },
@@ -407,9 +420,6 @@
         }
       }
     },
-    "Metric" : {
-
-    },
     "Midnight (Indigo)" : {
 
     },
@@ -548,6 +558,12 @@
       }
     },
     "Refresh this integration to collect its metrics." : {
+
+    },
+    "Refreshing usage" : {
+
+    },
+    "Refreshing…" : {
 
     },
     "Resets in %@" : {
@@ -761,9 +777,6 @@
 
     },
     "User" : {
-
-    },
-    "Value" : {
 
     },
     "Version" : {

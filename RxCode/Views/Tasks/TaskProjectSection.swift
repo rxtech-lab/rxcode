@@ -295,6 +295,7 @@ struct TaskProjectSection: View {
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
                 .layoutPriority(1)
+            ProjectInProgressBadge(count: board.inProgressTaskCount)
             Image(systemName: "chevron.right")
                 .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textTertiary)

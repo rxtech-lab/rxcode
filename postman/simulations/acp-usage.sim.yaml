@@ -1,0 +1,6 @@
+simulation: acp-usage
+routing: path
+mocks:
+  - name: acp-usage
+    routeKey: usage
+    path: postman/mocks/acp-usage/config.yaml

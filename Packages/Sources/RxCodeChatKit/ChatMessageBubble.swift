@@ -195,9 +195,7 @@ private struct CompactChatMessageBubble: View {
 
             guard let toolCall = block.toolCall else { continue }
             // Interactive questions, plan cards and json-render views retain their dedicated controls.
-            if ["askuserquestion", "exitplanmode", "exit_plan_mode"].contains(toolCall.name.lowercased())
-                || toolCall.name == ReviewCountdownCard.toolName
-                || JSONUITool.matches(toolCall) {
+            if !chatCanGroupTool(toolCall) {
                 flushTransientTools()
                 result.append(.tool(toolCall))
             } else {

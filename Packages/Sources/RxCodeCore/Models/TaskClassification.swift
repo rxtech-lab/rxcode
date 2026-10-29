@@ -4,6 +4,9 @@ import Foundation
 ///
 /// Every field is optional. Applying a suggestion only fills empty fields.
 public struct TaskClassification: Codable, Sendable, Hashable {
+    public var deadline: String?
+    public var size: String?
+    public var delays: [String]?
     public var type: String?
     public var priority: String?
     public var tags: [String]?
@@ -22,8 +25,14 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         version: String? = nil,
         milestone: String? = nil,
         story: String? = nil,
-        startsAfter: String? = nil
+        startsAfter: String? = nil,
+        deadline: String? = nil,
+        size: String? = nil,
+        delays: [String]? = nil
     ) {
+        self.deadline = deadline
+        self.size = size
+        self.delays = delays
         self.type = type
         self.priority = priority
         self.tags = tags
@@ -34,7 +43,7 @@ public struct TaskClassification: Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case type, priority, tags, version, milestone, story
+        case type, priority, tags, version, milestone, story, deadline, size, delays
         case startsAfter = "starts_after"
     }
 
@@ -48,6 +57,9 @@ public struct TaskClassification: Codable, Sendable, Hashable {
             if let value = try? container.decodeIfPresent(Double.self, forKey: key) { return String(value) }
             return nil
         }
+        deadline = text(.deadline)
+        size = text(.size)
+        delays = (try? container.decodeIfPresent([String].self, forKey: .delays)) ?? text(.delays).map { [$0] }
         type = text(.type)
         priority = text(.priority)
         version = text(.version)
@@ -97,7 +109,9 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         storyTitle: String?,
         board: TaskBoard,
         isStory: Bool = false,
-        startsAfterCandidates: [String] = []
+        startsAfterCandidates: [String] = [],
+        now: Date = Date(),
+        timeZone: TimeZone = .current
     ) -> String {
         func list(_ values: [String]) -> String {
             values.isEmpty ? "(none yet)" : values.joined(separator: ", ")
@@ -112,7 +126,7 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         var lines: [String] = [
             isStory ? "You classify a software story on a project board." : "You classify a software task on a project board.",
             "Reply with ONLY a JSON object, no prose and no markdown fences, with these keys:",
-            #"{"type": string|null, "priority": string|null, "tags": [string], "version": string|null, "milestone": string|null"# + storyKey + parentKey + "}",
+            #"{"type": string|null, "priority": string|null, "tags": [string], "version": string|null, "milestone": string|null, "deadline": string|null, "size": string|null, "delays": [string]"# + storyKey + parentKey + "}",
             "",
             "Rules:",
             "- type: exactly one of [\(board.effectiveTypes.map(\.name).joined(separator: ", "))], or null.",
@@ -120,6 +134,7 @@ public struct TaskClassification: Codable, Sendable, Hashable {
             "- tags: up to \(maxTags) short lowercase labels. Prefer existing tags: \(list(board.allTags)).",
             versionRule(board.allVersions),
             milestoneRule(board.allMilestones),
+            scheduleRules(now: now, timeZone: timeZone),
         ]
         if choosesStory {
             let titles = board.stories.map { "\"\($0.title)\"" }.joined(separator: ", ")
@@ -141,6 +156,18 @@ public struct TaskClassification: Codable, Sendable, Hashable {
             lines.append("Parent story: \(storyTitle)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Shared scheduling instructions for task and story suggestions.
+    private static func scheduleRules(now: Date, timeZone: TimeZone) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = timeZone
+        return """
+        - Current time: \(formatter.string(from: now)); timezone: \(timeZone.identifier). Resolve relative dates in this timezone.
+        - deadline: the due date stated in the request, as an ISO 8601 timestamp with timezone. For a date without a time use 18:00 local time. Use null when no deadline is stated; never invent one. If an extension gives a revised deadline, use the revised date.
+        - size: estimate the work as exactly one of [xs, s, m, l, xl]. XS is a tiny change, S a small focused change, M several related changes, L a substantial feature, XL a broad multi-part effort. Respect an explicit size in the request.
+        - delays: short reasons for delays or deadline extensions explicitly described in the request. Use [] when none are mentioned; never invent delay history, authors, or timestamps.
+        """
     }
 
     /// Version is filled whenever the board gives the model something to
@@ -180,6 +207,7 @@ public struct TaskClassification: Codable, Sendable, Hashable {
     /// filtered view — wins. Types and priorities that don't match the board
     /// are dropped rather than created.
     public func apply(to task: inout ProjectTask, board: TaskBoard) {
+        applySchedule(deadline: &task.deadline, size: &task.size, delays: &task.delays)
         // Matched against the candidates the prompt was built from, before
         // the story below can change them.
         if let title = Self.clean(startsAfter),
@@ -226,6 +254,7 @@ public struct TaskClassification: Codable, Sendable, Hashable {
 
     /// Stories share the same classification fields but do not carry an agent.
     public func apply(to story: inout ProjectStory, board: TaskBoard) {
+        applySchedule(deadline: &story.deadline, size: &story.size, delays: &story.delays)
         if story.typeId == nil, let type = Self.clean(type) {
             story.typeId = board.effectiveTypes.first {
                 $0.name.compare(type, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
@@ -245,6 +274,22 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         }
         for tag in suggested.prefix(Self.maxTags) where !story.tags.contains(tag) {
             story.tags.append(tag)
+        }
+    }
+
+    private func applySchedule(deadline: inout Date?, size: inout TaskSize?, delays: inout [TaskDelay]) {
+        if deadline == nil, let value = Self.clean(self.deadline) {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let fractional = formatter.date(from: value)
+            formatter.formatOptions = [.withInternetDateTime]
+            deadline = fractional ?? formatter.date(from: value)
+        }
+        if size == nil, let value = Self.clean(self.size)?.lowercased() {
+            size = TaskSize(rawValue: value)
+        }
+        if delays.isEmpty {
+            delays = (self.delays ?? []).compactMap(Self.clean).map { TaskDelay(reason: $0) }
         }
     }
 

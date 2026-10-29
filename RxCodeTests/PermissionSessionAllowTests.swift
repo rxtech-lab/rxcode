@@ -88,4 +88,36 @@ final class PermissionSessionAllowTests: XCTestCase {
         await server.stop()
     }
 
+    /// Regression: a cancelled turn must not leave a pending entry behind. Codex
+    /// request ids restart per process, and a leftover entry with a reused id made
+    /// the next computer-use request wait forever without showing a confirmation.
+    func testCancelPendingDeniesSessionRequestsAndAllowsFreshPrompt() async {
+        let server = PermissionServer()
+        let (_, stream) = await server.subscribe()
+        var iterator = stream.makeAsyncIterator()
+
+        let stale = Task { await server.requestDecision(toolUseId: "0", sessionId: "old", toolName: "mcp__cua_repl__js", toolInput: [:], mode: .auto) }
+        _ = await iterator.next()
+
+        let cancelled = await server.cancelPending(sessionId: "old")
+        XCTAssertEqual(cancelled, ["0"])
+        let staleDecision = await stale.value
+        XCTAssertEqual(staleDecision, .deny)
+
+        let fresh = Task { await server.requestDecision(toolUseId: "0", sessionId: "new", toolName: "mcp__cua_repl__js", toolInput: [:], mode: .auto) }
+        let broadcast = await iterator.next()
+        XCTAssertEqual(broadcast?.sessionId, "new")
+        await server.respond(toolUseId: "0", decision: .allowSessionTool)
+        let freshDecision = await fresh.value
+        XCTAssertEqual(freshDecision, .allow)
+        await server.stop()
+    }
+
+    func testCodexPermissionIdsNeverReuseJSONRPCIds() {
+        let first = CodexAppServer.permissionToolUseId(params: [:], keys: ["elicitationId"])
+        let second = CodexAppServer.permissionToolUseId(params: [:], keys: ["elicitationId"])
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(CodexAppServer.permissionToolUseId(params: ["itemId": .string("item-1")], keys: ["itemId"]), "item-1")
+    }
+
 }

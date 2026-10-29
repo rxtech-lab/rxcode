@@ -86,7 +86,7 @@ extension AppState {
             }
         } onCancel: {
             Task { @MainActor [weak self] in
-                self?.resolveAgentConfirmation(id: id, confirmed: false)
+                self?.settleAgentConfirmation(id: id, confirmed: false)
             }
         }
     }
@@ -103,11 +103,60 @@ extension AppState {
         agentPrompts.confirmations[index].isMinimized = minimized
     }
 
-    /// Settles the prompt `id` and resumes its waiting tool call once.
+    /// Applies the user's decision on prompt `id`. When the turn that asked has
+    /// already ended, nothing is waiting for the tool result anymore, so a
+    /// confirmation is sent to the thread as a new message to continue the work.
     func resolveAgentConfirmation(id: UUID, confirmed: Bool) {
-        guard let continuation = agentPrompts.continuations.byId.removeValue(forKey: id) else { return }
+        guard let confirmation = agentPrompts.confirmations.first(where: { $0.id == id }) else { return }
+        let turnEnded = !isSessionTurnRunning(confirmation.sessionKey)
+        guard settleAgentConfirmation(id: id, confirmed: confirmed) else { return }
+        guard confirmed, turnEnded else { return }
+        let prompt = "I confirmed \"\(confirmation.request.title)\". Go ahead."
+        Task { await sendLatePromptAnswer(prompt, sessionKey: confirmation.sessionKey) }
+    }
+
+    /// Settles the prompt `id` and resumes its waiting tool call once. Returns
+    /// whether the prompt was still pending.
+    @discardableResult
+    func settleAgentConfirmation(id: UUID, confirmed: Bool) -> Bool {
+        guard let continuation = agentPrompts.continuations.byId.removeValue(forKey: id) else { return false }
         agentPrompts.confirmations.removeAll { $0.id == id }
         continuation.resume(returning: confirmed)
+        return true
+    }
+
+    /// Whether thread `sessionKey` has a turn running, so a tool call can still
+    /// be waiting on the user's answer.
+    func isSessionTurnRunning(_ sessionKey: String) -> Bool {
+        sessionStates[resolveCurrentSessionId(sessionKey)]?.isStreaming == true
+    }
+
+    /// Sends a prompt answer given after its turn ended as a new message in
+    /// thread `sessionKey`, so the agent still receives it. Queued instead when
+    /// another turn started in the meantime.
+    func sendLatePromptAnswer(_ prompt: String, sessionKey: String) async {
+        let sessionID = resolveCurrentSessionId(sessionKey)
+        if isSessionTurnRunning(sessionID) {
+            let queued = QueuedMessage(text: prompt, attachments: [])
+            threadStore.appendQueued(sessionKey: sessionID, message: queued)
+            appendToWindowQueueMirrors(sessionID: sessionID, message: queued)
+            broadcastMobileSessionStatus(sessionID: sessionID)
+            return
+        }
+        let window: WindowState
+        if let open = registeredWindows().first(where: {
+            $0.selectedProject != nil && $0.currentSessionId.map(resolveCurrentSessionId) == sessionID
+        }) {
+            window = open
+        } else {
+            guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
+                  let project = projects.first(where: { $0.id == summary.projectId })
+            else { return }
+            window = WindowState()
+            window.selectedProject = project
+            window.currentSessionId = sessionID
+        }
+        _ = await sendPrompt(prompt, displayText: prompt, in: window)
     }
 
     /// Closes the open dialog. The view stays in its thread's Views list.

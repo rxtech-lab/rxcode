@@ -8,9 +8,32 @@ import RxCodeCore
 struct BriefingMarkdownView: View {
     let text: String
     var fontSize: CGFloat = 13.5
+    /// When set, only leading blocks up to roughly this many characters are
+    /// rendered, so a clipped preview doesn't lay out text it never shows.
+    var characterBudget: Int? = nil
 
     private var blocks: [Block] {
-        Self.blocks(for: text)
+        Self.blocks(for: text, characterBudget: characterBudget)
+    }
+
+    /// Leading blocks of `text` holding at least `characterBudget` characters
+    /// (all blocks when there is no budget).
+    static func blocks(for text: String, characterBudget: Int?) -> [Block] {
+        let all = blocks(for: text)
+        guard let characterBudget else { return all }
+        var used = 0
+        var result: [Block] = []
+        for block in all {
+            guard used < characterBudget else { break }
+            result.append(block)
+            used += block.characterCount
+        }
+        return result
+    }
+
+    /// Whether `characterBudget` drops any of `text`'s blocks.
+    static func isTruncated(_ text: String, characterBudget: Int) -> Bool {
+        blocks(for: text, characterBudget: characterBudget).count < blocks(for: text).count
     }
 
     /// Parsed blocks and inline runs are cached by source text so re-rendering
@@ -21,7 +44,9 @@ struct BriefingMarkdownView: View {
     private static func blocks(for text: String) -> [Block] {
         let key = text as NSString
         if let cached = blockCache.object(forKey: key) { return cached.value }
-        let parsed = parse(GeneratedTextSanitizer.cleanMarkdownDocument(text))
+        let parsed = BriefingPerformanceLog.measure("markdown parse cache miss (\(text.count) chars)") {
+            parse(GeneratedTextSanitizer.cleanMarkdownDocument(text))
+        }
         blockCache.setObject(CacheBox(parsed), forKey: key)
         return parsed
     }
@@ -42,7 +67,6 @@ struct BriefingMarkdownView: View {
                         .foregroundStyle(ClaudeTheme.textSecondary)
                         .lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
                 case .bullet(let content):
                     bulletRow(marker: "•", content: content)
                 case .ordered(let number, let content):
@@ -67,7 +91,6 @@ struct BriefingMarkdownView: View {
                 .foregroundStyle(ClaudeTheme.textSecondary)
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -106,7 +129,6 @@ struct BriefingMarkdownView: View {
             .font(.system(size: fontSize - 0.5, weight: isHeader ? .semibold : .regular))
             .foregroundStyle(isHeader ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
     }
 
     private func headingSize(_ level: Int) -> CGFloat {
@@ -126,6 +148,15 @@ struct BriefingMarkdownView: View {
         case bullet(String)
         case ordered(number: Int, content: String)
         case table(header: [String], rows: [[String]])
+
+        var characterCount: Int {
+            switch self {
+            case .heading(_, let content), .paragraph(let content), .bullet(let content), .ordered(_, let content):
+                content.count
+            case .table(let header, let rows):
+                (header + rows.flatMap { $0 }).reduce(0) { $0 + $1.count }
+            }
+        }
     }
 
     private static func parse(_ text: String) -> [Block] {

@@ -69,6 +69,10 @@ struct BriefingView: View {
     /// re-evaluate this view's body (and rebuild every card) each frame.
     @State private var scrollMetrics = BriefingTimelineScrollMetrics()
 
+    /// SwiftData rows behind the timeline, fetched once per revision rather
+    /// than several times on every body pass.
+    @State private var sourceCache = BriefingSourceCache()
+
     /// The work done on one project branch during a single calendar day. A
     /// branch worked on across several days yields one group per day; each
     /// chat belongs to the day it was created.
@@ -155,8 +159,12 @@ struct BriefingView: View {
     private func visibleThreadSummaryItems() -> [ThreadSummaryItem] {
         let knownIds = knownProjectIds
         let reviewIds = appState.codeReviewThreadIds
-        return appState.threadStore.allThreadSummaryItems()
+        return sourceCache.threadSummaries(revision: appState.threadSummaryRevision, store: appState.threadStore)
             .filter { knownIds.contains($0.projectId) && !reviewIds.contains($0.sessionId) }
+    }
+
+    private var allBranchBriefingItems: [BranchBriefingItem] {
+        sourceCache.branchBriefings(revision: appState.branchBriefingRevision, store: appState.threadStore)
     }
 
     private var allGroups: [BriefingGroup] {
@@ -165,7 +173,7 @@ struct BriefingView: View {
 
         let knownIds = knownProjectIds
         return Self.dayGroups(
-            briefings: appState.threadStore.allBranchBriefingItems().filter { knownIds.contains($0.projectId) },
+            briefings: allBranchBriefingItems.filter { knownIds.contains($0.projectId) },
             threads: visibleThreadSummaryItems()
         )
     }
@@ -282,7 +290,7 @@ struct BriefingView: View {
         _ = appState.threadSummaryRevision
         let knownIds = knownProjectIds
         let ids = Set(
-            appState.threadStore.allBranchBriefingItems()
+            allBranchBriefingItems
                 .filter { knownIds.contains($0.projectId) }
                 .map(\.projectId)
             + visibleThreadSummaryItems().map(\.projectId)
@@ -361,7 +369,7 @@ struct BriefingView: View {
         _ = appState.threadSummaryRevision
         let knownIds = knownProjectIds
         return appState.briefingDocuments.contains(where: \.isPublished)
-            || appState.threadStore.allBranchBriefingItems().contains { knownIds.contains($0.projectId) }
+            || allBranchBriefingItems.contains { knownIds.contains($0.projectId) }
             || !visibleThreadSummaryItems().isEmpty
     }
 
@@ -386,12 +394,19 @@ struct BriefingView: View {
     }
 
     private var content: some View {
+        let start = DispatchTime.now().uptimeNanoseconds
         let entries = self.entries
         let sections = daySections(entries)
         let showsScrubber = sections.count > 1
+        let rows = timelineRows(entries: entries, sections: sections)
+        BriefingPerformanceLog.log(
+            "BriefingView body\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : ""): \(entries.count) entries, \(sections.count) sections, "
+            + "\(rows.count) rows, width \(Int(availableWidth)), "
+            + "built in \(BriefingPerformanceLog.format(BriefingPerformanceLog.milliseconds(since: start)))ms"
+        )
         return HStack(spacing: 0) {
             BriefingTimelineTableView(
-                rows: timelineRows(entries: entries, sections: sections),
+                rows: rows,
                 anchors: sections.map {
                     BriefingTimelineSectionAnchor(id: $0.id, date: $0.day, rowId: Self.sectionTitleRowId($0))
                 },
@@ -525,7 +540,10 @@ struct BriefingView: View {
     // MARK: - Group card
 
     func groupCard(_ group: BriefingGroup) -> some View {
-        let project = projectsById[group.projectId]
+        BriefingPerformanceLog.log("group card body\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "") \(group.id)")
+        let project = BriefingPerformanceLog.measure("projectsById for group card", threshold: 1) {
+            projectsById[group.projectId]
+        }
         return VStack(alignment: .leading, spacing: 12) {
             groupCardHeader(group, project: project)
 
@@ -553,14 +571,16 @@ struct BriefingView: View {
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
+            // Shadow the card shape only; shadowing the whole card makes SwiftUI
+            // shadow every text run and chip, which is slow to draw while scrolling.
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
                 .fill(ClaudeTheme.surfacePrimary)
+                .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
         )
         .overlay(
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
                 .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
     }
 
     private func briefingSheet(_ group: BriefingGroup) -> some View {
@@ -725,6 +745,44 @@ struct BriefingView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: .now)
+    }
+}
+
+/// Caches the branch briefing and thread summary fetches by their AppState
+/// revision counters. Not observable: callers read the revision first, so the
+/// view still updates when a revision changes.
+@MainActor
+final class BriefingSourceCache {
+    private struct Key: Equatable {
+        let store: ObjectIdentifier
+        let revision: Int
+    }
+
+    private var briefingKey: Key?
+    private var briefings: [BranchBriefingItem] = []
+    private var summaryKey: Key?
+    private var summaries: [ThreadSummaryItem] = []
+
+    func branchBriefings(revision: Int, store: ThreadStore) -> [BranchBriefingItem] {
+        let key = Key(store: ObjectIdentifier(store), revision: revision)
+        if briefingKey != key {
+            briefings = BriefingPerformanceLog.measure("fetch branch briefings (revision \(revision))") {
+                store.allBranchBriefingItems()
+            }
+            briefingKey = key
+        }
+        return briefings
+    }
+
+    func threadSummaries(revision: Int, store: ThreadStore) -> [ThreadSummaryItem] {
+        let key = Key(store: ObjectIdentifier(store), revision: revision)
+        if summaryKey != key {
+            summaries = BriefingPerformanceLog.measure("fetch thread summaries (revision \(revision))") {
+                store.allThreadSummaryItems()
+            }
+            summaryKey = key
+        }
+        return summaries
     }
 }
 

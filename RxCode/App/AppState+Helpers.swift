@@ -104,10 +104,9 @@ extension AppState {
 
     // MARK: - Private Helpers
 
-    /// Extract the last response time from the message list. Based on the last assistant message; falls back to the last message, then current time.
+    /// Use the latest conversation activity, including a user turn awaiting a reply.
     func lastResponseDate(from messages: [ChatMessage]) -> Date {
-        messages.last(where: { $0.role == .assistant })?.timestamp
-            ?? messages.last?.timestamp
+        messages.last(where: { $0.role == .user || $0.role == .assistant })?.timestamp
             ?? Date()
     }
 

@@ -301,12 +301,16 @@ extension AppState {
     func addACPClient(_ spec: ACPClientSpec) {
         acpClients.append(spec)
         saveACPClients()
+        reconcileACPUsageIntegrations()
+        Task { await refreshUsagePlugins() }
     }
 
     func updateACPClient(_ spec: ACPClientSpec) {
         guard let idx = acpClients.firstIndex(where: { $0.id == spec.id }) else { return }
         acpClients[idx] = spec
         saveACPClients()
+        reconcileACPUsageIntegrations()
+        Task { await refreshUsagePlugins() }
     }
 
     func removeACPClient(id: String) {
@@ -321,6 +325,11 @@ extension AppState {
             }
         }
         acpClients.removeAll { $0.id == id }
+        let usageIDs = Set(usageDashboard.integrations.filter { $0.pluginID.hasPrefix("acp-") && $0.resource == id }.map(\.id))
+        usageDashboard.integrations.removeAll { usageIDs.contains($0.id) }
+        usageDashboard.cards.removeAll { usageIDs.contains($0.integrationID) }
+        usageDashboard.snapshots.removeAll { usageIDs.contains($0.id) }
+        Task { await persistUsageDashboard() }
         if selectedACPClientId == id { selectedACPClientId = "" }
         saveACPClients()
     }

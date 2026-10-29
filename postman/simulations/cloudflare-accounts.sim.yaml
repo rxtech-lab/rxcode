@@ -1,0 +1,6 @@
+simulation: cloudflare-accounts
+routing: path
+mocks:
+  - name: cloudflare-accounts
+    routeKey: cloudflare
+    path: postman/mocks/cloudflare-accounts/config.yaml

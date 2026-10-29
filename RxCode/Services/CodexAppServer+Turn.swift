@@ -324,7 +324,7 @@ extension CodexAppServer {
                 ]), to: stdin)
                 return
             }
-            let toolUseId = Self.firstString(in: params, keys: ["itemId", "callId", "id"]) ?? requestId
+            let toolUseId = Self.permissionToolUseId(params: params, keys: ["itemId", "callId", "id"])
             let command = Self.firstString(in: params, keys: ["command", "cmd"])
             let toolName = command == nil ? "Edit" : "Bash"
             var input = params
@@ -346,7 +346,7 @@ extension CodexAppServer {
                 "decision": .string(approved ? "accept" : "reject")
             ]), to: stdin)
         case "userInput/request":
-            let toolUseId = Self.firstString(in: params, keys: ["itemId", "callId", "id"]) ?? requestId
+            let toolUseId = Self.permissionToolUseId(params: params, keys: ["itemId", "callId", "id"])
             let decision = await permissionServer.requestDecision(
                 toolUseId: toolUseId,
                 sessionId: activeThreadId,
@@ -358,7 +358,7 @@ extension CodexAppServer {
                 "decision": .string(decision == .allow ? "accept" : "reject")
             ]), to: stdin)
         case "mcpServer/elicitation/request":
-            let toolUseId = Self.firstString(in: params, keys: ["elicitationId", "elicitation_id", "requestId", "request_id"]) ?? requestId
+            let toolUseId = Self.permissionToolUseId(params: params, keys: ["elicitationId", "elicitation_id"])
             let serverName = Self.firstString(in: params, keys: ["serverName", "server_name", "server"]) ?? "mcp"
             let request = params["request"]?.objectValue ?? params
             let meta = request["_meta"]?.objectValue
@@ -392,6 +392,13 @@ extension CodexAppServer {
         default:
             try Self.writeJSONLine(Self.response(id: requestId, result: [:]), to: stdin)
         }
+    }
+
+    /// JSON-RPC request ids restart at 0 in every app-server process, so they
+    /// must never key the shared permission queue: a stale entry from an earlier
+    /// process would swallow the new request without showing any UI.
+    static func permissionToolUseId(params: [String: JSONValue], keys: [String]) -> String {
+        firstString(in: params, keys: keys) ?? "codex-request-\(UUID().uuidString)"
     }
 
     static func isApprovalDecision(_ decision: PermissionDecision) -> Bool {

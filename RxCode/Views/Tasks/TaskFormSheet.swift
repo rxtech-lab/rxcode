@@ -46,6 +46,7 @@ struct TaskFormSheet: View {
     @State var pendingDelayRemoval: TaskDelay?
     @State var milestoneInput = ""
     @State var isAutoFilling = false
+    @State private var showingAutoFillPopover = false
     @State var isGeneratingTitle = false
     @State var suggestionAgent: GeneralAIModel = .taskAgent
     @State var pendingDeletion: TaskBoardSheet?
@@ -75,6 +76,8 @@ struct TaskFormSheet: View {
         /// The draft that must finish before this one starts, saved as the
         /// created task's "Starts after" link.
         var startsAfter: UUID?
+        /// The model's size estimate, saved on the created task.
+        var size: TaskSize?
     }
 
     enum Tab: Hashable {
@@ -213,6 +216,14 @@ struct TaskFormSheet: View {
             }
         }
         .frame(width: 560, height: 680)
+        .overlay {
+            if isAutoFilling {
+                ProgressView("Filling properties…")
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier("task-form-auto-fill-progress")
+            }
+        }
         .confirmationDialog(
             "Discard follow-up?",
             isPresented: $showingDiscardFollowUpConfirmation,
@@ -503,11 +514,6 @@ struct TaskFormSheet: View {
 
     var classificationSection: some View {
         Section {
-            LabeledContent("AI model") {
-                SuggestionAgentMenu(agent: $suggestionAgent)
-                    .disabled(isAutoFilling || isGeneratingTitle)
-            }
-
             if !isStory {
                 Picker("Status", selection: statusBinding) {
                     ForEach(board.effectiveColumns) { column in
@@ -575,7 +581,7 @@ struct TaskFormSheet: View {
                 Text("Properties")
                 Spacer()
                 Button {
-                    autoFill()
+                    showingAutoFillPopover = true
                 } label: {
                     if isAutoFilling {
                         ProgressView().controlSize(.mini)
@@ -586,7 +592,11 @@ struct TaskFormSheet: View {
                 .buttonStyle(.borderless)
                 .controlSize(.small)
                 .disabled(isAutoFilling || isGeneratingTitle || !hasSuggestionInput)
-                .help("Ask the selected model to fill in empty properties")
+                .help("Choose a model to fill in empty properties")
+                .accessibilityIdentifier("task-form-auto-fill")
+                .popover(isPresented: $showingAutoFillPopover, arrowEdge: .bottom) {
+                    autoFillPopover
+                }
                 Button {
                     fieldsSheet = .tags
                 } label: {
@@ -597,6 +607,33 @@ struct TaskFormSheet: View {
                 .help("Rename or delete types, labels, versions and milestones")
             }
         }
+    }
+
+    private var autoFillPopover: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Auto-fill Properties")
+                .font(.headline)
+            Text("Fill empty properties using the selected model.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            LabeledContent("AI model") {
+                SuggestionAgentMenu(agent: $suggestionAgent, persistsSelection: false)
+                    .accessibilityIdentifier("task-form-auto-fill-model")
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { showingAutoFillPopover = false }
+                Button("Auto-fill") {
+                    showingAutoFillPopover = false
+                    autoFill()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isAutoFilling || isGeneratingTitle || !hasSuggestionInput)
+                .accessibilityIdentifier("task-form-auto-fill-confirm")
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 340)
     }
 
     /// Types are picked from a dropdown; adding, renaming and recoloring

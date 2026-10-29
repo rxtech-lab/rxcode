@@ -7,6 +7,157 @@ import RxCodeCore
 
 @MainActor
 struct ToolActivityTests {
+    @Test func providerToolCallsGroupDuringStreamingAndAfterCompletion() {
+        let tools = [
+            ToolCall(id: "codex", name: "exec_command"),
+            ToolCall(id: "acp", name: "read_file"),
+            ToolCall(id: "mcp", name: "mcp__server__search")
+        ]
+        for streaming in [true, false] {
+            let messages = tools.map { tool in
+                var message = ChatMessage(role: .assistant, content: "")
+                message.blocks = [.toolCall(tool)]
+                message.isStreaming = streaming
+                return message
+            }
+            let groups = chatMessageGroups(messages)
+            #expect(groups.count == 1)
+            #expect(groups.first?.isTransientGroup == true)
+            #expect(groups.first?.id == messages.first?.id)
+            #expect(groups.first?.messages.last?.blocks.last?.toolCall?.name == tools.last?.name)
+
+            var combined = messages[0]
+            combined.blocks = tools.map { .toolCall($0) }
+            #expect(chatMessageGroups([combined]).first?.isTransientGroup == true)
+
+            let separator = ChatMessage(role: .assistant, content: "Explanation")
+            #expect(chatMessageGroups([messages[0], separator, messages[1]]).count == 3)
+
+            let whitespace = ChatMessage(role: .assistant, blocks: [.text("\n\n")])
+            let bridged = chatMessageGroups([messages[0], whitespace, messages[1]])
+            #expect(bridged.count == 1)
+            #expect(bridged.first?.isTransientGroup == true)
+        }
+    }
+
+    @Test func narrationWithToolCallJoinsFollowingToolGroup() {
+        for streaming in [true, false] {
+            // Mirrors a Codex turn: "I'll check…" + Bash, then tool-only messages.
+            let narrated = ChatMessage(role: .assistant, blocks: [
+                .text("I'll check the icon file."),
+                .toolCall(ToolCall(id: "bash-1", name: "Bash"))
+            ], isStreaming: streaming, duration: 3)
+            let followups = ["reasoning", "Edit", "Bash", "reasoning", "Bash"].enumerated().map { index, name in
+                ChatMessage(role: .assistant, blocks: [.toolCall(ToolCall(id: "t\(index)", name: name))],
+                            isStreaming: streaming)
+            }
+            let groups = chatMessageGroups([narrated] + followups)
+            #expect(groups.count == 2)
+            #expect(groups.first?.id == narrated.id)
+            #expect(groups.first?.isTransientGroup == false)
+            #expect(groups.first?.messages.first?.blocks.compactMap(\.text) == ["I'll check the icon file."])
+            #expect(groups.first?.messages.first?.duration == 3)
+            #expect(groups.last?.isTransientGroup == true)
+            #expect(groups.last?.messages.flatMap(\.toolCalls).count == 6)
+            #expect(Set(groups.map(\.id)).count == groups.count)
+        }
+    }
+
+    @Test func reasoningRowsStayInsideTheToolGroup() throws {
+        for streaming in [true, false] {
+            let names = ["exec_command", "reasoning", "exec_command", "reasoning", "reasoning", "read_file"]
+            let messages = names.enumerated().map { index, name in
+                ChatMessage(
+                    role: .assistant,
+                    blocks: [.toolCall(ToolCall(
+                        id: "call-\(index)",
+                        name: name,
+                        result: streaming ? nil : "Completed"
+                    ))],
+                    isStreaming: streaming
+                )
+            }
+            let groups = chatMessageGroups(messages)
+            #expect(groups.count == 1)
+            #expect(groups.first?.isTransientGroup == true)
+            #expect(groups.first?.messages.flatMap(\.toolCalls).map(\.name) == names)
+
+            #if os(macOS)
+            let view = ChatTransientGroupSummaryView(messages: messages)
+            let inspected = try view.inspect()
+            let labels = inspected.findAll(ViewType.Text.self).compactMap { try? $0.string() }
+            #expect(labels.contains("read_file"))
+            #expect(labels.contains("6 tool calls"))
+            #expect(!labels.contains("reasoning"))
+            #expect(inspected.findAll(ToolResultView.self).isEmpty)
+            #endif
+        }
+    }
+
+    @Test func interactiveToolsRemainOutsideCollapsedGroups() {
+        for name in ["AskUserQuestion", "ExitPlanMode", "exit_plan_mode",
+                     "ImageGeneration", ReviewCountdownCard.toolName] {
+            #expect(!chatCanGroupTool(ToolCall(id: name, name: name)))
+        }
+        #expect(chatCanGroupTool(ToolCall(id: "edit", name: "apply_patch")))
+    }
+
+    #if os(macOS)
+    private struct StreamingHost: View {
+        let bridge: ChatBridge
+        let window = WindowState()
+
+        var body: some View {
+            StreamingMessageView(onStructureChanged: {})
+                .environment(bridge)
+                .environment(window)
+        }
+    }
+
+    @Test func streamingResponseCombinesCompletedAndActiveTools() throws {
+        let bridge = ChatBridge()
+        let completed = ChatMessage(role: .assistant, blocks: [
+            .toolCall(ToolCall(id: "bash", name: "Bash", result: "Done"))
+        ])
+        var active = ChatMessage(role: .assistant, blocks: (0..<12).map {
+            .toolCall(ToolCall(id: "reasoning-\($0)", name: "reasoning"))
+        }, isStreaming: true)
+        bridge.messages = [ChatMessage(role: .user, content: "Run tools"), completed, active]
+        let view = StreamingHost(bridge: bridge)
+        let summaries = try view.inspect().findAll(ChatTransientGroupSummaryView.self)
+        #expect(summaries.count == 1)
+        let summary = try #require(summaries.first).actualView()
+        #expect(summary.messages.map(\.id) == [completed.id, active.id])
+        let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
+        #expect(labels.contains("13 tool calls"))
+        #expect(!labels.contains("1 tool call"))
+
+        // A narration message must still separate tool runs in the active response.
+        let narration = ChatMessage(role: .assistant, content: "Checking the result")
+        bridge.messages.insert(narration, at: 2)
+        #expect(try view.inspect().findAll(ChatTransientGroupSummaryView.self).count == 2)
+
+        // Completing the response preserves the same group in the settled list.
+        active.isStreaming = false
+        let groups = chatMessageGroups([completed, active])
+        #expect(groups.count == 1)
+        #expect(groups.first?.id == summary.messages.first?.id)
+    }
+
+    @Test func desktopGroupShowsLatestToolAndStartsCollapsed() throws {
+        let view = ChatTransientToolSummaryView(tools: [
+            ToolCall(id: "a", name: "exec_command", result: "ok"),
+            ToolCall(id: "b", name: "read_file")
+        ], isStreaming: true)
+        let inspected = try view.inspect()
+        let labels = inspected.findAll(ViewType.Text.self).compactMap { try? $0.string() }
+        #expect(labels.contains("read_file"))
+        #expect(labels.contains("2 tool calls"))
+        #expect(!labels.contains("exec_command"))
+        #expect(inspected.findAll(ToolResultView.self).isEmpty)
+    }
+    #endif
+
     @Test func statusesIncludeEmptySuccessAndResultlessFailure() {
         #expect(ToolActivityStatus(tool: ToolCall(id: "1", name: "read"), isStreaming: true) == .running)
         #expect(ToolActivityStatus(tool: ToolCall(id: "1", name: "read"), isStreaming: false) == .interrupted)
@@ -84,8 +235,8 @@ struct ToolActivityTests {
             ToolCall(id: "c", name: "Search")
         ], isStreaming: true)
         let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
-        #expect(labels.contains("3 tool calls"))
-        #expect(labels.contains("1 running · 1 succeeded · 1 failed"))
+        #expect(labels.contains("Search"))
+        #expect(labels.contains("3 tool calls · 1 running · 1 succeeded · 1 failed"))
         #expect(!labels.contains("Read"))
     }
 
@@ -107,7 +258,7 @@ struct ToolActivityTests {
             ], result: "ok"),
         ])
         let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
-        #expect(labels.contains("1 tool call"))
+        #expect(labels.contains("1 tool call · 1 succeeded"))
         #expect(labels.contains("Plan"))
         #expect(labels.contains("Measure"))
     }

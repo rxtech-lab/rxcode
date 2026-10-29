@@ -6,13 +6,15 @@ struct UsageDashboardCard: View {
     let snapshot: UsagePluginSnapshot
     let configuration: UsageCardConfiguration
     var allowsEditing = true
+    var isRefreshing = false
     @State private var showingDetails = false
     @State private var editing = false
 
     var body: some View {
         Button { showingDetails = true } label: {
             UsagePluginCard(snapshot: snapshot, configuration: configuration,
-                showsDetailIndicator: true, reservesEditControlSpace: allowsEditing)
+                showsDetailIndicator: true, reservesEditControlSpace: allowsEditing,
+                isRefreshing: isRefreshing)
                 .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)

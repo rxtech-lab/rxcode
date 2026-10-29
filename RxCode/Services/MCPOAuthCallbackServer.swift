@@ -1,22 +1,33 @@
 import Foundation
 import Network
 
-/// A short-lived OAuth receiver bound only to the IPv4 loopback interface.
+/// A short-lived OAuth receiver bound only to the loopback interface.
+/// Ephemeral ports suit dynamically registered clients; providers that require
+/// a pre-registered exact redirect URL use a fixed port.
 @MainActor
 final class MCPOAuthCallbackServer {
     private var listener: NWListener?
     private var startup: CheckedContinuation<URL, Error>?
     private var callback: CheckedContinuation<URL, Error>?
-    private var authorization: MCPOAuthService.Authorization?
+    private var redirectURI: URL?
+    private var accepts: ((URL) -> Bool)?
     private var connections: [UUID: NWConnection] = [:]
     private var timeout: Task<Void, Never>?
     private var finished = false
 
-    func start() async throws -> URL {
+    /// Starts listening. A fixed `port` is served at `http://localhost:<port>/oauth/callback`.
+    func start(port fixedPort: UInt16? = nil) async throws -> URL {
         try Task.checkCancellation()
         let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
-        let listener = try NWListener(using: parameters)
+        let listener: NWListener
+        if let fixedPort, let port = NWEndpoint.Port(rawValue: fixedPort) {
+            parameters.requiredInterfaceType = .loopback
+            listener = try NWListener(using: parameters, on: port)
+        } else {
+            parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+            listener = try NWListener(using: parameters)
+        }
+        let host = fixedPort == nil ? "127.0.0.1" : "localhost"
         self.listener = listener
         listener.stateUpdateHandler = { [weak self] state in
             Task { @MainActor in
@@ -24,7 +35,7 @@ final class MCPOAuthCallbackServer {
                 switch state {
                 case .ready:
                     if let port = self.listener?.port {
-                        self.startup?.resume(returning: URL(string: "http://127.0.0.1:\(port.rawValue)/oauth/callback")!)
+                        self.startup?.resume(returning: URL(string: "http://\(host):\(port.rawValue)/oauth/callback")!)
                         self.startup = nil
                     }
                 case .failed(let error): self.stop(error: error)
@@ -51,9 +62,25 @@ final class MCPOAuthCallbackServer {
     }
 
     func wait(for authorization: MCPOAuthService.Authorization, openBrowser: () -> Bool) async throws -> URL {
+        try await wait(redirectURI: authorization.redirectURI, accepts: { url in
+            do {
+                _ = try MCPOAuthService.callbackCode(authorization, callback: url)
+            } catch MCPOAuthService.AuthError.denied {
+                // State-validated OAuth errors must reach the sign-in UI too.
+            } catch MCPOAuthService.AuthError.authorizationFailed {
+            } catch {
+                return false
+            }
+            return true
+        }, openBrowser: openBrowser)
+    }
+
+    /// Waits for a callback that `accepts` (typically a state check) approves.
+    func wait(redirectURI: String, accepts: @escaping (URL) -> Bool, openBrowser: () -> Bool) async throws -> URL {
         try Task.checkCancellation()
         guard !finished else { throw CancellationError() }
-        self.authorization = authorization
+        self.redirectURI = URL(string: redirectURI)
+        self.accepts = accepts
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
                 callback = $0
@@ -109,7 +136,7 @@ final class MCPOAuthCallbackServer {
     }
 
     private func handle(_ data: Data, connection: NWConnection, id: UUID) {
-        guard let authorization,
+        guard let redirectURI, let accepts,
               let line = String(data: data, encoding: .utf8)?.components(separatedBy: "\r\n").first else {
             respond(connection, id: id, accepted: nil)
             return
@@ -117,21 +144,13 @@ final class MCPOAuthCallbackServer {
         let parts = line.split(separator: " ")
         guard parts.count == 3, parts[0] == "GET",
               parts[1].hasPrefix("/oauth/callback?"),
-              let base = URLComponents(string: authorization.redirectURI),
-              let url = URL(string: "http://127.0.0.1:\(base.port!)\(parts[1])") else {
+              let host = redirectURI.host, let port = redirectURI.port,
+              let url = URL(string: "http://\(host):\(port)\(parts[1])"), accepts(url) else {
             respond(connection, id: id, accepted: nil)
             return
         }
-        do {
-            _ = try MCPOAuthService.callbackCode(authorization, callback: url)
-        } catch MCPOAuthService.AuthError.denied {
-            // State-validated OAuth errors must reach the sign-in UI too.
-        } catch MCPOAuthService.AuthError.authorizationFailed {
-        } catch {
-            respond(connection, id: id, accepted: nil)
-            return
-        }
-        self.authorization = nil
+        self.redirectURI = nil
+        self.accepts = nil
         respond(connection, id: id, accepted: url)
     }
 
@@ -140,7 +159,7 @@ final class MCPOAuthCallbackServer {
         let isSuccess = received && !hasError
         let title = isSuccess ? "Continue in RxCode" : "Let’s try that again"
         let message = isSuccess
-            ? "Your authorization response has been received. Return to RxCode to finish connecting your MCP server."
+            ? "Your authorization response has been received. Return to RxCode to finish connecting."
             : "Sign-in could not be completed. Return to RxCode to review the message and start a new sign-in."
         let label = isSuccess ? "AUTHORIZATION RECEIVED" : "SIGN-IN NEEDS ATTENTION"
         let symbol = isSuccess ? "<path d=\"m8 16 5 5 11-11\"/>" : "<path d=\"M16 9v9m0 5h.01\"/>"

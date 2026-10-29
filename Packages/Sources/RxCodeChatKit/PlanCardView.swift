@@ -258,7 +258,7 @@ struct PlanCardView: View {
                 if !isStreaming {
                     Text(actionLabel)
                         .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ClaudeTheme.textOnAccent)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(ClaudeTheme.accent, in: Capsule())

@@ -74,6 +74,9 @@ struct SettingsView: View {
                 .tag(8)
         }
         .frame(width: 680, height: 620)
+        .background(ClaudeTheme.background)
+        .foregroundStyle(ClaudeTheme.textPrimary)
+        .tint(ClaudeTheme.accent)
         .focusable(false)
         .onAppear { selectedTab = 0 }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
@@ -148,6 +151,7 @@ struct GeneralSettingsTab: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(ClaudeTheme.background)
         .sheet(isPresented: $showCacheStorage) {
             CacheStorageSheet(workspaceManager: workspaceManager)
         }
@@ -167,7 +171,7 @@ struct GeneralSettingsTab: View {
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
             Text("View total occupied space and clear cached data across all workspaces, including briefings.")
                 .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
             Text("Total occupied space: \(occupiedBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Calculating…")")
                 .font(.system(size: ClaudeTheme.size(12)))
                 .monospacedDigit()
@@ -188,7 +192,7 @@ struct GeneralSettingsTab: View {
                         .font(.system(size: ClaudeTheme.size(13)))
                     Text("Wipe cached embeddings and re-embed every thread for semantic search. Use this if global search results look stale or empty.")
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
@@ -242,7 +246,7 @@ struct GeneralSettingsTab: View {
                         .font(.system(size: ClaudeTheme.size(13)))
                     Text(detail)
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -272,7 +276,7 @@ struct GeneralSettingsTab: View {
             )
             Text("font.size.hint")
                 .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
         }
     }
 
@@ -280,7 +284,7 @@ struct GeneralSettingsTab: View {
         HStack(spacing: 10) {
             Text(label)
                 .font(.system(size: ClaudeTheme.size(12)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .frame(width: 72, alignment: .leading)
             fontStepButton(systemName: "minus", action: onDecrease)
                 .disabled(value <= ThemeStore.minFontSizeAdjustment)
@@ -308,9 +312,9 @@ struct GeneralSettingsTab: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .frame(width: 26, height: 26)
-                .background(Color(NSColor.controlBackgroundColor))
+                .background(ClaudeTheme.surfacePrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -353,20 +357,20 @@ struct GeneralSettingsTab: View {
                         .frame(width: 10, height: 10)
                     Text(appState.selectedTheme.displayName)
                         .font(.system(size: ClaudeTheme.size(13)))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(NSColor.controlBackgroundColor))
+                .background(ClaudeTheme.surfacePrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                        .strokeBorder(ClaudeTheme.border, lineWidth: 1)
                 )
                 .contentShape(Rectangle())
             }
@@ -401,23 +405,23 @@ struct GeneralSettingsTab: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Open Source")
                         .font(.system(size: ClaudeTheme.size(13)))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                     Text(verbatim: "github.com/rxtech-lab/rxcode")
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
                 Spacer()
                 Image(systemName: "arrow.up.right.square")
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -436,23 +440,23 @@ struct GeneralSettingsTab: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Show Onboarding")
                         .font(.system(size: ClaudeTheme.size(13)))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                     Text("Review the CLI setup check")
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -469,23 +473,23 @@ struct GeneralSettingsTab: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("What's New")
                         .font(.system(size: ClaudeTheme.size(13)))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                     Text("See the latest features and updates")
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -501,19 +505,19 @@ struct GeneralSettingsTab: View {
                     .frame(width: 20)
                 Text("User Guide")
                     .font(.system(size: ClaudeTheme.size(13)))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -532,7 +536,7 @@ private struct AgentPromptsSettingsSection: View {
 
             Text("These instructions are included with every agent turn. Project instructions are added after the global instructions.")
                 .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("Global prompt")
@@ -560,7 +564,7 @@ private struct AgentPromptsSettingsSection: View {
             .frame(height: 88)
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
                     .allowsHitTesting(false)
             }
             .accessibilityLabel(label)
@@ -587,7 +591,7 @@ private struct ProjectPromptsSheet: View {
                                 Text(project.name)
                                 Text(project.path)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(ClaudeTheme.textSecondary)
                                     .lineLimit(1)
                             }
                             .padding(.vertical, 3)
@@ -626,7 +630,7 @@ private struct ProjectPromptDetailPage: View {
                         .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
                     Text("These instructions are included with every agent turn in this project, after the global prompt.")
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                     TextEditor(text: Binding(
                         get: { appState.projects.first(where: { $0.id == projectId })?.customPrompt ?? "" },
                         set: { appState.setProjectPrompt($0, for: projectId) }
@@ -634,7 +638,7 @@ private struct ProjectPromptDetailPage: View {
                     .font(.system(size: ClaudeTheme.size(12)))
                     .overlay {
                         RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                            .strokeBorder(ClaudeTheme.border, lineWidth: 1)
                             .allowsHitTesting(false)
                     }
                     .accessibilityLabel("Project prompt")

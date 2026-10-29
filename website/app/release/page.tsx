@@ -1,3 +1,4 @@
+import { Brand } from "../brand";
 import type { Metadata } from "next";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
@@ -46,7 +47,7 @@ function TopNav() {
             href="/"
             className="font-display text-2xl font-bold text-primary tracking-tight"
           >
-            RxCode
+            <Brand />
           </Link>
           <div className="hidden md:flex gap-7 text-sm">
             <Link
@@ -258,7 +259,7 @@ function Footer() {
             href="/"
             className="font-display text-2xl font-bold text-primary tracking-tight"
           >
-            RxCode
+            <Brand />
           </Link>
           <span className="text-sm text-on-surface-variant/70">
             © {year} RxCode. All rights reserved.

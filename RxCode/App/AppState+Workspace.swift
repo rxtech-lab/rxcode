@@ -39,7 +39,7 @@ extension AppState {
     }
 
     func loadWorkspaceSettings() {
-        selectedTheme = AppTheme(rawValue: workspaceDefaults.string(for: "selectedTheme") ?? "") ?? .claude
+        selectedTheme = AppTheme(rawValue: workspaceDefaults.string(for: "selectedTheme") ?? "") ?? .rxcode
         fontSizeAdjustment = workspaceDefaults.int(for: "fontSizeAdjustment", default: 0)
         messageFontSizeAdjustment = workspaceDefaults.int(for: "messageFontSizeAdjustment", default: 0)
         selectedModel = workspaceDefaults.string(for: "selectedModel") ?? "opus"

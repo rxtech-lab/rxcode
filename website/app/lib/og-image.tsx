@@ -1,16 +1,18 @@
 import { ImageResponse } from "next/og";
+import { BRAND_ICON_DATA_URL } from "./brand-icon";
 
 export const OG_SIZE = { width: 1200, height: 630 };
+const DEFAULT_TITLE = "Plan the big idea. Let your agents ship it.";
 
 export function renderOgImage(
-  title = "The Visual Command Center for AI Coding Agents",
-  description = "Native macOS · Claude Code, Codex & ACP clients · Free & Open Source"
+  title = DEFAULT_TITLE,
+  description = "Mac, server & mobile · Claude Code, Codex & ACP"
 ): ImageResponse {
   return new ImageResponse(
     (
       <div
         style={{
-          background: "#0E0E0F",
+          background: "#041438",
           width: "100%",
           height: "100%",
           display: "flex",
@@ -28,7 +30,7 @@ export function renderOgImage(
             position: "absolute",
             inset: 0,
             backgroundImage:
-              "linear-gradient(rgba(217,119,87,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(217,119,87,0.06) 1px, transparent 1px)",
+              "linear-gradient(rgba(0,207,187,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,207,187,0.06) 1px, transparent 1px)",
             backgroundSize: "40px 40px",
             display: "flex",
           }}
@@ -44,7 +46,7 @@ export function renderOgImage(
             width: "600px",
             height: "400px",
             background:
-              "radial-gradient(ellipse, rgba(217,119,87,0.18) 0%, transparent 70%)",
+              "radial-gradient(ellipse, rgba(0,207,187,0.18) 0%, transparent 70%)",
             display: "flex",
           }}
         />
@@ -58,31 +60,12 @@ export function renderOgImage(
             marginBottom: "40px",
           }}
         >
-          <div
-            style={{
-              width: "76px",
-              height: "76px",
-              background: "#D97757",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "14px",
-            }}
-          >
-            <span
-              style={{
-                color: "#FFFFFF",
-                fontSize: "34px",
-                fontWeight: 700,
-                letterSpacing: "-0.5px",
-              }}
-            >
-              Rx
-            </span>
-          </div>
+          {/* Embedded artwork also used by the website and browser icons. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={BRAND_ICON_DATA_URL} width={96} height={96} alt="" style={{ borderRadius: "22px" }} />
           <span
             style={{
-              color: "#F5F0EB",
+              color: "#e8f4ff",
               fontSize: "60px",
               fontWeight: 700,
               letterSpacing: "-1px",
@@ -95,24 +78,32 @@ export function renderOgImage(
         {/* Headline */}
         <div
           style={{
-            color: "#F5F0EB",
-            fontSize: "38px",
+            color: "#e8f4ff",
+            fontSize: "52px",
             fontWeight: 600,
             textAlign: "center",
             lineHeight: 1.25,
-            maxWidth: "820px",
+            maxWidth: "940px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
           }}
         >
-          {title}
+          {title === DEFAULT_TITLE ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ display: "flex", color: "#4df5c7" }}>Plan the big idea.</div>
+              <div style={{ display: "flex" }}>Let your agents ship it.</div>
+            </div>
+          ) : title}
         </div>
 
         {/* Sub-label */}
         <div
           style={{
-            color: "#7A6E68",
+            color: "#aec8de",
             fontSize: "22px",
             marginTop: "28px",
-            letterSpacing: "0.12em",
+            letterSpacing: "0.04em",
             textTransform: "uppercase",
             display: "flex",
             gap: "16px",

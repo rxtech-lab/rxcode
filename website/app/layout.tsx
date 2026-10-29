@@ -26,13 +26,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://code.rxlab.app"
   ),
-  title: "RxCode — The Visual Command Center for AI Coding Agents",
+  title: "RxCode — Plan the big idea. Let your agents ship it.",
   description:
-    "A native macOS desktop client that supercharges your AI coding workflow. Manage sessions, visualize project architecture, and review AI-generated code without leaving your desktop.",
+    "The native workspace for teams of AI agents. Sprint boards, automatic agent routing, schedules, briefings and chat for Claude Code, Codex, Antigravity, Cursor, OpenCode and more — on Mac, server and mobile.",
   openGraph: {
-    title: "RxCode — The Visual Command Center for AI Coding Agents",
+    title: "RxCode — Plan the big idea. Let your agents ship it.",
     description:
-      "A native macOS desktop client for AI coding agents. Visual sessions, project tree, and code review in one place.",
+      "Sprint boards, automatic agent routing, schedules, briefings and chat for your team of AI coding agents — on Mac, server and mobile.",
     type: "website",
     url: "/",
     siteName: "RxCode",
@@ -42,15 +42,15 @@ export const metadata: Metadata = {
         url: "/api/og",
         width: 1200,
         height: 630,
-        alt: "RxCode — The Visual Command Center for AI Coding Agents",
+        alt: "RxCode — Plan the big idea. Let your agents ship it.",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "RxCode — The Visual Command Center for AI Coding Agents",
+    title: "RxCode — Plan the big idea. Let your agents ship it.",
     description:
-      "A native macOS desktop client for AI coding agents. Visual sessions, project tree, and code review in one place.",
+      "Sprint boards, automatic agent routing, schedules, briefings and chat for your team of AI coding agents — on Mac, server and mobile.",
     images: ["/api/og"],
   },
 };

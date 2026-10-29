@@ -595,6 +595,9 @@
     "Run" : {
 
     },
+    "RxCode (Default)" : {
+
+    },
     "Scheduled" : {
 
     },
@@ -677,7 +680,7 @@
     "Terminal" : {
 
     },
-    "Terracotta (Default)" : {
+    "Terracotta" : {
 
     },
     "The 5-hour limit is %@ used." : {

@@ -363,6 +363,7 @@ struct SettingsWindowRoot: View {
 
     var body: some View {
         SettingsView()
+            .containerBackground(ClaudeTheme.background, for: .window)
             .environment(appState)
             .environment(windowState)
     }

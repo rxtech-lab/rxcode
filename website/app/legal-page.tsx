@@ -1,3 +1,4 @@
+import { Brand } from "./brand";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -55,7 +56,7 @@ function TopNav() {
             href="/"
             className="font-display text-2xl font-bold text-primary tracking-tight"
           >
-            RxCode
+            <Brand />
           </Link>
           <div className="hidden md:flex gap-7 text-sm">
             <Link
@@ -107,7 +108,7 @@ function Footer() {
             href="/"
             className="font-display text-2xl font-bold text-primary tracking-tight"
           >
-            RxCode
+            <Brand />
           </Link>
           <span className="text-sm text-on-surface-variant/70">
             © {year} RxCode. All rights reserved.

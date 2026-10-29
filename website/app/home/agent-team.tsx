@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { range, ScrollScene, useSceneProgress } from "./motion";
+import { range, ScrollScene, useLeaveProgress, useSceneProgress } from "./motion";
 import { CheckIcon, Eyebrow, SparkIcon } from "./ui";
 
 const IDEA = "Build a habit tracker with cloud sync, widgets and a weekly review.";
@@ -18,7 +18,7 @@ const HEADLINE =
 
 export function AgentTeam() {
   return (
-    <ScrollScene id="team" height="320vh">
+    <ScrollScene id="team" height="320vh" clip={false}>
       <TeamStage />
     </ScrollScene>
   );
@@ -26,12 +26,21 @@ export function AgentTeam() {
 
 function TeamStage() {
   const p = useSceneProgress();
+  // Exit: the stage stays put and recedes while the next section slides over.
+  const leave = useLeaveProgress("team");
   const typed = Math.round(range(p, 0.05, 0.3) * IDEA.length);
   const words = HEADLINE.split(" ");
   const lit = range(p, 0, 0.75) * words.length;
 
   return (
-    <div className="mx-auto grid h-full max-w-[var(--container-max)] grid-cols-1 items-center gap-10 px-6 pb-10 pt-20 lg:grid-cols-2 lg:gap-16">
+    <div
+      className="mx-auto grid h-full max-w-[var(--container-max)] grid-cols-1 items-center gap-10 px-6 pb-10 pt-20 lg:grid-cols-2 lg:gap-16"
+      style={{
+        transform: `translateY(${leave * 100}vh) scale(${1 - leave * 0.14})`,
+        opacity: 1 - leave * 0.7,
+        filter: leave > 0 ? `blur(${leave * 8}px)` : undefined,
+      }}
+    >
       <div>
         <Eyebrow>Agent team</Eyebrow>
         <p className="mt-6 font-display text-2xl font-semibold leading-[1.2] tracking-[-0.02em] md:text-[44px]">
@@ -86,23 +95,25 @@ function TeamStage() {
               <li
                 key={item.title}
                 className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] p-3 transition-[border-color] duration-500"
-                style={{
-                  opacity: shown,
-                  transform: `translateY(${(1 - shown) * 16}px)`,
-                  borderColor: done ? "rgba(52,211,153,0.35)" : undefined,
-                }}
+                style={{ borderColor: done ? "rgba(52,211,153,0.35)" : undefined }}
               >
+                {/* The slot is in place from the start; the plan fills it in. */}
                 <span
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-all duration-500 ${
-                    done
-                      ? "border-emerald-400 bg-emerald-400 text-black"
-                      : "border-white/20 text-transparent"
-                  }`}
+                  className="flex min-w-0 flex-1 items-center gap-3"
+                  style={{ opacity: shown, transform: `translateY(${(1 - shown) * 12}px)` }}
                 >
-                  <CheckIcon className="h-3.5 w-3.5" />
-                </span>
-                <span className="flex-1 truncate text-sm text-on-surface">
-                  {item.title}
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-all duration-500 ${
+                      done
+                        ? "border-emerald-400 bg-emerald-400 text-black"
+                        : "border-white/20 text-transparent"
+                    }`}
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="flex-1 truncate text-sm text-on-surface">
+                    {item.title}
+                  </span>
                 </span>
                 <span
                   className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 py-1 pl-1 pr-2.5 transition-all duration-500"

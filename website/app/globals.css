@@ -103,17 +103,24 @@ body {
 
 .release-notes h2 {
   font-size: 1.35rem;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--color-surface-variant);
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Section labels ("Features", "Fixes", …) render as mint pills. */
 .release-notes h3 {
-  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.18em;
   color: var(--color-primary);
   font-family: var(--font-mono);
-  font-weight: 500;
+  font-weight: 600;
+  padding: 0.35em 0.9em;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 .release-notes h4 {
@@ -140,7 +147,7 @@ body {
 .release-notes ul,
 .release-notes ol {
   margin: 0.75em 0;
-  padding-left: 1.4em;
+  padding-left: 0.4em;
   color: var(--color-on-surface-variant);
 }
 
@@ -154,12 +161,14 @@ body {
 }
 
 .release-notes ul > li::before {
-  content: "›";
+  content: "";
   position: absolute;
   left: 0;
-  top: 0;
-  color: var(--color-primary);
-  font-family: var(--font-mono);
+  top: 0.68em;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: var(--color-primary);
 }
 
 .release-notes ol {
@@ -179,9 +188,9 @@ body {
   font-family: var(--font-mono);
   font-size: 0.85em;
   background: var(--color-surface-container);
-  border: 1px solid var(--color-surface-variant);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.1em 0.4em;
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--color-on-surface);
 }
 
@@ -189,7 +198,7 @@ body {
   background: var(--color-surface-container-lowest);
   border: 1px solid var(--color-surface-variant);
   padding: 1em 1.1em;
-  border-radius: 6px;
+  border-radius: 14px;
   overflow-x: auto;
   margin: 1em 0;
 }
@@ -203,6 +212,7 @@ body {
 
 .release-notes blockquote {
   border-left: 3px solid var(--color-primary);
+  border-radius: 0 12px 12px 0;
   background: var(--color-surface-container-low);
   margin: 1em 0;
   padding: 0.6em 1em;
@@ -218,8 +228,8 @@ body {
 .release-notes img {
   max-width: 100%;
   height: auto;
-  border: 1px solid var(--color-surface-variant);
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
   margin: 1em 0;
 }
 
@@ -256,11 +266,12 @@ body {
   font-family: var(--font-display);
   font-size: 1.45rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--color-on-surface);
   margin-top: 1.8em;
   margin-bottom: 0.65em;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--color-surface-variant);
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .legal-content p {
@@ -445,25 +456,6 @@ body {
   mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
 }
 
-/* Screenshot placeholders shimmer until real captures replace them. */
-.placeholder-shimmer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.05) 50%, transparent 70%);
-  background-size: 250% 100%;
-  animation: shimmer 3.2s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  from {
-    background-position: 130% 0;
-  }
-  to {
-    background-position: -130% 0;
-  }
-}
-
 .progress-indeterminate {
   animation: progress-slide 1.4s ease-in-out infinite;
 }
@@ -563,7 +555,6 @@ body {
   }
   .aurora,
   .marquee,
-  .placeholder-shimmer::after,
   .progress-indeterminate,
   .caret,
   .typing-dot,
@@ -581,4 +572,38 @@ body {
     animation: none;
     transition: none;
   }
+}
+
+/* Section-to-section morph (driven by MorphLayer in home/morph.tsx). */
+[data-morph] {
+  opacity: calc(var(--morph-in, 1) * var(--morph-out, 1));
+}
+
+.morph-layer {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+}
+
+.morph-piece {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.45));
+}
+
+.morph-blank {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-primary) 14%, var(--color-surface-container-high)),
+    var(--color-surface-container-high)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }

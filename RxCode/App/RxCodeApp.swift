@@ -83,6 +83,13 @@ struct RxCodeApp: App {
     private let updateService = UpdateService.shared
 
     init() {
+        #if DEBUG
+        if AppSupport.isScreenshotCapture {
+            UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+            UserDefaults.standard.set(false, forKey: "showMenuBarExtra")
+            UserDefaults.standard.set(["en"], forKey: "AppleLanguages")
+        }
+        #endif
         if !AppSupport.isTestProcess {
             FirebaseBootstrap.configure()
         }
@@ -107,7 +114,12 @@ struct RxCodeApp: App {
         } defaultValue: {
             WorkspaceWindowValue(workspaceID: workspaceManager.frontmostWorkspaceID)
         }
+        #if DEBUG
+        .defaultSize(width: AppSupport.isScreenshotCapture ? 1440 : 1000,
+                     height: AppSupport.isScreenshotCapture ? 900 : 700)
+        #else
         .defaultSize(width: 1000, height: 700)
+        #endif
         .defaultLaunchBehavior(.presented)
         .commands {
             CommandGroup(replacing: .newItem) {

@@ -10,7 +10,7 @@ import {
   ArrowRightIcon,
   GITHUB_REPO_URL,
   GitHubIcon,
-  ScreenshotPlaceholder,
+  ProductScreenshot,
 } from "./ui";
 
 export function Hero({
@@ -120,7 +120,7 @@ export function Hero({
               <span className="h-3 w-3 rounded-full bg-[#28c840]" />
             </div>
             <div className="rounded-[20px]">
-              <ScreenshotPlaceholder label="RxCode workspace" />
+              <ProductScreenshot src="/screenshot/demo/workspace.webp" alt="RxCode desktop chat showing a fictional Orbit Studio conversation" priority />
             </div>
           </div>
         </div>
@@ -144,6 +144,7 @@ function AgentMarquee() {
             <div
               key={`${agent.name}-${i}`}
               aria-hidden={i >= AGENTS.length}
+              data-morph="hero"
               className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] pl-5 pr-8 py-3"
             >
               <Image

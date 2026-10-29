@@ -93,7 +93,7 @@ function SprintStage() {
         </div>
       </div>
 
-      <div className="glass-panel relative rounded-[28px] p-4 md:p-5">
+      <div data-morph="board" className="glass-panel relative rounded-[28px] p-4 md:p-5">
         <div className="grid grid-cols-4 gap-2 md:gap-3">
           {COLUMNS.map((column, ci) => (
             <div key={column} className="flex items-center justify-between px-1 pb-3">
@@ -119,6 +119,7 @@ function SprintStage() {
               style={{ left: `${card.column * 25}%`, top: `calc(8px + ${card.row} * var(--board-row))` }}
             >
               <div
+                data-morph="sprint"
                 className={`rounded-xl border p-2.5 shadow-lg transition-colors duration-500 md:p-3 ${
                   card.column === 3
                     ? "border-emerald-400/30 bg-emerald-400/[0.07]"

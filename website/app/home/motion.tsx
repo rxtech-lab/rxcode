@@ -140,12 +140,15 @@ export function ScrollScene({
   id,
   className = "",
   stageClassName = "",
+  clip = true,
 }: {
   children: ReactNode;
   height?: string;
   id?: string;
   className?: string;
   stageClassName?: string;
+  /** Set false to let stage content spill out (e.g. while it exits). */
+  clip?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   const [progress, setProgress] = useState(0);
@@ -185,7 +188,7 @@ export function ScrollScene({
       <div
         className={`${
           reduced ? "relative py-24" : "sticky top-0 h-screen"
-        } overflow-hidden ${stageClassName}`}
+        } ${clip ? "overflow-hidden" : "overflow-x-clip"} ${stageClassName}`}
       >
         <SceneContext.Provider value={reduced ? 1 : progress}>
           {children}
@@ -233,4 +236,42 @@ export function useElementProgress<T extends HTMLElement>(endOffset = 0.2) {
   }, [endOffset]);
 
   return [ref, reduced ? 1 : progress] as const;
+}
+
+/* ------------------------------------------------------------------ */
+/*  useLeaveProgress — progress of a pinned scene scrolling away       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 0 while the section is pinned, rising to 1 as its bottom edge scrolls from
+ * the bottom of the viewport to the top.
+ */
+export function useLeaveProgress(id: string) {
+  const [leave, setLeave] = useState(0);
+  const reduced = usePrefersReducedMotion();
+
+  useEffect(() => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const vh = window.innerHeight;
+      const next = clamp((vh - node.getBoundingClientRect().bottom) / vh);
+      setLeave((prev) => (Math.abs(prev - next) < 0.001 ? prev : next));
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [id]);
+
+  return reduced ? 0 : leave;
 }

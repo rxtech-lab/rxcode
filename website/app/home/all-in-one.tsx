@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { range, ScrollScene, useSceneProgress } from "./motion";
+import { range, ScrollScene, useLeaveProgress, useSceneProgress } from "./motion";
 import { CalendarIcon, ChatIcon, Eyebrow, NewspaperIcon } from "./ui";
 
 export function AllInOne() {
   return (
-    <ScrollScene id="everyday" height="330vh">
+    <ScrollScene id="everyday" height="330vh" clip={false}>
       <AllInOneStage />
     </ScrollScene>
   );
@@ -14,6 +14,8 @@ export function AllInOne() {
 
 function AllInOneStage() {
   const p = useSceneProgress();
+  // Exit: the stage holds and closes like an iris into a rounded window.
+  const leave = useLeaveProgress("everyday");
   const slide = range(p, 0.08, 0.92);
   const active = slide < 0.3 ? 0 : slide < 0.7 ? 1 : 2;
   const trackRef = useRef<HTMLDivElement>(null);
@@ -36,7 +38,14 @@ function AllInOneStage() {
   }, []);
 
   return (
-    <div className="flex h-full flex-col justify-center pb-10 pt-20">
+    <div
+      className="flex h-full flex-col justify-center pb-10 pt-20"
+      style={{
+        transform: `translateY(${leave * 100}vh) scale(${1 - leave * 0.08})`,
+        clipPath: leave > 0 ? `inset(${leave * 22}% ${leave * 26}% round ${leave * 56}px)` : undefined,
+        opacity: 1 - range(leave, 0.55, 1),
+      }}
+    >
       <div className="mx-auto w-full max-w-[var(--container-max)] px-6">
         <Eyebrow>Schedule · Briefing · Chat</Eyebrow>
         <div className="mt-5 flex flex-col justify-between gap-6 md:flex-row md:items-end">

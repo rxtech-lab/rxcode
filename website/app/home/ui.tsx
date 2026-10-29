@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 
 export const GITHUB_REPO_URL = "https://github.com/rxtech-lab/rxcode";
 export const FLOWCY_URL = "https://www.flowcy.dev";
@@ -25,34 +26,30 @@ export function Eyebrow({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Stand-in for a product screenshot. Swap it for an <Image> once the new
- * captures are ready.
- */
-export function ScreenshotPlaceholder({
-  label,
+/** Native macOS captures from an isolated workspace containing fictional data only. */
+export function ProductScreenshot({
+  src,
+  alt,
   aspect = "aspect-[16/10]",
   className = "",
+  priority = false,
 }: {
-  label: string;
+  src: string;
+  alt: string;
   aspect?: string;
   className?: string;
+  priority?: boolean;
 }) {
   return (
-    <div
-      className={`placeholder-shimmer relative ${aspect} w-full overflow-hidden rounded-[inherit] bg-surface-container-low ${className}`}
-      role="img"
-      aria-label={`Screenshot placeholder: ${label}`}
-    >
-      <div className="absolute inset-0 bg-dots opacity-40" />
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-on-surface-variant">
-          <ImageIcon className="h-5 w-5" />
-        </span>
-        <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-on-surface-variant/70">
-          {label}
-        </span>
-      </div>
+    <div className={`relative ${aspect} w-full overflow-hidden rounded-[inherit] bg-[#07132b] ${className}`}>
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        priority={priority}
+        sizes="(max-width: 767px) 100vw, (max-width: 1200px) 66vw, 1200px"
+        className="object-contain"
+      />
     </div>
   );
 }

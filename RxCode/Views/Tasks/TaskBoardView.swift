@@ -133,6 +133,7 @@ struct TaskOverviewView: View {
     @Environment(WindowState.self) private var windowState
 
     @Binding var sheet: TaskBoardSheet?
+    @State private var performance = StoryBoardPerformanceLog()
     @State private var keyword = ""
     /// The story whose task sheet is open.
     @State private var storySheet: ProjectStory?
@@ -150,6 +151,10 @@ struct TaskOverviewView: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = Self._logChanges()
+        #endif
+        let _ = performance.record("overview-body")
         let visibleProjects = visibleProjects
         let isSearching = !keyword.trimmingCharacters(in: .whitespaces).isEmpty
         VStack(spacing: 0) {
@@ -199,11 +204,22 @@ struct TaskOverviewView: View {
                     // together instead of jumping.
                     .taskBoardAnimation(value: visibleProjects.map(\.id))
                 }
+                .onScrollGeometryChange(for: CGPoint.self) { geometry in
+                    geometry.contentOffset
+                } action: { _, offset in
+                    performance.recordScrollOffset(offset)
+                }
+                .onScrollPhaseChange { oldPhase, newPhase in
+                    performance.log("overview scroll \(oldPhase) -> \(newPhase) projects=\(visibleProjects.count)")
+                    if newPhase == .idle { performance.flush(scope: "overview") }
+                }
                 .defaultScrollAnchor(.leading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .background(backdrop)
+        .task { await performance.monitor(scope: "overview") }
+        .onDisappear { performance.flush(scope: "overview") }
         .overlay(alignment: .topTrailing) {
             if let project = hiddenCardFeedback {
                 HStack(spacing: 12) {
@@ -259,6 +275,8 @@ struct TaskOverviewView: View {
 
     /// While filtering, projects with no match drop out so results stay dense.
     private var visibleProjects: [Project] {
+        let start = DispatchTime.now().uptimeNanoseconds
+        defer { performance.record("visible-projects", since: start) }
         let trimmed = keyword.trimmingCharacters(in: .whitespaces)
         let projects = appState.projects.filter { !appState.hiddenTaskProjectIds.contains($0.id) }
         guard !trimmed.isEmpty else { return projects }

@@ -545,6 +545,16 @@ extension AppState {
 
         let model = sessionStates[sessionKey]?.model ?? projectSelection.model
         let effort = sessionStates[sessionKey]?.effort ?? (selectedEffort == "auto" ? nil : selectedEffort)
+        let acpSelection = agentProvider == .acp ? acpSelectionParts(for: model) : nil
+        await CodingAnalyticsRecorder.shared.begin(
+            threadID: sessionKey, projectID: projectId, turnID: streamId, prompt: displayText,
+            provider: agentProvider,
+            clientID: agentProvider == .acp
+                ? (acpSelection?.clientId ?? sessionStates[sessionKey]?.acpClientId ?? selectedACPClientId) : nil,
+            model: acpSelection?.model ?? model,
+            usageLimits: codingAnalyticsLimits(provider: agentProvider, model: model,
+                clientID: acpSelection?.clientId ?? sessionStates[sessionKey]?.acpClientId, phase: .start)
+        )
         let task = Task { [weak self, window] in
             guard let self else { return }
             await self.processStream(

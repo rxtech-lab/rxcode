@@ -429,6 +429,19 @@ extension AppState {
             logger.info("\(debugLogPrefix, privacy: .public) phase=sendPromptReady stream=\(streamId) sessionKey=\(sessionKey, privacy: .public) provider=\(effectiveProvider.rawValue, privacy: .public) model=\(effectiveModel ?? "<default>", privacy: .public) cwd=\(effectiveCwd, privacy: .public)")
         }
 
+        let acpSelection = effectiveProvider == .acp ? acpSelectionParts(for: effectiveModel) : nil
+        let userInitiated = !isStopHookReprompt && (!skipAppendingUserMessage || initialMessages != nil)
+        await CodingAnalyticsRecorder.shared.begin(
+            threadID: sessionKey, projectID: project.id, turnID: streamId,
+            prompt: userInitiated ? (displayText ?? prompt) : nil,
+            provider: effectiveProvider,
+            clientID: effectiveProvider == .acp
+                ? (acpSelection?.clientId ?? sessionStates[sessionKey]?.acpClientId ?? selectedACPClientId) : nil,
+            model: acpSelection?.model ?? effectiveModel,
+            usageLimits: codingAnalyticsLimits(provider: effectiveProvider, model: effectiveModel,
+                clientID: acpSelection?.clientId ?? sessionStates[sessionKey]?.acpClientId, phase: .start)
+        )
+
         let task = Task { [weak self, window] in
             guard let self else { return }
             await self.processStream(
@@ -728,6 +741,7 @@ extension AppState {
     func applySessionIdRedirect(from pendingKey: String, to realSessionId: String) {
         logger.info("[IDE_SEND_THREAD] session id redirect pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")
         sessionIdRedirect[pendingKey] = realSessionId
+        Task { await CodingAnalyticsRecorder.shared.redirect(from: pendingKey, to: realSessionId) }
         if let waiter = sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
             logger.info("[IDE_SEND_THREAD] resuming session rename waiter pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")
             waiter.resume(with: realSessionId)

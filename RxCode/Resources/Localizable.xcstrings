@@ -5093,6 +5093,9 @@
     "Choose Claude Code, Codex, or an ACP registry client." : {
 
     },
+    "Choose Export Location…" : {
+
+    },
     "Choose File…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5487,6 +5490,9 @@
           }
         }
       }
+    },
+    "Clear Rating" : {
+
     },
     "Clear selection" : {
       "localizations" : {
@@ -5942,6 +5948,12 @@
         }
       }
     },
+    "Coding Analytics" : {
+
+    },
+    "Coding Analytics Error" : {
+
+    },
     "Collapse chats" : {
       "localizations" : {
         "ko" : {
@@ -6228,6 +6240,9 @@
           }
         }
       }
+    },
+    "Compressing ZIP…" : {
+
     },
     "Condition" : {
       "localizations" : {
@@ -8202,6 +8217,12 @@
         }
       }
     },
+    "Delete All Analytics" : {
+
+    },
+    "Delete All Analytics…" : {
+
+    },
     "Delete All Archived" : {
       "localizations" : {
         "ko" : {
@@ -8217,6 +8238,9 @@
           }
         }
       }
+    },
+    "Delete all coding analytics?" : {
+
     },
     "Delete all memories" : {
       "localizations" : {
@@ -8285,6 +8309,9 @@
           }
         }
       }
+    },
+    "Delete Data" : {
+
     },
     "Delete Document" : {
       "localizations" : {
@@ -8598,6 +8625,9 @@
         }
       }
     },
+    "Deleting…" : {
+
+    },
     "Deny" : {
       "localizations" : {
         "en" : {
@@ -8816,6 +8846,9 @@
           }
         }
       }
+    },
+    "Developer" : {
+
     },
     "Device name" : {
       "localizations" : {
@@ -10539,6 +10572,25 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$d:%2$02d 后过期"
+          }
+        }
+      }
+    },
+    "Export a ZIP with analytics and the full available chat history of recorded sessions. All providers use a shared message format, including text, tool calls and results. Attachment files are not included. Unavailable histories are listed in the manifest." : {
+
+    },
+    "Export Data" : {
+
+    },
+    "Export…" : {
+
+    },
+    "Exporting chat histories: %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Exporting chat histories: %1$lld of %2$lld"
           }
         }
       }
@@ -12321,6 +12373,9 @@
           }
         }
       }
+    },
+    "How was this session?" : {
+
     },
     "https://example.com/mcp" : {
       "localizations" : {
@@ -16517,6 +16572,9 @@
         }
       }
     },
+    "No Recorded Session" : {
+
+    },
     "No relay server configured" : {
       "localizations" : {
         "ko" : {
@@ -18530,6 +18588,9 @@
         }
       }
     },
+    "Permanently delete all recorded coding analytics and ratings from this Mac. Your chats and previously exported files are kept." : {
+
+    },
     "Permanently delete archived chats after the retention window. Pinned chats are never auto-deleted. This cannot be undone." : {
       "localizations" : {
         "ko" : {
@@ -18882,6 +18943,9 @@
           }
         }
       }
+    },
+    "Preparing export…" : {
+
     },
     "Preset" : {
       "localizations" : {
@@ -19566,6 +19630,12 @@
         }
       }
     },
+    "Rate Session" : {
+
+    },
+    "Rate this coding session" : {
+
+    },
     "Raw Text" : {
 
     },
@@ -19704,6 +19774,12 @@
           }
         }
       }
+    },
+    "Record Coding Behavior" : {
+
+    },
+    "Records prompts, model history, usage-limit snapshots, session timing, reported tokens and ratings. Nothing is uploaded automatically." : {
+
     },
     "Refactor onboarding into slides" : {
       "localizations" : {
@@ -21603,6 +21679,12 @@
     "Saving credentials and refreshing models…" : {
 
     },
+    "Saving rating…" : {
+
+    },
+    "Saving ZIP…" : {
+
+    },
     "Saving…" : {
 
     },
@@ -22560,6 +22642,9 @@
       }
     },
     "Send a follow-up to this run's thread" : {
+
+    },
+    "Send a prompt with coding analytics enabled to record and rate this session." : {
 
     },
     "Send as notification" : {
@@ -24363,6 +24448,9 @@
           }
         }
       }
+    },
+    "Starts with your next prompt" : {
+
     },
     "Status" : {
       "localizations" : {
@@ -26731,6 +26819,9 @@
         }
       }
     },
+    "Turning recording off keeps existing data. Exported files contain your prompt text." : {
+
+    },
     "turns" : {
       "localizations" : {
         "zh-Hans" : {
@@ -26786,6 +26877,9 @@
     "Unable to Save" : {
 
     },
+    "Unable to Save Rating" : {
+
+    },
     "Unarchive" : {
       "localizations" : {
         "ko" : {
@@ -26811,6 +26905,9 @@
           }
         }
       }
+    },
+    "Understand how you work with Claude Code, Codex and ACP clients. Everything stays on this Mac." : {
+
     },
     "Undo" : {
 
@@ -28435,6 +28532,12 @@
         }
       }
     },
+    "Your chats are kept" : {
+
+    },
+    "Your Data" : {
+
+    },
     "Your Flowcy account email" : {
       "localizations" : {
         "zh-Hans" : {
@@ -28444,6 +28547,9 @@
           }
         }
       }
+    },
+    "ZIP with analytics and chat history" : {
+
     },
     "Zone ID" : {
 

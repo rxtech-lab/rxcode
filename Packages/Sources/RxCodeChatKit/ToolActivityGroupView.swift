@@ -7,6 +7,7 @@ public struct ToolActivityGroupView: View {
     let tools: [ToolCall]
     let isStreaming: Bool
     @State private var isExpanded = false
+    @State private var showingActivitySheet = false
     @State private var selectedID: String?
 
     /// Interactive json-render views drawn inline above the group instead of folded into it.
@@ -42,7 +43,11 @@ public struct ToolActivityGroupView: View {
     private var activity: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
+                #if os(iOS)
+                showingActivitySheet = true
+                #else
                 withAnimation(.snappy(duration: 0.25)) { isExpanded.toggle() }
+                #endif
             } label: {
                 HStack(spacing: 12) {
                     ToolActivityBadge(status: overallStatus, systemImage: "wrench.and.screwdriver.fill", size: 32)
@@ -99,16 +104,55 @@ public struct ToolActivityGroupView: View {
                 .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        #if os(iOS)
+        .sheet(isPresented: $showingActivitySheet) {
+            activitySheet
+        }
+        .sensoryFeedback(.selection, trigger: showingActivitySheet)
+        #else
         .sheet(isPresented: Binding(get: { selectedID != nil }, set: { if !$0 { selectedID = nil } })) {
             if let tool = tools.first(where: { $0.id == selectedID }) {
                 ToolActivityDetailView(tool: tool, isStreaming: isStreaming)
             }
         }
-        #if os(iOS)
-        .sensoryFeedback(.selection, trigger: isExpanded)
-        .sensoryFeedback(.selection, trigger: selectedID)
         #endif
     }
+
+    #if os(iOS)
+    private var activitySheet: some View {
+        NavigationStack {
+            List {
+                ForEach(tools) { tool in
+                    Button { selectedID = tool.id } label: {
+                        ToolActivityStepRow(
+                            tool: tool,
+                            status: ToolActivityStatus(tool: tool, isStreaming: isStreaming),
+                            isFirst: tool.id == tools.first?.id,
+                            isLast: tool.id == tools.last?.id
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("tool-activity-\(tool.id)")
+                }
+            }
+            .navigationTitle("Tool Calls")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showingActivitySheet = false }
+                }
+            }
+            .sheet(isPresented: Binding(get: { selectedID != nil }, set: { if !$0 { selectedID = nil } })) {
+                if let tool = tools.first(where: { $0.id == selectedID }) {
+                    ToolActivityDetailView(tool: tool, isStreaming: isStreaming)
+                }
+            }
+            .sensoryFeedback(.selection, trigger: selectedID)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+    #endif
 
     private var summary: String {
         let counts = Dictionary(grouping: statuses) { $0 }

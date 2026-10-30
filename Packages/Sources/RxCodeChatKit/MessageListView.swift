@@ -4,6 +4,12 @@ import RxCodeCore
 
 #if os(macOS)
 
+extension EnvironmentValues {
+    /// Host-provided actions shown at the trailing end of the transcript's last
+    /// row once the response settles — the same spot as a message's copy button.
+    @Entry public var chatTranscriptEndActions: AnyView? = nil
+}
+
 nonisolated enum MessageListViewScrollPolicy {
     static func shouldRequestLiveBottomScroll(wasAtBottom: Bool) -> Bool {
         wasAtBottom
@@ -20,6 +26,7 @@ nonisolated enum MessageListViewScrollPolicy {
 struct MessageListView: View {
     @Environment(ChatBridge.self) private var chatBridge
     @Environment(WindowState.self) private var windowState
+    @Environment(\.chatTranscriptEndActions) private var transcriptEndActions
     @State private var settledItems: [ChatMessage] = []
     /// Pre-grouped rows for `settledItems`. Streaming deltas re-evaluate this
     /// view frequently, so rebuilding every historical row from `settledItems`
@@ -337,7 +344,16 @@ struct MessageListView: View {
                 Spacer(minLength: 40)
             }
         case .webPreview:
-            WebPreviewButton(messages: settledItems)
+            HStack(alignment: .center, spacing: 8) {
+                WebPreviewButton(messages: settledItems)
+                Spacer(minLength: 0)
+                if let transcriptEndActions {
+                    transcriptEndActions
+                }
+            }
+            // Assistant bubbles reserve 40pt on the trailing edge; line the
+            // actions up with their hover copy button.
+            .padding(.trailing, 40)
         case .loadingPrevious, .custom:
             EmptyView()
         }

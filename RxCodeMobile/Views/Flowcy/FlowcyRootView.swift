@@ -182,7 +182,7 @@ struct FlowcyRemoteToolbar: ToolbarContent {
                         MobileHaptics.buttonTap()
                         actions.connect()
                     }
-                    Button("Manage Paired Computers", systemImage: "desktopcomputer.and.gearshape") {
+                    Button("Manage Paired Computers", systemImage: "desktopcomputer") {
                         MobileHaptics.buttonTap()
                         showingPairedComputers = true
                     }

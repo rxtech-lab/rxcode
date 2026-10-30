@@ -22,7 +22,6 @@ struct SyncLoadingView: View {
     @State private var shimmerTask: Task<Void, Never>?
 
     var body: some View {
-        let _ = logger.debug("SyncLoadingView body: isTimedOut=\(self.isTimedOut)")
         if isTimedOut {
             timeoutView
         } else {

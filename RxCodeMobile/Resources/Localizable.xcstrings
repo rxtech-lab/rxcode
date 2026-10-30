@@ -1181,6 +1181,9 @@
         }
       }
     },
+    "All Views Hidden" : {
+
+    },
     "All workflows passing" : {
 
     },
@@ -5863,6 +5866,9 @@
     "Has its own task board" : {
 
     },
+    "Hidden Views" : {
+
+    },
     "Hide" : {
 
     },
@@ -5900,6 +5906,9 @@
           }
         }
       }
+    },
+    "Hide View" : {
+
     },
     "High" : {
       "localizations" : {
@@ -6663,6 +6672,7 @@
 
     },
     "Locked once the task has run, so it keeps matching what the agent was asked to do." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6936,6 +6946,9 @@
       }
     },
     "Manage Your Subscription" : {
+
+    },
+    "Manage…" : {
 
     },
     "Managed on Mac" : {
@@ -7896,7 +7909,11 @@
     "No Messages" : {
 
     },
+    "No Models" : {
+
+    },
     "No models available" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7919,6 +7936,9 @@
       }
     },
     "No Models Available" : {
+
+    },
+    "No models match the current selection." : {
 
     },
     "No open auto-update pull requests." : {
@@ -8553,7 +8573,11 @@
         }
       }
     },
+    "Nothing to filter by yet" : {
+
+    },
     "Nothing to filter by yet." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10531,9 +10555,6 @@
     "Saving template…" : {
 
     },
-    "Saving view…" : {
-
-    },
     "Saving webhook…" : {
 
     },
@@ -10864,6 +10885,9 @@
           }
         }
       }
+    },
+    "Search models" : {
+
     },
     "Search or enter website name" : {
       "localizations" : {
@@ -12290,6 +12314,7 @@
 
     },
     "The description is locked once a task has run, so it keeps matching what the agent was asked to do." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13617,6 +13642,9 @@
     "Use Folder" : {
 
     },
+    "Use Hidden Views to restore a view." : {
+
+    },
     "Use mobile search to find synced projects, thread titles, and desktop search hits." : {
       "localizations" : {
         "en" : {
@@ -13755,6 +13783,9 @@
         }
       }
     },
+    "View hidden" : {
+
+    },
     "View Log" : {
 
     },
@@ -13788,6 +13819,9 @@
           }
         }
       }
+    },
+    "View restored" : {
+
     },
     "View Run" : {
 
@@ -13836,6 +13870,9 @@
           }
         }
       }
+    },
+    "Views" : {
+
     },
     "Voice Input" : {
 

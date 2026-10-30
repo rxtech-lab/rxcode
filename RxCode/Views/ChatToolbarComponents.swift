@@ -80,7 +80,6 @@ struct ChatToolbarControls: View {
 
     var body: some View {
         HStack(spacing: placement == .composer ? 8 : 4) {
-            CodingSessionRatingButton()
             if placement == .composer {
                 Spacer(minLength: 12)
             }
@@ -318,6 +317,7 @@ struct ChatDetailModifiers: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .environment(\.chatTranscriptEndActions, AnyView(CodingSessionRatingButton()))
             .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
             .overlay {
                 if let request = presentedPermissionModalRequest {

@@ -152,7 +152,7 @@ struct ProjectsSidebar: View {
 
                 // Projects Section
                 if !state.projects.isEmpty {
-                    GlassEffectContainer(spacing: 12) {
+                    Group {
                         ForEach(state.projects) { project in
                             GlassProjectCard(
                                 project: project,
@@ -169,12 +169,13 @@ struct ProjectsSidebar: View {
                             )
                         }
                     }
-                } else {
-                    emptyProjectsView
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+        }
+        .overlay {
+            if state.projects.isEmpty { emptyProjectsView }
         }
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.3), value: state.projects.map(\.id))
@@ -284,8 +285,7 @@ struct ProjectsSidebar: View {
             .buttonStyle(.glass)
             .padding(.top, 8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Helpers
@@ -338,18 +338,15 @@ struct ProjectsSidebar: View {
     }
 
     private func threadCount(for projectID: UUID) -> Int {
-        state.sessions.filter { $0.projectId == projectID && !$0.isArchived }.count
+        state.sessionListIndex.projects[projectID]?.threadCount ?? 0
     }
 
     private func activeJobCount(for projectID: UUID) -> Int {
-        state.sessions.filter { $0.projectId == projectID && $0.isStreaming }.count
+        state.sessionListIndex.projects[projectID]?.activeJobCount ?? 0
     }
 
     private func lastActivity(for projectID: UUID) -> Date? {
-        state.sessions
-            .filter { $0.projectId == projectID }
-            .map(\.updatedAt)
-            .max()
+        state.sessionListIndex.projects[projectID]?.lastActivity
     }
 
     private static func truncatedPath(_ path: String) -> String {

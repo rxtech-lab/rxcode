@@ -204,7 +204,7 @@ extension MobileAppState {
             if !hasReceivedInitialSnapshot { hasReceivedInitialSnapshot = true }
             if !cachedDesktopTaskProjects.isEmpty { cachedDesktopTaskProjects = [] }
             let applyMillis = Int(Date().timeIntervalSince(applyStart) * 1000)
-            logger.info("[MobileSync] applied snapshot seq=\(snap.seq ?? 0, privacy: .public) in \(applyMillis, privacy: .public)ms changed=[\(changedFields.joined(separator: ","), privacy: .public)]")
+            logger.info("PERFORMANCE: [MobileSync] applied snapshot seq=\(snap.seq ?? 0, privacy: .public) in \(applyMillis, privacy: .public)ms changed=[\(changedFields.joined(separator: ","), privacy: .public)]")
             if !changedFields.isEmpty {
                 scheduleTaskCacheSave()
                 refreshWidgetData()
@@ -604,20 +604,24 @@ extension MobileAppState {
     }
 
     func upsertSessionSummary(_ summary: SessionSummary) {
-        if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
-            sessions[index] = summary
+        var updated = sessions
+        if let index = updated.firstIndex(where: { $0.id == summary.id }) {
+            guard updated[index] != summary else { return }
+            updated[index] = summary
         } else {
-            sessions.append(summary)
+            updated.append(summary)
         }
-        sessions.sort { lhs, rhs in
+        updated.sort { lhs, rhs in
             if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
             return lhs.updatedAt > rhs.updatedAt
         }
+        sessions = updated
     }
 
     func updateSessionStreamingFlag(sessionID: String, isStreaming: Bool) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         let current = sessions[index]
+        guard current.isStreaming != isStreaming else { return }
         sessions[index] = SessionSummary(
             id: current.id,
             projectId: current.projectId,
@@ -630,7 +634,10 @@ extension MobileAppState {
             progress: current.progress,
             todos: current.todos,
             queuedMessages: current.queuedMessages,
-            hasUncheckedCompletion: current.hasUncheckedCompletion
+            hasUncheckedCompletion: current.hasUncheckedCompletion,
+            parentThreadId: current.parentThreadId,
+            threadLabel: current.threadLabel,
+            changedFileCount: current.changedFileCount
         )
     }
 

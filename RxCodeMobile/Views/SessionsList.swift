@@ -1,6 +1,7 @@
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
+import os
 
 enum MobileDraftSessionID {
     private static let prefix = "draft-new"
@@ -29,6 +30,7 @@ struct SessionsList: View {
     var usesSelection = true
     @State private var searchText = ""
     @State private var showingNewThread = false
+    @State private var createdSessionID: String?
     @State private var showingTasks = false
     @State private var showingDeleteProjectConfirm = false
     @State private var showingSearch = false
@@ -50,6 +52,8 @@ struct SessionsList: View {
     // into these caches when the project / each thread appears.
     @State private var projectMenuItems: [MenuItem] = []
     @State private var threadMenus: [String: [MenuItem]] = [:]
+    @State private var threadMenuKeys: [String: String] = [:]
+    @State private var threadMenuGeneration = 0
     @State private var isRunningMenuCommand = false
 
     private var project: Project? {
@@ -70,6 +74,7 @@ struct SessionsList: View {
     /// increments as the user scrolls so we never render every thread at once.
     @State private var displayLimit = SessionsList.pageSize
     private static let pageSize = 20
+    private static let performanceLogger = Logger(subsystem: "com.rxlab.RxCodeMobile", category: "ListPerformance")
 
     /// Parent thread ids whose nested review children are currently expanded.
     @State private var expandedReviewParentIds: Set<String> = []
@@ -96,9 +101,14 @@ struct SessionsList: View {
                 FullScreenSearchView(isPresented: $showingSearch)
                     .environmentObject(state)
             }
-            .sheet(isPresented: $showingNewThread) {
+            .sheet(isPresented: $showingNewThread, onDismiss: {
+                guard let id = createdSessionID else { return }
+                createdSessionID = nil
+                let resolved = state.resolveSessionID(id)
+                state.pendingDeepLink = MobileDeepLink(sessionID: resolved, projectID: projectID)
+            }) {
                 NewThreadSheet(projectID: projectID) { newSessionID in
-                    selected = newSessionID
+                    createdSessionID = newSessionID
                 }
                 .environmentObject(state)
                 .mobileSheetPresentation()
@@ -172,6 +182,12 @@ struct SessionsList: View {
                 title: "Working…",
                 message: "The Mac is performing the requested action."
             )
+            .onChange(of: projectID) { _, _ in
+                displayLimit = Self.pageSize
+                expandedReviewParentIds = []
+                threadMenus = [:]
+                threadMenuKeys = [:]
+            }
             .task(id: projectMenuRefreshKey) {
                 // Prefetch the project's serializable context menu from the Mac,
                 // re-keyed on the git-dirty + PR state it's gated by so it
@@ -191,7 +207,7 @@ struct SessionsList: View {
     /// Invalidation key for a thread menu: changes when the thread's
     /// file-edit / review-thread gating changes.
     private func threadMenuRefreshKey(_ session: SessionSummary) -> String {
-        "\(session.id)|\(session.hasRecordedFileChanges)|\(session.isCodeReviewThread)"
+        "\(state.pairedDesktopPubkey)|\(state.relayURL)|\(session.id)|\(session.hasRecordedFileChanges)|\(session.isCodeReviewThread)|\(session.isStreaming)|\(projectMenuRefreshKey)|\(threadMenuGeneration)"
     }
 
     // MARK: - Serializable menu handling
@@ -220,6 +236,7 @@ struct SessionsList: View {
             defer { if showsLoading { isRunningMenuCommand = false } }
             do {
                 let result = try await state.executeMenuCommand(command)
+                threadMenuGeneration += 1
                 await state.refreshSnapshot()
                 if let threadId = result.threadId { selected = threadId }
                 if let urlString = result.openURL, let url = URL(string: urlString) { openURL(url) }
@@ -388,8 +405,9 @@ struct SessionsList: View {
                 if usesDesktopSearch {
                     desktopSearchResults
                 } else {
-                    GlassEffectContainer(spacing: 12) {
-                        ForEach(visible) { session in
+                    ForEach(visible) { session in
+                        // One stable lazy child per parent, including its expanded reviews.
+                        VStack(spacing: 10) {
                             threadGroup(for: session)
                         }
                     }
@@ -509,23 +527,11 @@ struct SessionsList: View {
     /// thread that is also in this list) are nested under their parent. A child
     /// whose parent isn't here falls back to the top level so it's never hidden.
     private var topLevelFiltered: [SessionSummary] {
-        let ids = Set(filtered.map(\.id))
-        return filtered.filter { session in
-            guard let parent = session.parentThreadId else { return true }
-            return !ids.contains(parent)
-        }
+        state.sessionListIndex.projects[projectID]?.roots ?? []
     }
 
-    /// Review children grouped by their parent thread id, oldest first so they
-    /// number naturally as `Review 1`, `Review 2`, …
     private var childrenByParent: [String: [SessionSummary]] {
-        let ids = Set(filtered.map(\.id))
-        let children = filtered.filter { session in
-            guard let parent = session.parentThreadId else { return false }
-            return ids.contains(parent)
-        }
-        return Dictionary(grouping: children, by: { $0.parentThreadId! })
-            .mapValues { $0.sorted { $0.updatedAt < $1.updatedAt } }
+        state.sessionListIndex.projects[projectID]?.children ?? [:]
     }
 
     /// A top-level thread row. When it owns review children, an in-card leading
@@ -573,7 +579,19 @@ struct SessionsList: View {
             // Prefetch this thread's serializable menu from the Mac so the
             // synchronous `.contextMenu` builder has it ready. Re-keyed on the
             // thread's gating state so it refreshes after new file edits, etc.
-            threadMenus[session.id] = (try? await state.fetchThreadMenu(sessionId: session.id)) ?? []
+            let key = threadMenuRefreshKey(session)
+            guard threadMenuKeys[session.id] != key else { return }
+            let start = ContinuousClock.now
+            do {
+                let items = try await state.fetchThreadMenu(sessionId: session.id)
+                guard !Task.isCancelled, key == threadMenuRefreshKey(session) else { return }
+                threadMenus[session.id] = items
+                threadMenuKeys[session.id] = key
+                Self.performanceLogger.debug("PERFORMANCE: mobile thread menu session=\(session.id, privacy: .public) items=\(items.count, privacy: .public) duration=\(String(describing: start.duration(to: .now)), privacy: .public)")
+            } catch {
+                guard !Task.isCancelled else { return }
+                Self.performanceLogger.debug("PERFORMANCE: mobile thread menu failed session=\(session.id, privacy: .public)")
+            }
         }
         .contextMenu {
             threadContextMenu(for: session)
@@ -605,21 +623,11 @@ struct SessionsList: View {
     private func loadMore() {
         guard displayLimit < topLevelFiltered.count else { return }
         displayLimit = min(displayLimit + Self.pageSize, topLevelFiltered.count)
+        Self.performanceLogger.debug("PERFORMANCE: mobile thread page visible=\(displayLimit, privacy: .public) total=\(topLevelFiltered.count, privacy: .public)")
     }
 
     private var filtered: [SessionSummary] {
-        let query = searchText.lowercased()
-        return state.sessions
-            .filter { session in
-                guard session.projectId == projectID, !session.isArchived else { return false }
-                if query.isEmpty { return true }
-                let title = ChatSession.stripAttachmentMarkers(from: session.title).lowercased()
-                return title.contains(query)
-            }
-            .sorted { lhs, rhs in
-                if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
-                return lhs.updatedAt > rhs.updatedAt
-            }
+        state.sessionListIndex.projects[projectID]?.sessions ?? []
     }
 }
 

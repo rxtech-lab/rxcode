@@ -72,6 +72,10 @@ struct SettingsView: View {
                     Label("Tasks", systemImage: "checklist")
                 }
                 .tag(8)
+
+            DeveloperSettingsTab()
+                .tabItem { Label("Developer", systemImage: "hammer") }
+                .tag(9)
         }
         .frame(width: 680, height: 620)
         .background(ClaudeTheme.background)

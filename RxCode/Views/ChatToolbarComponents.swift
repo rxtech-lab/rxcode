@@ -80,6 +80,7 @@ struct ChatToolbarControls: View {
 
     var body: some View {
         HStack(spacing: placement == .composer ? 8 : 4) {
+            CodingSessionRatingButton()
             if placement == .composer {
                 Spacer(minLength: 12)
             }

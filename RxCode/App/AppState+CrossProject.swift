@@ -58,6 +58,15 @@ extension AppState {
             streamStart: streamStart
         )
 
+        var analyticsModel = preflight.resolvedModel ?? model
+        defer {
+            let finalKey = sessionKey
+            let endedAt = Date()
+            let limits = codingAnalyticsLimits(provider: agentProvider, model: analyticsModel,
+                clientID: preflight.acpSpec?.id, phase: .end, now: endedAt)
+            Task { await CodingAnalyticsRecorder.shared.finish(turnID: streamId, threadID: finalKey, now: endedAt, usageLimits: limits) }
+        }
+
         let stream: AsyncStream<StreamEvent>
         if let earlyStream = preflight.earlyStream {
             stream = earlyStream
@@ -142,6 +151,14 @@ extension AppState {
                     break
                 }
 
+                if case .result(let result) = event {
+                    await CodingAnalyticsRecorder.shared.update(
+                        turnID: streamId, model: analyticsModel, usage: result.usage,
+                        usageLimits: codingAnalyticsLimits(provider: agentProvider, model: analyticsModel,
+                            clientID: preflight.acpSpec?.id, phase: .result)
+                    )
+                }
+
                 let ownsSession = stateForSession(sessionKey).activeStreamId == streamId
 
                 if !ownsSession {
@@ -188,7 +205,9 @@ extension AppState {
                 case .system(let systemEvent):
                     logger.info("[Stream:UI] event #\(eventCount) .system (gap=\(String(format: "%.1f", gap))s)")
                     if let model = systemEvent.model {
+                        analyticsModel = model
                         updateState(sessionKey) { $0.activeModelName = model }
+                        await CodingAnalyticsRecorder.shared.update(turnID: streamId, model: model)
                     }
 
                     // Track background "backend agent" tasks so a `result` that

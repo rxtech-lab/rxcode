@@ -45,6 +45,7 @@ extension AppState {
             state.needsNewMessage = true
             state.unconsumedSteerCount += 1
         }
+        await CodingAnalyticsRecorder.shared.update(turnID: streamId, prompt: text)
         await saveCurrentSession(in: window)
         return true
     }

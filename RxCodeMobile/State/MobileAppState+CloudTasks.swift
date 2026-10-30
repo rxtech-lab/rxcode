@@ -101,6 +101,9 @@ extension MobileAppState {
             guard let view = request.view else { throw cloudTaskInvalidRequest() }
             board.upsertSavedView(view)
 
+        case .editMetadata:
+            throw AutopilotRemoteError.server("Connect to the project's Mac to manage project metadata.")
+
         case .quickAddTask, .followUp, .fetchRuns:
             throw AutopilotRemoteError.server("Connect to a Mac to use its agent and task runs.")
         }

@@ -21,7 +21,16 @@ actor MCPAppConnection {
         if let process, process.isRunning { process.terminate() }
     }
 
-    func load(toolName: String) async throws -> MCPAppResource? {
+    /// Names of the server's tools that advertise an MCP App resource.
+    func appToolNames() async throws -> Set<String> {
+        try await connect()
+        return Set(tools.compactMap { tool in
+            MCPAppResource.resourceURI(in: tool) == nil ? nil : tool["name"]?.stringValue
+        })
+    }
+
+    private func connect() async throws {
+        guard tools.isEmpty else { return }
         _ = try await rpc("initialize", params: .object([
             "protocolVersion": .string("2025-11-25"),
             "capabilities": .object(["extensions": .object([
@@ -36,6 +45,10 @@ actor MCPAppConnection {
             tools += page["tools"]?.arrayValue ?? []
             cursor = page["nextCursor"]
         } while cursor?.stringValue != nil && tools.count < 10_000
+    }
+
+    func load(toolName: String) async throws -> MCPAppResource? {
+        try await connect()
         guard let tool = tools.first(where: { $0["name"]?.stringValue == toolName }),
               let uri = MCPAppResource.resourceURI(in: tool) else { return nil }
         let read = try await rpc("resources/read", params: .object(["uri": .string(uri)]))

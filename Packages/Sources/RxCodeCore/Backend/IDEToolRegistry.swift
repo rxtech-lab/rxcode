@@ -211,7 +211,7 @@ public enum IDEToolRegistry {
                     "provider": .object(["type": .array([.string("string"), .string("null")]), "description": .string("claudeCode, codex, acp, or null to unassign. Changing provider clears the old model and effort.")]),
                     "model": .object(["type": .array([.string("string"), .string("null")]), "description": .string("Model id from ide__list_agent_models for the selected provider, or null to use its default. ACP ids include the client prefix. Omit to keep the current model unless provider changes.")]),
                     "title": .object(["type": .string("string"), "description": .string("Replacement nonempty title.")]),
-                    "details": .object(["type": .string("string"), "description": .string("Replacement Markdown description. Cannot change after a task has started.")]),
+                    "details": .object(["type": .string("string"), "description": .string("Replacement Markdown description. Can be edited after a task has run; does not change the existing run transcript or send a follow-up to the agent.")]),
                     "status": .object(["type": .string("string"), "description": .string("Destination column id. Entering a chat column may start an agent and consume tokens; running tasks cannot change column.")]),
                     "story_id": .object(["type": .array([.string("string"), .string("null")]), "description": .string("Story UUID on the task project board; null removes the story assignment.")]),
                     "priority": .object(["type": .array([.string("string"), .string("null")]), "description": .string("urgent, high, medium, low, or null to clear.")]),

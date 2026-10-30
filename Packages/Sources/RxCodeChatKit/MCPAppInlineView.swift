@@ -5,38 +5,54 @@ import RxCodeCore
 import UIKit
 #endif
 
-/// Native App host. Untrusted HTML runs in an opaque-origin sandbox, with no native APIs.
-struct MCPAppSheet: View {
+/// Renders a tool call's MCP App directly in the chat transcript.
+/// Untrusted HTML runs in an opaque-origin sandbox, with no native APIs.
+struct MCPAppInlineView: View {
+    let toolCall: ToolCall
+    let loader: MCPAppLoader
+    @State private var resource: MCPAppResource?
+
+    var body: some View {
+        Group {
+            if let resource {
+                MCPAppInlineHost(resource: resource, toolCall: toolCall)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: resource != nil)
+        .task(id: toolCall.id) {
+            guard resource == nil else { return }
+            // Tools without an App, or servers that can't be reached, simply render no App.
+            resource = try? await loader(toolCall)
+        }
+    }
+}
+
+private struct MCPAppInlineHost: View {
     let resource: MCPAppResource
     let toolCall: ToolCall
-    @Environment(\.dismiss) private var dismiss
     @State private var bridge = MCPAppBridge()
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Label("MCP App", systemImage: "app.connected.to.app.below.fill").font(.headline)
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-            }.padding()
-            Divider()
-            MCPAppWebView(resource: resource, toolCall: toolCall, bridge: bridge)
-        }
-        .frame(idealWidth: 800, idealHeight: 620)
-        .overlay {
-            if bridge.running {
-                ProgressView("Running App action…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        MCPAppWebView(resource: resource, toolCall: toolCall, bridge: bridge)
+            .frame(height: bridge.preferredHeight)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ClaudeTheme.border, lineWidth: 0.5))
+            .overlay {
+                if bridge.running {
+                    ProgressView("Running App action…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
             }
-        }
-        .confirmationDialog("Allow this MCP App tool call?", isPresented: Binding(
-            get: { bridge.pending != nil }, set: { if !$0 { bridge.rejectPending() } }
-        ), titleVisibility: .visible) {
-            Button("Allow") { bridge.approvePending() }
-            Button("Cancel", role: .cancel) { bridge.rejectPending() }
-        } message: {
-            Text(verbatim: bridge.pendingDescription)
-        }
-        .onDisappear { bridge.close() }
+            .padding(.vertical, 4)
+            .confirmationDialog("Allow this MCP App tool call?", isPresented: Binding(
+                get: { bridge.pending != nil }, set: { if !$0 { bridge.rejectPending() } }
+            ), titleVisibility: .visible) {
+                Button("Allow") { bridge.approvePending() }
+                Button("Cancel", role: .cancel) { bridge.rejectPending() }
+            } message: {
+                Text(verbatim: bridge.pendingDescription)
+            }
     }
 }
 
@@ -47,6 +63,8 @@ final class MCPAppBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     var toolCall: ToolCall?
     var pending: JSONValue?
     var running = false
+    /// Height requested by the App via `ui/notifications/size-changed`, clamped for the transcript.
+    var preferredHeight: CGFloat = 360
     private var operation: Task<Void, Never>?
     private var initialized = false
     private var closed = false
@@ -83,6 +101,10 @@ final class MCPAppBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate
                     "content": .array([.object(["type": .string("text"), "text": .string(text)])]),
                     "isError": .bool(toolCall?.isError ?? false)
                 ]))
+            }
+        } else if method == "ui/notifications/size-changed" {
+            if let height = rpc["params"]?["height"]?.numberValue, height.isFinite {
+                preferredHeight = min(max(CGFloat(height), 120), 720)
             }
         } else if initialized, method == "tools/call" {
             guard pending == nil, !running else { reject(rpc, code: -32000, message: "Another App action is pending."); return }
@@ -212,10 +234,16 @@ struct MCPAppWebView {
 extension MCPAppWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView { makeWebView() }
     func updateNSView(_ nsView: WKWebView, context: Context) {}
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: ()) {
+        (nsView.navigationDelegate as? MCPAppBridge)?.close()
+    }
 }
 #else
 extension MCPAppWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView { makeWebView() }
     func updateUIView(_ uiView: WKWebView, context: Context) {}
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: ()) {
+        (uiView.navigationDelegate as? MCPAppBridge)?.close()
+    }
 }
 #endif

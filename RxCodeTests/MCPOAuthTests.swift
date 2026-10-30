@@ -6,6 +6,56 @@ import Synchronization
 
 @MainActor
 final class MCPOAuthTests: XCTestCase {
+    /// Real HTTP through the local Cloudflare simulation; no Keychain or live credentials.
+    func testCloudflareUsageRefreshOverHTTP() async throws {
+        guard let origin = ProcessInfo.processInfo.environment["CLOUDFLARE_USAGE_SIMULATION_URL"],
+              let base = URL(string: origin) else {
+            throw XCTSkip("Set CLOUDFLARE_USAGE_SIMULATION_URL to the local Cloudflare simulation.")
+        }
+        for scenario in ["rejected", "expired", "keep-refresh", "forbidden", "always-401", "refresh-failure", "concurrent"] {
+            let endpoint = base.appending(path: "oauth-test/\(scenario)")
+            var reset = URLRequest(url: endpoint.appending(path: "reset"))
+            reset.httpMethod = "POST"
+            _ = try await URLSession.shared.data(for: reset)
+            let saved: [String: Any] = ["access_token": "fixture-original", "refresh_token": "fixture-refresh"]
+            var data = try JSONSerialization.data(withJSONObject: saved)
+            if scenario == "expired" || scenario == "concurrent" {
+                data = try JSONSerialization.data(withJSONObject: saved.merging(["expiresAt": -1000]) { $1 })
+            }
+            let memory = UsageOAuthMemoryStorage(data)
+            let service = UsageOAuthTokens(storage: memory.storage, requestURL: { endpoint.appending(path: $0.path) })
+            var integration = UsageIntegration(pluginID: "cloudflare", title: "Fixture")
+            integration.oauth = .init(clientID: "fixture-client", callbackURL: CloudflareUsageOAuth.callbackURL, scopes: "memberships.read")
+            let configuration = integration
+            if scenario == "concurrent" {
+                try await withThrowingTaskGroup(of: String?.self) { group in
+                    for _ in 0..<20 { group.addTask { try await service.accessToken(configuration) } }
+                    for try await token in group { XCTAssertEqual(token, "fixture-renewed") }
+                }
+                let late = try await service.accessToken(integration, rejecting: "fixture-original")
+                XCTAssertEqual(late, "fixture-renewed")
+            } else {
+                do {
+                    let accounts = try await service.withAccessToken(integration) { token in
+                        try await CloudflareAccounts.list(token: token ?? "", baseURL: endpoint)
+                    }
+                    XCTAssertFalse(["forbidden", "always-401", "refresh-failure"].contains(scenario))
+                    XCTAssertEqual(accounts.first?.id, "fixture-account")
+                } catch {
+                    XCTAssertTrue(["forbidden", "always-401", "refresh-failure"].contains(scenario), "\(scenario): \(error)")
+                }
+            }
+            let (statsData, _) = try await URLSession.shared.data(from: endpoint.appending(path: "stats"))
+            let stats = try XCTUnwrap(JSONSerialization.jsonObject(with: statsData) as? [String: Int])
+            XCTAssertEqual(stats["refreshes"], scenario == "forbidden" ? 0 : 1, scenario)
+            let expectedReads = ["concurrent": 0, "expired": 1, "forbidden": 1, "refresh-failure": 1][scenario] ?? 2
+            XCTAssertEqual(stats["reads"], expectedReads, scenario)
+            let stored = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(memory.data)) as? [String: Any])
+            XCTAssertEqual(stored["refresh_token"] as? String,
+                           ["keep-refresh", "forbidden", "refresh-failure"].contains(scenario) ? "fixture-refresh" : "fixture-rotated")
+        }
+    }
+
     func testCloudflareDefaultScopesReachAuthorizationRequest() throws {
         for saved in [nil, UsageOAuthConfiguration(),
                       UsageOAuthConfiguration(clientID: CloudflareUsageOAuth.clientID, scopes: " \n"),
@@ -477,6 +527,17 @@ nonisolated private final class OAuthFixtureProtocol: URLProtocol, @unchecked Se
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() { stopped.withLock { $0 = true } }
+}
+
+nonisolated private final class UsageOAuthMemoryStorage: Sendable {
+    private let state: Mutex<Data?>
+    init(_ data: Data) { state = Mutex(data) }
+    var data: Data? { state.withLock { $0 } }
+    var storage: UsageOAuthTokens.Storage {
+        .init(read: { [self] _ in data },
+              write: { [self] data, _ in state.withLock { $0 = data } },
+              delete: { [self] _ in state.withLock { $0 = nil } })
+    }
 }
 
 nonisolated private final class OAuthMemoryStorage: Sendable {

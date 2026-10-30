@@ -169,6 +169,11 @@ extension AppState {
             deleteStory(story)
             return nil
 
+        case .editMetadata:
+            guard let edit = request.metadataEdit, !edit.name.isEmpty else { throw MobileTaskBoardError.missing("metadataEdit") }
+            updateBoard(projectId) { edit.apply(to: &$0) }
+            return nil
+
         case .upsertView:
             guard var view = request.view else { throw MobileTaskBoardError.missing("view") }
             // The phone can edit standard settings, but cannot replace or

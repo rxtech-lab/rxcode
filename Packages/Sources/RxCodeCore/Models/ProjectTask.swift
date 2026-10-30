@@ -319,7 +319,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// `TaskBoardHook` matches on it to advance the task when the turn finishes.
     public var sessionKey: String?
     /// The existing chat from which this task was created. This is not a run:
-    /// it must not lock the description or participate in column triggers.
+    /// it must not participate in column triggers.
     public var sourceSessionKey: String?
     /// Why the last run needs a person's attention before review. Cleared when
     /// a later completion check passes or the task is run again.
@@ -465,10 +465,6 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
     }
-
-    /// The description is what the agent was prompted with, so it is frozen
-    /// once the task has been dispatched.
-    public var isDescriptionLocked: Bool { sessionKey != nil }
 
     /// The prompt handed to the agent when the task is dispatched, also shown
     /// as the thread's first user message.
@@ -652,6 +648,9 @@ public struct TaskBoard: Codable, Sendable {
     public var savedViews: [TaskSavedView]
     /// Tag colors. A tag with no entry renders in the neutral color.
     public var labels: [TaskLabel]
+    /// Registered values remain available before a task or story uses them.
+    public var versions: [String]
+    public var milestones: [String]
     /// Customized item types. Empty means the board still offers
     /// `TaskItemType.defaults`; see `effectiveTypes`.
     public var itemTypes: [TaskItemType]
@@ -669,6 +668,8 @@ public struct TaskBoard: Codable, Sendable {
         tasks: [ProjectTask] = [],
         savedViews: [TaskSavedView] = [],
         labels: [TaskLabel] = [],
+        versions: [String] = [],
+        milestones: [String] = [],
         itemTypes: [TaskItemType] = [],
         columns: [TaskColumn] = [],
         cloudSync: CloudBoardSyncState? = nil
@@ -678,13 +679,15 @@ public struct TaskBoard: Codable, Sendable {
         self.tasks = tasks
         self.savedViews = savedViews
         self.labels = labels
+        self.versions = versions
+        self.milestones = milestones
         self.itemTypes = itemTypes
         self.columns = columns
         self.cloudSync = cloudSync
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, stories, tasks, savedViews, labels, itemTypes, columns, cloudSync
+        case schemaVersion, stories, tasks, savedViews, labels, versions, milestones, itemTypes, columns, cloudSync
     }
 
     public init(from decoder: Decoder) throws {
@@ -694,6 +697,8 @@ public struct TaskBoard: Codable, Sendable {
         tasks = try c.decodeIfPresent([ProjectTask].self, forKey: .tasks) ?? []
         savedViews = try c.decodeIfPresent([TaskSavedView].self, forKey: .savedViews) ?? []
         labels = try c.decodeIfPresent([TaskLabel].self, forKey: .labels) ?? []
+        versions = try c.decodeIfPresent([String].self, forKey: .versions) ?? []
+        milestones = try c.decodeIfPresent([String].self, forKey: .milestones) ?? []
         itemTypes = try c.decodeIfPresent([TaskItemType].self, forKey: .itemTypes) ?? []
         columns = try c.decodeIfPresent([TaskColumn].self, forKey: .columns) ?? []
         cloudSync = try? c.decodeIfPresent(CloudBoardSyncState.self, forKey: .cloudSync)
@@ -771,15 +776,15 @@ public struct TaskBoard: Codable, Sendable {
         Array(Set(tasks.flatMap(\.tags) + stories.flatMap(\.tags) + labels.map(\.name))).sorted()
     }
 
-    /// Every distinct version used on the board, newest-looking first.
+    /// Registered and used versions, newest-looking first.
     public var allVersions: [String] {
-        Array(Set(tasks.compactMap(\.version) + stories.compactMap(\.version)).filter { !$0.isEmpty })
+        Array(Set(versions + tasks.compactMap(\.version) + stories.compactMap(\.version)).filter { !$0.isEmpty })
             .sorted(by: >)
     }
 
-    /// Every distinct milestone used on the board, sorted for picker order.
+    /// Registered and used milestones, sorted for picker order.
     public var allMilestones: [String] {
-        Array(Set(tasks.compactMap(\.milestone) + stories.compactMap(\.milestone)).filter { !$0.isEmpty })
+        Array(Set(milestones + tasks.compactMap(\.milestone) + stories.compactMap(\.milestone)).filter { !$0.isEmpty })
             .sorted()
     }
 

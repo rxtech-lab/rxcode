@@ -1,4 +1,5 @@
 import RxCodeCore
+import RxCodeChatKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -13,6 +14,8 @@ struct TaskProjectDetailView: View {
     let project: Project
     @Binding var sheet: TaskBoardSheet?
 
+    @State private var showingHiddenViews = false
+    @State private var visibilityFeedback: String?
     @State private var selectedViewId: UUID?
     @State private var keyword = ""
     @State private var viewEditor: TaskViewEditorPayload?
@@ -26,11 +29,11 @@ struct TaskProjectDetailView: View {
     @State private var isEvaluatingScriptFilter = false
 
     private var board: TaskBoard { appState.taskBoard(for: project.id) }
-    private var views: [TaskSavedView] { appState.taskViews(for: project.id) }
+    private var views: [TaskSavedView] { board.visibleViews }
 
     /// The picked tab, else the project's default view.
     private var currentView: TaskSavedView {
-        views.first { $0.id == selectedViewId } ?? board.defaultView
+        views.first { $0.id == selectedViewId } ?? views.first(where: \.isDefault) ?? views.first ?? .defaultView
     }
 
     var body: some View {
@@ -44,7 +47,13 @@ struct TaskProjectDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
             }
-            content
+            if views.isEmpty {
+                ContentUnavailableView("All Views Hidden", systemImage: "eye.slash",
+                    description: Text("Use Hidden Views to restore a view."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                content
+            }
         }
         .overlay(alignment: .topTrailing) {
             if project.isCloud, board.savedViews.contains(where: \.hasFilterScript) {
@@ -75,6 +84,21 @@ struct TaskProjectDetailView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10)).padding()
                 }
             }
+        }
+        .overlay(alignment: .top) {
+            if let visibilityFeedback {
+                Label(visibilityFeedback, systemImage: "checkmark.circle.fill")
+                    .padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
+            }
+        }
+        .task(id: visibilityFeedback) {
+            guard visibilityFeedback != nil else { return }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            visibilityFeedback = nil
+        }
+        .sheet(isPresented: $showingHiddenViews) {
+            TaskHiddenViewsSheet(views: board.effectiveViews, feedback: visibilityFeedback,
+                onRestore: { setHidden(false, view: $0) }, onDone: { showingHiddenViews = false })
         }
         .onChange(of: appState.cloudSyncError(for: project.id)) { _, error in
             if error == nil { dismissedCloudSyncError = nil }
@@ -163,6 +187,13 @@ struct TaskProjectDetailView: View {
 
                 Spacer()
 
+                if board.effectiveViews.contains(where: \.isHidden) {
+                    Button("Hidden Views", systemImage: "eye.slash") { showingHiddenViews = true }
+                        .buttonStyle(.bordered)
+                        .fixedSize()
+                        .accessibilityIdentifier("task-project-hidden-views")
+                }
+
                 ProjectCloudButton(project: project)
 
                 Menu {
@@ -234,7 +265,8 @@ struct TaskProjectDetailView: View {
                         showsDefaultBadge: views.count > 1,
                         isEvaluatingScript: view.id == currentView.id && isEvaluatingScriptFilter,
                         scriptError: view.id == currentView.id ? scriptFilterError : nil,
-                        canDelete: views.count > 1,
+                        canDelete: board.effectiveViews.count > 1,
+                        onHide: { setHidden(true, view: view) },
                         onSelect: { selectedViewId = view.id },
                         onEdit: { viewEditor = TaskViewEditorPayload(projectId: project.id, view: view, isNew: false) },
                         onDuplicate: { duplicate(view) },
@@ -278,6 +310,14 @@ struct TaskProjectDetailView: View {
         .overlay(alignment: .bottom) {
             ClaudeThemeDivider()
         }
+    }
+
+    private func setHidden(_ hidden: Bool, view: TaskSavedView) {
+        var updated = view
+        updated.isHidden = hidden
+        appState.upsertSavedView(updated, projectId: project.id)
+        if hidden && selectedViewId == view.id { selectedViewId = nil }
+        visibilityFeedback = hidden ? String(localized: "View hidden") : String(localized: "View restored")
     }
 
     // MARK: - Content
@@ -495,6 +535,7 @@ private struct TaskViewTab: View {
     /// Why the view's Swift filter failed, if it did.
     let scriptError: String?
     let canDelete: Bool
+    let onHide: () -> Void
     let onSelect: () -> Void
     let onEdit: () -> Void
     let onDuplicate: () -> Void
@@ -600,6 +641,7 @@ private struct TaskViewTab: View {
 
     @ViewBuilder
     private var menuItems: some View {
+        Button("Hide View", systemImage: "eye.slash", action: onHide)
         Button("Edit View…", action: onEdit)
         Button("Duplicate View", action: onDuplicate)
         Button("Set as Default View", action: onSetDefault)

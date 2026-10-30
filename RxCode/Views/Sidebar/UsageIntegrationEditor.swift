@@ -290,10 +290,10 @@ struct UsageIntegrationEditor: View {
         let current = integration
         defer { loadingAccounts = false }
         do {
-            guard let token = try await UsageOAuthTokens.shared.accessToken(current) else {
-                throw UsagePluginError.invalidConfiguration
+            let accounts = try await UsageOAuthTokens.shared.withAccessToken(current) { token in
+                guard let token else { throw UsagePluginError.invalidConfiguration }
+                return try await CloudflareAccounts.list(token: token)
             }
-            let accounts = try await CloudflareAccounts.list(token: token)
             try Task.checkCancellation()
             guard integration.id == current.id && integration.pluginID == "cloudflare" else { return }
             cloudflareAccounts = accounts

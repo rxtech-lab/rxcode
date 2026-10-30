@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
@@ -13,6 +14,7 @@ struct MobileTaskViewForm: View {
     let projectID: UUID
     let onSave: (TaskSavedView) -> Void
     @State private var draft: TaskSavedView
+    @State private var metadataField: TaskMetadataEdit.Field?
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -59,17 +61,20 @@ struct MobileTaskViewForm: View {
                 filterLink(
                     "Versions",
                     options: listed(board.allVersions, draft.versions),
-                    selection: $draft.versions
+                    selection: $draft.versions,
+                    field: .versions
                 )
                 filterLink(
                     "Milestones",
                     options: listed(board.allMilestones, draft.milestones),
-                    selection: $draft.milestones
+                    selection: $draft.milestones,
+                    field: .milestones
                 )
                 filterLink(
                     "Tags",
                     options: listed(board.allTags, draft.tags),
-                    selection: $draft.tags
+                    selection: $draft.tags,
+                    field: .tags
                 )
             } header: {
                 Text("Filters")
@@ -86,6 +91,15 @@ struct MobileTaskViewForm: View {
                 Button("Save") { save() }
                     .disabled(isSaving || draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+        }
+        .sheet(item: $metadataField) { field in
+            TaskMetadataSheet(board: board, field: field) { edit in
+                try await state.saveMetadata(edit, projectID: projectID)
+                edit.apply(to: &draft)
+            }
+        }
+        .overlay {
+            if isSaving { ProgressView("Saving…").padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) }
         }
         .mobileTaskErrorAlert($errorMessage)
     }
@@ -106,10 +120,13 @@ struct MobileTaskViewForm: View {
     private func filterLink<Value: Hashable>(
         _ title: LocalizedStringKey,
         options: [(Value, String)],
-        selection: Binding<[Value]>
+        selection: Binding<[Value]>,
+        field: TaskMetadataEdit.Field? = nil
     ) -> some View {
         NavigationLink {
-            MobileFilterValuesList(title: title, options: options, selection: selection)
+            MobileFilterValuesList(title: title, options: options, selection: selection, onManage: field.map { field in
+                { MobileHaptics.buttonTap(); metadataField = field }
+            })
         } label: {
             LabeledContent(title) {
                 Text(summary(of: selection.wrappedValue, in: options))
@@ -156,42 +173,50 @@ private struct MobileFilterValuesList<Value: Hashable>: View {
     let title: LocalizedStringKey
     let options: [(Value, String)]
     @Binding var selection: [Value]
+    var onManage: (() -> Void)?
 
     var body: some View {
         List {
-            if options.isEmpty {
-                Text("Nothing to filter by yet.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(options, id: \.0) { value, label in
-                    Button {
-                        toggle(value)
-                    } label: {
-                        HStack {
-                            Text(label)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if selection.contains(value) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
+            ForEach(options, id: \.0) { value, label in
+                Button {
+                    toggle(value)
+                } label: {
+                    HStack {
+                        Text(label)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if selection.contains(value) {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.tint)
                         }
                     }
                 }
             }
         }
+        .overlay {
+            if options.isEmpty {
+                ContentUnavailableView("Nothing to filter by yet", systemImage: "line.3.horizontal.decrease")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if let onManage {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Manage…", action: onManage)
+                }
+            }
             if !selection.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Clear") { selection = [] }
+                    Button("Clear") { MobileHaptics.buttonTap(); selection = [] }
                 }
             }
         }
     }
 
     private func toggle(_ value: Value) {
+        MobileHaptics.buttonTap()
         if selection.contains(value) {
             selection.removeAll { $0 == value }
         } else {

@@ -369,6 +369,10 @@ extension MobileAppState {
         try await taskBoardCall(TaskBoardRequestPayload(projectID: story.projectId, operation: .deleteStory, storyID: story.id))
     }
 
+    func saveMetadata(_ edit: TaskMetadataEdit, projectID: UUID) async throws {
+        try await taskBoardCall(TaskBoardRequestPayload(projectID: projectID, operation: .editMetadata, metadataEdit: edit))
+    }
+
     func saveView(_ view: TaskSavedView, projectID: UUID) async throws {
         try await taskBoardCall(TaskBoardRequestPayload(projectID: projectID, operation: .upsertView, view: view))
     }

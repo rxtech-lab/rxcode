@@ -500,6 +500,18 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
         super.paste(sender)
     }
 
+    override func pasteAsPlainText(_ sender: Any?) {
+        // Paste and Match Style bypasses paste(_:). Consume image attachments before
+        // AppKit can insert their clipboard text representation (which may be a newline).
+        if onPasteCommandV() { return }
+        super.pasteAsPlainText(sender)
+    }
+
+    override func pasteAsRichText(_ sender: Any?) {
+        if onPasteCommandV() { return }
+        super.pasteAsRichText(sender)
+    }
+
     override func mouseDown(with event: NSEvent) {
         if onImageChipTap != nil,
            let idx = imageChipIndex(at: event.locationInWindow) {

@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
@@ -20,6 +21,7 @@ struct TaskViewFormSheet: View {
     let payload: TaskViewEditorPayload
     let onSave: (TaskSavedView) -> Void
 
+    @State private var metadataField: TaskMetadataEdit.Field?
     @State private var draft = TaskSavedView(name: "")
 
     private var board: TaskBoard { appState.taskBoard(for: payload.projectId) }
@@ -75,7 +77,8 @@ struct TaskViewFormSheet: View {
                     empty: "No versions on this project yet.",
                     footer: "Tasks targeting any selected version.",
                     options: listed(board.allVersions, draft.versions),
-                    selection: \.versions
+                    selection: \.versions,
+                    metadataField: .versions
                 )
 
                 filterSection(
@@ -83,7 +86,8 @@ struct TaskViewFormSheet: View {
                     empty: "No milestones on this project yet.",
                     footer: "Tasks in any selected milestone.",
                     options: listed(board.allMilestones, draft.milestones),
-                    selection: \.milestones
+                    selection: \.milestones,
+                    metadataField: .milestones
                 )
 
                 filterSection(
@@ -91,7 +95,8 @@ struct TaskViewFormSheet: View {
                     empty: "No tags on this project yet.",
                     footer: "Tasks must carry every selected tag.",
                     options: listed(board.allTags, draft.tags),
-                    selection: \.tags
+                    selection: \.tags,
+                    metadataField: .tags
                 )
 
                 TaskFilterScriptSection(projectId: payload.projectId, script: $draft.filterScript)
@@ -102,6 +107,12 @@ struct TaskViewFormSheet: View {
         }
         .frame(width: 480, height: 640)
         .onAppear { draft = payload.view }
+        .sheet(item: $metadataField) { field in
+            TaskMetadataSheet(board: board, field: field) { edit in
+                appState.updateBoard(payload.projectId) { edit.apply(to: &$0) }
+                edit.apply(to: &draft)
+            }
+        }
     }
 
     private var footer: some View {
@@ -147,7 +158,8 @@ struct TaskViewFormSheet: View {
         empty: LocalizedStringKey,
         footer: LocalizedStringKey,
         options: [(Value, String)],
-        selection: WritableKeyPath<TaskSavedView, [Value]>
+        selection: WritableKeyPath<TaskSavedView, [Value]>,
+        metadataField: TaskMetadataEdit.Field? = nil
     ) -> some View {
         Section {
             if options.isEmpty {
@@ -159,7 +171,14 @@ struct TaskViewFormSheet: View {
                 }
             }
         } header: {
-            Text(title)
+            HStack {
+                Text(title)
+                Spacer()
+                if let metadataField {
+                    Button("Manage…") { self.metadataField = metadataField }
+                        .buttonStyle(.borderless)
+                }
+            }
         } footer: {
             Text(footer)
         }

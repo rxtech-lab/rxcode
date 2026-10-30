@@ -178,7 +178,6 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(appState.linkedTask(forSessionId: "real-1", projectId: project.id)?.id, task.id)
         XCTAssertEqual(appState.linkedTask(forSessionId: "source-1", projectId: project.id)?.id, sourceTask.id)
-        XCTAssertFalse(sourceTask.isDescriptionLocked)
         XCTAssertNil(appState.linkedTask(forSessionId: "real-1", projectId: otherProject.id))
         XCTAssertNil(appState.linkedTask(forSessionId: "unlinked", projectId: project.id))
     }

@@ -4,6 +4,25 @@ import Testing
 
 @Suite("Cloud saved views")
 struct CloudSavedViewsTests {
+    @Test func hidingScriptViewSyncsWithoutReplacingHostSettings() throws {
+        var host = wire("Host")
+        host.view.filterScript = "host source"
+        host.view.versions = ["2.0"]
+        var phone = host
+        phone.view.isHidden = true
+        phone.view.filterScript = "stale source"
+        let result = CloudSavedViews.preservingRemoteScripts(in: [phone], remote: [host])
+        #expect(result[0].view.isHidden)
+        #expect(result[0].view.filterScript == host.view.filterScript)
+        #expect(result[0].view.versions == ["2.0"])
+        let decoded = try JSONDecoder().decode(CloudSavedView.self, from: JSONEncoder().encode(result[0]))
+        #expect(decoded.localView(sync: CloudBoardSyncState()).isHidden)
+        #expect(CloudSavedViews.merging(local: [host], base: [host], remote: result)[0].view.isHidden)
+        var restored = result[0]
+        restored.view.isHidden = false
+        #expect(!CloudSavedViews.preservingRemoteScripts(in: [restored], remote: result)[0].view.isHidden)
+    }
+
     @Test func mobileEditsPreserveLatestRemoteSwiftSource() {
         var remote = wire("Desktop")
         remote.view.filterScript = "new source"

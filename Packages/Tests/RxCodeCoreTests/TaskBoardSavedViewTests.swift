@@ -4,6 +4,32 @@ import Testing
 
 @Suite("Task board saved views")
 struct TaskBoardSavedViewTests {
+    @Test("Visibility survives persistence without removing saved settings or order")
+    func visibilityPersistence() throws {
+        let legacy = try JSONDecoder().decode(TaskSavedView.self, from: Data(#"{"name":"Old"}"#.utf8))
+        #expect(!legacy.isHidden)
+        var board = TaskBoard()
+        var hidden = TaskSavedView(name: "Release", versions: ["2.0"], isDefault: true)
+        board.upsertSavedView(hidden)
+        let order = board.effectiveViews.map(\.id)
+        hidden.isHidden = true
+        board.upsertSavedView(hidden)
+        let decoded = try JSONDecoder().decode(TaskBoard.self, from: JSONEncoder().encode(board))
+        #expect(decoded.effectiveViews.map(\.id) == order)
+        #expect(!decoded.visibleViews.contains { $0.id == hidden.id })
+        #expect(decoded.defaultView.isHidden)
+        hidden.isHidden = false
+        board.upsertSavedView(hidden)
+        #expect(board.visibleViews.map(\.id) == order)
+        #expect(board.defaultView.versions == ["2.0"])
+        for var view in board.effectiveViews {
+            view.isHidden = true
+            board.upsertSavedView(view)
+        }
+        #expect(board.visibleViews.isEmpty)
+        #expect(board.effectiveViews.count == order.count)
+    }
+
     @Test("The default view falls back to the first tab and stays unique")
     func defaultView() throws {
         var board = TaskBoard()

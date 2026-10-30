@@ -3,12 +3,18 @@ import RxCodeCore
 
 /// Keeps the popover anchored to the card, including in the menu bar and editor.
 struct UsageDashboardCard: View {
+    @Environment(AppState.self) private var appState
     let snapshot: UsagePluginSnapshot
     let configuration: UsageCardConfiguration
     var allowsEditing = true
     var isRefreshing = false
     @State private var showingDetails = false
     @State private var editing = false
+    @State private var editingIntegration: UsageIntegration?
+
+    private var integration: UsageIntegration? {
+        appState.usageDashboard.integrations.first { $0.id == configuration.integrationID }
+    }
 
     var body: some View {
         Button { showingDetails = true } label: {
@@ -37,12 +43,21 @@ struct UsageDashboardCard: View {
             }
         }
         .popover(isPresented: $showingDetails, arrowEdge: .bottom) {
-            UsageCardDetailPopover(snapshot: snapshot, configuration: configuration, allowsEditing: allowsEditing) {
+            UsageCardDetailPopover(snapshot: snapshot, configuration: configuration,
+                                   allowsEditing: allowsEditing,
+                                   allowsIntegrationEditing: allowsEditing && integration != nil,
+                                   onEditIntegration: {
+                guard let integration else { return }
+                BriefingPerformanceLog.log("usage card edit integration: \(integration.id)")
+                showingDetails = false
+                editingIntegration = integration
+            }) {
                 showingDetails = false
                 editing = true
             }
         }
         .sheet(isPresented: $editing) { UsageCardEditor(card: configuration) }
+        .sheet(item: $editingIntegration) { UsageIntegrationEditor(integration: $0) }
     }
 }
 
@@ -52,6 +67,8 @@ private struct UsageCardDetailPopover: View {
     let snapshot: UsagePluginSnapshot
     let configuration: UsageCardConfiguration
     let allowsEditing: Bool
+    let allowsIntegrationEditing: Bool
+    let onEditIntegration: () -> Void
     let onEdit: () -> Void
     @State private var plugin: (any UsagePlugin)?
 
@@ -60,7 +77,15 @@ private struct UsageCardDetailPopover: View {
             HStack {
                 Text("Usage details").font(.headline)
                 Spacer()
-                if allowsEditing { Button("Edit view…", systemImage: "slider.horizontal.3", action: onEdit) }
+                if allowsEditing {
+                    Menu("Edit…") {
+                        Button("Edit view…", systemImage: "slider.horizontal.3", action: onEdit)
+                        if allowsIntegrationEditing {
+                            Button("Edit integration…", systemImage: "gearshape", action: onEditIntegration)
+                                .accessibilityIdentifier("usage-card-edit-integration-\(configuration.id.uuidString)")
+                        }
+                    }
+                }
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding()
             Divider()

@@ -7,6 +7,9 @@ public extension TaskBoard {
         savedViews.isEmpty ? [TaskSavedView.defaultView] : savedViews
     }
 
+    /// Tabs currently shown, retaining the saved order.
+    var visibleViews: [TaskSavedView] { effectiveViews.filter { !$0.isHidden } }
+
     /// The view-tab order after dropping `view` onto `target`'s tab: the
     /// dragged tab takes the target's slot, like `columnOrder(moving:to:)`.
     /// `nil` when the drop is a no-op or either id isn't a tab.

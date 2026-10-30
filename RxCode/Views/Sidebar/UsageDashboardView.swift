@@ -7,6 +7,7 @@ struct UsageDashboardView: View {
     @State private var managing = false
     @State private var updatingStyle = false
     @State private var editingCard: UsageCardConfiguration?
+    @State private var editingIntegration: UsageIntegration?
     private var visibleCards: [UsageCardConfiguration] {
         appState.usageDashboard.visibleCards(projectIDs: projectIds)
     }
@@ -28,6 +29,13 @@ struct UsageDashboardView: View {
                             .usageCardSize(card.cardSize)
                             .contextMenu {
                                 Button("Edit card…") { editingCard = card }
+                                if let integration = appState.usageDashboard.integrations.first(where: { $0.id == card.integrationID }) {
+                                    Button("Edit integration…", systemImage: "gearshape") {
+                                        BriefingPerformanceLog.log("usage card context menu edit integration: \(integration.id)")
+                                        editingIntegration = integration
+                                    }
+                                    .accessibilityIdentifier("usage-card-context-edit-integration-\(card.id.uuidString)")
+                                }
                                 Menu("Card style") {
                                     ForEach(UsageCardConfiguration.styles, id: \.self) { style in
                                         Button(style.capitalized) { update(card) { $0.style = style } }
@@ -56,6 +64,7 @@ struct UsageDashboardView: View {
         .overlay { if updatingStyle { ProgressView("Updating card…").padding().background(.regularMaterial) } }
         .sheet(isPresented: $managing) { UsageDashboardManager() }
         .sheet(item: $editingCard) { UsageCardEditor(card: $0) }
+        .sheet(item: $editingIntegration) { UsageIntegrationEditor(integration: $0) }
         .alert("Usage cards", isPresented: Binding(get: { appState.usageDashboardError != nil }, set: { if !$0 { appState.usageDashboardError = nil } })) {
             Button("OK") { appState.usageDashboardError = nil }
         } message: { Text(appState.usageDashboardError ?? "") }

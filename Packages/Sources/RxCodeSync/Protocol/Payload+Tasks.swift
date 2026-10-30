@@ -85,6 +85,8 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
         case fetchRuns
         /// Insert or replace a saved project view.
         case upsertView
+        /// Create or rename one shared tag, version or milestone.
+        case editMetadata
     }
 
     public let clientRequestID: UUID
@@ -92,6 +94,7 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
     public let operation: Operation
     public let task: ProjectTask?
     public let story: ProjectStory?
+    public let metadataEdit: TaskMetadataEdit?
     public let view: TaskSavedView?
     public let taskID: UUID?
     public let storyID: UUID?
@@ -116,6 +119,7 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
         task: ProjectTask? = nil,
         story: ProjectStory? = nil,
         view: TaskSavedView? = nil,
+        metadataEdit: TaskMetadataEdit? = nil,
         taskID: UUID? = nil,
         storyID: UUID? = nil,
         status: TaskStatus? = nil,
@@ -131,6 +135,7 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
         self.task = task
         self.story = story
         self.view = view
+        self.metadataEdit = metadataEdit
         self.taskID = taskID
         self.storyID = storyID
         self.status = status

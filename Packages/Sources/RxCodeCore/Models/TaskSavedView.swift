@@ -69,6 +69,8 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
     /// The view a project opens on, and the one its dashboard card previews.
     /// At most one view per board carries it; see `TaskBoard.defaultView`.
     public var isDefault: Bool
+    /// Account-synced visibility; hiding keeps the layout and filters intact.
+    public var isHidden: Bool = false
 
     public init(
         id: UUID = UUID(),
@@ -98,7 +100,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, filterSnapshot, storyPanelStatuses, isDefault
-        case columnSorts
+        case columnSorts, isHidden
         /// Single-value filters written before multi-select existed.
         case version, storyId
     }
@@ -130,6 +132,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         filterSnapshot = try? c.decodeIfPresent(TaskFilterSnapshot.self, forKey: .filterSnapshot)
         filterScript = try? c.decodeIfPresent(String.self, forKey: .filterScript)
         storyPanelStatuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .storyPanelStatuses)) ?? []
+        isHidden = (try? c.decodeIfPresent(Bool.self, forKey: .isHidden)) ?? false
         isDefault = (try? c.decodeIfPresent(Bool.self, forKey: .isDefault)) ?? false
     }
 
@@ -149,6 +152,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         try c.encodeIfPresent(filterSnapshot, forKey: .filterSnapshot)
         try c.encodeIfPresent(filterScript, forKey: .filterScript)
         try c.encode(storyPanelStatuses, forKey: .storyPanelStatuses)
+        if isHidden { try c.encode(isHidden, forKey: .isHidden) }
         if isDefault { try c.encode(isDefault, forKey: .isDefault) }
         if versions.count == 1 { try c.encode(versions[0], forKey: .version) }
         if storyIds.count == 1 { try c.encode(storyIds[0], forKey: .storyId) }

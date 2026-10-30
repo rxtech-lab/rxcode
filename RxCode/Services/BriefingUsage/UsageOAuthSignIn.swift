@@ -1,11 +1,12 @@
 import AppKit
 import CryptoKit
 import RxCodeCore
+import os
 
 /// RxCode's registered public Vercel OAuth app. Vercel only accepts HTTP(S)
 /// redirect URLs, so sign-in completes on a fixed loopback port that must match
 /// the callback registered for this client.
-enum VercelUsageOAuth {
+nonisolated enum VercelUsageOAuth {
     /// Hidden for now: Vercel's OAuth apps can't read team or billing data while
     /// those API permissions are in closed beta, so Vercel integrations use an
     /// access token (API key) instead. The sign-in flow below is kept intact so
@@ -18,7 +19,7 @@ enum VercelUsageOAuth {
 }
 
 /// HTTP loopback redirect registered with the user's Cloudflare PKCE client.
-enum CloudflareUsageOAuth {
+nonisolated enum CloudflareUsageOAuth {
     static let clientID = "b6b76fc6ac489f6e340e0b671104e4d1"
     static let callbackURL = "http://localhost:47616/oauth/callback"
     // These read scopes are registered on RxCode's bundled Cloudflare client.
@@ -52,7 +53,7 @@ enum CloudflareUsageOAuth {
 
 extension UsageIntegration {
     /// Vercel always uses the bundled app; other providers use their saved configuration.
-    var resolvedOAuth: UsageOAuthConfiguration? {
+    nonisolated var resolvedOAuth: UsageOAuthConfiguration? {
         switch pluginID {
         case "vercel": VercelUsageOAuth.configuration
         case "cloudflare": CloudflareUsageOAuth.configuration(oauth)
@@ -135,6 +136,27 @@ final class UsageOAuthSignIn {
 
 actor UsageOAuthTokens {
     static let shared = UsageOAuthTokens()
+    private let logger = Logger(subsystem: "com.rxlab.RxCode", category: "UsageOAuth")
+    struct Storage: Sendable {
+        var read: @Sendable (UUID) -> Data?
+        var write: @Sendable (Data, UUID) throws -> Void
+        var delete: @Sendable (UUID) throws -> Void
+    }
+    private let storage: Storage
+    private let session: URLSession
+    private let requestURL: @Sendable (URL) -> URL
+    private var refreshes: [UUID: (id: UUID, task: Task<Tokens, Error>)] = [:]
+    private var generations: [UUID: UUID] = [:]
+
+    init(session: URLSession = .shared, storage: Storage? = nil,
+         requestURL: @escaping @Sendable (URL) -> URL = { $0 }) {
+        self.session = session
+        self.requestURL = requestURL
+        self.storage = storage ?? Storage(
+            read: { KeychainHelper.read(service: "com.rxlab.RxCode.usage.oauth", account: $0.uuidString) },
+            write: { try KeychainHelper.save($0, service: "com.rxlab.RxCode.usage.oauth", account: $1.uuidString) },
+            delete: { try KeychainHelper.delete(service: "com.rxlab.RxCode.usage.oauth", account: $0.uuidString) })
+    }
     private struct Tokens: Codable {
         var access_token: String
         var refresh_token: String?
@@ -142,27 +164,69 @@ actor UsageOAuthTokens {
         var expiresAt: Date?
     }
     func exchange(_ integration: UsageIntegration, fields: [String: String]) async throws {
-        _ = try await request(integration, fields: fields, previousRefresh: nil)
+        generations[integration.id] = UUID()
+        refreshes.removeValue(forKey: integration.id)?.task.cancel()
+        let generation = generations[integration.id]
+        let tokens = try await request(integration, fields: fields, previousRefresh: nil)
+        guard generations[integration.id] == generation else { throw CancellationError() }
+        try storage.write(JSONEncoder().encode(tokens), integration.id)
     }
-    func accessToken(_ integration: UsageIntegration) async throws -> String? {
-        guard let data = KeychainHelper.read(service: "com.rxlab.RxCode.usage.oauth", account: integration.id.uuidString) else { return nil }
+    func accessToken(_ integration: UsageIntegration, rejecting rejectedToken: String? = nil) async throws -> String? {
+        guard let data = storage.read(integration.id) else { return nil }
+        if let pending = refreshes[integration.id] { return try await pending.task.value.access_token }
         let tokens = try JSONDecoder().decode(Tokens.self, from: data)
-        if let expiry = tokens.expiresAt, expiry.timeIntervalSinceNow < 60 {
-            guard let refresh = tokens.refresh_token else { throw UsagePluginError.http(401) }
-            return try await request(integration, fields: ["grant_type": "refresh_token", "refresh_token": refresh], previousRefresh: refresh).access_token
+        let rejected = rejectedToken != nil && tokens.access_token == rejectedToken
+        let expiring = tokens.expiresAt.map { $0.timeIntervalSinceNow < 60 } ?? false
+        guard rejected || expiring else { return tokens.access_token }
+        guard let refresh = tokens.refresh_token, !refresh.isEmpty else {
+            if !rejected, let expiry = tokens.expiresAt, expiry > Date() { return tokens.access_token }
+            throw UsagePluginError.oauth("Sign in again to renew usage access.")
         }
-        return tokens.access_token
+        let id = UUID()
+        let generation = generations[integration.id]
+        let pending = Task {
+            logger.info("PERFORMANCE: Refreshing usage OAuth for \(integration.pluginID, privacy: .public)")
+            let renewed = try await request(integration, fields: ["grant_type": "refresh_token", "refresh_token": refresh], previousRefresh: refresh)
+            try Task.checkCancellation()
+            guard generations[integration.id] == generation else { throw CancellationError() }
+            try storage.write(JSONEncoder().encode(renewed), integration.id)
+            logger.info("PERFORMANCE: Usage OAuth refresh completed for \(integration.pluginID, privacy: .public)")
+            return renewed
+        }
+        refreshes[integration.id] = (id, pending)
+        defer {
+            if refreshes[integration.id]?.id == id { refreshes.removeValue(forKey: integration.id) }
+        }
+        return try await pending.value.access_token
+    }
+
+    /// Retry once only when the provider rejects the OAuth token used by this operation.
+    func withAccessToken<T: Sendable>(_ integration: UsageIntegration,
+                                     operation: @Sendable (String?) async throws -> T) async throws -> T {
+        let token = try await accessToken(integration)
+        do { return try await operation(token) }
+        catch {
+            guard let token, let error = error as? UsagePluginError else { throw error }
+            switch error {
+            case .http(401), .provider(401, _): break
+            default: throw error
+            }
+            guard let renewed = try await accessToken(integration, rejecting: token) else { throw error }
+            return try await operation(renewed)
+        }
     }
     nonisolated static func hasTokens(_ id: UUID) -> Bool {
         KeychainHelper.read(service: "com.rxlab.RxCode.usage.oauth", account: id.uuidString) != nil
     }
     func delete(_ id: UUID) throws {
-        try KeychainHelper.delete(service: "com.rxlab.RxCode.usage.oauth", account: id.uuidString)
+        generations[id] = UUID()
+        refreshes.removeValue(forKey: id)?.task.cancel()
+        try storage.delete(id)
     }
     private func request(_ integration: UsageIntegration, fields: [String: String], previousRefresh: String?) async throws -> Tokens {
         guard let config = integration.resolvedOAuth else { throw UsagePluginError.invalidConfiguration }
         let endpoint = integration.pluginID == "vercel" ? "https://api.vercel.com/login/oauth/token" : "https://dash.cloudflare.com/oauth2/token"
-        var request = URLRequest(url: URL(string: endpoint)!)
+        var request = URLRequest(url: requestURL(URL(string: endpoint)!))
         request.httpMethod = "POST"; request.timeoutInterval = 45
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
@@ -170,10 +234,14 @@ actor UsageOAuthTokens {
         request.httpBody = Data(values.sorted { $0.key < $1.key }.map {
             "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)"
         }.joined(separator: "&").utf8)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw UsagePluginError.invalidResponse }
         guard response.statusCode == 200 else {
+            logger.warning("PERFORMANCE: Usage OAuth token request failed for \(integration.pluginID, privacy: .public), HTTP \(response.statusCode)")
             let body = try? JSONDecoder().decode([String: String].self, from: data)
+            if fields["grant_type"] == "refresh_token", body?["error"] == "invalid_grant" {
+                throw UsagePluginError.oauth("Your usage session has expired or was revoked. Sign in again in the integration sheet.")
+            }
             if let message = body?["error_description"] ?? body?["error"] { throw UsagePluginError.oauth(message) }
             throw UsagePluginError.http(response.statusCode)
         }
@@ -181,7 +249,6 @@ actor UsageOAuthTokens {
         guard !tokens.access_token.isEmpty else { throw UsagePluginError.invalidResponse }
         tokens.refresh_token = tokens.refresh_token ?? previousRefresh
         tokens.expiresAt = tokens.expires_in.map { Date().addingTimeInterval($0) }
-        try KeychainHelper.save(JSONEncoder().encode(tokens), service: "com.rxlab.RxCode.usage.oauth", account: integration.id.uuidString)
         return tokens
     }
 }

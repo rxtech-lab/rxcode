@@ -68,11 +68,7 @@ extension AppState {
             task.title = title
         }
         if arguments["details"] != nil {
-            let details = try string("details")
-            guard !task.isDescriptionLocked || details == task.details else {
-                throw IDEToolError.invalidArguments("The description cannot change after the task has started. Use ide__run_task with a follow-up prompt instead.")
-            }
-            task.details = details
+            task.details = try string("details")
         }
         if arguments["status"] != nil {
             let status = TaskStatus(rawValue: try string("status"))

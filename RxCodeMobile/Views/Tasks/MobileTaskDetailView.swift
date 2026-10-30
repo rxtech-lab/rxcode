@@ -142,11 +142,6 @@ struct MobileTaskDetailView: View {
                         .font(.subheadline)
                         .textSelection(.enabled)
                 }
-                if task.isDescriptionLocked {
-                    Label("Locked once the task has run, so it keeps matching what the agent was asked to do.", systemImage: "lock")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             if !task.parentTaskIds.isEmpty {

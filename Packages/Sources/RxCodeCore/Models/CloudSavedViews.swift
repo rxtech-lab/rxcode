@@ -47,6 +47,7 @@ public struct CloudSavedViews: Codable, Sendable, Equatable {
             if var remote = remote.first(where: { $0.id == entry.id }), remote.view.hasFilterScript {
                 // Choosing a standard default view may clear the previous default marker.
                 remote.view.isDefault = remote.view.isDefault && entry.view.isDefault
+                remote.view.isHidden = entry.view.isHidden
                 return remote
             }
             result.view.filterScript = scripts[entry.id]?.filterScript

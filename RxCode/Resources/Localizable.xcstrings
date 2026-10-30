@@ -3239,6 +3239,9 @@
     "All time" : {
 
     },
+    "All Views Hidden" : {
+
+    },
     "Allow" : {
       "localizations" : {
         "en" : {
@@ -9617,6 +9620,9 @@
     "Edit connection…" : {
 
     },
+    "Edit integration…" : {
+
+    },
     "Edit memory" : {
       "localizations" : {
         "ko" : {
@@ -11927,6 +11933,9 @@
         }
       }
     },
+    "Hidden Views" : {
+
+    },
     "Hide" : {
 
     },
@@ -12097,6 +12106,9 @@
       }
     },
     "Hide up to 50 threads" : {
+
+    },
+    "Hide View" : {
 
     },
     "High" : {
@@ -25540,6 +25552,7 @@
       }
     },
     "The description is locked once a task leaves Pending, so it keeps matching what the agent was asked to do." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -27245,6 +27258,9 @@
         }
       }
     },
+    "Use Hidden Views to restore a view." : {
+
+    },
     "Use hosted relay" : {
       "localizations" : {
         "ko" : {
@@ -27792,6 +27808,9 @@
         }
       }
     },
+    "View hidden" : {
+
+    },
     "View options" : {
       "localizations" : {
         "zh-Hans" : {
@@ -27817,6 +27836,9 @@
           }
         }
       }
+    },
+    "View restored" : {
+
     },
     "View total occupied space and clear cached data across all workspaces, including briefings." : {
       "localizations" : {

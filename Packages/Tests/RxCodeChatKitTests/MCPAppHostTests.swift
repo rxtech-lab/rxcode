@@ -45,6 +45,21 @@ struct MCPAppHostTests {
         #expect(bridge.pending == nil)
     }
 
+    @Test func inlineAppResizesWithinTranscriptBounds() async throws {
+        let resource = MCPAppResource(html: #"""
+        <!doctype html><script>
+        parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{height:5000}}, '*');
+        </script>
+        """#, tool: .object(["name": .string("dashboard")])) { _, _ in .object([:]) }
+        let toolCall = ToolCall(id: "inline", name: "mcp__fixture__dashboard", input: [:], result: "{}")
+        let bridge = MCPAppBridge()
+        let webView = MCPAppWebView(resource: resource, toolCall: toolCall, bridge: bridge).makeWebView()
+        defer { bridge.close(); webView.stopLoading() }
+        let deadline = Date().addingTimeInterval(10)
+        while bridge.preferredHeight == 360 && Date() < deadline { try await Task.sleep(for: .milliseconds(25)) }
+        #expect(bridge.preferredHeight == 720, "App height is clamped so it can't take over the chat")
+    }
+
     private actor CallCounter {
         var value = 0
         func increment() { value += 1 }

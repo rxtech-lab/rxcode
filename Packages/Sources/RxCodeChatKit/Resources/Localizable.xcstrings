@@ -1146,6 +1146,9 @@
         }
       }
     },
+    "Changes apply to this project's tasks, stories and saved views immediately." : {
+
+    },
     "Click to preview" : {
 
     },
@@ -1848,6 +1851,9 @@
         }
       }
     },
+    "Create Value" : {
+
+    },
     "Currently at %lld%%" : {
       "localizations" : {
         "en" : {
@@ -2470,6 +2476,9 @@
         }
       }
     },
+    "Edit Value" : {
+
+    },
     "Enable" : {
       "localizations" : {
         "en" : {
@@ -2845,6 +2854,9 @@
 
     },
     "Generating image…" : {
+
+    },
+    "Hidden Views" : {
 
     },
     "How can I help you?" : {
@@ -3408,9 +3420,6 @@
         }
       }
     },
-    "Loading App…" : {
-
-    },
     "Log in to Anthropic account" : {
       "localizations" : {
         "en" : {
@@ -3630,9 +3639,6 @@
           }
         }
       }
-    },
-    "MCP App" : {
-
     },
     "Message" : {
       "localizations" : {
@@ -3895,6 +3901,9 @@
         }
       }
     },
+    "No Hidden Views" : {
+
+    },
     "No Parameters" : {
 
     },
@@ -3964,6 +3973,9 @@
         }
       }
     },
+    "No values yet" : {
+
+    },
     "ok" : {
       "localizations" : {
         "ko" : {
@@ -4026,9 +4038,6 @@
           }
         }
       }
-    },
-    "Open MCP App" : {
-
     },
     "Open preview" : {
 
@@ -4714,6 +4723,9 @@
         }
       }
     },
+    "Restore" : {
+
+    },
     "Restore Default" : {
       "localizations" : {
         "en" : {
@@ -5009,6 +5021,12 @@
           }
         }
       }
+    },
+    "Saving view…" : {
+
+    },
+    "Saving…" : {
+
     },
     "Search commands..." : {
       "localizations" : {
@@ -6198,6 +6216,9 @@
         }
       }
     },
+    "Unable to Save" : {
+
+    },
     "Upgrade plan" : {
       "localizations" : {
         "en" : {
@@ -6269,6 +6290,9 @@
           }
         }
       }
+    },
+    "Use Add to create a project value." : {
+
     },
     "Use the Add menu or Shift-Tab to ask the agent for a read-only plan before edits begin." : {
       "localizations" : {

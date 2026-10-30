@@ -113,13 +113,6 @@ struct TaskFormSheet: View {
         return stored.sessionKey != nil
     }
 
-    /// Uses the stored task, not the draft, so changing the status picker in
-    /// this form doesn't lock the field mid-edit.
-    var isDescriptionLocked: Bool {
-        guard !isStory else { return false }
-        return appState.task(id: task.id)?.isDescriptionLocked ?? false
-    }
-
     var isStatusLocked: Bool {
         guard let stored = appState.task(id: task.id) else { return false }
         return appState.isStatusLocked(stored)
@@ -447,15 +440,8 @@ struct TaskFormSheet: View {
                 // Stories keep no attachment list, so a file dropped on a story
                 // description is recorded as a Markdown link only.
                 attachments: isStory ? nil : $task.attachments,
-                placeholder: String(localized: "Add more detail for the agent"),
-                isDisabled: isDescriptionLocked
+                placeholder: String(localized: "Add more detail for the agent")
             )
-
-            if isDescriptionLocked {
-                Label("The description is locked once a task leaves Pending, so it keeps matching what the agent was asked to do.", systemImage: "lock")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
 
             Picker("Project", selection: projectBinding) {
                 ForEach(appState.projects) { project in

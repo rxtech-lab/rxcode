@@ -55,11 +55,6 @@ struct MobileTaskFormView: View {
                     .accessibilityIdentifier("task-form-title")
                 TextField("Description", text: $task.details, axis: .vertical)
                     .lineLimit(4...12)
-                    .disabled(task.isDescriptionLocked)
-            } footer: {
-                if task.isDescriptionLocked {
-                    Label("The description is locked once a task has run, so it keeps matching what the agent was asked to do.", systemImage: "lock")
-                }
             }
 
             Section {

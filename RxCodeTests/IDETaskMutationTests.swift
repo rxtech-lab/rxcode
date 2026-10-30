@@ -70,21 +70,56 @@ final class IDETaskMutationTests: XCTestCase {
         }
     }
 
-    func testMCPUpdateRejectsLockedDescriptionAndStatus() async throws {
+    func testDescriptionEditsPersistAfterRunWithoutDispatchingAgent() async throws {
+        for status: TaskStatus in [.inProgress, .pendingReview, .done] {
+            var task = makeTask(status: status)
+            task.details = "Original description"
+            seed([task])
+            task.details = "Updated **Markdown** description"
+
+            appState.upsertTask(task)
+
+            let updated = try XCTUnwrap(appState.task(id: task.id))
+            XCTAssertEqual(updated.details, task.details)
+            XCTAssertEqual(updated.sessionKey, "sess-1")
+            XCTAssertEqual(updated.status, status)
+            XCTAssertFalse(appState.shouldDispatchTask(updated, from: status))
+            XCTAssertTrue(appState.dispatchingTaskIds.isEmpty)
+            var saved = await persistence.loadTaskBoard(projectId: project.id)
+            for _ in 0..<100 where saved.tasks.first?.details != task.details || saved.tasks.first?.status != status {
+                try await Task.sleep(for: .milliseconds(10))
+                saved = await persistence.loadTaskBoard(projectId: project.id)
+            }
+            XCTAssertEqual(saved.tasks.first?.details, task.details)
+            XCTAssertEqual(saved.tasks.first?.status, status)
+        }
+    }
+
+    func testMCPUpdateAllowsDescriptionAfterRun() async throws {
+        for status: TaskStatus in [.inProgress, .pendingReview, .done] {
+            let task = makeTask(status: status)
+            seed([task])
+            for details in ["Updated **Markdown** description", ""] {
+                _ = try await update(task, fields: ["details": .string(details)])
+                let updated = try XCTUnwrap(appState.task(id: task.id))
+                XCTAssertEqual(updated.details, details)
+                XCTAssertEqual(updated.sessionKey, task.sessionKey)
+                XCTAssertEqual(updated.status, status)
+                XCTAssertTrue(appState.dispatchingTaskIds.isEmpty)
+            }
+        }
+    }
+
+    func testMCPUpdateRejectsLockedStatusWithoutSavingDescription() async throws {
         let task = makeTask()
         seed([task])
-        for field in ["details", "status"] {
-            do {
-                _ = try await appState.ideHandleToolCall(
-                    name: "ide__update_task",
-                    arguments: .object([
-                        "task_id": .string(task.id.uuidString),
-                        field: .string(field == "details" ? "Changed" : TaskStatus.done.rawValue),
-                    ]), sessionKey: "chat-1"
-                )
-                XCTFail("Locked field must fail")
-            } catch { }
-        }
+        do {
+            _ = try await update(task, fields: [
+                "details": .string("Changed"),
+                "status": .string(TaskStatus.done.rawValue),
+            ])
+            XCTFail("Locked status must fail")
+        } catch { }
         XCTAssertEqual(appState.task(id: task.id), task)
     }
 

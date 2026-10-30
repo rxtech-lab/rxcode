@@ -1,4 +1,5 @@
 import RxCodeCore
+import RxCodeChatKit
 import RxCodeSync
 import SwiftUI
 
@@ -35,6 +36,7 @@ struct MobileTaskBoardView: View {
     /// pushed inside the Tasks dashboard's stack.
     var isModal = true
 
+    @State private var showingHiddenViews = false
     @State private var viewFeedback: String?
     @State private var isSavingView = false
     @State private var mode: Mode = .tasks
@@ -108,11 +110,11 @@ struct MobileTaskBoardView: View {
         state.taskBoard(for: projectID)
     }
 
-    private var views: [TaskSavedView] { board.effectiveViews }
+    private var views: [TaskSavedView] { board.visibleViews }
 
     /// The picked view, else the project's default view.
     private var currentView: TaskSavedView {
-        views.first { $0.id == selectedViewID } ?? board.defaultView
+        views.first { $0.id == selectedViewID } ?? views.first(where: \.isDefault) ?? views.first ?? .defaultView
     }
 
     private func snapshotContains(_ id: UUID, story: Bool) -> Bool {
@@ -168,11 +170,8 @@ struct MobileTaskBoardView: View {
         .overlay(alignment: .topTrailing) {
             if taskMovesInFlight > 0 {
                 ProgressView("Moving tasks…").padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
-            } else if isSavingView {
-                ProgressView("Saving view…").padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
-            } else if let viewFeedback {
-                Label(viewFeedback, systemImage: "checkmark.circle.fill")
-                    .padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
+            } else {
+                TaskViewSaveFeedback(isSaving: isSavingView, feedback: viewFeedback)
             }
         }
         .task(id: viewFeedback) {
@@ -221,6 +220,12 @@ struct MobileTaskBoardView: View {
             }
             .mobileSheetPresentation([.large])
         }
+        .sheet(isPresented: $showingHiddenViews) {
+            TaskHiddenViewsSheet(views: board.effectiveViews, isSaving: isSavingView, feedback: viewFeedback,
+                onRestore: { setHidden(false, view: $0) }, onDone: { MobileHaptics.buttonTap(); showingHiddenViews = false })
+                .mobileTaskErrorAlert($errorMessage)
+                .mobileSheetPresentation([.large])
+        }
         .sheet(isPresented: $showingColumnOrder) {
             columnOrderSheet.mobileSheetPresentation([.medium, .large])
         }
@@ -230,7 +235,11 @@ struct MobileTaskBoardView: View {
 
     @ViewBuilder
     private var boardContent: some View {
-        if hasLoaded && currentView.hasFilterScript && currentView.filterSnapshot?.source != currentView.filterScript {
+        if hasLoaded && views.isEmpty {
+            ContentUnavailableView("All Views Hidden", systemImage: "eye.slash",
+                description: Text("Use Hidden Views to restore a view."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if hasLoaded && currentView.hasFilterScript && currentView.filterSnapshot?.source != currentView.filterScript {
             ContentUnavailableView("Waiting for Host Sync", systemImage: "desktopcomputer",
                 description: Text("Open RxCode on your Mac to sync this Swift filter view."))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -577,40 +586,15 @@ struct MobileTaskBoardView: View {
             }
         }
         ToolbarItem(placement: .primaryAction) {
-            Menu {
-                ForEach(views) { view in
-                    Button {
-                        selectedViewID = view.id
-                        UISelectionFeedbackGenerator().selectionChanged()
-                    } label: {
-                        Label(view.name, systemImage: view.id == currentView.id ? "checkmark" : view.layout.systemImage)
-                    }
-                }
-                Divider()
-                Button("Reorder Columns", systemImage: "arrow.left.arrow.right") {
-                    MobileHaptics.buttonTap()
-                    showingColumnOrder = true
-                }
-                .disabled(visibleColumns.count < 2)
-                Button {
-                    editingView = MobileViewEditorPayload(view: TaskSavedView(name: String(localized: "New view")))
-                } label: {
-                    Label("New View", systemImage: "plus")
-                }
-                Button {
-                    editingView = MobileViewEditorPayload(view: currentView)
-                } label: {
-                    Label("Edit View", systemImage: "pencil")
-                }.disabled(currentView.hasFilterScript)
-                Button {
-                    setDefault(currentView)
-                } label: {
-                    Label("Set as Default View", systemImage: "star")
-                }
-                .disabled(currentView.hasFilterScript || currentView.id == board.defaultView.id)
-            } label: {
-                Label(currentView.name, systemImage: currentView.layout.systemImage)
-            }
+            MobileTaskViewPicker(views: views, currentView: currentView, defaultViewID: board.defaultView.id,
+                canReorderColumns: visibleColumns.count > 1,
+                onSelect: { selectedViewID = $0 },
+                onShowHidden: { showingHiddenViews = true },
+                onHide: { setHidden(true, view: currentView) },
+                onReorderColumns: { showingColumnOrder = true },
+                onCreate: { editingView = MobileViewEditorPayload(view: TaskSavedView(name: String(localized: "New view"))) },
+                onEdit: { editingView = MobileViewEditorPayload(view: currentView) },
+                onSetDefault: { setDefault(currentView) })
             .disabled(!hasLoaded || isSavingView)
             .accessibilityIdentifier("task-board-views")
         }
@@ -654,17 +638,29 @@ struct MobileTaskBoardView: View {
         return draft
     }
 
+    private func setHidden(_ hidden: Bool, view: TaskSavedView) {
+        var updated = view
+        updated.isHidden = hidden
+        MobileHaptics.buttonTap()
+        saveView(updated, feedback: hidden ? String(localized: "View hidden") : String(localized: "View restored"))
+    }
+
     private func setDefault(_ view: TaskSavedView) {
         var updated = view
         updated.isDefault = true
         selectedViewID = view.id
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        MobileHaptics.buttonTap()
+        saveView(updated, feedback: String(localized: "Default view updated"))
+    }
+
+    private func saveView(_ view: TaskSavedView, feedback: String) {
         isSavingView = true
         Task {
             defer { isSavingView = false }
             do {
-                try await state.saveView(updated, projectID: projectID)
-                viewFeedback = String(localized: "Default view updated")
+                try await state.saveView(view, projectID: projectID)
+                if view.isHidden && selectedViewID == view.id { selectedViewID = nil }
+                viewFeedback = feedback
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             } catch {
                 errorMessage = error.localizedDescription

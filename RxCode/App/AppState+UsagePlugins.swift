@@ -104,15 +104,7 @@ extension AppState {
         for integration in usageDashboard.integrations {
             let snapshot: UsagePluginSnapshot
             do {
-                var token = ""
-                if !integration.pluginID.hasPrefix("ai-") && !integration.pluginID.hasPrefix("acp-") {
-                    // Vercel OAuth is hidden (see VercelUsageOAuth.isEnabled); ignore any stale tokens.
-                    let oauthToken = integration.pluginID == "vercel" && !VercelUsageOAuth.isEnabled
-                        ? nil : try await UsageOAuthTokens.shared.accessToken(integration)
-                    let apiKey = await UsageDashboardStore.shared.credential(for: integration.id)
-                    token = oauthToken ?? apiKey ?? ""
-                }
-                snapshot = try await usagePluginRegistry.fetch(integration, credential: token)
+                snapshot = try await fetchUsageSnapshot(integration)
             } catch {
                 var previous = usageDashboard.snapshots.first { $0.id == integration.id }
                     ?? .init(id: integration.id, pluginID: integration.pluginID, title: integration.title,
@@ -137,6 +129,25 @@ extension AppState {
         usageDashboard = dashboard
         publishUsageDashboard()
         return true
+    }
+
+    private func fetchUsageSnapshot(_ integration: UsageIntegration) async throws -> UsagePluginSnapshot {
+        let registry = usagePluginRegistry
+        if integration.pluginID.hasPrefix("ai-") || integration.pluginID.hasPrefix("acp-") {
+            return try await registry.fetch(integration, credential: "")
+        }
+        // Billing uses its own API token and must not be blocked by an expired OAuth session.
+        if integration.pluginID == "cloudflare", integration.resource.isEmpty,
+           let billing = await UsageDashboardStore.shared.billingCredential(for: integration.id), !billing.isEmpty {
+            return try await registry.fetch(integration, credential: billing)
+        }
+        let apiKey = await UsageDashboardStore.shared.credential(for: integration.id) ?? ""
+        if integration.pluginID == "vercel" && !VercelUsageOAuth.isEnabled {
+            return try await registry.fetch(integration, credential: apiKey)
+        }
+        return try await UsageOAuthTokens.shared.withAccessToken(integration) { token in
+            try await registry.fetch(integration, credential: token ?? apiKey)
+        }
     }
 
     func persistUsageDashboard() async {

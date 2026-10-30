@@ -462,11 +462,6 @@ extension AppState {
         }
         updateBoard(task.projectId) { board in
             if let idx = board.tasks.firstIndex(where: { $0.id == stamped.id }) {
-                // Enforced here as well as in the form, so no edit path can
-                // rewrite what an already-started task was asked to do.
-                if board.tasks[idx].isDescriptionLocked {
-                    stamped.details = board.tasks[idx].details
-                }
                 board.tasks[idx] = stamped
             } else {
                 if stamped.sortIndex == 0 {
@@ -768,26 +763,14 @@ extension AppState {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != version else { return }
         updateBoard(projectId) { board in
-            for idx in board.tasks.indices where board.tasks[idx].version == version {
-                board.tasks[idx].version = trimmed
-            }
-            for idx in board.stories.indices where board.stories[idx].version == version {
-                board.stories[idx].version = trimmed
-            }
-            for idx in board.savedViews.indices {
-                var renamed: [String] = []
-                for existing in board.savedViews[idx].versions {
-                    let value = existing == version ? trimmed : existing
-                    if !renamed.contains(value) { renamed.append(value) }
-                }
-                board.savedViews[idx].versions = renamed
-            }
+            TaskMetadataEdit(field: .versions, original: version, name: trimmed).apply(to: &board)
         }
     }
 
     /// Clears a version from every story, task and saved view using it.
     func deleteVersion(_ version: String, projectId: UUID) {
         updateBoard(projectId) { board in
+            board.versions.removeAll { $0 == version }
             for idx in board.tasks.indices where board.tasks[idx].version == version {
                 board.tasks[idx].version = nil
             }
@@ -806,23 +789,22 @@ extension AppState {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != milestone else { return }
         updateBoard(projectId) { board in
-            for idx in board.tasks.indices where board.tasks[idx].milestone == milestone {
-                board.tasks[idx].milestone = trimmed
-            }
-            for idx in board.stories.indices where board.stories[idx].milestone == milestone {
-                board.stories[idx].milestone = trimmed
-            }
+            TaskMetadataEdit(field: .milestones, original: milestone, name: trimmed).apply(to: &board)
         }
     }
 
     /// Clears a milestone from every story and task using it.
     func deleteMilestone(_ milestone: String, projectId: UUID) {
         updateBoard(projectId) { board in
+            board.milestones.removeAll { $0 == milestone }
             for idx in board.tasks.indices where board.tasks[idx].milestone == milestone {
                 board.tasks[idx].milestone = nil
             }
             for idx in board.stories.indices where board.stories[idx].milestone == milestone {
                 board.stories[idx].milestone = nil
+            }
+            for idx in board.savedViews.indices {
+                board.savedViews[idx].milestones.removeAll { $0 == milestone }
             }
         }
     }

@@ -107,6 +107,10 @@ public actor CloudUsagePlugin: UsagePlugin {
                     let data = try await request(endpoint.absoluteString, query: [:], token: billingToken ?? credential)
                     metrics = try UsageResponseParser.cloudflare(data)
                     period = "Current billing period"
+                } catch UsagePluginError.provider(401, _) where billingToken != nil {
+                    throw UsagePluginError.provider(401, "Cloudflare rejected the billing API token. Replace it in the integration sheet; OAuth sign-in cannot renew an API token.")
+                } catch UsagePluginError.http(401) where billingToken != nil {
+                    throw UsagePluginError.provider(401, "Cloudflare rejected the billing API token. Replace it in the integration sheet; OAuth sign-in cannot renew an API token.")
                 } catch UsagePluginError.provider(403, _) {
                     throw UsagePluginError.provider(403, message)
                 } catch UsagePluginError.http(403) {

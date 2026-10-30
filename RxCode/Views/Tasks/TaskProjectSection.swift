@@ -23,6 +23,8 @@ struct TaskProjectSection: View {
     @Binding var storySheet: ProjectStory?
     @AppStorage private var cardFilterData: Data
 
+    @State private var performance = StoryBoardPerformanceLog()
+
     @State private var isDropTargeted = false
     @State private var pendingDeletion: TaskBoardSheet?
     @State private var scriptFilterResult: (script: String, outcome: TaskFilterScriptEvaluator.Outcome)?
@@ -62,6 +64,8 @@ struct TaskProjectSection: View {
     }
 
     private var filteredStories: [ProjectStory] {
+        let start = DispatchTime.now().uptimeNanoseconds
+        defer { performance.record("filter-sort", since: start) }
         let filter = cardFilter
         let scriptSelection = scriptFilterSelection
         return appState.recentStories(for: project.id, keyword: keyword).filter { story in
@@ -73,6 +77,10 @@ struct TaskProjectSection: View {
     private var hasActiveFilter: Bool { !cardFilter.isEmpty || cardFilter.hasFilterScript }
 
     var body: some View {
+        #if DEBUG
+        let _ = Self._logChanges()
+        #endif
+        let _ = performance.record("project-body")
         VStack(alignment: .leading, spacing: 0) {
             header
             storyContent
@@ -91,6 +99,8 @@ struct TaskProjectSection: View {
         .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
             if case .story(let story, _) = candidate { appState.deleteStory(story) }
         }
+        .task { await performance.monitor(scope: "project=\(project.id)") }
+        .onDisappear { performance.flush(scope: "project=\(project.id)") }
         .task(id: scriptFilterKey) { await runScriptFilter() }
         .task(id: project.path) {
             ExternalEditorService.shared.detectRepoURLIfNeeded(for: project)
@@ -136,6 +146,15 @@ struct TaskProjectSection: View {
                 .padding(.bottom, 12)
                 .padding(.top, 2)
             }
+        }
+        .onScrollGeometryChange(for: CGPoint.self) { geometry in
+            geometry.contentOffset
+        } action: { _, offset in
+            performance.recordScrollOffset(offset)
+        }
+        .onScrollPhaseChange { oldPhase, newPhase in
+            performance.log("project=\(project.id) scroll \(oldPhase) -> \(newPhase) displayedStories=\(stories.count) tasks=\(board.tasks.count)")
+            if newPhase == .idle { performance.flush(scope: "project=\(project.id)") }
         }
         .scrollContentBackground(.hidden)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -352,7 +371,9 @@ struct TaskProjectSection: View {
 
     /// Order plus the rolled-up status and progress each story card shows.
     private func storySignature(_ stories: [ProjectStory], board: TaskBoard) -> [String] {
-        stories.map { story in
+        let start = DispatchTime.now().uptimeNanoseconds
+        defer { performance.record("story-signature", since: start) }
+        return stories.map { story in
             let progress = board.progress(for: story)
             return "\(story.id):\(board.rolledUpStatus(for: story).rawValue):\(progress.done)/\(progress.total)"
         }

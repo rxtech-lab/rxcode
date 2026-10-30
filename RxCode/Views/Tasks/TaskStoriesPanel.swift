@@ -29,6 +29,7 @@ struct TaskStoriesPanel: View {
     private static let storyPageSize = 30
 
     @AppStorage("taskBoardStoriesPanelExpanded") private var isExpanded = true
+    @State private var performance = StoryBoardPerformanceLog()
     @State private var isFilterPresented = false
     @State private var visibleStoryCount = storyPageSize
     @State private var revealedOlderStoryCount = 0
@@ -47,6 +48,10 @@ struct TaskStoriesPanel: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = Self._logChanges()
+        #endif
+        let _ = performance.record("panel-body")
         Group {
             if isExpanded {
                 expanded
@@ -68,6 +73,8 @@ struct TaskStoriesPanel: View {
         .onChange(of: stories.map(\.id)) { _, _ in
             visibleStoryCount = Self.storyPageSize
         }
+        .task { await performance.monitor(scope: "story-panel") }
+        .onDisappear { performance.flush(scope: "story-panel") }
         .accessibilityIdentifier("task-stories-panel")
     }
 
@@ -109,12 +116,14 @@ struct TaskStoriesPanel: View {
     // MARK: - Expanded
 
     private var expanded: some View {
+        let start = DispatchTime.now().uptimeNanoseconds
         let lastActivity = board.storyLastActivity()
         let (recentStories, olderStories) = agedStories(lastActivity: lastActivity)
         let shownStories = recentStories + Array(olderStories.prefix(revealedOlderStoryCount))
         let hiddenCount = max(0, olderStories.count - revealedOlderStoryCount)
         let visibleStories = Array(shownStories.prefix(visibleStoryCount))
         let lastVisibleStoryId = visibleStories.last?.id
+        performance.record("panel-activity-aging-pagination", since: start)
 
         return VStack(alignment: .leading, spacing: 10) {
             header
@@ -169,6 +178,15 @@ struct TaskStoriesPanel: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 16)
+            }
+            .onScrollGeometryChange(for: CGPoint.self) { geometry in
+                geometry.contentOffset
+            } action: { _, offset in
+                performance.recordScrollOffset(offset)
+            }
+            .onScrollPhaseChange { oldPhase, newPhase in
+                performance.log("story-panel scroll \(oldPhase) -> \(newPhase) stories=\(stories.count) visible=\(visibleStories.count) tasks=\(board.tasks.count)")
+                if newPhase == .idle { performance.flush(scope: "story-panel") }
             }
             .scrollContentBackground(.hidden)
         }

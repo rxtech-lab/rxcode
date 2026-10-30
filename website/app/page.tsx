@@ -4,9 +4,12 @@ import { SupportedAgents } from "./home/agents";
 import { AllInOne } from "./home/all-in-one";
 import { FlowcyCloud } from "./home/flowcy";
 import { Hero } from "./home/hero";
+import { LocalModel } from "./home/local-model";
 import { MorphLayer, type MorphTransition } from "./home/morph";
+import { OnCall } from "./home/on-call";
 import { Remote } from "./home/remote";
-import { ClosingCTA, Screenshots } from "./home/sections";
+import { ClosingCTA } from "./home/sections";
+import { Screenshots } from "./home/showcase";
 import { SprintBoard } from "./home/sprint-board";
 import { formatSize, getLatestRelease } from "./lib/release";
 import { SiteFooter } from "./site-footer";
@@ -50,6 +53,8 @@ export default async function Home() {
         <AllInOne />
         <FlowcyCloud />
         <SupportedAgents />
+        <LocalModel />
+        <OnCall />
         <Screenshots />
         <ClosingCTA tag={release.tag} dmgUrl={release.dmgUrl} />
       </main>

@@ -92,7 +92,15 @@ final class MobileAppState: ObservableObject {
     @Published var pairingStatus: PairingStatus = .idle
 
     @Published var projects: [Project] = []
-    @Published var sessions: [SessionSummary] = []
+    @Published var sessions: [SessionSummary] = [] {
+        didSet {
+            guard sessions != oldValue else { return }
+            let start = ContinuousClock.now
+            sessionListIndex = MobileSessionListIndex(sessions: sessions)
+            logger.debug("PERFORMANCE: mobile session index sessions=\(self.sessions.count, privacy: .public) projects=\(self.sessionListIndex.projects.count, privacy: .public) duration=\(String(describing: start.duration(to: .now)), privacy: .public)")
+        }
+    }
+    private(set) var sessionListIndex = MobileSessionListIndex()
     @Published var branchBriefings: [MobileBranchBriefing] = []
     @Published var usageDashboard = UsageDashboard()
     @Published var briefingDocuments: [MobileBriefingDocument] = []
@@ -462,6 +470,10 @@ final class MobileAppState: ObservableObject {
             relaySuspendedForBackground = true
             enqueueLifecycle(label: "background/stop") { [client] in await client.stop() }
         case .active:
+            guard relaySuspendedForBackground else {
+                logger.debug("PERFORMANCE: foreground relay start skipped; client already active")
+                return
+            }
             logger.info("[Lifecycle] entering foreground — reconnecting relay")
             relaySuspendedForBackground = false
             enqueueLifecycle(label: "foreground/start") { [client] in await client.start() }

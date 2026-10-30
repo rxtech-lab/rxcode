@@ -102,6 +102,7 @@ struct MobileChatView: View {
     @State var lastAutoBottomScrollDate = Date.distantPast
     @State var packageShouldScrollToBottom = false
     @State var packageScrollRequestTask: Task<Void, Never>?
+    @State private var packageScrollAnimated = false
     @State var minimumThreadLoadElapsed = false
     @State var isThreadLoadingOverlayVisible = true
     @State var threadLoadingHideTask: Task<Void, Never>?
@@ -130,11 +131,11 @@ struct MobileChatView: View {
 
     var body: some View {
         activeThreadLayout
-            .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
-            .animation(.easeInOut(duration: 0.2), value: sessionQuestions.count)
-            .animation(.easeInOut(duration: 0.2), value: pendingPlans.count)
             .animation(.easeInOut(duration: 0.25), value: shouldShowThreadLoading)
-            .animation(.easeInOut(duration: 0.2), value: shouldShowDiffBanner)
+            .onDisappear {
+                packageScrollRequestTask?.cancel()
+                packageScrollRequestTask = nil
+            }
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(title)
             .toolbar { threadActionsToolbar }
@@ -285,6 +286,7 @@ struct MobileChatView: View {
                 items: mobileTranscriptItems,
                 isStreaming: isStreaming,
                 shouldScrollToBottom: packageShouldScrollToBottom,
+                scrollToBottomAnimated: packageScrollAnimated,
                 isAtBottom: $isNearBottom,
                 hasMorePrevious: {
                     didSettleInitialScroll
@@ -298,8 +300,6 @@ struct MobileChatView: View {
                 mobileTranscriptAccessory(accessory)
             }
             .opacity(isInitialMessageListHidden && !messages.isEmpty ? 0 : 1)
-            .animation(.easeInOut(duration: 0.2), value: isStreaming)
-            .animation(.easeInOut(duration: 0.2), value: isLoadingMore)
             .animation(.easeInOut(duration: 0.18), value: isInitialMessageListHidden)
             .mobileDismissesKeyboardOnScroll(.interactively)
             .onGeometryChange(for: CGRect.self) { proxy in
@@ -313,6 +313,7 @@ struct MobileChatView: View {
             }
             .task {
                 try? await Task.sleep(for: .seconds(0.8))
+                guard !Task.isCancelled else { return }
                 didSettleInitialScroll = true
             }
             .onChange(of: isNearBottom) { _, nearBottom in
@@ -336,44 +337,40 @@ struct MobileChatView: View {
                 }
                 if !didEstablishInitialScroll {
                     establishInitialPackageScroll(reason: "messagesArrived")
-                } else if autoScrollEnabled {
-                    requestPackageScrollToBottom(reason: "lastMessage")
                 }
-            }
-            .onChange(of: messages.last?.content) { _, _ in
-                guard didEstablishInitialScroll, autoScrollEnabled else { return }
-                requestPackageScrollToBottom(reason: "messageContent")
+                // MessageList owns content following and preserves the user's
+                // anchor; a second request here restarts its scroll animation.
             }
             .onChange(of: isStreaming) { _, streaming in
                 if !streaming {
                     pendingIndicatorSpacerReduction = 0
                     isPinningLatestTurnToTop = false
                 }
-                guard didEstablishInitialScroll, autoScrollEnabled else { return }
-                requestPackageScrollToBottom(reason: streaming ? "streamingStarted" : "streamingEnded")
             }
             .onChange(of: composerMinY) { oldValue, newValue in
                 guard didEstablishInitialScroll, abs(newValue - oldValue) > 0.5, autoScrollEnabled else { return }
                 requestPackageScrollToBottom(reason: "composer")
             }
             .overlay(alignment: .bottomLeading) {
-                if !isNearBottom {
-                    scrollToBottomButton()
-                        .padding(.leading, 16)
-                        .padding(.bottom, scrollToBottomButtonBottomPadding)
-                        .transition(.scale.combined(with: .opacity))
-                        .zIndex(1)
-                        .onAppear {
-                            mobileChatLogger.debug(
-                                "[ScrollButton] appeared bottomPadding=\(Double(scrollToBottomButtonBottomPadding), privacy: .public)"
-                            )
-                        }
-                        .onDisappear {
-                            mobileChatLogger.debug("[ScrollButton] disappeared")
-                        }
+                ZStack {
+                    if !isNearBottom {
+                        scrollToBottomButton()
+                            .padding(.leading, 16)
+                            .padding(.bottom, scrollToBottomButtonBottomPadding)
+                            .transition(.scale.combined(with: .opacity))
+                            .zIndex(1)
+                            .onAppear {
+                                mobileChatLogger.debug(
+                                    "[ScrollButton] appeared bottomPadding=\(Double(scrollToBottomButtonBottomPadding), privacy: .public)"
+                                )
+                            }
+                            .onDisappear {
+                                mobileChatLogger.debug("[ScrollButton] disappeared")
+                            }
+                    }
                 }
+                .animation(.spring(duration: 0.25), value: isNearBottom)
             }
-            .animation(.spring(duration: 0.25), value: isNearBottom)
 
             VStack(spacing: 0) {
                 if !queuedMessages.isEmpty {
@@ -407,6 +404,10 @@ struct MobileChatView: View {
                     onStop: handleStop
                 )
             }
+            .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
+            .animation(.easeInOut(duration: 0.2), value: sessionQuestions.count)
+            .animation(.easeInOut(duration: 0.2), value: pendingPlans.count)
+            .animation(.easeInOut(duration: 0.2), value: shouldShowDiffBanner)
             .background(Color.clear)
             .zIndex(2)
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -674,14 +675,22 @@ struct MobileChatView: View {
     }
 
     private func requestPackageScrollToBottom(reason: String) {
-        packageScrollRequestTask?.cancel()
+        // Coalesce geometry changes during keyboard animation instead of
+        // cancelling and restarting a scroll task on every frame.
+        if reason == "button" {
+            packageScrollRequestTask?.cancel()
+            packageScrollRequestTask = nil
+        }
+        guard packageScrollRequestTask == nil else { return }
+        packageScrollAnimated = reason == "button"
         packageShouldScrollToBottom = false
         mobileChatLogger.debug(
-            "[MessageList] scrollToBottom requested reason=\(reason, privacy: .public) session=\(sessionID, privacy: .public)"
+            "PERFORMANCE: [MessageList] scrollToBottom requested reason=\(reason, privacy: .public) session=\(sessionID, privacy: .public)"
         )
         packageScrollRequestTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(10))
+            try? await Task.sleep(for: .milliseconds(16))
             guard !Task.isCancelled else { return }
+            packageScrollRequestTask = nil
             packageShouldScrollToBottom = true
         }
     }

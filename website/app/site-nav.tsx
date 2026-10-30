@@ -13,16 +13,19 @@ const SECTIONS = [
   { id: "routing", label: "Routing" },
   { id: "team", label: "Agent team" },
   { id: "mobile", label: "Mobile" },
+  { id: "everyday", label: "Everyday" },
   { id: "flowcy", label: "Flowcy" },
   { id: "agents", label: "Agents" },
+  { id: "finetune", label: "Fine-tune" },
+  { id: "oncall", label: "On call" },
+  { id: "screenshots", label: "Gallery" },
 ];
 
 const PAGES = [{ href: "/release", label: "Releases" }];
 
 /**
- * Floating pill navbar shared by every page. On the homepage the section
- * links scroll in place and the current section is highlighted; elsewhere
- * they jump back to the homepage.
+ * Floating pill navbar shared by every page. It stays minimal; on the
+ * homepage, section links live in an auto-hiding rail on the right edge.
  */
 export function SiteNav({ dmgUrl }: { dmgUrl?: string }) {
   const pathname = usePathname();
@@ -41,7 +44,7 @@ export function SiteNav({ dmgUrl }: { dmgUrl?: string }) {
         <div
           className={`flex h-14 w-full items-center justify-between gap-4 rounded-full pl-4 pr-2 transition-all duration-500 ${
             scrolled || !isHome
-              ? "max-w-5xl border border-white/10 bg-background/75 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+              ? "max-w-3xl border border-white/10 bg-background/75 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl"
               : "max-w-[var(--container-max)] border border-transparent"
           }`}
         >
@@ -53,25 +56,14 @@ export function SiteNav({ dmgUrl }: { dmgUrl?: string }) {
             <Brand />
           </Link>
 
-          <div className="hidden items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] p-1 text-sm lg:flex">
-            {SECTIONS.map((section) => (
-              <NavPill
-                key={section.id}
-                href={sectionHref(section.id)}
-                active={isActive(section.id)}
-              >
-                {section.label}
-              </NavPill>
-            ))}
-            <span className="mx-1 h-4 w-px bg-white/10" aria-hidden="true" />
-            {PAGES.map((page) => (
-              <NavPill key={page.href} href={page.href} active={isActive(page.href)}>
-                {page.label}
-              </NavPill>
-            ))}
-          </div>
-
           <div className="flex items-center gap-1.5">
+            <div className="hidden items-center text-sm lg:flex">
+              {PAGES.map((page) => (
+                <NavPill key={page.href} href={page.href} active={isActive(page.href)}>
+                  {page.label}
+                </NavPill>
+              ))}
+            </div>
             <a
               href={GITHUB_REPO_URL}
               target="_blank"
@@ -95,6 +87,8 @@ export function SiteNav({ dmgUrl }: { dmgUrl?: string }) {
         </div>
       </nav>
 
+      {isHome && <SectionRail active={activeSection} />}
+
       <MobileMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -109,6 +103,60 @@ export function SiteNav({ dmgUrl }: { dmgUrl?: string }) {
         ]}
       />
     </>
+  );
+}
+
+/** Vertical scroll-spy pinned to the right edge of the homepage. */
+function SectionRail({ active }: { active: string | null }) {
+  const activeIndex = SECTIONS.findIndex((section) => section.id === active);
+
+  return (
+    <nav
+      aria-label="Page sections"
+      className="group fixed bottom-10 right-5 top-24 z-50 hidden pl-6 lg:block"
+    >
+      {/* Track through the dot centres, filled up to the current section. */}
+      <span className="absolute bottom-[5px] right-[4.5px] top-[5px] w-px bg-white/10" aria-hidden="true">
+        <span
+          className="absolute inset-x-0 top-0 bg-gradient-to-b from-primary/20 to-primary transition-[height] duration-500"
+          style={{ height: `${(Math.max(0, activeIndex) / (SECTIONS.length - 1)) * 100}%` }}
+        />
+      </span>
+      <ul className="relative flex h-full flex-col items-end justify-between">
+        {SECTIONS.map((section, i) => {
+          const current = i === activeIndex;
+          const passed = i < activeIndex;
+          return (
+            <li key={section.id}>
+              <Link
+                href={`#${section.id}`}
+                aria-current={current ? "true" : undefined}
+                className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em]"
+              >
+                <span
+                  className={`whitespace-nowrap transition-all duration-300 ${
+                    current
+                      ? "text-primary"
+                      : "translate-x-2 text-on-surface-variant opacity-0 group-hover:translate-x-0 group-hover:opacity-100 hover:text-on-surface"
+                  }`}
+                >
+                  {section.label}
+                </span>
+                <span
+                  className={`block h-2.5 w-2.5 rounded-full border transition-all duration-300 ${
+                    current
+                      ? "scale-125 border-primary bg-background shadow-[0_0_12px_2px_rgba(77,245,199,0.45)]"
+                      : passed
+                        ? "scale-75 border-primary bg-primary"
+                        : "scale-75 border-white/30 bg-background"
+                  }`}
+                />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
@@ -266,7 +314,7 @@ function useScrolled(threshold: number) {
   return scrolled;
 }
 
-/** The homepage section that spans the middle of the viewport. */
+/** The last homepage section whose top has passed the middle of the viewport. */
 function useActiveSection(enabled: boolean) {
   const [active, setActive] = useState<string | null>(null);
 
@@ -279,7 +327,7 @@ function useActiveSection(enabled: boolean) {
       let current: string | null = null;
       for (const { id } of SECTIONS) {
         const rect = document.getElementById(id)?.getBoundingClientRect();
-        if (rect && rect.top <= mid && rect.bottom > mid) current = id;
+        if (rect && rect.top <= mid) current = id;
       }
       setActive(current);
     };

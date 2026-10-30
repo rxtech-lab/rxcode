@@ -19,11 +19,15 @@ struct ToolResultView: View {
         let lower = toolCall.name.lowercased()
         self.toolNameLower = lower
         let isTransient = ToolCategory(toolName: lower).isTransient
+        #if os(iOS)
+        self._isExpanded = State(initialValue: false)
+        #else
         // Edit tool is expanded by default; transient tools are expanded only while running (until result arrives)
         self._isExpanded = State(initialValue:
             lower == "edit" || lower == "multiedit"
             || (isTransient && isMessageStreaming && toolCall.result == nil)
         )
+        #endif
     }
 
     /// Description input for the Agent tool
@@ -61,6 +65,9 @@ struct ToolResultView: View {
 
     private var standardBody: some View {
         Group {
+            #if os(iOS)
+            minimalBody
+            #else
             if isCardTool {
                 cardBody
                     .bubbleStyle(displayIsError ? .toolError : .tool)
@@ -74,6 +81,7 @@ struct ToolResultView: View {
             } else {
                 minimalBody
             }
+            #endif
         }
         .onChange(of: toolCall.result) { _, newResult in
             guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
@@ -282,9 +290,13 @@ struct ToolResultView: View {
                 MCPAppInlineView(toolCall: toolCall, loader: loader)
             }
         }
+        #if os(iOS)
+        .sensoryFeedback(.selection, trigger: showBashSheet)
+        .sensoryFeedback(.selection, trigger: showDetailSheet)
+        #endif
         .sheet(isPresented: $showBashSheet) {
             BashTerminalSheet(toolCall: toolCall)
-                .mobileSheetPresentation()
+                .toolCallDetailSheetPresentation()
         }
         .sheet(isPresented: $showDetailSheet) {
             ToolCallDetailSheet(toolCall: toolCall)
@@ -830,9 +842,8 @@ private extension View {
     func toolCallDetailSheetPresentation() -> some View {
 #if os(iOS)
         self
-            .presentationDetents([.large])
-            .presentationDragIndicator(.hidden)
-            .interactiveDismissDisabled(true)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
 #else
         self
 #endif

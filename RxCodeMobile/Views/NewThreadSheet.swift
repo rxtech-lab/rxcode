@@ -22,14 +22,13 @@ struct NewThreadSheet: View {
     var initialText: String? = nil
     let onSessionCreated: (String) -> Void
 
-    @State private var text: String = ""
     @State private var isSubmitting = false
+    @State private var focusDismissalGeneration = 0
     @State private var awaitingFromSessionIDs: Set<String>?
     /// Re-requests a snapshot, then gives up, when the Mac never reports the
     /// new thread — so the send button can't spin forever.
     @State private var submitWatchdog: Task<Void, Never>?
     @State private var submitError: String?
-    @FocusState private var isFocused: Bool
 
     // Per-thread agent config. Seeded once from the desktop's current settings,
     // then applied only to the thread this sheet creates (no longer mutates the
@@ -40,14 +39,6 @@ struct NewThreadSheet: View {
     @State private var selectedPermissionMode: PermissionMode = .default
     @State private var didSeedConfig = false
 
-    private var trimmed: String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var canSend: Bool {
-        !trimmed.isEmpty && !isSubmitting
-    }
-
     private var projectName: String {
         state.projects.first(where: { $0.id == projectID })?.name ?? String(localized: "this project")
     }
@@ -57,14 +48,15 @@ struct NewThreadSheet: View {
             ScrollView {
                 VStack(spacing: 28) {
                     header
-                    composer
+                    NewThreadComposer(initialText: initialText ?? "", isSubmitting: isSubmitting, focusDismissalGeneration: focusDismissalGeneration, onSubmit: submit)
                     NewThreadConfigStrip(
                         projectID: projectID,
                         preferredBranch: preferredBranch,
                         selectedProvider: $selectedProvider,
                         selectedModelID: $selectedModelID,
                         selectedPermissionMode: $selectedPermissionMode,
-                        planModeEnabled: $planModeEnabled
+                        planModeEnabled: $planModeEnabled,
+                        onPresentSettings: { focusDismissalGeneration += 1 }
                     )
                     .environmentObject(state)
                 }
@@ -86,16 +78,13 @@ struct NewThreadSheet: View {
         .mobileSheetPresentation()
         .onAppear {
             seedConfigIfNeeded()
-            if let initialText, text.isEmpty { text = initialText }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                isFocused = true
-            }
         }
         .onChange(of: state.desktopSettings) { _, _ in
             seedConfigIfNeeded()
         }
-        .onChange(of: state.sessions.map(\.id)) { _, _ in
-            attemptJumpToNewSession()
+        .onReceive(state.$sessions) { sessions in
+            // @Published emits before assignment; inspect the emitted value.
+            attemptJumpToNewSession(in: sessions)
         }
         .onDisappear {
             submitWatchdog?.cancel()
@@ -137,66 +126,6 @@ struct NewThreadSheet: View {
         .padding(.top, 8)
     }
 
-    // MARK: - Composer (multiline input with embedded send)
-
-    private var composer: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            TextField(
-                "Describe what to build…",
-                text: $text,
-                axis: .vertical
-            )
-            .lineLimit(4 ... 14)
-            .textFieldStyle(.plain)
-            .font(.body)
-            .focused($isFocused)
-            .disabled(isSubmitting)
-            .submitLabel(.return)
-            .accessibilityIdentifier("new-thread-input")
-
-            sendButton
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.secondary.opacity(0.18), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
-    }
-
-    private var sendButton: some View {
-        Button {
-            submit()
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(canSend ? AnyShapeStyle(accentGradient) : AnyShapeStyle(Color.secondary.opacity(0.18)))
-                    .frame(width: 36, height: 36)
-
-                if isSubmitting {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(.white)
-                } else {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(canSend ? Color.white : .secondary)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(!canSend)
-        .accessibilityIdentifier("new-thread-send")
-        .animation(.easeInOut(duration: 0.15), value: canSend)
-        .animation(.easeInOut(duration: 0.15), value: isSubmitting)
-    }
-
     // MARK: - Style helpers
 
     private var accentGradient: LinearGradient {
@@ -223,11 +152,9 @@ struct NewThreadSheet: View {
         selectedPermissionMode = settings.permissionMode
     }
 
-    private func submit() {
-        guard canSend else { return }
-        let body = trimmed
+    private func submit(_ body: String) {
+        guard !body.isEmpty, !isSubmitting else { return }
         isSubmitting = true
-        isFocused = false
         awaitingFromSessionIDs = Set(
             state.sessions
                 .filter { $0.projectId == projectID }
@@ -288,9 +215,9 @@ struct NewThreadSheet: View {
         submitError = message
     }
 
-    private func attemptJumpToNewSession() {
+    private func attemptJumpToNewSession(in sessions: [SessionSummary]) {
         guard let existing = awaitingFromSessionIDs else { return }
-        let newest = state.sessions
+        let newest = sessions
             .filter { $0.projectId == projectID && !existing.contains($0.id) }
             .max(by: { $0.updatedAt < $1.updatedAt })
         guard let newest else { return }
@@ -305,6 +232,108 @@ struct NewThreadSheet: View {
         onSessionCreated(newest.id)
         dismiss()
     }
+}
+
+/// Keeps high-frequency text edits out of the app-state observing sheet.
+private struct NewThreadComposer: View {
+    let initialText: String
+    let isSubmitting: Bool
+    let focusDismissalGeneration: Int
+    let onSubmit: (String) -> Void
+    @State private var text = ""
+    @State private var didSeedText = false
+    @FocusState private var isFocused: Bool
+
+    private var canSend: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSubmitting
+    }
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(red: 0.95, green: 0.6, blue: 0.4),
+                     Color(red: 0.85, green: 0.5, blue: 0.55),
+                     Color(red: 0.65, green: 0.5, blue: 0.7)],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        composer
+            .onChange(of: focusDismissalGeneration) { _, _ in isFocused = false }
+            .task {
+                guard !didSeedText else { return }
+                didSeedText = true
+                text = initialText
+                // Let the sheet mount before asking the keyboard to attach.
+                do { try await Task.sleep(for: .milliseconds(200)) }
+                catch { return }
+                guard focusDismissalGeneration == 0 else { return }
+                isFocused = true
+                newThreadLogger.debug("PERFORMANCE: mobile new-thread composer ready")
+            }
+    }
+
+    // MARK: - Composer (multiline input with embedded send)
+
+    private var composer: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            TextField(
+                "Describe what to build…",
+                text: $text,
+                axis: .vertical
+            )
+            .lineLimit(4 ... 14)
+            .textFieldStyle(.plain)
+            .font(.body)
+            .focused($isFocused)
+            .disabled(isSubmitting)
+            .submitLabel(.return)
+            .accessibilityIdentifier("new-thread-input")
+
+            sendButton
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
+    }
+
+    private var sendButton: some View {
+        Button {
+            isFocused = false
+            onSubmit(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(canSend ? AnyShapeStyle(accentGradient) : AnyShapeStyle(Color.secondary.opacity(0.18)))
+                    .frame(width: 36, height: 36)
+
+                if isSubmitting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(canSend ? Color.white : .secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSend)
+        .accessibilityIdentifier("new-thread-send")
+        .animation(.easeInOut(duration: 0.15), value: canSend)
+        .animation(.easeInOut(duration: 0.15), value: isSubmitting)
+    }
+
 }
 
 // MARK: - New Thread Config Strip
@@ -322,7 +351,9 @@ struct NewThreadConfigStrip: View {
     @Binding var selectedModelID: String?
     @Binding var selectedPermissionMode: PermissionMode
     @Binding var planModeEnabled: Bool
+    var onPresentSettings: () -> Void = {}
     @State private var showingCreateBranch = false
+    @State private var modelPicker: NewThreadModelPickerSnapshot?
     @State private var didApplyPreferredBranch = false
     /// Optimistically tracks the branch the user picked in this sheet so the
     /// chip label updates immediately. The desktop's `projectBranches` snapshot
@@ -361,6 +392,12 @@ struct NewThreadConfigStrip: View {
                 baseBranch: state.projectBranches[projectID]
             )
             .environmentObject(state)
+        }
+        .sheet(item: $modelPicker) { snapshot in
+            NewThreadModelPicker(snapshot: snapshot) { model in
+                applyModel(model)
+            }
+            .mobileSheetPresentation([.large])
         }
         .onAppear(perform: applyPreferredBranchIfNeeded)
         .onChange(of: state.projectBranches[projectID]) { _, _ in
@@ -492,33 +529,18 @@ struct NewThreadConfigStrip: View {
     }
 
     private var modelMenu: some View {
-        Menu {
-            ForEach(modelSections) { section in
-                Section(section.title) {
-                    ForEach(section.models, id: \.key) { model in
-                        Button {
-                            applyModel(model)
-                        } label: {
-                            let isSelected = selectedProvider == model.provider
-                                && selectedModelID == model.id
-                            HStack {
-                                Text(model.displayName)
-                                if isSelected {
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if allModels.isEmpty {
-                Text("No models available")
-            }
+        Button {
+            MobileHaptics.buttonTap()
+            onPresentSettings()
+            modelPicker = NewThreadModelPickerSnapshot(
+                sections: modelSections,
+                selectedProvider: selectedProvider,
+                selectedModelID: selectedModelID
+            )
         } label: {
             chipLabel(icon: "cpu", title: selectedModelLabel)
         }
-        .disabled(allModels.isEmpty)
+        .accessibilityIdentifier("new-thread-model-picker")
         .popoverTip(MobileTips.AgentSelectionTip(), arrowEdge: .top)
     }
 

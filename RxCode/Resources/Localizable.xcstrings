@@ -1893,6 +1893,9 @@
         }
       }
     },
+    "Active time" : {
+
+    },
     "Add" : {
       "localizations" : {
         "en" : {
@@ -4255,6 +4258,9 @@
         }
       }
     },
+    "Bad" : {
+
+    },
     "Based on %lld tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5581,6 +5587,9 @@
           }
         }
       }
+    },
+    "Click again to clear" : {
+
     },
     "Click to select · Command-right-click to add or remove · Right-click for Show Diff" : {
       "localizations" : {
@@ -11885,6 +11894,9 @@
         }
       }
     },
+    "Good" : {
+
+    },
     "Got it" : {
       "localizations" : {
         "ko" : {
@@ -12350,6 +12362,9 @@
         }
       }
     },
+    "How did this session go?" : {
+
+    },
     "How many more tasks of that average cost fit before each limit is reached, based on what's used now." : {
       "localizations" : {
         "zh-Hans" : {
@@ -12385,9 +12400,6 @@
           }
         }
       }
-    },
-    "How was this session?" : {
-
     },
     "https://example.com/mcp" : {
       "localizations" : {
@@ -15317,6 +15329,9 @@
           }
         }
       }
+    },
+    "Neutral" : {
+
     },
     "Never runs" : {
       "localizations" : {
@@ -19642,10 +19657,25 @@
         }
       }
     },
+    "Rate as %@" : {
+
+    },
     "Rate Session" : {
 
     },
     "Rate this coding session" : {
+
+    },
+    "Rated %@ — change rating" : {
+
+    },
+    "Rating cleared" : {
+
+    },
+    "Rating saved" : {
+
+    },
+    "Ratings stay on this Mac and are included when you export coding analytics." : {
 
     },
     "Raw Text" : {
@@ -26678,6 +26708,9 @@
         }
       }
     },
+    "Tokens" : {
+
+    },
     "Tokens burned" : {
       "localizations" : {
         "zh-Hans" : {
@@ -26844,6 +26877,9 @@
           }
         }
       }
+    },
+    "Turns" : {
+
     },
     "Type" : {
       "localizations" : {

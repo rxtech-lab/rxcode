@@ -228,7 +228,12 @@ struct RemoteWorkspaceView: View {
             logger.info("Reconnect overlay shown connection=\(String(describing: state.connectionState), privacy: .public) unavailable=\(state.desktopTaskUnavailable, privacy: .public)")
             showReconnectOverlay = true
         }
-        .onChange(of: state.activeSessionID) { _, newValue in
+        .onChange(of: state.activeSessionID) { oldValue, newValue in
+            // Subscribing acknowledges an existing navigation; only an ID
+            // replacement needs to change the destination again.
+            guard let oldValue, let newValue,
+                  MobileDraftSessionID.isDraft(oldValue)
+                    || state.resolveSessionID(oldValue) == newValue else { return }
             openActiveSession(newValue)
         }
         .onChange(of: state.pendingDeepLink) { _, _ in
@@ -255,8 +260,9 @@ struct RemoteWorkspaceView: View {
 
         // Send the snapshot request (returns immediately, snapshot arrives async)
         consumePendingDeepLink()
-        await state.refreshSnapshot()
-        logger.info("Snapshot request sent")
+        if !state.isDesktopTaskSyncReady {
+            await state.refreshSnapshot()
+        }
 
         // Wait for either snapshot to arrive or timeout
         let timeoutSeconds = 15
@@ -265,7 +271,8 @@ struct RemoteWorkspaceView: View {
 
         var pollCount = 0
         while !state.isDesktopTaskSyncReady && pollCount < maxPolls {
-            try? await Task.sleep(for: .milliseconds(pollIntervalMs))
+            do { try await Task.sleep(for: .milliseconds(pollIntervalMs)) }
+            catch { return }
             pollCount += 1
             if pollCount % 50 == 0 { // Log every 5 seconds
                 logger.debug("Still waiting for snapshot... polls=\(pollCount)/\(maxPolls)")
@@ -275,12 +282,8 @@ struct RemoteWorkspaceView: View {
         let hasSnapshot = state.isDesktopTaskSyncReady
         logger.info("Wait completed: hasSnapshot=\(hasSnapshot), polls=\(pollCount)/\(maxPolls)")
 
-        // Ensure minimum 2 second display time for smooth UX
-        if pollCount < 20 { // Less than 2 seconds elapsed
-            let remainingMs = (20 - pollCount) * Int(pollIntervalMs)
-            logger.debug("Waiting additional \(remainingMs)ms for minimum display time")
-            try? await Task.sleep(for: .milliseconds(remainingMs))
-        }
+        guard !Task.isCancelled else { return }
+        logger.debug("PERFORMANCE: mobile initial sync wait polls=\(pollCount, privacy: .public) ready=\(hasSnapshot, privacy: .public)")
 
         if hasSnapshot {
             logger.info("Connection successful - showing content")
@@ -536,11 +539,6 @@ struct RemoteWorkspaceView: View {
         MobileChatView(sessionID: sessionID, onClose: onClose ?? { closeChat() })
             .id(sessionID)
             .toolbar(.hidden, for: .tabBar)
-            .task(id: sessionID) {
-                if !MobileDraftSessionID.isDraft(sessionID) {
-                    await state.subscribe(to: sessionID)
-                }
-            }
     }
 
     /// Pop the chat view after its thread is archived or deleted. Compact mode

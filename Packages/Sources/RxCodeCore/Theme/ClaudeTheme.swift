@@ -188,7 +188,7 @@ public struct ClaudeAccentButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(ClaudeTheme.textOnAccent)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .background(
@@ -233,9 +233,9 @@ public struct ClaudeSendButton: View {
         Button(action: action) {
             Image(systemName: "arrow.up")
                 .font(.system(size: ClaudeTheme.size(14), weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(isEnabled ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
                 .frame(width: 32, height: 32)
-                .background(isEnabled ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+                .background(isEnabled ? ClaudeTheme.accent : ClaudeTheme.surfaceTertiary)
                 .clipShape(Circle())
         }
         .buttonStyle(.plain)

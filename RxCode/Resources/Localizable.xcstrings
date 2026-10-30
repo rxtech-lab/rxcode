@@ -11959,6 +11959,7 @@
       }
     },
     "Hide more" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -12042,6 +12043,9 @@
           }
         }
       }
+    },
+    "Hide up to 50 threads" : {
+
     },
     "High" : {
       "localizations" : {
@@ -23209,6 +23213,7 @@
       }
     },
     "Show all threads in this project" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -23335,6 +23340,9 @@
           }
         }
       }
+    },
+    "Show fewer" : {
+
     },
     "Show full error message" : {
       "localizations" : {
@@ -23465,6 +23473,7 @@
       }
     },
     "Show only the first five threads" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -23557,6 +23566,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示模型和提供方的明细。"
+          }
+        }
+      }
+    },
+    "Show the next %lld threads (%lld remaining)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show the next %1$lld threads (%2$lld remaining)"
           }
         }
       }

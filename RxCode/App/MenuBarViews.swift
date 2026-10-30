@@ -204,6 +204,9 @@ struct MenuBarContentView: View {
         }
         .padding(14)
         .frame(width: 280)
+        .background(ClaudeTheme.background)
+        .foregroundStyle(ClaudeTheme.textPrimary)
+        .tint(ClaudeTheme.accent)
         .sheet(isPresented: $showCreateWorkspaceSheet) {
             CreateWorkspaceSheet()
                 .environment(appState)
@@ -224,7 +227,7 @@ struct MenuBarContentView: View {
         HStack {
             Text("\(appState.selectedAgentProvider.displayNameText) Usage")
                 .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .textCase(.uppercase)
 
             Spacer()
@@ -258,20 +261,20 @@ struct MenuBarContentView: View {
                 Text("\(appState.inProgressSessionCount)")
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
 
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle")
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                 Text("Awaiting check")
                     .font(.system(size: ClaudeTheme.size(12)))
                 Spacer()
                 Text("\(appState.uncheckedFinishedSessionCount)")
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
         }
     }
@@ -314,7 +317,7 @@ struct MenuBarContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("CI Status")
                 .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .textCase(.uppercase)
                 .padding(.bottom, 4)
 
@@ -363,7 +366,7 @@ struct MenuBarContentView: View {
             .buttonStyle(.borderless)
             .keyboardShortcut("q")
             .font(.system(size: ClaudeTheme.size(12)))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(ClaudeTheme.textSecondary)
         }
     }
 }
@@ -387,7 +390,7 @@ private struct CIStatusRow: View {
             .padding(.horizontal, 6)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isHovering && isLink ? Color.primary.opacity(0.1) : .clear)
+                    .fill(isHovering && isLink ? ClaudeTheme.sidebarItemHover : .clear)
             )
             // Extend the highlight past the row's text inset, like a native menu item.
             .padding(.horizontal, -6)
@@ -419,7 +422,7 @@ private struct CIStatusRow: View {
                 if let branch = row.status.branch, !branch.isEmpty {
                     Text(branch)
                         .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                         .lineLimit(1)
                 }
             }
@@ -427,11 +430,11 @@ private struct CIStatusRow: View {
             if isLink {
                 Image(systemName: "arrow.up.right.square")
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             } else {
                 Text(row.status.overallState.label)
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
         }
     }
@@ -457,11 +460,11 @@ private struct MenuBarUsageBar: View {
                     Text("\(formatPercent(percent))%")
                         .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 } else {
                     Text("—")
                         .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
 
@@ -483,11 +486,11 @@ private struct MenuBarUsageBar: View {
             if let resetsAt, percent != nil {
                 Text("Resets \(Self.resetFormatter.localizedString(for: resetsAt, relativeTo: Date()))")
                     .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             } else if percent == nil {
                 Text(emptyText)
                     .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             }
         }
     }

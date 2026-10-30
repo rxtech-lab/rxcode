@@ -155,6 +155,12 @@ extension AppState {
     /// model round trip and a network token refresh before it began reading
     /// the sidebar's own data.
     func initialize() async {
+        #if DEBUG
+        if AppSupport.isScreenshotCapture {
+            await initializeScreenshotWorkspace()
+            return
+        }
+        #endif
         let launchStart = ContinuousClock.now
 
         ThemeStore.shared.current = selectedTheme

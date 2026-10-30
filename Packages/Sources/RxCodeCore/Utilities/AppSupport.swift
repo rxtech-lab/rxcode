@@ -6,6 +6,9 @@ import Foundation
 /// `RxCode.<suffix>` so alternate builds never share state with production.
 public enum AppSupport {
     public static var isUnitTesting: Bool {
+        #if DEBUG
+        if isScreenshotCapture { return true }
+        #endif
         let environment = ProcessInfo.processInfo.environment
         return environment["RXCODE_UNIT_TESTING"] == "1"
             || environment["XCTestConfigurationFilePath"] != nil
@@ -16,6 +19,11 @@ public enum AppSupport {
     }
 
     public static let bundleScopedURL: URL = {
+        #if DEBUG
+        if isScreenshotCapture {
+            return FileManager.default.temporaryDirectory.appendingPathComponent("RxCodeMarketingCapture", isDirectory: true)
+        }
+        #endif
         if let override = ProcessInfo.processInfo.environment["RXCODE_APP_SUPPORT_DIR"],
            !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true)
@@ -33,6 +41,13 @@ public enum AppSupport {
         migrateLegacyClarcDirectoryIfNeeded(root: root, target: target)
         return target
     }()
+
+    #if DEBUG
+    /// Only a separately identified debug app can open the fictional marketing workspace.
+    public static var isScreenshotCapture: Bool {
+        Bundle.main.bundleIdentifier == "com.rxlab.RxCode.screenshots"
+    }
+    #endif
 
     public static let personalWorkspaceID = "personal"
 

@@ -1,8 +1,10 @@
+import Observation
 import SwiftUI
 
 // MARK: - Theme Colors Definition
 
 public struct ThemeColors: @unchecked Sendable {
+    public let textOnAccent: Color
     public let accent: Color
     public let accentSubtle: Color
     public let background: Color
@@ -39,8 +41,9 @@ public struct ThemeColors: @unchecked Sendable {
         codeBackground: Color, codeHeaderBackground: Color,
         userBubble: Color, userBubbleText: Color, assistantBubble: Color,
         statusSuccess: Color, statusError: Color, statusWarning: Color,
-        inputBackground: Color, inputBorder: Color
+        inputBackground: Color, inputBorder: Color, textOnAccent: Color = .white
     ) {
+        self.textOnAccent = textOnAccent
         self.accent = accent
         self.accentSubtle = accentSubtle
         self.background = background
@@ -69,7 +72,6 @@ public struct ThemeColors: @unchecked Sendable {
     }
 
     // Computed shorthands
-    public var textOnAccent: Color { .white }
     public var inputPlaceholder: Color { textTertiary }
     public var statusRunning: Color { accent }
 }
@@ -274,9 +276,49 @@ extension ThemeColors {
     }()
 }
 
+// MARK: - RxCode Theme (mint, teal, and navy)
+
+// Derived from the app icon: navy #05173D ground, mint #64FFD4 / teal #00E3CC marks,
+// pale blue #CDE6FA. Surfaces stay close together so content, not chrome, stands out;
+// text is navy (light) or pale blue-white (dark) for high legibility.
+extension ThemeColors {
+    public static let rxcode: ThemeColors = {
+        let accent = Color(light: .hex(0x006B5F), dark: .hex(0x64F5D2))
+        return ThemeColors(
+            accent: accent,
+            accentSubtle: accent.opacity(0.14),
+            background: Color(light: .hex(0xF7F9FC), dark: .hex(0x0A1631)),
+            surfacePrimary: Color(light: .hex(0xEEF2F8), dark: .hex(0x111F3D)),
+            surfaceSecondary: Color(light: .hex(0xE4EAF3), dark: .hex(0x18284A)),
+            surfaceTertiary: Color(light: .hex(0xD9E1EE), dark: .hex(0x213358)),
+            surfaceElevated: Color(light: .hex(0xFFFFFF), dark: .hex(0x15244A)),
+            sidebarBackground: Color(light: .hex(0xEDF2F8), dark: .hex(0x07112A)),
+            sidebarItemHover: Color(light: .hex(0xE1E8F2), dark: .hex(0x18284A)),
+            sidebarItemSelected: accent.opacity(0.18),
+            textPrimary: Color(light: .hex(0x05173D), dark: .hex(0xEEF4FB)),
+            textSecondary: Color(light: .hex(0x33456A), dark: .hex(0xC4D3E6)),
+            textTertiary: Color(light: .hex(0x4A5D80), dark: .hex(0x9DB0C9)),
+            border: Color(light: .hex(0xC6D1E0), dark: .hex(0x2B3E63)),
+            borderSubtle: Color(light: .hex(0xDDE4EE), dark: .hex(0x1B2B4D)),
+            codeBackground: Color(light: .hex(0xEEF2F8), dark: .hex(0x07112A)),
+            codeHeaderBackground: Color(light: .hex(0xE4EAF3), dark: .hex(0x111F3D)),
+            userBubble: Color(light: .hex(0x05173D), dark: .hex(0x213358)),
+            userBubbleText: .hex(0xEEF4FB),
+            assistantBubble: Color(light: .hex(0xEEF2F8), dark: .hex(0x111F3D)),
+            statusSuccess: Color(light: .hex(0x006B5F), dark: .hex(0x64F5D2)),
+            statusError: Color(light: .hex(0xBA3F45), dark: .hex(0xFF9C9C)),
+            statusWarning: Color(light: .hex(0x8F5E00), dark: .hex(0xF5CF80)),
+            inputBackground: Color(light: .hex(0xFFFFFF), dark: .hex(0x111F3D)),
+            inputBorder: Color(light: .hex(0x8090AB), dark: .hex(0x5B7098)),
+            textOnAccent: Color(light: .white, dark: .hex(0x05173D))
+        )
+    }()
+}
+
 // MARK: - App Theme Enum
 
 public enum AppTheme: String, CaseIterable, Identifiable {
+    case rxcode   = "RxCode"
     case claude   = "Terracotta"
     case ocean    = "Ocean"
     case forest   = "Forest"
@@ -288,7 +330,8 @@ public enum AppTheme: String, CaseIterable, Identifiable {
 
     public var displayName: LocalizedStringResource {
         switch self {
-        case .claude:   "Terracotta (Default)"
+        case .rxcode:   "RxCode (Default)"
+        case .claude:   "Terracotta"
         case .ocean:    "Ocean (Blue)"
         case .forest:   "Forest (Green)"
         case .lavender: "Lavender (Purple)"
@@ -303,6 +346,7 @@ public enum AppTheme: String, CaseIterable, Identifiable {
 
     public var colors: ThemeColors {
         switch self {
+        case .rxcode:   .rxcode
         case .claude:   .claude
         case .ocean:    .ocean
         case .forest:   .forest
@@ -320,17 +364,18 @@ public extension Notification.Name {
 }
 
 @MainActor
+@Observable
 public final class ThemeStore {
     public static let shared = ThemeStore()
     private init() {}
 
-    public var current: AppTheme = .claude {
+    public var current: AppTheme = .rxcode {
         didSet {
             colors = current.colors
             NotificationCenter.default.post(name: .rxcodeThemeDidChange, object: nil)
         }
     }
-    public var colors: ThemeColors = .claude
+    public var colors: ThemeColors = .rxcode
 
     public static let minFontSizeAdjustment: Int = -5
     public static let maxFontSizeAdjustment: Int = 8

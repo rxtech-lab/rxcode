@@ -297,7 +297,7 @@ final class AppState {
 
     // MARK: - Theme
 
-    var selectedTheme: AppTheme = .claude {
+    var selectedTheme: AppTheme = .rxcode {
         didSet {
             workspaceDefaults.set(selectedTheme.rawValue, for: "selectedTheme")
             ThemeStore.shared.current = selectedTheme

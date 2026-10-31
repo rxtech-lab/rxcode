@@ -73,6 +73,14 @@ final class ChatHistoryTests: XCTestCase {
 
         app.buttons["global-new-chat"].click()
         XCTAssertFalse(app.staticTexts["Global transcript content"].firstMatch.exists)
+
+        // Switching back to Projects must dismiss the global chat surface,
+        // including when its history list has an active selection.
+        globalChat.click()
+        XCTAssertTrue(app.staticTexts["Global transcript content"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["general-route-tasks"].click()
+        XCTAssertTrue(app.buttons["task-board-add"].waitForExistence(timeout: 10))
+        XCTAssertFalse(history.exists)
     }
 }
 

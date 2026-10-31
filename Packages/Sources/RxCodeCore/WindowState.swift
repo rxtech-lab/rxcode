@@ -332,7 +332,14 @@ public final class WindowState {
     /// than one entry. `showingBriefing` / `showingTasks` remain as computed
     /// accessors so the existing call sites keep their original meaning: setting
     /// either to `false` returns the window to chat, exactly as before.
-    public var generalRoute: GeneralRoute? = .tasks
+    public var generalRoute: GeneralRoute? = .tasks {
+        didSet {
+            // A pending thread load must not reopen chat after navigation.
+            if let generalRoute, generalRoute != .chat {
+                cancelSessionSwitchTask()
+            }
+        }
+    }
 
     public var showingBriefing: Bool {
         get { generalRoute == .briefing }

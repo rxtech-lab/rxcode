@@ -616,6 +616,14 @@ extension AppState {
             guard let self, let window else { return }
             await self.editAndResend(messageId: messageId, newContent: newContent, in: window)
         }
+        bridge.fetchLocalResourcesHandler = { [weak self, weak window] in
+            guard let self, let window,
+                  let model = self.localModels.model(id: self.effectiveModelSelection(in: window).model) else { return (nil, nil, nil) }
+            let usage = await self.localModels.manager.resourceUsage(modelID: model.id)
+            return (usage.memory, usage.gpu,
+                    usage.context ?? min(self.localModels.effectiveContextSize,
+                                         model.contextLength ?? self.localModels.effectiveContextSize))
+        }
         bridge.fetchRateLimitHandler = { [weak self] provider in
             await self?.rateLimitUsage(for: provider)
         }

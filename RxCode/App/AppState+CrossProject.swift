@@ -521,6 +521,9 @@ extension AppState {
                     }
 
                 case .result(let resultEvent):
+                    if let percentage = resultEvent.contextWindow?.usedPercentage, percentage.isFinite {
+                        updateState(sessionKey) { $0.lastTurnContextUsedPercentage = max(0, min(100, percentage)) }
+                    }
                     logger.info("[Stream:UI] event #\(eventCount) .result (gap=\(String(format: "%.1f", gap))s, isError=\(resultEvent.isError), session=\(resultEvent.sessionId))")
                     if let debugLogPrefix {
                         let totalElapsed = Date().timeIntervalSince(streamStart)

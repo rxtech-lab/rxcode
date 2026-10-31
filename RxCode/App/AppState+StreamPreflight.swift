@@ -225,6 +225,33 @@ extension AppState {
                 logPreflight("skillContext", detail: "chars=0")
             }
             resolvedSendMode = registerMode
+        case .localAgent:
+            // The harness renders one system prompt per turn, so background
+            // context goes there rather than into the user's message.
+            appendExtraSystemPrompt(configuredPromptContext)
+            appendExtraSystemPrompt(branchBriefingContext)
+            appendExtraSystemPrompt(resolvedMemoryContext)
+            appendExtraSystemPrompt(hookStartContext)
+            if let skillContext = await skillContextAsync {
+                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
+                appendExtraSystemPrompt(skillContext)
+            }
+            resolvedSendMode = registerMode
+            if !localModels.isAvailable {
+                earlyStream = AsyncStream<StreamEvent> { c in
+                    c.yield(.user(UserMessage(
+                        toolUseId: nil,
+                        content: "No local model is installed. Download one in Settings → Agent → RxCode Agent.",
+                        isError: true
+                    )))
+                    c.yield(.result(ResultEvent(
+                        durationMs: nil, totalCostUsd: nil,
+                        sessionId: cliSessionId ?? sessionKey,
+                        isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                    )))
+                    c.finish()
+                }
+            }
         case .acp:
             acpMCPServers = await mcp.acpMCPServers(
                 projectPath: cwd,

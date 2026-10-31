@@ -8,7 +8,7 @@ public nonisolated struct ChatTranscriptAccessory: Identifiable, Hashable, Senda
         case loadingPrevious
         case loadingNext
         case streamingIndicator
-        case webPreview
+        case endActions
         case custom
     }
 

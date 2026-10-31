@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import RxCodeCore
 import os
 
@@ -500,6 +501,21 @@ actor MarketplaceService {
                 .filter { $0.isEnabled(for: provider) }
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             guard !records.isEmpty else { return nil }
+
+            if provider == .localAgent {
+                let directory = configURL.deletingLastPathComponent().appending(path: "local-skill-context")
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                var lines = ["# Installed skills\nWhen a skill matches the task, read its file for full instructions before using it."]
+                for record in records {
+                    let filename = SHA256.hash(data: Data(record.id.utf8)).map { String(format: "%02x", $0) }.joined()
+                    let url = directory.appending(path: filename + ".md")
+                    let detail = record.instructions ?? record.summary ?? record.name
+                    try detail.write(to: url, atomically: true, encoding: .utf8)
+                    let summary = record.summary ?? parseSkillMetadata(detail).description ?? record.name
+                    lines.append("- \(record.name): \(summary.prefix(300))\n  Read: \(url.path)")
+                }
+                return lines.joined(separator: "\n")
+            }
 
             var lines = ["# Installed RxCode skills\nUse the following installed skills when they match the user's request."]
             var remainingBudget = 18_000

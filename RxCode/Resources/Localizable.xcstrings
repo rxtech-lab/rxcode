@@ -128,6 +128,16 @@
         }
       }
     },
+    "“%@” (%@) will be removed from this Mac." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "“%1$@” (%2$@) will be removed from this Mac."
+          }
+        }
+      }
+    },
     "\"%@\" will be archived. Archived chats are hidden from the active list and can be restored from Archived." : {
       "localizations" : {
         "ko" : {
@@ -159,6 +169,9 @@
           }
         }
       }
+    },
+    "“%@” will stop and its partial files will be removed." : {
+
     },
     "\"%@\" will stop running. This can't be undone." : {
       "localizations" : {
@@ -291,6 +304,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · %@ · %lld 条规则%@"
+          }
+        }
+      }
+    },
+    "%@ · %@ ctx" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ ctx"
           }
         }
       }
@@ -439,6 +462,9 @@
         }
       }
     },
+    "%@ context" : {
+
+    },
     "%@ copy" : {
       "localizations" : {
         "zh-Hans" : {
@@ -517,6 +543,22 @@
         }
       }
     },
+    "%@ max context" : {
+
+    },
+    "%@ memory · %@ usable by the GPU" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ memory · %2$@ usable by the GPU"
+          }
+        }
+      }
+    },
+    "%@ models you upload to Hugging Face, including private ones, appear here." : {
+
+    },
     "%@ not found" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -544,6 +586,12 @@
           }
         }
       }
+    },
+    "%@ parameters" : {
+
+    },
+    "%@ tokens" : {
+
     },
     "%@ Usage" : {
       "localizations" : {
@@ -599,6 +647,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 将从文档索引中移除。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "%@, %@ %@, %lld active jobs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@ %3$@, %4$lld active jobs"
           }
         }
       }
@@ -882,6 +940,9 @@
         }
       }
     },
+    "%lld downloads and installs will stop and their partial files will be removed." : {
+
+    },
     "%lld elements" : {
 
     },
@@ -1116,6 +1177,9 @@
           }
         }
       }
+    },
+    "%lld parts" : {
+
     },
     "%lld projects" : {
       "localizations" : {
@@ -1472,6 +1536,9 @@
         }
       }
     },
+    "1 hour" : {
+
+    },
     "1 project" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1512,6 +1579,9 @@
         }
       }
     },
+    "5 minutes" : {
+
+    },
     "5-hour · 7-day used" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1543,6 +1613,7 @@
       }
     },
     "5h" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1710,6 +1781,12 @@
         }
       }
     },
+    "15 minutes" : {
+
+    },
+    "30 minutes" : {
+
+    },
     "A column that triggers a chat needs an “On session stop” column that doesn't trigger a chat itself." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1768,6 +1845,12 @@
           }
         }
       }
+    },
+    "Access token" : {
+
+    },
+    "Access Token" : {
+
     },
     "Access token (leave blank to keep existing token)" : {
 
@@ -2966,6 +3049,9 @@
         }
       }
     },
+    "Agent, ACP client and local model downloads appear here." : {
+
+    },
     "AI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4090,6 +4176,9 @@
         }
       }
     },
+    "Automatic (%@ tokens)" : {
+
+    },
     "Automatic code review" : {
       "localizations" : {
         "ko" : {
@@ -4742,6 +4831,9 @@
         }
       }
     },
+    "by %@" : {
+
+    },
     "By model" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4845,6 +4937,24 @@
           }
         }
       }
+    },
+    "Cancel All" : {
+
+    },
+    "Cancel All Downloads" : {
+
+    },
+    "Cancel all downloads?" : {
+
+    },
+    "Cancel Download" : {
+
+    },
+    "Cancel this download?" : {
+
+    },
+    "Cancelled" : {
+
     },
     "Card size" : {
 
@@ -5443,6 +5553,9 @@
           }
         }
       }
+    },
+    "Clear Completed" : {
+
     },
     "Clear destination — pick again from the toolbar" : {
       "localizations" : {
@@ -6672,6 +6785,9 @@
         }
       }
     },
+    "Context window" : {
+
+    },
     "Continue" : {
       "localizations" : {
         "ko" : {
@@ -6891,6 +7007,9 @@
         }
       }
     },
+    "Could Not Load Files" : {
+
+    },
     "Could not load published versions." : {
       "localizations" : {
         "zh-Hans" : {
@@ -6976,6 +7095,9 @@
       }
     },
     "Couldn't send the message. Try again." : {
+
+    },
+    "Couldn't Sign In" : {
 
     },
     "Couldn't sync %@ to the cloud: %@" : {
@@ -7071,6 +7193,9 @@
           }
         }
       }
+    },
+    "Create a token on Hugging Face…" : {
+
     },
     "Create and checkout" : {
       "localizations" : {
@@ -8405,6 +8530,9 @@
         }
       }
     },
+    "Delete model?" : {
+
+    },
     "Delete Preset" : {
       "localizations" : {
         "ko" : {
@@ -9232,6 +9360,12 @@
         }
       }
     },
+    "Download a large model?" : {
+
+    },
+    "Download a model from Browse to use the RxCode Agent." : {
+
+    },
     "Download APK" : {
       "localizations" : {
         "ko" : {
@@ -9306,6 +9440,28 @@
           }
         }
       }
+    },
+    "Downloading · %@" : {
+
+    },
+    "Downloading · %@ of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Downloading · %1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "Downloading…" : {
+
+    },
+    "Downloads" : {
+
+    },
+    "Downloads (%lld)" : {
+
     },
     "Downloads use npm and are stored in RxCode's application support folder. Use Manage to install a specific published version." : {
       "extractionState" : "stale",
@@ -10782,6 +10938,9 @@
         }
       }
     },
+    "Failed: %@" : {
+
+    },
     "Failing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11451,6 +11610,9 @@
         }
       }
     },
+    "Format" : {
+
+    },
     "Format the JSON body." : {
       "localizations" : {
         "ko" : {
@@ -11511,6 +11673,9 @@
           }
         }
       }
+    },
+    "Gated" : {
+
     },
     "General" : {
       "localizations" : {
@@ -11675,6 +11840,9 @@
           }
         }
       }
+    },
+    "GGUF models run on llama.cpp; MLX models run on Apple's MLX." : {
+
     },
     "Git Repositories" : {
       "extractionState" : "stale",
@@ -11928,6 +12096,9 @@
           }
         }
       }
+    },
+    "hf_…" : {
+
     },
     "Hidden (%lld)" : {
       "localizations" : {
@@ -12846,9 +13017,6 @@
         }
       }
     },
-    "Install Claude Code, Codex, or a client from the ACP registry." : {
-
-    },
     "Install Client" : {
 
     },
@@ -13241,6 +13409,9 @@
           }
         }
       }
+    },
+    "Keep Downloading" : {
+
     },
     "Keep Editing" : {
       "localizations" : {
@@ -13808,6 +13979,9 @@
     "Live preview" : {
 
     },
+    "llama.cpp %@" : {
+
+    },
     "Load from .env file" : {
       "localizations" : {
         "ko" : {
@@ -13862,6 +14036,9 @@
     "Load teams from Vercel" : {
 
     },
+    "Loaded" : {
+
+    },
     "Loading accounts…" : {
 
     },
@@ -13913,6 +14090,9 @@
           }
         }
       }
+    },
+    "Loading files…" : {
+
     },
     "Loading Flowcy projects…" : {
       "localizations" : {
@@ -14036,6 +14216,9 @@
         }
       }
     },
+    "Loading…" : {
+
+    },
     "Local" : {
       "localizations" : {
         "en" : {
@@ -14057,6 +14240,9 @@
           }
         }
       }
+    },
+    "Local Models" : {
+
     },
     "Local on-device search · archived threads included" : {
       "extractionState" : "stale",
@@ -14170,6 +14356,9 @@
           }
         }
       }
+    },
+    "Make Default" : {
+
     },
     "Make Local Only" : {
       "localizations" : {
@@ -14415,6 +14604,9 @@
           }
         }
       }
+    },
+    "Manage Models…" : {
+
     },
     "Manage Project Prompts…" : {
       "localizations" : {
@@ -14971,6 +15163,12 @@
         }
       }
     },
+    "MLX %@" : {
+
+    },
+    "MLX repositories hold one quantization and download whole. Text models run natively on Apple silicon using the MLX Swift runtime included with RxCode. No Python installation is needed." : {
+
+    },
     "Mobile" : {
       "localizations" : {
         "ko" : {
@@ -15331,6 +15529,9 @@
       }
     },
     "Neutral" : {
+
+    },
+    "Never" : {
 
     },
     "Never runs" : {
@@ -15907,6 +16108,12 @@
         }
       }
     },
+    "No %@ Files" : {
+
+    },
+    "No %@ Models" : {
+
+    },
     "No active runs" : {
       "localizations" : {
         "ko" : {
@@ -15932,9 +16139,6 @@
           }
         }
       }
-    },
-    "No Agents Installed" : {
-
     },
     "No agents match “%@”." : {
       "extractionState" : "stale",
@@ -16209,6 +16413,9 @@
         }
       }
     },
+    "No Downloads" : {
+
+    },
     "No editors detected" : {
       "localizations" : {
         "ko" : {
@@ -16336,6 +16543,9 @@
           }
         }
       }
+    },
+    "No Local Models" : {
+
     },
     "No Log" : {
 
@@ -17673,6 +17883,9 @@
         }
       }
     },
+    "Only visible to its owner" : {
+
+    },
     "Open" : {
       "localizations" : {
         "ko" : {
@@ -17860,6 +18073,9 @@
           }
         }
       }
+    },
+    "Open Profile on Hugging Face" : {
+
     },
     "Open Project" : {
       "localizations" : {
@@ -18974,6 +19190,9 @@
     "Preparing export…" : {
 
     },
+    "Preparing…" : {
+
+    },
     "Preset" : {
       "localizations" : {
         "ko" : {
@@ -19112,6 +19331,9 @@
           }
         }
       }
+    },
+    "Private and gated models will no longer be available to browse or download. Models already downloaded stay on this Mac." : {
+
     },
     "Project" : {
       "localizations" : {
@@ -20123,6 +20345,9 @@
         }
       }
     },
+    "Release memory when idle for" : {
+
+    },
     "Release publishing" : {
       "localizations" : {
         "ko" : {
@@ -20321,6 +20546,9 @@
           }
         }
       }
+    },
+    "Remove from list" : {
+
     },
     "Remove from Views" : {
 
@@ -20739,6 +20967,9 @@
           }
         }
       }
+    },
+    "Requires accepting the model's terms on Hugging Face" : {
+
     },
     "Resend Link" : {
       "localizations" : {
@@ -21424,6 +21655,9 @@
         }
       }
     },
+    "Runs open-weight models from Hugging Face on this Mac, with opencode-style tools." : {
+
+    },
     "Runs when streaming stops. Its output is shown and saved with the thread. If the command exits non-zero, its output is sent back to the agent to continue (up to 3 times)." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -21458,6 +21692,9 @@
         }
       }
     },
+    "Runtime" : {
+
+    },
     "RxCode" : {
       "localizations" : {
         "ko" : {
@@ -21473,6 +21710,12 @@
           }
         }
       }
+    },
+    "RxCode Agent" : {
+
+    },
+    "RxCode asks for read access to your profile, your repositories and the gated repositories you can open. It never gets write access." : {
+
     },
     "RxCode needs the GitHub App to see your repositories. Install it for the account or organizations you want to import from." : {
       "localizations" : {
@@ -22000,6 +22243,9 @@
         }
       }
     },
+    "Search %@ models on Hugging Face" : {
+
+    },
     "Search agents" : {
       "localizations" : {
         "ko" : {
@@ -22064,6 +22310,9 @@
           }
         }
       }
+    },
+    "Search Failed" : {
+
     },
     "Search filename..." : {
       "localizations" : {
@@ -22355,6 +22604,9 @@
         }
       }
     },
+    "Search your %@ models" : {
+
+    },
     "Secrets" : {
       "localizations" : {
         "ko" : {
@@ -22370,6 +22622,9 @@
           }
         }
       }
+    },
+    "Section" : {
+
     },
     "See recent stories and task progress for every project in one place." : {
       "localizations" : {
@@ -23894,6 +24149,9 @@
         }
       }
     },
+    "Sign in to download your private models and gated models you have access to" : {
+
+    },
     "Sign in to Flowcy in Settings to create cloud projects." : {
       "localizations" : {
         "ko" : {
@@ -23956,6 +24214,15 @@
         }
       }
     },
+    "Sign In to Hugging Face" : {
+
+    },
+    "Sign in to Hugging Face to browse and download the models you uploaded, including private ones." : {
+
+    },
+    "Sign In to Hugging Face…" : {
+
+    },
     "Sign in to rxlab" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -24005,6 +24272,9 @@
         }
       }
     },
+    "Sign In to See Your Models" : {
+
+    },
     "Sign in to your Flowcy account" : {
       "localizations" : {
         "ko" : {
@@ -24046,6 +24316,9 @@
           }
         }
       }
+    },
+    "Sign In with Hugging Face" : {
+
     },
     "Sign in with rxlab" : {
       "localizations" : {
@@ -24111,6 +24384,9 @@
         }
       }
     },
+    "Sign In with Token" : {
+
+    },
     "Sign In…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -24136,6 +24412,9 @@
           }
         }
       }
+    },
+    "Sign out of Hugging Face?" : {
+
     },
     "Sign Out…" : {
 
@@ -24178,6 +24457,9 @@
         }
       }
     },
+    "Signed in as %@" : {
+
+    },
     "Signed in to %@." : {
       "localizations" : {
         "zh-Hans" : {
@@ -24188,10 +24470,16 @@
         }
       }
     },
+    "Signed in to Hugging Face" : {
+
+    },
     "Signed in with %@" : {
 
     },
     "Signed in with Vercel" : {
+
+    },
+    "Signing in lets the RxCode Agent browse and download your private models and public gated models your account has been granted access to." : {
 
     },
     "Signing In…" : {
@@ -24363,6 +24651,9 @@
         }
       }
     },
+    "Smaller quantizations (Q4) use less memory with a small quality cost. Q4_K_M is a good default." : {
+
+    },
     "Solid 5-hour · dashed 7-day" : {
       "localizations" : {
         "zh-Hans" : {
@@ -24372,6 +24663,9 @@
           }
         }
       }
+    },
+    "Something Went Wrong" : {
+
     },
     "Sort by" : {
 
@@ -25675,6 +25969,9 @@
         }
       }
     },
+    "The model is loaded on first use and unloaded after the idle period to free memory. Larger context windows use more memory; the model's own maximum always applies." : {
+
+    },
     "The model that runs general AI tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -26231,6 +26528,9 @@
         }
       }
     },
+    "This model is gated: request access on its [Hugging Face page](%@), then download it while signed in." : {
+
+    },
     "This model powers quick add and the task and story forms' title and Auto-fill buttons. ACP client suggestions run in a separate session." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -26315,6 +26615,9 @@
           }
         }
       }
+    },
+    "This repository has no downloadable %@ model files." : {
+
     },
     "This run has no chat thread, or it was deleted." : {
 
@@ -26865,6 +27168,9 @@
         }
       }
     },
+    "Try Again" : {
+
+    },
     "Turning recording off keeps existing data. Exported files contain your prompt text." : {
 
     },
@@ -26970,6 +27276,9 @@
           }
         }
       }
+    },
+    "Unload" : {
+
     },
     "Unpin" : {
       "localizations" : {
@@ -27254,6 +27563,9 @@
           }
         }
       }
+    },
+    "Use a token with read access instead of signing in in the browser. It is stored in your Keychain." : {
+
     },
     "Use an AI Gateway key from the selected Vercel team. Shows the team's remaining USD balance, even when billable usage is filtered by project. Stored only in Keychain." : {
 

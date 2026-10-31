@@ -147,6 +147,10 @@ extension AppState {
                 }
                 // Client disabled or removed; fall through to the summarization settings.
                 logger.warning("ACP client for PR generation is unavailable; using summarization settings")
+            case .localAgent:
+                // Loading a local model for one-shot text would stall the UI
+                // for the model's load time; use the summarization settings.
+                break
             }
         }
         switch summarizationProvider {

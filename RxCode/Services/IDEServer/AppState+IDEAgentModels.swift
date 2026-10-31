@@ -17,6 +17,7 @@ extension AppState {
                 case .acp:
                     source = client?.models.isEmpty == true && (client?.modelOptions?.isEmpty ?? true)
                         ? "client_default" : "configured"
+                case .localAgent: source = "downloaded"
                 }
                 return .object([
                     "id": .string(section.id),

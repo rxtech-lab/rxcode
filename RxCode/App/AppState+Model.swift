@@ -33,6 +33,15 @@ extension AppState {
             ("codex", AgentProvider.codex.displayNameText, .codex, nil, Self.availableCodexModels(codexModels)),
         ]
 
+        // RxCode's own agent appears once a local model is downloaded.
+        if !localModels.installed.isEmpty {
+            sections.append(("localAgent", AgentProvider.localAgent.displayNameText, .localAgent, nil,
+                             localModels.installed.map {
+                                 AgentModel(provider: .localAgent, id: $0.id, displayName: $0.displayName,
+                                            description: Self.localModelDescription($0))
+                             }))
+        }
+
         // Preserve provider groups so subscription and separately billed models
         // remain distinguishable. Selection keys still identify the ACP client.
         for client in acpClients where client.enabled {
@@ -67,6 +76,13 @@ extension AppState {
             }
         }
         return sections
+    }
+
+    static func localModelDescription(_ model: LocalModelInfo) -> String {
+        [LocalModelFormat.parameters(model.parameterCount).map { "\($0) parameters" },
+         LocalModelFormat.bytes(model.sizeBytes), "by \(model.author)"]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
 
     /// Splits an ACP model key `<clientId>::<model>` into its parts.

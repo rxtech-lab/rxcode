@@ -71,7 +71,7 @@ actor ACPInstallerService {
 
     /// Downloads + extracts `bin`, returning the absolute path of the resolved executable.
     func install(
-        _ bin: ACPBinaryDist, registryId: String, version: String,
+        _ bin: ACPBinaryDist, registryId: String, version: String, displayName: String? = nil,
         progress: (@Sendable (Progress) -> Void)? = nil
     ) async throws -> String {
         let installDir = Self.installRoot()
@@ -86,6 +86,48 @@ actor ACPInstallerService {
             return resolvedCmdPath
         }
 
+        // A second request for the same agent and version waits for the
+        // first: both would clear and extract into the same folder.
+        let key = "\(registryId)/\(version)"
+        if let running = inFlight[key] { return try await running.value }
+
+        let task = Task {
+            try await DownloadCenter.track("\(displayName ?? registryId) \(version)", kind: .acpAgent) { item in
+                let reporting: @Sendable (Progress) -> Void = { update in
+                    let phase: DownloadCenter.Phase = switch update.phase {
+                    case .downloading: .downloading
+                    case .extracting, .preparing: .installing
+                    }
+                    DownloadCenter.update(item, phase: phase, receivedBytes: update.downloadedBytes, totalBytes: update.expectedBytes)
+                    progress?(update)
+                }
+                do {
+                    return try await self.performInstall(
+                        bin, installDir: installDir, resolvedCmdPath: resolvedCmdPath, progress: reporting
+                    )
+                } catch {
+                    // Leave nothing half-extracted behind a failed or cancelled install.
+                    try? FileManager.default.removeItem(at: installDir)
+                    throw error
+                }
+            }
+        }
+        inFlight[key] = task
+        defer { inFlight[key] = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private var inFlight: [String: Task<String, Error>] = [:]
+
+    private func performInstall(
+        _ bin: ACPBinaryDist, installDir: URL, resolvedCmdPath: String,
+        progress: (@Sendable (Progress) -> Void)?
+    ) async throws -> String {
+        let fm = FileManager.default
         // Fresh install: clear stale partials, recreate dir.
         try? fm.removeItem(at: installDir)
         try fm.createDirectory(at: installDir, withIntermediateDirectories: true)
@@ -109,6 +151,7 @@ actor ACPInstallerService {
             throw ACPInstallError.downloadFailed(underlying: error)
         }
         defer { try? fm.removeItem(at: downloaded) }
+        try Task.checkCancellation()
 
         progress?(Progress(phase: .extracting))
         try extract(archive: downloaded, originalURL: archiveURL, into: installDir)

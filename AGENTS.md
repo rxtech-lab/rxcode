@@ -4,7 +4,7 @@ This file is the canonical guidance for coding agents working in this repository
 
 ## Project Overview
 
-RxCode is a native macOS desktop client for AI coding agents. It is written in Swift and SwiftUI, with a project-centric UI for Claude Code, Codex, and Agent Client Protocol (ACP) clients. The app includes streaming chat, permission approval flows, run profiles, Git worktree support, natural-language thread search, mobile sync, and briefing/change tracking.
+RxCode is a native macOS desktop client for AI coding agents. It is written in Swift and SwiftUI, with a project-centric UI for Claude Code, Codex, Agent Client Protocol (ACP) clients, and its own local-model agent. The app includes streaming chat, permission approval flows, run profiles, Git worktree support, natural-language thread search, mobile sync, and briefing/change tracking.
 
 The main app target is a macOS app. The repository also contains shared Swift packages, widget/mobile-related code, website assets, and release tooling.
 
@@ -75,6 +75,7 @@ Project notes:
 | `ClaudeService` | Runs Claude Code, handles process discovery, streaming, summaries, and CLI session integration. |
 | `CodexAppServer` | Runs Codex app-server sessions, parses protocol events, fetches Codex models and rate limits. |
 | `ACPService` | Runs ACP clients such as OpenCode or Gemini CLI, manages pooled ACP sessions, protocol I/O, model discovery, and permission bridging. |
+| `LocalModelStore` / `LlamaServerManager` | RxCode Agent (`AgentProvider.localAgent`): RxAgentSDK's `RxAgentHarness` running Hugging Face MLX models natively through MLX Swift or GGUF models on a managed llama.cpp `llama-server`, with downloads, hardware-fit recommendations and idle auto-release. `HuggingFaceAccountStore` signs in to Hugging Face (OAuth PKCE or access token, Keychain-stored) for private and gated repos. |
 | `ACPRegistryService` / `ACPInstallerService` | Fetches ACP registry data and installs compatible ACP client binaries. |
 | `PermissionServer` | Local HTTP server for CLI permission hooks and approval handoff to the UI. |
 | `MCPService` | Reads, writes, probes, and adapts MCP server configuration for supported agent runtimes. |

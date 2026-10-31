@@ -272,6 +272,7 @@ extension AppState {
         case .claudeCode: return claude
         case .codex: return codex
         case .acp: return acp
+        case .localAgent: return localAgentBackend
         }
     }
 
@@ -618,9 +619,12 @@ extension AppState {
         if let bin = agent.distribution.binary?[ACPPlatform.current] {
             do {
                 let path = try await ACPInstallerService.shared.install(
-                    bin, registryId: agent.id, version: agent.version, progress: progress
+                    bin, registryId: agent.id, version: agent.version, displayName: agent.name, progress: progress
                 )
                 return .binary(path: path, args: bin.args ?? [], env: bin.env ?? [:])
+            } catch is CancellationError {
+                // Cancelled from the Downloads window: don't fall back to npx/uvx.
+                throw CancellationError()
             } catch {
                 if let npx = agent.distribution.npx {
                     guard let package = ACPPackageVersion.npx(npx.package, version: agent.version) else {

@@ -71,7 +71,44 @@ actor AgentRuntimeInstaller {
         }
     }
 
+    /// Installs in flight, so a second request for the same runtime waits for
+    /// the first instead of racing it into the same folder.
+    private var inFlight: [Runtime: Task<Void, Error>] = [:]
+
+    /// Installs `runtime` as a tracked, cancellable item in the Downloads window.
     func install(
+        _ runtime: Runtime,
+        version: String,
+        progress: (@Sendable (Progress) -> Void)? = nil
+    ) async throws {
+        if let running = inFlight[runtime] {
+            try await running.value
+            return
+        }
+        let title = "\(runtime.displayName)\(version == "latest" ? "" : " \(version)")"
+        let task = Task {
+            try await DownloadCenter.track(title, kind: .agentRuntime) { item in
+                try await self.performInstall(runtime, version: version) { update in
+                    let phase: DownloadCenter.Phase = switch update.phase {
+                    case .resolving: .preparing
+                    case .downloading: .downloading
+                    case .finalizing: .installing
+                    }
+                    DownloadCenter.update(item, phase: phase, receivedBytes: update.downloadedBytes, totalBytes: update.expectedBytes)
+                    progress?(update)
+                }
+            }
+        }
+        inFlight[runtime] = task
+        defer { inFlight[runtime] = nil }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func performInstall(
         _ runtime: Runtime,
         version: String,
         progress: (@Sendable (Progress) -> Void)? = nil
@@ -131,9 +168,17 @@ actor AgentRuntimeInstaller {
                 ))
             }
         }
-        let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
-        for await _ in completion { break }
+        // Cancelling ends npm, which closes its output and ends the wait.
+        nonisolated(unsafe) let running = process
+        let data = await withTaskCancellationHandler {
+            let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
+            for await _ in completion { break }
+            return data
+        } onCancel: {
+            if running.isRunning { running.terminate() }
+        }
         monitor.cancel()
+        try Task.checkCancellation()
         guard process.terminationStatus == 0 else {
             let message = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "npm exited with status \(process.terminationStatus)"

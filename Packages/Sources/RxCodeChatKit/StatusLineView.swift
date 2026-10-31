@@ -3,6 +3,7 @@ import RxCodeCore
 
 struct StatusLineView: View {
     @Environment(ChatBridge.self) private var chatBridge
+    @State private var localResources: (memory: UInt64?, gpu: UInt64?, context: Int?)?
     @State private var rateLimit: RateLimitUsage?
     @State private var showFiveHourPopover = false
     @State private var showSevenDayPopover = false
@@ -57,6 +58,16 @@ struct StatusLineView: View {
         .overlay(alignment: .top) {
             ClaudeTheme.borderSubtle.frame(height: 0.5)
         }
+        .task(id: chatBridge.agentProvider) {
+            localResources = nil
+            guard chatBridge.agentProvider == .localAgent else { return }
+            while !Task.isCancelled {
+                let resources = await chatBridge.fetchLocalResourcesHandler?()
+                guard !Task.isCancelled else { return }
+                localResources = resources
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            }
+        }
         .task {
             await refreshRateLimit()
             // Retry after 5 seconds if initial load fails
@@ -94,7 +105,7 @@ struct StatusLineView: View {
         switch chatBridge.agentProvider {
         case .claudeCode: return chatBridge.claudeVersion
         case .codex: return chatBridge.codexVersion
-        case .acp: return nil
+        case .acp, .localAgent: return nil
         }
     }
 
@@ -103,6 +114,7 @@ struct StatusLineView: View {
         case .claudeCode: return "CC"
         case .codex: return "Codex"
         case .acp: return "ACP"
+        case .localAgent: return "Local"
         }
     }
 
@@ -185,6 +197,9 @@ struct StatusLineView: View {
                 title: "7-day rate limit",
                 body: "Tracks usage against Codex's rolling 7-day limit. Resets gradually as older requests age out."
             )
+        case .localAgent:
+            Label("Model RAM \(resourceBytes(localResources?.memory))", systemImage: "memorychip")
+                .help("Memory of the local model process, including model weights, cache, and runtime overhead. Excludes other apps and system memory.")
         case .acp:
             EmptyView()
         }
@@ -260,11 +275,15 @@ struct StatusLineView: View {
             Image(systemName: "memorychip")
                 .font(.system(size: ClaudeTheme.size(10)))
             Text("context", bundle: .module)
+            if chatBridge.agentProvider == .localAgent, let capacity = localResources?.context {
+                Text("\(capacity.formatted()) tokens", bundle: .module)
+                    .help("Configured context limit for the local model. Usage percentage appears after the agent reports it.")
+            }
             if let ctxPct = contextPercentage {
                 miniBar(percent: ctxPct)
                 Text("\(Int(ctxPct))%")
                     .foregroundStyle(colorForPercent(ctxPct))
-            } else {
+            } else if chatBridge.agentProvider != .localAgent || localResources?.context == nil {
                 Text("--")
             }
         }
@@ -369,6 +388,11 @@ struct StatusLineView: View {
         f.maximumUnitCount = 2
         f.allowedUnits = [.hour, .minute, .second]
         return f.string(from: seconds) ?? "—"
+    }
+
+    private func resourceBytes(_ bytes: UInt64?) -> String {
+        guard let bytes else { return "—" }
+        return ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .memory)
     }
 
     private func refreshRateLimit() async {

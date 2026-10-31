@@ -4,17 +4,30 @@ public enum AgentProvider: String, Codable, CaseIterable, Sendable, Hashable {
     case claudeCode
     case codex
     case acp
+    /// RxCode's own in-process agent (RxAgentHarness) running a local model
+    /// downloaded from Hugging Face.
+    case localAgent
 
     public var displayName: LocalizedStringResource {
         switch self {
         case .claudeCode: return "Claude Code"
         case .codex: return "Codex"
         case .acp: return "ACP"
+        case .localAgent: return "RxCode Agent"
         }
     }
 
     public var displayNameText: String {
         String(localized: displayName)
+    }
+
+    /// Tolerant decoding: a provider added by a newer build (desktop and mobile
+    /// versions can differ) decodes as Claude Code instead of failing the whole
+    /// payload — a thread list or settings snapshot is worth more than one
+    /// mislabelled row.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AgentProvider(rawValue: raw) ?? .claudeCode
     }
 
     /// Default `SessionOrigin` for sessions originated by this provider.
@@ -24,7 +37,9 @@ public enum AgentProvider: String, Codable, CaseIterable, Sendable, Hashable {
         switch self {
         case .claudeCode: return .cliBacked
         case .codex: return .codexAppServer
-        case .acp: return .acpAgent
+        // Same storage shape as ACP: the agent keeps its own session and
+        // RxCode keeps a replay copy in its JSON store.
+        case .acp, .localAgent: return .acpAgent
         }
     }
 }

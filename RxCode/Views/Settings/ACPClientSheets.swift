@@ -205,6 +205,9 @@ struct ACPVersionSheet: View {
                     }
                 }
                 didFinish = true
+            } catch is CancellationError {
+                // Cancelled from the Downloads window: back to the version picker.
+                progress = nil
             } catch {
                 errorMessage = error.localizedDescription
             }

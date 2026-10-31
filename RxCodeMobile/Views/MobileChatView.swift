@@ -470,7 +470,7 @@ struct MobileChatView: View {
         case .loadingNext, .streamingIndicator:
             MobileStreamingIndicator(isThinking: isThinking)
                 .transition(.opacity)
-        case .webPreview:
+        case .endActions:
             EmptyView()
         case .custom:
             if accessory.id == "mobile-bottom-spacer" {

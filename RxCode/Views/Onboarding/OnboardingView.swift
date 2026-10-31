@@ -386,6 +386,8 @@ struct OnboardingView: View {
             do {
                 try await AgentRuntimeInstaller.shared.install(runtime, version: "latest")
                 await checkCLI()
+            } catch is CancellationError {
+                // Cancelled from the Downloads window.
             } catch {
                 cliInstallError = error.localizedDescription
             }

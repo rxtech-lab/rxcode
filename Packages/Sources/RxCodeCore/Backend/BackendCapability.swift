@@ -43,6 +43,11 @@ public extension AgentProvider {
             return [
                 .planMode, .fileEdit, .mcpServers, .skills, .attachments, .getUsage,
             ]
+        case .localAgent:
+            // The harness ships its own todowrite, question and plan-mode
+            // handling; usage comes from the local server, so there is no
+            // account quota to fetch.
+            return [.askUserQuestion, .todos, .planMode, .fileEdit, .mcpServers, .attachments]
         }
     }
 }

@@ -560,6 +560,11 @@ private struct TaskCardModelRow: View {
             let clientId = appState.acpSelectionParts(for: agent.model)?.clientId
             let iconURL = appState.acpClients.first(where: { $0.id == clientId })?.iconURL
             ACPIconView(url: iconURL, size: 14)
+        case .localAgent:
+            Image(systemName: "desktopcomputer")
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(.secondary)
         }
     }
 }

@@ -18,6 +18,17 @@ struct SDKPermissionResolver: RxAgentCore.PermissionResolving {
     let sessionKey: String
 
     func resolve(_ request: RxAgentCore.PermissionRequest) async -> RxAgentCore.PermissionDecision {
+        // A question is answered, not approved: `requestDecision` keeps only
+        // allow/deny, so the answers would be lost. The ask-user entry point
+        // returns the `{questions, answers}` payload the card produced.
+        if request.toolName == "AskUserQuestion" {
+            let answers = await server.requestAskUserAnswers(
+                toolUseId: request.id,
+                sessionId: sessionKey,
+                toolInput: request.toolInput.mapValues(AppJSON.init)
+            )
+            return answers.map { .allowWithInput(SDKJSON($0)) } ?? .deny
+        }
         let decision = await server.requestDecision(
             toolUseId: request.id,
             sessionId: sessionKey,

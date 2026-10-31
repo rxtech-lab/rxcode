@@ -111,6 +111,7 @@ struct RxCodeApp: App {
             )
             .focusable(false)
             .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+            .modifier(DownloadWindowPresenter())
         } defaultValue: {
             WorkspaceWindowValue(workspaceID: workspaceManager.frontmostWorkspaceID)
         }
@@ -146,6 +147,7 @@ struct RxCodeApp: App {
                 }
             }
             AutomationCommands()
+            DownloadsCommands()
             DocumentationCommands(appState: appState)
         }
 
@@ -159,6 +161,7 @@ struct RxCodeApp: App {
                 )
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
             }
         }
         .defaultSize(width: 1000, height: 700)
@@ -172,6 +175,7 @@ struct RxCodeApp: App {
                 )
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
             }
         }
         .defaultSize(width: 800, height: 700)
@@ -188,6 +192,7 @@ struct RxCodeApp: App {
                 )
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
             }
         }
         .defaultSize(width: 1000, height: 700)
@@ -197,6 +202,7 @@ struct RxCodeApp: App {
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
             TerminalWindowRoot(path: value?.path ?? "")
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
         }
         .defaultSize(width: 900, height: 600)
 
@@ -204,26 +210,39 @@ struct RxCodeApp: App {
             SettingsWindowRoot(appState: appState)
                 .environment(workspaceManager)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
         }
 
         // Standalone Automation windows, opened from the "Automation" menu.
         Window("Flowcy", id: "autopilot-window") {
             AutopilotWindowRoot(appState: appState)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
         }
         .defaultSize(width: 720, height: 640)
 
         Window("Hooks", id: "hooks-window") {
             HooksWindowRoot(appState: appState)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
         }
         .defaultSize(width: 760, height: 620)
 
         Window("Custom Context Menus", id: "custom-menus-window") {
             CustomMenusWindowRoot(appState: appState)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
         }
         .defaultSize(width: 720, height: 620)
+
+        // Download and install progress for agents, ACP clients and local models.
+        Window("Downloads", id: DownloadsWindow.id) {
+            DownloadsWindow()
+                .environment(appState)
+        }
+        .defaultSize(width: 520, height: 420)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
 
         MenuBarExtra(isInserted: $showMenuBarExtra) {
             MenuBarContentView()

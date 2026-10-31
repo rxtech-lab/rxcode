@@ -26,7 +26,7 @@ Keep create, update, and delete forms in dedicated `Sheet` or `Dialog` elements.
 
 Presentation elements remain hidden until opened. They can be detached from the document root; their child trees still validate. Only one presentation can be active at a time. Close it before opening another. Status updates appear in an overlay, including inside sheets. Mobile button actions, toggle/picker/slider changes provide selection haptics.
 
-The existing top-level `presentation: "dialog"` continues to open the whole tool view in the host's dialog and retain its transcript card. It is separate from a `Dialog` element inside a spec.
+The existing top-level `presentation: "dialog"` continues to open the whole tool view in the host's dialog and retain its transcript card. Agents are told to keep views inline (the default) and use `dialog` only when the user explicitly asks for one. It is separate from a `Dialog` element inside a spec.
 
 ## Example
 

@@ -58,6 +58,8 @@ struct ToolResultView: View {
             ReviewCountdownCardView(toolCall: toolCall)
         } else if toolNameLower == "imagegeneration" {
             GeneratedImageToolView(toolCall: toolCall, isStreaming: isMessageStreaming)
+        } else if toolNameLower == VideoGenerationProgress.toolName.lowercased() {
+            GeneratedVideoToolView(toolCall: toolCall, isStreaming: isMessageStreaming)
         } else {
             standardBody
         }

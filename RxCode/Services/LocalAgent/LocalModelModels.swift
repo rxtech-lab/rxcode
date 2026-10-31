@@ -46,6 +46,12 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
     let quantization: String?
     let downloadedAt: Date
     var format: LocalModelWeightFormat = .gguf
+    var huggingFaceMetadata: HFModelSummary? = nil
+
+    var isVideoModel: Bool {
+        guard let task = huggingFaceMetadata?.pipelineTag else { return false }
+        return ["text-to-video", "image-to-video", "video-to-video"].contains(task)
+    }
 
     var displayName: String {
         let base = repoID.split(separator: "/").last.map(String.init) ?? repoID
@@ -68,7 +74,7 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
 
 extension LocalModelInfo {
     private enum CodingKeys: String, CodingKey {
-        case repoID, author, files, sizeBytes, parameterCount, contextLength, architecture, quantization, downloadedAt, format
+        case repoID, author, files, sizeBytes, parameterCount, contextLength, architecture, quantization, downloadedAt, format, huggingFaceMetadata
     }
 
     /// Entries saved before MLX support have no `format`; they are GGUF.
@@ -84,12 +90,13 @@ extension LocalModelInfo {
         quantization = try container.decodeIfPresent(String.self, forKey: .quantization)
         downloadedAt = try container.decode(Date.self, forKey: .downloadedAt)
         format = try container.decodeIfPresent(LocalModelWeightFormat.self, forKey: .format) ?? .gguf
+        huggingFaceMetadata = try container.decodeIfPresent(HFModelSummary.self, forKey: .huggingFaceMetadata)
     }
 }
 
 // MARK: - Hugging Face catalog
 
-nonisolated struct HFModelSummary: Identifiable, Hashable, Sendable {
+nonisolated struct HFModelSummary: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let author: String
     let downloads: Int
@@ -103,6 +110,17 @@ nonisolated struct HFModelSummary: Identifiable, Hashable, Sendable {
     var isPrivate = false
     /// Public, but downloads need a signed-in account granted access.
     var isGated = false
+    var pipelineTag: String? = nil
+    var libraryName: String? = nil
+    var tags: [String] = []
+
+    var licenses: [String] {
+        tags.filter { $0.hasPrefix("license:") }.map { String($0.dropFirst("license:".count)) }
+    }
+
+    var categoryLabel: String? {
+        pipelineTag?.split(separator: "-").map { $0.capitalized }.joined(separator: " ")
+    }
 
     var name: String { id.split(separator: "/").last.map(String.init) ?? id }
 }

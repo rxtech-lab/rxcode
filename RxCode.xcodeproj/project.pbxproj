@@ -110,6 +110,7 @@
 		DFADD4013068CF9F00A1E94D /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFADD4003068CF9F00A1E94D /* RxAgentSDK */; };
 		DFADD4043068D1A500A1E94D /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFADD4033068D1A500A1E94D /* RxAgentSDK */; };
 		DFADD4143068F4A400A1E94D /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFADD4133068F4A400A1E94D /* RxAgentSDK */; };
+		E1F2A3B4C5D6E7F8091A2B3E /* VideoCompanionResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F2A3B4C5D6E7F8091A2B3D /* VideoCompanionResolverTests.swift */; };
 		E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62000002FCB000100000001 /* MemoryIntentTests.swift */; };
 		E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = E6A001012F8A000100000001 /* SwiftTerm */; };
 		E6C001022F9B000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E6C001012F9B000100000001 /* Sparkle */; };
@@ -282,6 +283,7 @@
 		DFA9E5060000000000000001 /* AppStateSteeringTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateSteeringTests.swift; sourceTree = "<group>"; };
 		DFA9E5080000000000000001 /* ReasoningLevelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReasoningLevelTests.swift; sourceTree = "<group>"; };
 		DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EffortSanitizationTests.swift; sourceTree = "<group>"; };
+		E1F2A3B4C5D6E7F8091A2B3D /* VideoCompanionResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VideoCompanionResolverTests.swift; sourceTree = "<group>"; };
 		E220C5427FC34A8E7DDEADD9 /* RxCodeDesktopWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeDesktopWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E62000002FCB000100000001 /* MemoryIntentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryIntentTests.swift; sourceTree = "<group>"; };
 		E67335382F7356F600FD26C7 /* RxCode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCode.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -535,6 +537,7 @@
 				DFA9E5040000000000000001 /* AgentEventBridgeTests.swift */,
 				EBCAA31501FDBEDDC060182B /* LocalModelTests.swift */,
 				D0C1E2A3B4C5D6E7F8091A2B /* DownloadCenterTests.swift */,
+				E1F2A3B4C5D6E7F8091A2B3D /* VideoCompanionResolverTests.swift */,
 				D0C1E2A3B4C5D6E7F8091B2B /* HuggingFaceAuthTests.swift */,
 				DFA9E5060000000000000001 /* AppStateSteeringTests.swift */,
 				DFA9E5080000000000000001 /* ReasoningLevelTests.swift */,
@@ -1131,6 +1134,7 @@
 				DFA9E5050000000000000001 /* AgentEventBridgeTests.swift in Sources */,
 				BEC12E505C6B3EF5C950BEC9 /* LocalModelTests.swift in Sources */,
 				D0C1E2A3B4C5D6E7F8091A2C /* DownloadCenterTests.swift in Sources */,
+				E1F2A3B4C5D6E7F8091A2B3E /* VideoCompanionResolverTests.swift in Sources */,
 				D0C1E2A3B4C5D6E7F8091B2C /* HuggingFaceAuthTests.swift in Sources */,
 				DFA9E5070000000000000001 /* AppStateSteeringTests.swift in Sources */,
 				DFA9E5090000000000000001 /* ReasoningLevelTests.swift in Sources */,

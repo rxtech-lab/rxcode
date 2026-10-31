@@ -194,6 +194,12 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         HStack(spacing: 10) {
             attachButton
 
+            if chatBridge.isVideoModel {
+                VideoQualityPicker()
+                videoModeChip
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            }
+
             if windowState.sessionPlanMode {
                 planModeChip
                     .transition(.scale(scale: 0.95).combined(with: .opacity))
@@ -206,6 +212,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
         .frame(height: 32)
         .animation(.easeInOut(duration: 0.15), value: windowState.sessionPlanMode)
+        .animation(.easeInOut(duration: 0.15), value: chatBridge.isVideoModel)
     }
 
     private var hasComposerContent: Bool {
@@ -308,6 +315,31 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         .accessibilityIdentifier("plan-mode-chip")
     }
 
+    /// Shown while the selected model generates video. Not a toggle: the model
+    /// itself decides it, so it is informational and switches with the picker.
+    private var videoModeChip: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "film")
+                .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+
+            Text("Video", bundle: .module)
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                .lineLimit(1)
+        }
+        .foregroundStyle(ClaudeTheme.accent)
+        .padding(.horizontal, 9)
+        .frame(height: 26)
+        .background(ClaudeTheme.accentSubtle, in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(ClaudeTheme.accent.opacity(0.35), lineWidth: 1)
+        )
+        .help(String(localized: "This model generates a video from your message", bundle: .module))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("Video generation", bundle: .module))
+        .accessibilityIdentifier("video-mode-chip")
+    }
+
     /// Mirrors `windowState.sessionPlanMode` into a Binding so the Menu's `Toggle`
     /// drives `chatBridge.togglePlanMode()` — the same path used by Shift+Tab.
     private var planModeBinding: Binding<Bool> {
@@ -326,7 +358,9 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             focusTrigger: inputFocusTrigger,
             font: .systemFont(ofSize: ClaudeTheme.size(14)),
             textColor: NSColor(ClaudeTheme.textPrimary),
-            placeholder: String(localized: "Type a message...", bundle: .module),
+            placeholder: chatBridge.isVideoModel
+                ? String(localized: "Describe a video…", bundle: .module)
+                : String(localized: "Type a message...", bundle: .module),
             onReturn: handleReturnKey,
             onUpArrow: { handleUpArrow() == .handled },
             onDownArrow: { handleDownArrow() == .handled },

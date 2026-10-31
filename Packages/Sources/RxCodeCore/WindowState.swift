@@ -323,6 +323,8 @@ public final class WindowState {
     }
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
+    /// A local video opened from a chat link, shown in a player sheet.
+    public var playingVideo: PreviewFile?
     // MARK: - General Route
 
     /// The full-pane destination selected from the sidebar's "General" section.

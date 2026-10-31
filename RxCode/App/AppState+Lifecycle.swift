@@ -619,6 +619,10 @@ extension AppState {
         bridge.fetchLocalResourcesHandler = { [weak self, weak window] in
             guard let self, let window,
                   let model = self.localModels.model(id: self.effectiveModelSelection(in: window).model) else { return (nil, nil, nil) }
+            // Video models run as a short-lived sd-cli process per render.
+            if model.isVideoModel {
+                return (StableDiffusionProcess.memoryFootprint(), nil, nil)
+            }
             let usage = await self.localModels.manager.resourceUsage(modelID: model.id)
             return (usage.memory, usage.gpu,
                     usage.context ?? min(self.localModels.effectiveContextSize,
@@ -695,6 +699,9 @@ extension AppState {
                 bridge.agentProvider = provider
                 bridge.canSteer = self.canSteer(in: window)
                 bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
+                let isVideoModel = provider == .localAgent
+                    && localModels.model(id: currentModel).map(\.isVideoModel) == true
+                if bridge.isVideoModel != isVideoModel { bridge.isVideoModel = isVideoModel }
                 let advice = rateLimitAdvice(for: provider, model: currentModel)
                 if bridge.rateLimitAdvice != advice {
                     bridge.rateLimitAdvice = advice

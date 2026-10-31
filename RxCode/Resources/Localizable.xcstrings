@@ -543,9 +543,6 @@
         }
       }
     },
-    "%@ max context" : {
-
-    },
     "%@ memory · %@ usable by the GPU" : {
       "localizations" : {
         "en" : {
@@ -634,6 +631,9 @@
           }
         }
       }
+    },
+    "%@ was moved or deleted." : {
+
     },
     "%@ will be removed from the docs index. This can't be undone." : {
       "localizations" : {
@@ -3185,6 +3185,9 @@
         }
       }
     },
+    "All Categories" : {
+
+    },
     "All Chats" : {
       "localizations" : {
         "ko" : {
@@ -3650,6 +3653,9 @@
         }
       }
     },
+    "Architecture" : {
+
+    },
     "Archive" : {
       "localizations" : {
         "ko" : {
@@ -3965,6 +3971,9 @@
 
     },
     "Authentication…" : {
+
+    },
+    "Author" : {
 
     },
     "Auto" : {
@@ -4965,6 +4974,9 @@
     "Cards in done columns and finished stories with no updates for this long are hidden from the board. Open work is never hidden. Reveal older items 10 at a time." : {
 
     },
+    "Category" : {
+
+    },
     "Change status" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5066,6 +5078,12 @@
         }
       }
     },
+    "Check for runtime updates" : {
+
+    },
+    "Check for Updates" : {
+
+    },
     "Check for Updates..." : {
       "localizations" : {
         "en" : {
@@ -5123,6 +5141,9 @@
         }
       }
     },
+    "Checking for updates…" : {
+
+    },
     "Checking which device runs this task…" : {
 
     },
@@ -5177,6 +5198,9 @@
         }
       }
     },
+    "Choose a model from the list to see its files and download one." : {
+
+    },
     "Choose a model to fill in empty properties" : {
 
     },
@@ -5205,6 +5229,9 @@
           }
         }
       }
+    },
+    "Choose an installed model to see its details." : {
+
     },
     "Choose an integration" : {
 
@@ -6753,6 +6780,9 @@
         }
       }
     },
+    "Context" : {
+
+    },
     "Context memories: %lld" : {
       "localizations" : {
         "ko" : {
@@ -7006,9 +7036,6 @@
           }
         }
       }
-    },
-    "Could Not Load Files" : {
-
     },
     "Could not load published versions." : {
       "localizations" : {
@@ -9441,6 +9468,9 @@
         }
       }
     },
+    "Downloaded" : {
+
+    },
     "Downloading · %@" : {
 
     },
@@ -10287,6 +10317,9 @@
           }
         }
       }
+    },
+    "Engines" : {
+
     },
     "Enroll with Passkey" : {
       "localizations" : {
@@ -13071,6 +13104,9 @@
         }
       }
     },
+    "Install Managed Copy" : {
+
+    },
     "Install one CLI, then check again." : {
       "localizations" : {
         "ko" : {
@@ -13785,6 +13821,12 @@
         }
       }
     },
+    "Library" : {
+
+    },
+    "License" : {
+
+    },
     "Lifecycle" : {
       "localizations" : {
         "ko" : {
@@ -13802,6 +13844,9 @@
       }
     },
     "Like widgets, cards take 1 to 4 grid cells and the briefing arranges them to fill gaps." : {
+
+    },
+    "Likes" : {
 
     },
     "Limit" : {
@@ -13982,6 +14027,9 @@
     "llama.cpp %@" : {
 
     },
+    "llama.cpp and stable-diffusion.cpp are downloaded from their official GitHub releases; a Homebrew copy is used when RxCode has not installed one. MLX ships with RxCode and updates with it. Uninstalling an engine keeps its models on disk." : {
+
+    },
     "Load from .env file" : {
       "localizations" : {
         "ko" : {
@@ -14064,6 +14112,9 @@
         }
       }
     },
+    "Loading Categories…" : {
+
+    },
     "Loading current branches…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14109,6 +14160,12 @@
           }
         }
       }
+    },
+    "Loading model card…" : {
+
+    },
+    "Loading model…" : {
+
     },
     "Loading more..." : {
       "localizations" : {
@@ -14240,9 +14297,6 @@
           }
         }
       }
-    },
-    "Local Models" : {
-
     },
     "Local on-device search · archived threads included" : {
       "extractionState" : "stale",
@@ -14605,9 +14659,6 @@
         }
       }
     },
-    "Manage Models…" : {
-
-    },
     "Manage Project Prompts…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14873,6 +14924,9 @@
         }
       }
     },
+    "Max context" : {
+
+    },
     "Maximum concurrent tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15012,6 +15066,12 @@
           }
         }
       }
+    },
+    "Memory & Context" : {
+
+    },
+    "Memory fit" : {
+
     },
     "Memory History" : {
       "localizations" : {
@@ -15308,6 +15368,9 @@
           }
         }
       }
+    },
+    "Models…" : {
+
     },
     "Monthly" : {
       "localizations" : {
@@ -16108,9 +16171,6 @@
         }
       }
     },
-    "No %@ Files" : {
-
-    },
     "No %@ Models" : {
 
     },
@@ -16666,6 +16726,9 @@
           }
         }
       }
+    },
+    "No models downloaded" : {
+
     },
     "No notifications yet." : {
       "localizations" : {
@@ -17594,6 +17657,9 @@
         }
       }
     },
+    "Not specified" : {
+
+    },
     "Not yet managed" : {
       "localizations" : {
         "ko" : {
@@ -17820,6 +17886,9 @@
         }
       }
     },
+    "On This Mac" : {
+
+    },
     "One finished task: its chat, model, finish time and how long it ran." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18041,6 +18110,9 @@
           }
         }
       }
+    },
+    "Open on Hugging Face" : {
+
     },
     "Open on This Mac…" : {
       "localizations" : {
@@ -18716,6 +18788,9 @@
           }
         }
       }
+    },
+    "Parameters" : {
+
     },
     "Passing" : {
       "localizations" : {
@@ -19735,6 +19810,9 @@
         }
       }
     },
+    "Quantization" : {
+
+    },
     "Queue a follow-up…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20248,6 +20326,9 @@
           }
         }
       }
+    },
+    "Reinstall" : {
+
     },
     "Reject" : {
       "localizations" : {
@@ -21188,6 +21269,9 @@
         }
       }
     },
+    "Retry Loading Categories" : {
+
+    },
     "Retry Sync" : {
 
     },
@@ -21695,6 +21779,12 @@
     "Runtime" : {
 
     },
+    "Runtimes" : {
+
+    },
+    "Runtimes…" : {
+
+    },
     "RxCode" : {
       "localizations" : {
         "ko" : {
@@ -21783,6 +21873,12 @@
           }
         }
       }
+    },
+    "RxCode's copy of llama.cpp will be deleted. GGUF models stay on disk and need the engine reinstalled before they run." : {
+
+    },
+    "RxCode's copy of stable-diffusion.cpp will be deleted. Diffusion models stay on disk and need the engine reinstalled before they run." : {
+
     },
     "RxCode's managed copy will be removed. Separately installed copies are managed outside RxCode." : {
 
@@ -22243,7 +22339,7 @@
         }
       }
     },
-    "Search %@ models on Hugging Face" : {
+    "Search %@ models" : {
 
     },
     "Search agents" : {
@@ -22676,6 +22772,9 @@
           }
         }
       }
+    },
+    "Select a Model" : {
+
     },
     "Select a Project" : {
       "localizations" : {
@@ -25859,6 +25958,9 @@
         }
       }
     },
+    "The default model is used when a RxCode Agent chat does not pick one." : {
+
+    },
     "The delay is recorded with your name and the current time." : {
       "localizations" : {
         "ko" : {
@@ -25948,6 +26050,9 @@
           }
         }
       }
+    },
+    "The MLX engine will be turned off and any loaded MLX model unloaded. MLX models stay on disk and run again after you reinstall the engine." : {
+
     },
     "The model each run of this task uses" : {
       "localizations" : {
@@ -26619,6 +26724,9 @@
     "This repository has no downloadable %@ model files." : {
 
     },
+    "This repository has no model card." : {
+
+    },
     "This run has no chat thread, or it was deleted." : {
 
     },
@@ -27267,6 +27375,15 @@
     "Undo" : {
 
     },
+    "Uninstall" : {
+
+    },
+    "Uninstall %@?" : {
+
+    },
+    "Uninstall…" : {
+
+    },
     "Unknown project" : {
       "localizations" : {
         "zh-Hans" : {
@@ -27391,6 +27508,9 @@
         }
       }
     },
+    "Update" : {
+
+    },
     "Update available: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -27410,6 +27530,9 @@
           }
         }
       }
+    },
+    "Updated" : {
+
     },
     "Updated %@" : {
       "localizations" : {
@@ -28076,6 +28199,9 @@
           }
         }
       }
+    },
+    "Video Not Found" : {
+
     },
     "View" : {
       "localizations" : {

@@ -21,6 +21,18 @@ final class DownloadCenterTests: XCTestCase {
         XCTAssertNil(center.items.first?.fraction)
     }
 
+    func testRapidByteUpdatesAreThrottledButCompletionAndPhaseChangesAreNot() {
+        let center = DownloadCenter()
+        let id = center.begin("Qwen3-8B-4bit", kind: .localModel)
+        center.update(id, phase: .downloading, receivedBytes: 10, totalBytes: 100)
+        center.update(id, phase: .downloading, receivedBytes: 20)
+        XCTAssertEqual(center.items.first?.receivedBytes, 10)
+        center.update(id, phase: .downloading, receivedBytes: 100)
+        XCTAssertEqual(center.items.first?.receivedBytes, 100)
+        center.update(id, phase: .installing)
+        XCTAssertEqual(center.items.first?.phase, .installing)
+    }
+
     func testUpdatesAfterCompletionAreIgnored() {
         let center = DownloadCenter()
         let id = center.begin("MLX runtime", kind: .modelRuntime)

@@ -1,11 +1,13 @@
+import AppKit
 import RxCodeCore
 import SwiftUI
 
 /// Browse, download and manage the local models the RxCode Agent runs.
 ///
-/// Two sections behind a segmented control — the Hugging Face catalog, fetched
-/// on demand, and what is installed — so each is its own full-height list.
-/// Choosing a quantization for a search result is its own pushed view.
+/// A two-column split view: the sidebar holds a segmented control for the
+/// Hugging Face catalog, the signed-in account's repos and what is installed,
+/// above that section's list; the detail column shows the selected model —
+/// its quantizations to download, or an installed model's details.
 struct LocalModelsSheet: View {
     enum Section: String, CaseIterable, Identifiable {
         case browse = "Browse"
@@ -14,53 +16,73 @@ struct LocalModelsSheet: View {
         var id: String { rawValue }
     }
 
+    enum InstalledSelection: Hashable {
+        case settings
+        case model(String)
+    }
+
+    var initialModel: LocalModelSheetRequest? = nil
+
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var section: Section = .browse
+    @State private var remoteSelection: HFModelSummary?
+    @State private var installedSelection: InstalledSelection?
     @State private var status: String?
     @State private var errorMessage: String?
     @State private var pendingDownload: PendingDownload?
     @State private var pendingDeletion: LocalModelInfo?
     @State private var showSignIn = false
+    @State private var loadingInitialModel = false
 
     private var store: LocalModelStore { appState.localModels }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                hardwareHeader
-                Picker("Section", selection: $section) {
-                    ForEach(Section.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .padding(.bottom, 10)
-                Divider()
-                Group {
-                    switch section {
-                    case .browse: LocalModelBrowseView(onDownload: requestDownload)
-                    case .mine: myModels
-                    case .installed: installedList
+        NavigationSplitView {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 380, ideal: 400, max: 480)
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        HuggingFaceAccountButton(showSignIn: $showSignIn)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .navigationTitle("Local Models")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    HuggingFaceAccountButton(showSignIn: $showSignIn)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .navigationDestination(for: HFModelSummary.self) { summary in
-                LocalModelDetailView(summary: summary, onDownload: requestDownload)
+        }
+        .task(id: initialModel?.id) {
+            guard let request = initialModel else { return }
+            loadingInitialModel = true
+            defer { loadingInitialModel = false }
+            do {
+                remoteSelection = try await HuggingFaceClient.model(request.repoID, format: request.format)
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottom) { progressOverlay }
+        .overlay {
+            if loadingInitialModel {
+                ProgressView("Loading model…")
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .onChange(of: section) {
+            remoteSelection = nil
+            installedSelection = nil
+        }
+        .onChange(of: store.installed) {
+            if case .model(let id) = installedSelection, !store.installed.contains(where: { $0.id == id }) {
+                installedSelection = nil
+            }
+        }
         .sheet(isPresented: $showSignIn) {
             HuggingFaceSignInSheet()
                 .frame(minWidth: 520, idealWidth: 560, minHeight: 460, idealHeight: 520)
@@ -90,10 +112,39 @@ struct LocalModelsSheet: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Sidebar
 
-    private var hardwareHeader: some View {
-        HStack(alignment: .center, spacing: 16) {
+    private var sidebar: some View {
+        VStack(spacing: 0) {
+            Picker("Section", selection: $section) {
+                ForEach(Section.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            Group {
+                switch section {
+                case .browse: LocalModelBrowseView(selection: $remoteSelection, initialModel: initialModel)
+                case .mine: myModels
+                case .installed: installedList
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                hardwareFooter
+            }
+            .background(.bar)
+        }
+    }
+
+    // MARK: - Hardware
+
+    private var hardwareFooter: some View {
+        VStack(alignment: .leading, spacing: 6) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(store.hardware.chip).font(.system(size: ClaudeTheme.size(12), weight: .medium))
@@ -104,27 +155,30 @@ struct LocalModelsSheet: View {
             } icon: {
                 Image(systemName: "memorychip")
             }
-            Spacer()
-            serverControls
             runtimeControls
+            serverControls
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     /// Runtimes install on demand with the first download of their format,
-    /// so the header only reports what is already installed.
+    /// so the footer only reports what is already installed.
     @ViewBuilder
     private var runtimeControls: some View {
-        if let runtime = store.mlxRuntime {
-            Label("MLX \(runtime.version)", systemImage: "checkmark.circle.fill")
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(ClaudeTheme.statusSuccess)
-        }
-        if let runtime = store.runtime {
-            Label("llama.cpp \(runtime.version)", systemImage: "checkmark.circle.fill")
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(ClaudeTheme.statusSuccess)
+        if store.mlxRuntime != nil || store.runtime != nil {
+            HStack(spacing: 12) {
+                if let runtime = store.mlxRuntime {
+                    Label("MLX \(runtime.version)", systemImage: "checkmark.circle.fill")
+                }
+                if let runtime = store.runtime {
+                    Label("llama.cpp \(runtime.version)", systemImage: "checkmark.circle.fill")
+                }
+            }
+            .font(.system(size: ClaudeTheme.size(10)))
+            .foregroundStyle(ClaudeTheme.statusSuccess)
+            .lineLimit(1)
         }
     }
 
@@ -138,6 +192,8 @@ struct LocalModelsSheet: View {
                     .font(.system(size: ClaudeTheme.size(10)))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
                 Button("Unload") {
                     Task {
                         await store.unloadServer()
@@ -158,7 +214,7 @@ struct LocalModelsSheet: View {
     @ViewBuilder
     private var myModels: some View {
         if let account = store.huggingFace.account {
-            LocalModelBrowseView(author: account.username, onDownload: requestDownload)
+            LocalModelBrowseView(author: account.username, selection: $remoteSelection)
                 .id(account.username)
         } else {
             ContentUnavailableView {
@@ -175,8 +231,81 @@ struct LocalModelsSheet: View {
 
     // MARK: - Installed
 
-    @ViewBuilder
     private var installedList: some View {
+        List {
+            SwiftUI.Section {
+                Label("Memory & Context", systemImage: "slider.horizontal.3")
+                    .padding(.vertical, 2)
+                    .selectableModelRow(isSelected: installedSelection == .settings) { installedSelection = .settings }
+            }
+            SwiftUI.Section("Models") {
+                if store.installed.isEmpty {
+                    Text("No models downloaded")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(store.installed) { model in
+                    InstalledModelRow(
+                        model: model,
+                        isDefault: store.settings.defaultModelID == model.id,
+                        fit: store.fit(bytes: model.sizeBytes)
+                    )
+                    .selectableModelRow(isSelected: installedSelection == .model(model.id)) {
+                        installedSelection = .model(model.id)
+                    }
+                    .contextMenu {
+                        Button("Make Default") { store.settings.defaultModelID = model.id }
+                            .disabled(store.settings.defaultModelID == model.id)
+                        Divider()
+                        Button("Delete…", role: .destructive) { pendingDeletion = model }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Detail
+
+    @ViewBuilder
+    private var detail: some View {
+        switch section {
+        case .browse, .mine:
+            if let summary = remoteSelection {
+                LocalModelDetailView(summary: summary, onDownload: requestDownload)
+                    .id(summary.id)
+            } else {
+                ContentUnavailableView(
+                    "Select a Model",
+                    systemImage: "cube.transparent",
+                    description: Text("Choose a model from the list to see its files and download one.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        case .installed:
+            switch installedSelection {
+            case .settings:
+                runtimeSettings
+            case .model(let id):
+                if let model = store.installed.first(where: { $0.id == id }) {
+                    InstalledModelDetailView(
+                        model: model,
+                        directory: model.directory(in: store.modelsRoot),
+                        isDefault: store.settings.defaultModelID == model.id,
+                        fit: store.fit(bytes: model.sizeBytes),
+                        onMakeDefault: { store.settings.defaultModelID = model.id },
+                        onDelete: { pendingDeletion = model }
+                    )
+                } else {
+                    installedPlaceholder
+                }
+            case nil:
+                installedPlaceholder
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var installedPlaceholder: some View {
         if store.installed.isEmpty {
             ContentUnavailableView(
                 "No Local Models",
@@ -185,41 +314,40 @@ struct LocalModelsSheet: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            @Bindable var store = store
-            Form {
-                SwiftUI.Section("Models") {
-                    ForEach(store.installed) { model in
-                        InstalledModelRow(
-                            model: model,
-                            isDefault: store.settings.defaultModelID == model.id,
-                            fit: store.fit(bytes: model.sizeBytes),
-                            onMakeDefault: { store.settings.defaultModelID = model.id },
-                            onDelete: { pendingDeletion = model }
-                        )
-                    }
-                }
-                SwiftUI.Section {
-                    Picker("Release memory when idle for", selection: $store.settings.idleMinutes) {
-                        Text("5 minutes").tag(5)
-                        Text("15 minutes").tag(15)
-                        Text("30 minutes").tag(30)
-                        Text("1 hour").tag(60)
-                        Text("Never").tag(0)
-                    }
-                    Picker("Context window", selection: $store.settings.contextSize) {
-                        Text("Automatic (\(store.hardware.defaultContextSize.formatted()) tokens)").tag(Int?.none)
-                        ForEach([8_192, 16_384, 32_768, 65_536, 131_072], id: \.self) { size in
-                            Text("\(size.formatted()) tokens").tag(Int?.some(size))
-                        }
-                    }
-                } header: {
-                    Text("Runtime")
-                } footer: {
-                    Text("The model is loaded on first use and unloaded after the idle period to free memory. Larger context windows use more memory; the model's own maximum always applies.")
-                }
-            }
-            .formStyle(.grouped)
+            ContentUnavailableView(
+                "Select a Model",
+                systemImage: "shippingbox",
+                description: Text("Choose an installed model to see its details.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var runtimeSettings: some View {
+        @Bindable var store = store
+        return Form {
+            SwiftUI.Section {
+                Picker("Release memory when idle for", selection: $store.settings.idleMinutes) {
+                    Text("5 minutes").tag(5)
+                    Text("15 minutes").tag(15)
+                    Text("30 minutes").tag(30)
+                    Text("1 hour").tag(60)
+                    Text("Never").tag(0)
+                }
+                Picker("Context window", selection: $store.settings.contextSize) {
+                    Text("Automatic (\(store.hardware.defaultContextSize.formatted()) tokens)").tag(Int?.none)
+                    ForEach([8_192, 16_384, 32_768, 65_536, 131_072], id: \.self) { size in
+                        Text("\(size.formatted()) tokens").tag(Int?.some(size))
+                    }
+                }
+            } header: {
+                Text("Runtime")
+            } footer: {
+                Text("The model is loaded on first use and unloaded after the idle period to free memory. Larger context windows use more memory; the model's own maximum always applies.")
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Memory & Context")
     }
 
     // MARK: - Overlay
@@ -283,7 +411,9 @@ struct LocalModelsSheet: View {
                         contextLength: mlxContext ?? full?.contextLength,
                         architecture: summary.architecture ?? full?.architecture,
                         lastModified: full?.lastModified, format: format,
-                        isPrivate: summary.isPrivate, isGated: summary.isGated
+                        isPrivate: summary.isPrivate, isGated: summary.isGated,
+                        pipelineTag: full?.pipelineTag ?? summary.pipelineTag,
+                        libraryName: full?.libraryName ?? summary.libraryName, tags: full?.tags ?? summary.tags
                     )
                 }
                 if store.runtime(for: summary.format) == nil { try await store.installRuntime(for: summary.format) }
@@ -355,39 +485,71 @@ private struct InstalledModelRow: View {
     let model: LocalModelInfo
     let isDefault: Bool
     let fit: LocalModelFit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(model.displayName)
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if isDefault {
+                    Text("Default")
+                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.accent)
+                }
+            }
+            HStack(spacing: 8) {
+                Text(model.format.label)
+                Text(LocalModelFormat.bytes(model.sizeBytes))
+                Spacer(minLength: 0)
+                LocalModelFitBadge(fit: fit)
+            }
+            .font(.system(size: ClaudeTheme.size(10)))
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// An installed model's details and the actions that change it.
+private struct InstalledModelDetailView: View {
+    let model: LocalModelInfo
+    let directory: URL
+    let isDefault: Bool
+    let fit: LocalModelFit
     let onMakeDefault: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(model.displayName).font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                    if isDefault {
-                        Text("Default")
-                            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.accent)
-                    }
-                }
-                HStack(spacing: 10) {
-                    Text("by \(model.author)")
-                    if let params = LocalModelFormat.parameters(model.parameterCount) { Text("\(params) parameters") }
-                    Text(LocalModelFormat.bytes(model.sizeBytes))
-                    if let context = model.contextLength { Text("\(context.formatted()) max context") }
-                    LocalModelFitBadge(fit: fit)
-                }
-                .font(.system(size: ClaudeTheme.size(10)))
-                .foregroundStyle(.secondary)
+        Form {
+            SwiftUI.Section("Model") {
+                LabeledContent("Repository", value: model.repoID)
+                LabeledContent("Author", value: model.author)
+                LabeledContent("Format", value: model.format.label)
+                if let quantization = model.quantization { LabeledContent("Quantization", value: quantization) }
+                if let params = LocalModelFormat.parameters(model.parameterCount) { LabeledContent("Parameters", value: params) }
+                if let architecture = model.architecture { LabeledContent("Architecture", value: architecture) }
+                if let context = model.contextLength { LabeledContent("Max context", value: "\(context.formatted()) tokens") }
             }
-            Spacer()
-            Menu("Manage…") {
-                Button("Make Default", action: onMakeDefault).disabled(isDefault)
-                Divider()
+            SwiftUI.Section("On This Mac") {
+                LabeledContent("Size", value: LocalModelFormat.bytes(model.sizeBytes))
+                LabeledContent("Memory fit") { LocalModelFitBadge(fit: fit) }
+                LabeledContent("Downloaded", value: model.downloadedAt.formatted(date: .abbreviated, time: .shortened))
+                if model.files.count > 1 { LabeledContent("Files", value: model.files.count.formatted()) }
+            }
+            SwiftUI.Section {
+                Button(isDefault ? "Default Model" : "Make Default", action: onMakeDefault)
+                    .disabled(isDefault)
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([directory])
+                }
                 Button("Delete…", role: .destructive, action: onDelete)
+            } footer: {
+                Text("The default model is used when a RxCode Agent chat does not pick one.")
             }
-            .fixedSize()
-            .controlSize(.small)
         }
+        .formStyle(.grouped)
+        .navigationTitle(model.displayName)
     }
 }
-

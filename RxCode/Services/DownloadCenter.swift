@@ -81,6 +81,11 @@ final class DownloadCenter {
     private(set) var presentRequest = 0
 
     @ObservationIgnored private var cancelHandlers: [UUID: @MainActor () -> Void] = [:]
+    /// Last time each item's byte count was published, for throttling.
+    @ObservationIgnored private var lastByteUpdate: [UUID: Date] = [:]
+    /// Byte-only updates closer together than this are dropped so the
+    /// progress text doesn't churn. Phase changes always go through.
+    static let byteUpdateInterval: TimeInterval = 0.5
 
     var activeCount: Int { items.filter { $0.phase.isActive }.count }
 
@@ -99,6 +104,13 @@ final class DownloadCenter {
 
     func update(_ id: UUID, phase: Phase, receivedBytes: Int64? = nil, totalBytes: Int64? = nil) {
         guard let index = items.firstIndex(where: { $0.id == id }), items[index].phase.isActive else { return }
+        let now = Date()
+        let reachedTotal = receivedBytes != nil && receivedBytes == (totalBytes ?? items[index].totalBytes)
+        if items[index].phase == phase, !reachedTotal, receivedBytes != nil,
+           let last = lastByteUpdate[id], now.timeIntervalSince(last) < Self.byteUpdateInterval {
+            return
+        }
+        lastByteUpdate[id] = now
         items[index].phase = phase
         if let receivedBytes { items[index].receivedBytes = receivedBytes }
         if let totalBytes { items[index].totalBytes = totalBytes > 0 ? totalBytes : nil }
@@ -192,6 +204,7 @@ final class DownloadCenter {
 
     private func complete(_ id: UUID, phase: Phase) {
         cancelHandlers[id] = nil
+        lastByteUpdate[id] = nil
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].phase = phase
         items[index].finishedAt = Date()

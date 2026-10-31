@@ -32,9 +32,12 @@ struct StatusLineView: View {
 
             rateLimitAdviceSegment()
 
-            Divider().frame(height: 12)
+            // Video renders have no conversation context to report.
+            if !chatBridge.isVideoModel {
+                Divider().frame(height: 12)
 
-            contextSegment()
+                contextSegment()
+            }
 
             Spacer()
 

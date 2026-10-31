@@ -30,7 +30,14 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
 
     public var body: some View {
         VStack(spacing: 0) {
-            if isEmptyState {
+            if chatBridge.isVideoModel {
+                // Video models get a studio — player, render progress and a
+                // list of generations — instead of the message list.
+                VideoStudioView {
+                    composer
+                    bottomAccessory
+                }
+            } else if isEmptyState {
                 emptyStateLayout
             } else {
                 messageScrollView

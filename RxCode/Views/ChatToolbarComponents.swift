@@ -110,7 +110,7 @@ struct ChatToolbarControls: View {
 
             Menu {
                 Section("Model Picker") {
-                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                    ForEach(appState.availableAgentModelSections(in: windowState), id: \.id) { section in
                         Section {
                             ForEach(section.models, id: \.key) { model in
                                 Button {

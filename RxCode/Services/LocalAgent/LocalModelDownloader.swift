@@ -32,6 +32,11 @@ nonisolated final class LocalModelDownloader: NSObject, URLSessionDownloadDelega
     private var task: URLSessionDownloadTask?
     private var destination: URL?
     private var session: URLSession?
+    private var lastProgressReport = Date.distantPast
+
+    /// Minimum gap between progress callbacks. URLSession reports every few
+    /// kilobytes, which makes the UI text churn; the final byte always reports.
+    static let progressInterval: TimeInterval = 0.5
 
     /// Downloads `url` to `destination`, replacing anything there. A
     /// `bearerToken` is sent to the Hub only, never to the CDN it redirects to.
@@ -79,7 +84,14 @@ nonisolated final class LocalModelDownloader: NSObject, URLSessionDownloadDelega
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
                     totalBytesExpectedToWrite: Int64) {
-        lock.withLock { onProgress }?(totalBytesWritten, totalBytesExpectedToWrite)
+        let handler = lock.withLock { () -> (@Sendable (Int64, Int64) -> Void)? in
+            let now = Date()
+            let finished = totalBytesExpectedToWrite > 0 && totalBytesWritten >= totalBytesExpectedToWrite
+            guard finished || now.timeIntervalSince(lastProgressReport) >= Self.progressInterval else { return nil }
+            lastProgressReport = now
+            return onProgress
+        }
+        handler?(totalBytesWritten, totalBytesExpectedToWrite)
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {

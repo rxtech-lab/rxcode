@@ -21,34 +21,103 @@ enum LocalAgentBackendFactory {
         }
     }
 
+    /// Prints as its message, since the SDK formats failures with `String(describing:)`.
+    struct ResolveFailure: LocalizedError, CustomStringConvertible {
+        let message: String
+        var errorDescription: String? { message }
+        var description: String { message }
+    }
+
     /// Built once: the backend holds the harness, whose per-session runtimes
     /// (permission approvals, background shells) must survive between turns.
     @MainActor private static var cached: (server: ObjectIdentifier, backend: any AgentBackend)?
 
+    /// The user's default task model, read when a video model first needs
+    /// its companion files looked up; nil when none can run the lookup.
+    typealias TaskModelProvider = @MainActor @Sendable () -> VideoCompanionResolver.TaskModel?
+
     @MainActor
-    static func backend(permissionServer: PermissionServer, store: LocalModelStore) -> any AgentBackend {
+    static func backend(
+        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { nil }
+    ) -> any AgentBackend {
         if let cached, cached.server == ObjectIdentifier(permissionServer) { return cached.backend }
-        let backend = makeBackend(permissionServer: permissionServer, store: store)
+        let backend = makeBackend(permissionServer: permissionServer, store: store, taskModel: taskModel)
         cached = (ObjectIdentifier(permissionServer), backend)
         return backend
     }
 
     /// The SDK estimates the unabridged tool catalog. Local adapters check the
     /// prepared prompt instead and use the harness's overflow compaction path.
-    static func configuration(store: any HarnessSessionStore) -> HarnessConfiguration {
+    static func configuration(store: any HarnessSessionStore, extraTools: [any HarnessTool] = []) -> HarnessConfiguration {
         HarnessConfiguration(
-            tools: HarnessToolset.standard(), store: store,
+            tools: HarnessToolset.standard() + extraTools, store: store,
             systemPrompt: HarnessSystemPrompt(agentName: "RxCode"),
             compaction: HarnessCompactionPolicy(automatic: false)
         )
     }
 
-    static func makeBackend(permissionServer: PermissionServer, store: LocalModelStore) -> any AgentBackend {
+    /// Renders clips for whichever video model the turn's tool call names.
+    static func videoTool(
+        store: LocalModelStore, manager: LlamaServerManager, taskModel: @escaping TaskModelProvider
+    ) -> VideoGenerationTool {
+        VideoGenerationTool(job: { modelID in
+            await MainActor.run {
+                guard let model = store.model(id: modelID), LocalVideoRecipe.supports(model) else { return nil }
+                let resolver = taskModel()
+                return VideoGenerationTool.Job(
+                    model: model, modelsRoot: store.modelsRoot, outputDirectory: store.generatedVideosRoot,
+                    prepare: { report in
+                        try await store.prepareVideoGeneration(model: model, taskModel: resolver, report: report)
+                    }
+                )
+            }
+        }, manager: manager)
+    }
+
+    static func makeBackend(
+        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { nil }
+    ) -> any AgentBackend {
         let sessions = RxCodeHarnessSessionStore(
             directory: store.appSupport.appending(path: "harness-sessions")
         )
-        let agent = HarnessAgent(configuration: configuration(store: sessions))
         let manager = store.manager
+        let agent = HarnessAgent(configuration: configuration(
+            store: sessions, extraTools: [videoTool(store: store, manager: manager, taskModel: taskModel)]
+        ))
+
+        let resolve: HarnessAgentClient.ModelResolver = { requested in
+            let (model, root, context) = await MainActor.run {
+                (store.model(id: requested), store.modelsRoot, store.effectiveContextSize)
+            }
+            guard let model else { throw ResolveError.noModel }
+            if model.isVideoModel {
+                guard LocalVideoRecipe.supports(model) else {
+                    throw ResolveFailure(message: "This is a video model, but RxCode does not yet support its video architecture.")
+                }
+                return .init(model: LocalVideoHarnessModel(modelID: model.id), name: model.id)
+            }
+            if model.format == .mlx {
+                guard LlamaRuntimeInstaller.isAppleSilicon else { throw MLXRuntimeInstaller.InstallError.unsupportedMac }
+                guard await MainActor.run(body: { store.runtime(for: .mlx) }) != nil else {
+                    throw ResolveError.noRuntime(.mlx)
+                }
+                return .init(model: NativeMLXHarnessModel(manager: manager, model: model,
+                    modelsRoot: root, contextWindow: min(context, model.contextLength ?? context)), name: model.id)
+            }
+            guard let runtime = await MainActor.run(body: { store.runtime(for: model.format) }) else {
+                throw ResolveError.noRuntime(model.format)
+            }
+            let server = try await manager.ensureServer(
+                for: model, modelsRoot: root, runtime: URL(filePath: runtime.path), contextSize: context
+            )
+            return .init(
+                model: LocalLlamaHarnessModel(
+                    base: OpenAICompatibleHarnessModel(baseURL: server.baseURL, contextWindow: server.contextSize),
+                    manager: manager
+                ),
+                name: model.id
+            )
+        }
 
         let client = HarnessAgentClient(
             id: clientID,
@@ -60,28 +129,13 @@ enum LocalAgentBackendFactory {
                 }
             },
             resolveModel: { requested in
-                let (model, root, context) = await MainActor.run {
-                    (store.model(id: requested), store.modelsRoot, store.effectiveContextSize)
+                // The SDK reports resolver failures with `String(describing:)`,
+                // which prints enum cases. Hand it the localized message instead.
+                do { return try await resolve(requested) } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    throw ResolveFailure(message: error.localizedDescription)
                 }
-                guard let model else { throw ResolveError.noModel }
-                if model.format == .mlx {
-                    guard LlamaRuntimeInstaller.isAppleSilicon else { throw MLXRuntimeInstaller.InstallError.unsupportedMac }
-                    return .init(model: NativeMLXHarnessModel(manager: manager, model: model,
-                        modelsRoot: root, contextWindow: min(context, model.contextLength ?? context)), name: model.id)
-                }
-                guard let runtime = await MainActor.run(body: { store.runtime(for: model.format) }) else {
-                    throw ResolveError.noRuntime(model.format)
-                }
-                let server = try await manager.ensureServer(
-                    for: model, modelsRoot: root, runtime: URL(filePath: runtime.path), contextSize: context
-                )
-                return .init(
-                    model: LocalLlamaHarnessModel(
-                        base: OpenAICompatibleHarnessModel(baseURL: server.baseURL, contextWindow: server.contextSize),
-                        manager: manager
-                    ),
-                    name: model.id
-                )
             }
         )
 

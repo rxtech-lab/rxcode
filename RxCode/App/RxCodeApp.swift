@@ -52,6 +52,7 @@ struct ProjectWindowValue: Codable, Hashable {
 struct ChatWindowValue: Codable, Hashable {
     let instanceId: UUID
     var workspaceID: String?
+    var sessionId: String? = nil
 }
 
 // MARK: - GeneralRouteWindowValue
@@ -171,14 +172,16 @@ struct RxCodeApp: App {
             if let value {
                 ChatWindowRoot(
                     workspaceManager: workspaceManager,
-                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    sessionId: value.sessionId
                 )
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
             }
         }
-        .defaultSize(width: 800, height: 700)
+        .defaultSize(width: 1200, height: 800)
+        .windowStyle(.hiddenTitleBar)
 
         // Detached General-route window — opened from the sidebar Projects,
         // Briefing, and Scheduled rows' context menus.
@@ -277,6 +280,7 @@ struct MainWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .generatedVideoSheet(windowState)
                     .transition(.opacity)
             } else {
                 LoadingView()
@@ -290,6 +294,10 @@ struct MainWindowRoot: View {
             allowing: ["*"]
         )
         .onOpenURL { url in
+            if let request = LocalModelSheetRequest.parse(url) {
+                appState.localModelSheetRequest = request
+                return
+            }
             if url.scheme == "rxcode", url.host == "widget",
                let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
                let targetID = components.queryItems?.first(where: { $0.name == "workspace" })?.value,
@@ -347,6 +355,10 @@ struct MainWindowRoot: View {
 @MainActor
 func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> OpenURLAction {
     OpenURLAction { url in
+        if let request = LocalModelSheetRequest.parse(url) {
+            appState.localModelSheetRequest = request
+            return .handled
+        }
         if let docs = DocsDeepLink.parse(url), docs.action == .setup {
             appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
             return .handled
@@ -371,6 +383,11 @@ func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> Ope
 private func openMarkdownLink(_ url: URL, in windowState: WindowState) -> OpenURLAction.Result {
     if let fileLink = LocalFileLink.parse(url) {
         let fileName = URL(fileURLWithPath: fileLink.path).lastPathComponent
+        // The inspector previews text; videos get a player.
+        if GeneratedVideoSheet.canPlay(path: fileLink.path) {
+            windowState.playingVideo = PreviewFile(path: fileLink.path, name: fileName)
+            return .handled
+        }
         windowState.inspectorFile = PreviewFile(
             path: fileLink.path,
             name: fileName.isEmpty ? fileLink.path : fileName
@@ -477,6 +494,7 @@ struct ProjectWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .generatedVideoSheet(windowState)
                     .transition(.opacity)
             } else {
                 LoadingView()
@@ -524,6 +542,7 @@ struct ProjectWindowRoot: View {
 struct ChatWindowRoot: View {
     let workspaceManager: WorkspaceManager
     let workspaceID: String
+    var sessionId: String? = nil
     @Environment(\.controlActiveState) private var controlActiveState
     @State private var windowState = WindowState()
     @State private var chatBridge = ChatBridge()
@@ -539,9 +558,13 @@ struct ChatWindowRoot: View {
                     .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, OpenURLAction { url in
-                        openMarkdownLink(url, in: windowState)
-                    })
+                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .sheet(item: Bindable(appState).localModelSheetRequest) { request in
+                        LocalModelsSheet(initialModel: request)
+                            .frame(minWidth: 900, idealWidth: 1000, minHeight: 640, idealHeight: 720)
+                            .environment(appState)
+                    }
+                    .generatedVideoSheet(windowState)
                     .navigationTitle(navigationTitleText)
                     .transition(.opacity)
             } else {
@@ -569,6 +592,9 @@ struct ChatWindowRoot: View {
             appState.setupChatBridge(chatBridge, for: windowState)
             await appState.initializeWindow(windowState)
             appState.openGlobalChat(in: windowState)
+            if let sessionId {
+                appState.selectSession(id: sessionId, inChatTab: true, in: windowState)
+            }
         }
     }
 

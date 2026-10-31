@@ -78,6 +78,45 @@ extension AppState {
         return sections
     }
 
+    /// Whether a model id names a downloaded local video model.
+    func isLocalVideoModel(_ id: String, provider: AgentProvider) -> Bool {
+        provider == .localAgent && localModels.model(id: id).map(\.isVideoModel) == true
+    }
+
+    /// A started thread on a video model stays a video thread: its history is
+    /// prompts and clips, which a chat model can't continue. A new chat is
+    /// free to pick any model.
+    func isVideoModelLocked(in window: WindowState) -> Bool {
+        guard window.currentSessionId != nil else { return false }
+        let selection = effectiveModelSelection(in: window)
+        return isLocalVideoModel(selection.model, provider: selection.provider)
+    }
+
+    /// The sections a window's model pickers offer: only video models once a
+    /// video thread has started, otherwise everything.
+    func availableAgentModelSections(in window: WindowState) -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
+        let sections = availableAgentModelSections()
+        guard isVideoModelLocked(in: window) else { return sections }
+        return sections.compactMap { section in
+            let models = section.models.filter { isLocalVideoModel($0.id, provider: $0.provider) }
+            return models.isEmpty ? nil : (section.id, section.title, section.provider, section.iconURL, models)
+        }
+    }
+
+    /// False for a non-video model while a video thread is locked.
+    func canSelectModel(_ model: String, provider: AgentProvider, in window: WindowState) -> Bool {
+        guard isVideoModelLocked(in: window), !isLocalVideoModel(model, provider: provider) else { return true }
+        logger.info("[Model] ignored switch to \(model, privacy: .public): video threads only take video models")
+        return false
+    }
+
+    /// Sets the effort for the current session and persists it in the session state.
+    func setSessionEffort(_ effort: String?, in window: WindowState) {
+        window.sessionEffort = effort
+        let key = window.currentSessionId ?? window.newSessionKey
+        updateState(key) { $0.effort = effort }
+    }
+
     static func localModelDescription(_ model: LocalModelInfo) -> String {
         [LocalModelFormat.parameters(model.parameterCount).map { "\($0) parameters" },
          LocalModelFormat.bytes(model.sizeBytes), "by \(model.author)"]
@@ -169,6 +208,12 @@ extension AppState {
                 return parts.model.isEmpty ? "ACP · Default" : "ACP · \(parts.model)"
             }
             return "\(client.displayName) · \(acpModelDisplayName(client: client, model: parts.model))"
+        }
+        if provider == .localAgent {
+            if let info = localModels.installed.first(where: { $0.id == model }) { return info.displayName }
+            // Not installed (anymore): show the file or repo name without its path or extension.
+            let name = model.split(separator: "/").last.map(String.init) ?? model
+            return name.hasSuffix(".gguf") ? String(name.dropLast(5)) : name
         }
         return Self.modelDisplayName(model, provider: provider)
     }

@@ -81,6 +81,11 @@ struct ProjectWindowView: View {
             windowState.isProjectWindow = true
         }
         .hookUI()
+        .sheet(item: Bindable(appState).localModelSheetRequest) { request in
+            LocalModelsSheet(initialModel: request)
+                .frame(minWidth: 900, idealWidth: 1000, minHeight: 640, idealHeight: 720)
+                .environment(appState)
+        }
         .sheet(item: Bindable(windowState).inspectorFile) { file in
             FileInspectorView(filePath: file.path, fileName: file.name)
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,

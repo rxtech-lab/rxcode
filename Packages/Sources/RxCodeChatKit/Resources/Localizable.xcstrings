@@ -608,6 +608,9 @@
         }
       }
     },
+    "Activity" : {
+
+    },
     "Add" : {
       "localizations" : {
         "en" : {
@@ -733,6 +736,12 @@
           }
         }
       }
+    },
+    "Advanced" : {
+
+    },
+    "Advanced Settings…" : {
+
     },
     "Agent" : {
       "localizations" : {
@@ -1800,6 +1809,12 @@
         }
       }
     },
+    "Couldn't generate video" : {
+
+    },
+    "Couldn't Generate Video" : {
+
+    },
     "Couldn't reach the current response — still queued, sends when it ends." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1993,6 +2008,12 @@
       }
     },
     "Deny" : {
+
+    },
+    "Describe a scene below and %@ renders a short clip with sound." : {
+
+    },
+    "Describe a video…" : {
 
     },
     "Description" : {
@@ -2416,6 +2437,9 @@
         }
       }
     },
+    "Edit Prompt" : {
+
+    },
     "Edit Shortcut" : {
       "localizations" : {
         "en" : {
@@ -2768,6 +2792,12 @@
         }
       }
     },
+    "Failed" : {
+
+    },
+    "File missing" : {
+
+    },
     "Files" : {
       "localizations" : {
         "ko" : {
@@ -2807,6 +2837,12 @@
       }
     },
     "First Page" : {
+
+    },
+    "Frame rate: %lld fps" : {
+
+    },
+    "Frames: %lld" : {
 
     },
     "Generate a one-line session summary" : {
@@ -2856,13 +2892,37 @@
     "Generated image" : {
 
     },
+    "Generated video" : {
+
+    },
+    "Generated video player" : {
+
+    },
     "Generating image" : {
 
     },
     "Generating image…" : {
 
     },
+    "Generating video" : {
+
+    },
+    "Generation activity" : {
+
+    },
+    "Generations" : {
+
+    },
+    "H3 guidance is fixed at 1.0. A fixed seed helps compare settings. Quality settings apply to future local video generations across windows." : {
+
+    },
+    "Height: %lld px" : {
+
+    },
     "Hidden Views" : {
+
+    },
+    "Higher presets increase resolution and sampling work, using more memory and time. Results depend on the model; these presets do not add an upscaling pass." : {
 
     },
     "How can I help you?" : {
@@ -3470,6 +3530,22 @@
         }
       }
     },
+    "made in %lld min %lld s" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "made in %1$lld min %2$lld s"
+          }
+        }
+      }
+    },
+    "made in %lld s" : {
+
+    },
+    "Make a Video" : {
+
+    },
     "Manage agent configuration" : {
       "localizations" : {
         "en" : {
@@ -3891,6 +3967,9 @@
     "Next page" : {
 
     },
+    "No Activity Yet" : {
+
+    },
     "No changes" : {
       "localizations" : {
         "en" : {
@@ -3988,6 +4067,9 @@
     "No values yet" : {
 
     },
+    "No video was generated" : {
+
+    },
     "ok" : {
       "localizations" : {
         "ko" : {
@@ -4051,6 +4133,9 @@
           }
         }
       }
+    },
+    "Open player" : {
+
     },
     "Open preview" : {
 
@@ -4352,6 +4437,12 @@
     "Preparing view…" : {
 
     },
+    "Preparing…" : {
+
+    },
+    "Preset" : {
+
+    },
     "Preview generated image" : {
 
     },
@@ -4417,6 +4508,9 @@
           }
         }
       }
+    },
+    "Quality" : {
+
     },
     "Read file" : {
       "localizations" : {
@@ -4786,6 +4880,9 @@
     "Result" : {
 
     },
+    "Reuse prompt" : {
+
+    },
     "Review" : {
       "localizations" : {
         "ko" : {
@@ -5013,6 +5110,9 @@
         }
       }
     },
+    "Sampling steps: %lld" : {
+
+    },
     "Save" : {
       "localizations" : {
         "en" : {
@@ -5084,6 +5184,9 @@
           }
         }
       }
+    },
+    "Seed (−1 for random)" : {
+
     },
     "Select/change AI model" : {
       "localizations" : {
@@ -5495,6 +5598,9 @@
         }
       }
     },
+    "Show in Finder" : {
+
+    },
     "Show less" : {
       "localizations" : {
         "en" : {
@@ -5707,6 +5813,12 @@
         }
       }
     },
+    "Steps appear here while a video is being prepared and rendered." : {
+
+    },
+    "Stop" : {
+
+    },
     "Stop Review" : {
       "localizations" : {
         "ko" : {
@@ -5877,6 +5989,12 @@
     "The tool returned an empty result." : {
 
     },
+    "The video file is no longer on this device" : {
+
+    },
+    "The video file is no longer on this device." : {
+
+    },
     "This command will run in the terminal when the button is clicked" : {
       "localizations" : {
         "en" : {
@@ -5920,6 +6038,9 @@
           }
         }
       }
+    },
+    "This model generates a video from your message" : {
+
     },
     "This tool was called without arguments." : {
 
@@ -6235,6 +6356,9 @@
     "Unable to Save" : {
 
     },
+    "Untitled prompt" : {
+
+    },
     "Upgrade plan" : {
       "localizations" : {
         "en" : {
@@ -6347,6 +6471,30 @@
           }
         }
       }
+    },
+    "Video" : {
+
+    },
+    "Video generation" : {
+
+    },
+    "Video generation failed" : {
+
+    },
+    "Video generation was stopped" : {
+
+    },
+    "Video not available" : {
+
+    },
+    "Video Not Found" : {
+
+    },
+    "Video quality and advanced settings" : {
+
+    },
+    "Video Settings" : {
+
     },
     "View" : {
       "localizations" : {
@@ -6550,6 +6698,9 @@
           }
         }
       }
+    },
+    "Width: %lld px" : {
+
     },
     "Write heap snapshot for memory diagnostics" : {
       "localizations" : {

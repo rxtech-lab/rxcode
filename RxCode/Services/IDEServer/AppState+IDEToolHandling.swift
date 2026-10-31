@@ -45,6 +45,8 @@ extension AppState: IDEToolHandling {
             return try await handleCreateStory(arguments: arguments, sessionKey: sessionKey)
         case "ide__create_task":
             return try await handleCreateTask(arguments: arguments, sessionKey: sessionKey)
+        case "ide__search_huggingface_models":
+            return try await handleSearchHuggingFaceModels(arguments: arguments)
         case "ide__list_agent_models":
             return handleListAgentModels()
         case JSONUITool.ideName:

@@ -142,10 +142,10 @@ public enum JSONUITool {
     Tones: default|muted|accent|positive|negative|warning. At most 300 elements. After the call, don't repeat \
     the view's content in text.
 
-    `presentation`: "inline" (default) draws the view in the chat. "dialog" opens it in a dialog over the chat \
-    instead, and the chat shows a small card that reopens it; the thread's Views list keeps it after the user closes \
-    it. Use dialog for larger content that deserves the full window, such as a final report or a dashboard. The call \
-    returns without waiting for the dialog to close.
+    `presentation`: "inline" (default) draws the view in the chat. Always use inline unless the user explicitly asks \
+    to open the view in a dialog or window, regardless of how large the view is. "dialog" opens it in a dialog over \
+    the chat instead, and the chat shows a small card that reopens it; the thread's Views list keeps it after the \
+    user closes it. The call returns without waiting for the dialog to close.
     """
 
     public static let inputSchema: JSONValue = {
@@ -180,7 +180,7 @@ public enum JSONUITool {
                 "presentation": .object([
                     "type": .string("string"),
                     "enum": .array(Presentation.allCases.map { .string($0.rawValue) }),
-                    "description": .string("inline (default) draws the view in the chat; dialog opens it in a dialog, with a card in the chat to reopen it."),
+                    "description": .string("inline (default, preferred) draws the view in the chat. Use dialog only when the user explicitly asks for a dialog or window; it opens the view in a dialog, with a card in the chat to reopen it."),
                 ]),
             ]),
             "required": .array([.string("spec")]),

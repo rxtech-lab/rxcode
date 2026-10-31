@@ -58,6 +58,7 @@ public final class ChatBridge {
     public var sendSlashCommandHandler: ((String) async -> Void)?
     public var runTerminalCommandHandler: ((String) async -> Void)?
     public var editAndResendHandler: ((UUID, String) async -> Void)?
+    public var fetchLocalResourcesHandler: (() async -> (memory: UInt64?, gpu: UInt64?, context: Int?))?
     public var fetchRateLimitHandler: ((AgentProvider) async -> RateLimitUsage?)?
     public var setSessionProviderHandler: ((AgentProvider) -> Void)?
     public var togglePlanModeHandler: (() async -> Void)?

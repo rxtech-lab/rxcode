@@ -7,6 +7,32 @@ import RxCodeCore
 
 @MainActor
 struct ToolActivityTests {
+    @Test func localModelWhitespaceDoesNotSplitActiveToolFromCompletedTools() throws {
+        let names = ["question", "bash", "question", "bash"]
+        var messages = names.enumerated().map { index, name in
+            ChatMessage(role: .assistant, blocks: [
+                .text("\n\n\n\n"),
+                .toolCall(ToolCall(id: "local-\(index)", name: name,
+                                   result: index == 3 ? nil : "Done")),
+                .text("\n\n")
+            ], isStreaming: index == 3)
+        }
+        for streaming in [true, false] {
+            messages[3].isStreaming = streaming
+            let rows = ChatTranscriptListItem.items(for: messages, transientGroupMinSize: streaming ? 1 : 2)
+            #expect(rows.count == 1)
+            let row = try #require(rows.first)
+            guard case .transientGroup(let grouped) = row.kind else {
+                Issue.record("Expected all four local-model tools in one group")
+                return
+            }
+            #expect(grouped.flatMap(\.toolCalls).map(\.name) == names)
+            #expect(grouped.first?.id == messages.first?.id)
+        }
+        messages.insert(ChatMessage(role: .assistant, content: "Trying another command"), at: 3)
+        #expect(chatMessageGroups(messages, minGroupSize: 1).count == 3)
+    }
+
     @Test func providerToolCallsGroupDuringStreamingAndAfterCompletion() {
         let tools = [
             ToolCall(id: "codex", name: "exec_command"),

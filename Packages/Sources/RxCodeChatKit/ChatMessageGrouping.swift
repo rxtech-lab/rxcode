@@ -111,8 +111,10 @@ func chatSplitToolRuns(_ message: ChatMessage) -> [ChatMessage] {
 
     var runs: [(isTools: Bool, blocks: [MessageBlock])] = []
     for block in message.blocks {
-        // Blank text between tool calls renders nothing; keep it in the tool run.
-        let isTools = chatIsGroupableBlock(block) || (runs.last?.isTools == true && chatIsBlankText(block))
+        // Local models can emit blank text before each tool call. Do not create
+        // a separate streaming bubble for it: that would split adjacent tools.
+        if chatIsBlankText(block) { continue }
+        let isTools = chatIsGroupableBlock(block)
         if isTools == runs.last?.isTools {
             runs[runs.count - 1].blocks.append(block)
         } else {

@@ -6,27 +6,67 @@ import SwiftUI
 
 struct MenuBarLabel: View {
     @Environment(AppState.self) private var appState
+    @State private var memoryText = "—"
 
     var body: some View {
         let inProgress = appState.inProgressSessionCount
         let provider = appState.selectedAgentProvider
-        let usage = provider == .codex ? appState.latestCodexRateLimitUsage : appState.latestRateLimitUsage
-        let fiveHour = usage?.fiveHourPercent
+        let metric = metric(for: provider)
         let _ = appState.ciStatusRevision
         let ciFailing = appState.anyCIFailing
 
-        if let image = Self.renderLabelImage(agentText: Self.agentText(for: provider), fiveHour: fiveHour, inProgress: inProgress, ciFailing: ciFailing) {
-            Image(nsImage: image)
-        } else {
-            Image(systemName: "message")
+        Group {
+            if let image = Self.renderLabelImage(agentText: Self.agentText(for: provider), metricText: metric.text, metricLabel: metric.label, inProgress: inProgress, ciFailing: ciFailing) {
+                Image(nsImage: image)
+            } else {
+                Image(systemName: "message")
+            }
+        }
+        .accessibilityLabel("\(provider.displayNameText), \(metric.text) \(metric.label), \(inProgress) active jobs")
+        .help(metric.help)
+        .task(id: provider) {
+            memoryText = "—"
+            guard provider == .localAgent else { return }
+            while !Task.isCancelled {
+                let bytes = await appState.localModels.manager.loadedModelMemoryBytes()
+                guard !Task.isCancelled else { return }
+                memoryText = bytes.map {
+                    ByteCountFormatter.string(fromByteCount: Int64(clamping: $0), countStyle: .memory)
+                } ?? "—"
+                do {
+                    try await Task.sleep(for: .seconds(5))
+                } catch {
+                    break
+                }
+            }
+        }
+    }
+
+    private func metric(for provider: AgentProvider) -> (text: String, label: String, help: String) {
+        switch provider {
+        case .localAgent:
+            return (memoryText, "Model RAM",
+                    "Local model process memory: \(memoryText). Includes model weights, cache, and runtime overhead; excludes other apps and system memory.")
+        case .claudeCode, .codex:
+            let usage = provider == .codex ? appState.latestCodexRateLimitUsage : appState.latestRateLimitUsage
+            let usesFiveHour = provider == .claudeCode || (usage?.hasFiveHourLimit ?? true)
+            let percent = usesFiveHour ? usage?.fiveHourPercent : usage?.sevenDayPercent
+            let label = usesFiveHour ? "5h" : "7d"
+            let text = percent.map { value in
+                value > 0 && value < 1 ? String(format: "%.1f%%", value) : "\(Int(value.rounded()))%"
+            } ?? "—%"
+            return (text, label, "\(provider.displayNameText) \(label) usage limit: \(text)")
+        case .acp:
+            return ("", "", "ACP activity")
         }
     }
 
     @MainActor
-    private static func renderLabelImage(agentText: String, fiveHour: Double?, inProgress: Int, ciFailing: Bool) -> NSImage? {
+    private static func renderLabelImage(agentText: String, metricText: String, metricLabel: String, inProgress: Int, ciFailing: Bool) -> NSImage? {
         let content = MenuBarLabelContent(
             agentText: agentText,
-            fiveHourText: fiveHour.map { "\(formatPercent($0))%" } ?? "—%",
+            metricText: metricText,
+            metricLabel: metricLabel,
             statusText: inProgress > 0 ? "\(inProgress)job\(inProgress == 1 ? "" : "s")" : "IDLE",
             ciFailing: ciFailing
         )
@@ -45,14 +85,8 @@ struct MenuBarLabel: View {
         case .claudeCode: return "CC"
         case .codex: return "CODEX"
         case .acp: return "ACP"
+        case .localAgent: return "LOCAL"
         }
-    }
-
-    private static func formatPercent(_ value: Double) -> String {
-        if value > 0 && value < 1 {
-            return String(format: "%.1f", value)
-        }
-        return "\(Int(value.rounded()))"
     }
 }
 
@@ -60,7 +94,8 @@ private struct MenuBarLabelContent: View {
     private static let textSize: CGFloat = 9
 
     let agentText: String
-    let fiveHourText: String
+    let metricText: String
+    let metricLabel: String
     let statusText: String
     let ciFailing: Bool
 
@@ -74,7 +109,7 @@ private struct MenuBarLabelContent: View {
                 .frame(height: 18, alignment: .center)
 
             VStack(alignment: .leading, spacing: -1) {
-                usageLine
+                if !metricLabel.isEmpty { metricLine }
                 Text(statusText)
                     .font(.system(size: Self.textSize, weight: .semibold))
                     .monospacedDigit()
@@ -96,14 +131,14 @@ private struct MenuBarLabelContent: View {
         .foregroundStyle(.black)
     }
 
-    private var usageLine: some View {
+    private var metricLine: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(fiveHourText)
+            Text(metricText)
                 .font(.system(size: Self.textSize, weight: .semibold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            Text("5h")
+            Text(metricLabel)
                 .font(.system(size: Self.textSize, weight: .medium))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -124,7 +159,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return appState.latestRateLimitUsage
         case .codex: return appState.latestCodexRateLimitUsage
-        case .acp: return nil
+        case .acp, .localAgent: return nil
         }
     }
 
@@ -132,7 +167,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return "7-day limit"
         case .codex: return "7-day limit"
-        case .acp: return "Usage"
+        case .acp, .localAgent: return "Usage"
         }
     }
 
@@ -140,7 +175,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayPercent
         case .codex: return selectedUsage?.sevenDayPercent
-        case .acp: return nil
+        case .acp, .localAgent: return nil
         }
     }
 
@@ -148,7 +183,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayResetsAt
         case .codex: return selectedUsage?.sevenDayResetsAt
-        case .acp: return nil
+        case .acp, .localAgent: return nil
         }
     }
 
@@ -287,8 +322,9 @@ struct MenuBarContentView: View {
                 Task { await appState.refreshSelectedAgentRateLimitUsage() }
             }
         )) {
-            // ACP has no usage tracking, so it isn't offered in the menubar picker.
-            ForEach(AgentProvider.allCases.filter { $0 != .acp }, id: \.self) { provider in
+            // ACP and the RxCode Agent have no usage tracking, so they aren't
+            // offered in the menubar picker.
+            ForEach(AgentProvider.allCases.filter { $0 != .acp && $0 != .localAgent }, id: \.self) { provider in
                 Text(provider.displayName)
                     .tag(provider)
             }
@@ -301,6 +337,7 @@ struct MenuBarContentView: View {
         case .claudeCode: return "Sign in to Claude Code to see usage"
         case .codex: return "Sign in to Codex to see usage"
         case .acp: return "Usage tracking not supported by ACP"
+        case .localAgent: return "Local models have no usage limits"
         }
     }
 

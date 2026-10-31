@@ -148,6 +148,11 @@ extension AppState {
             return await claude.generatePlainSummary(prompt: prompt, model: agent.model ?? "haiku", limit: 2000)
         case .codex:
             return await codex.generateCodexPlainSummary(prompt: prompt, model: agent.model)
+        case .localAgent:
+            // Suggestions are one-shot calls; a local model would first have to
+            // load, so they are not offered on it.
+            logger.warning("[Tasks] suggestions are not available on the local agent")
+            return nil
         case .acp:
             guard let parts = acpSelectionParts(for: agent.model),
                   let spec = acpClients.first(where: { $0.id == parts.clientId && $0.enabled })

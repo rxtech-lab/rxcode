@@ -116,6 +116,30 @@ final class GlobalChatTests: XCTestCase {
         XCTAssertNil(window.currentSessionId)
     }
 
+    func testProjectsNavigationCancelsPendingChatSelection() async throws {
+        let project = makeProject("Repository")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        let session = ChatSession(
+            id: UUID().uuidString,
+            projectId: Project.globalChatID,
+            title: "Global conversation",
+            messages: [ChatMessage(role: .user, content: "Hello")]
+        )
+        appState.allSessionSummaries = [session.summary]
+        await persistence.stubFullSession(session)
+
+        // Cross-project selection loads asynchronously. Navigate away before
+        // it gets its main-actor turn, as with a quick Chat → Projects switch.
+        appState.selectSession(id: session.id, inChatTab: true, in: window)
+        window.generalRoute = .tasks
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(window.generalRoute, .tasks)
+        XCTAssertEqual(window.selectedProject?.id, project.id)
+        XCTAssertNil(window.currentSessionId)
+    }
+
     func testGlobalChatKeepsProjectAndGlobalDraftsSeparate() {
         let project = makeProject("Repository")
         appState.projects = [project]

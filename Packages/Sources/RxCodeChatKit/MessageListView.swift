@@ -114,12 +114,6 @@ struct MessageListView: View {
             .chatMessageListRowStyle()
         }
 
-        if !chatBridge.isStreaming && !settledItems.isEmpty {
-            WebPreviewButton(messages: settledItems)
-                .id("web-preview")
-                .chatMessageListRowStyle()
-        }
-
         Color.clear
             .frame(height: 1)
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -317,8 +311,8 @@ struct MessageListView: View {
             items.append(.accessory(.init(id: "desktop-end-loading-indicator", kind: .loadingNext)))
         }
 
-        if !chatBridge.isStreaming && !settledItems.isEmpty {
-            items.append(.accessory(.init(id: "desktop-web-preview", kind: .webPreview)))
+        if !chatBridge.isStreaming && !settledItems.isEmpty && transcriptEndActions != nil {
+            items.append(.accessory(.init(id: "desktop-end-actions", kind: .endActions)))
         }
         return items
     }
@@ -343,9 +337,8 @@ struct MessageListView: View {
                 )
                 Spacer(minLength: 40)
             }
-        case .webPreview:
+        case .endActions:
             HStack(alignment: .center, spacing: 8) {
-                WebPreviewButton(messages: settledItems)
                 Spacer(minLength: 0)
                 if let transcriptEndActions {
                     transcriptEndActions

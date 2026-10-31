@@ -130,6 +130,8 @@ struct ACPSetupPreview: View {
             do {
                 let spec = try await appState.installACPClient(from: agent)
                 appState.addACPClient(spec)
+            } catch is CancellationError {
+                // Cancelled from the Downloads window.
             } catch {
                 errorMessage = error.localizedDescription
             }

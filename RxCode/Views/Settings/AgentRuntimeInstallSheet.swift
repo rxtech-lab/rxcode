@@ -204,6 +204,9 @@ struct AgentRuntimeInstallSheet: View {
                 }
                 await onInstalled()
                 didFinish = true
+            } catch is CancellationError {
+                // Cancelled from the Downloads window.
+                progress = nil
             } catch {
                 errorMessage = error.localizedDescription
                 progress = nil

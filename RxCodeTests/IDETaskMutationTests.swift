@@ -231,7 +231,7 @@ final class IDETaskMutationTests: XCTestCase {
         ]
         let catalog = try await modelCatalog()
         let providers = try XCTUnwrap(jsonArray(catalog["providers"]))
-        XCTAssertEqual(providers.compactMap { jsonString($0["provider"]) }, ["claudeCode", "codex", "acp"])
+        XCTAssertEqual(providers.compactMap { jsonString($0["provider"]) }, ["claudeCode", "codex", "acp", "localAgent"])
         let groups = providers.flatMap { jsonArray($0["groups"]) ?? [] }
         let modelIds = groups.flatMap { jsonArray($0["models"]) ?? [] }.compactMap { jsonString($0["id"]) }
         XCTAssertTrue(modelIds.contains("opus"))

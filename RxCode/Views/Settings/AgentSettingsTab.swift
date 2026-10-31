@@ -44,12 +44,10 @@ struct AgentSettingsTab: View {
                     header
                     if catalog {
                         registrySection(availableHeight: max(0, geometry.size.height - 150))
-                    } else if appState.claudeInstalled || appState.codexInstalled || !appState.acpClients.isEmpty {
-                        installedSection
                     } else {
-                        ContentUnavailableView("No Agents Installed", systemImage: "person.crop.rectangle.stack",
-                                               description: Text("Install Claude Code, Codex, or a client from the ACP registry."))
-                            .frame(maxWidth: .infinity, minHeight: max(0, geometry.size.height - 150))
+                        // The RxCode Agent needs nothing installed outside
+                        // RxCode, so the installed list is never empty.
+                        installedSection
                     }
                 }
                 .padding(24)
@@ -176,6 +174,7 @@ struct AgentSettingsTab: View {
 
     private var installedSection: some View {
         VStack(spacing: 8) {
+            LocalAgentSettingsRow()
             if appState.claudeInstalled {
                 AgentRuntimeSettingsView(runtime: .claude, catalog: false)
             }

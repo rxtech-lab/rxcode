@@ -59,3 +59,17 @@ struct AgentModelTests {
         #expect(roundTrip.origin == .codexAppServer)
     }
 }
+
+struct LocalAgentProviderTests {
+    @Test func localAgentRoundTripsAndPersistsLikeACP() throws {
+        let data = try JSONEncoder().encode(AgentProvider.localAgent)
+        #expect(try JSONDecoder().decode(AgentProvider.self, from: data) == .localAgent)
+        #expect(AgentProvider.localAgent.defaultSessionOrigin == .acpAgent)
+        #expect(AgentProvider.localAgent.staticCapabilities.contains(.askUserQuestion))
+    }
+
+    @Test func unknownProviderDecodesInsteadOfFailingThePayload() throws {
+        let decoded = try JSONDecoder().decode([AgentProvider].self, from: Data(#"["codex","someFutureAgent"]"#.utf8))
+        #expect(decoded == [.codex, .claudeCode])
+    }
+}

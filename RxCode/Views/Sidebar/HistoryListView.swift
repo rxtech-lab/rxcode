@@ -180,6 +180,8 @@ struct HistoryListView: View {
         Binding<String?>(
             get: { appState.currentSession(in: windowState)?.id },
             set: { id in
+                // List can write its selection while the Chat tab is removed.
+                guard !opensInChatTab || windowState.generalRoute == .chat else { return }
                 if let id {
                     appState.selectSession(id: id, inChatTab: opensInChatTab, in: windowState)
                     onSelectSession?()

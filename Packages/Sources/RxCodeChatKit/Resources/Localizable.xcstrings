@@ -155,7 +155,13 @@
         }
       }
     },
+    "%@ Model Settings" : {
+
+    },
     "%@ tokens" : {
+
+    },
+    "%@ will be permanently deleted. This cannot be undone. The prompt will remain in this thread." : {
 
     },
     "%@: %@" : {
@@ -243,6 +249,9 @@
           }
         }
       }
+    },
+    "%lld steps" : {
+
     },
     "%lld tool calls" : {
 
@@ -649,6 +658,9 @@
         }
       }
     },
+    "Add an option, e.g. billing: payments and refunds" : {
+
+    },
     "Add First Shortcut" : {
       "localizations" : {
         "en" : {
@@ -714,6 +726,12 @@
           }
         }
       }
+    },
+    "Add option" : {
+
+    },
+    "Add options below and ask a question; %@ scores each one. With fewer than two options, it judges the question true or false." : {
+
     },
     "Add working directory to session" : {
       "localizations" : {
@@ -956,6 +974,15 @@
         }
       }
     },
+    "Ask a question to decide…" : {
+
+    },
+    "Ask again with these options" : {
+
+    },
+    "Aspect Ratio" : {
+
+    },
     "Assistant: %@" : {
       "localizations" : {
         "ko" : {
@@ -993,6 +1020,18 @@
           }
         }
       }
+    },
+    "Audio delivery and advanced settings" : {
+
+    },
+    "Audio Not Found" : {
+
+    },
+    "Audio Settings" : {
+
+    },
+    "Auto" : {
+
     },
     "Auto-fix PR CI failures and review comments" : {
       "localizations" : {
@@ -1158,7 +1197,16 @@
         }
       }
     },
+    "Change: %lld%%" : {
+
+    },
     "Changes apply to this project's tasks, stories and saved views immediately." : {
+
+    },
+    "Choose among %lld options" : {
+
+    },
+    "Clear" : {
 
     },
     "Click to preview" : {
@@ -1223,6 +1271,9 @@
           }
         }
       }
+    },
+    "Close preview" : {
+
     },
     "Code review will start in %lld %@" : {
       "localizations" : {
@@ -1639,6 +1690,18 @@
         }
       }
     },
+    "Continue from this image" : {
+
+    },
+    "Continue from This Image" : {
+
+    },
+    "Continue from This Video" : {
+
+    },
+    "Continue from this video's last frame" : {
+
+    },
     "Continue in Desktop app" : {
       "localizations" : {
         "en" : {
@@ -1660,6 +1723,12 @@
           }
         }
       }
+    },
+    "Continued from this image" : {
+
+    },
+    "Continues from" : {
+
     },
     "Copied" : {
       "localizations" : {
@@ -1705,6 +1774,9 @@
         }
       }
     },
+    "Copy answer" : {
+
+    },
     "Copy Conversation" : {
       "localizations" : {
         "en" : {
@@ -1726,6 +1798,9 @@
           }
         }
       }
+    },
+    "Copy image" : {
+
     },
     "Copy last response to clipboard" : {
       "localizations" : {
@@ -1787,6 +1862,9 @@
         }
       }
     },
+    "Copy transcript" : {
+
+    },
     "Cost" : {
       "localizations" : {
         "en" : {
@@ -1809,10 +1887,31 @@
         }
       }
     },
+    "Couldn't Continue from Video" : {
+
+    },
+    "Couldn't Decide" : {
+
+    },
+    "Couldn't Delete Generation" : {
+
+    },
+    "Couldn't Delete Video" : {
+
+    },
+    "Couldn't Generate Image" : {
+
+    },
+    "Couldn't Generate Settings" : {
+
+    },
     "Couldn't generate video" : {
 
     },
     "Couldn't Generate Video" : {
+
+    },
+    "Couldn't Make Audio" : {
 
     },
     "Couldn't reach the current response — still queued, sends when it ends." : {
@@ -1941,6 +2040,9 @@
         }
       }
     },
+    "Decisions" : {
+
+    },
     "Deep multi-agent cloud code review" : {
       "localizations" : {
         "en" : {
@@ -2007,13 +2109,37 @@
         }
       }
     },
+    "Delete from Disk…" : {
+
+    },
+    "Delete Generation?" : {
+
+    },
+    "Delete Generation…" : {
+
+    },
+    "Delete Video from Disk?" : {
+
+    },
+    "Deleting…" : {
+
+    },
+    "Delivery" : {
+
+    },
     "Deny" : {
+
+    },
+    "Describe a picture below and %@ paints it. Attach an image to refine it." : {
 
     },
     "Describe a scene below and %@ renders a short clip with sound." : {
 
     },
     "Describe a video…" : {
+
+    },
+    "Describe an image…" : {
 
     },
     "Description" : {
@@ -2440,6 +2566,9 @@
     "Edit Prompt" : {
 
     },
+    "Edit Question" : {
+
+    },
     "Edit Shortcut" : {
       "localizations" : {
         "en" : {
@@ -2461,6 +2590,9 @@
           }
         }
       }
+    },
+    "Edit Text" : {
+
     },
     "Edit the array below to add, remove, or change custom slash commands." : {
       "localizations" : {
@@ -2552,6 +2684,12 @@
           }
         }
       }
+    },
+    "Engine and setup agent" : {
+
+    },
+    "Engine and setup agent for this studio" : {
+
     },
     "Enter plan mode" : {
       "localizations" : {
@@ -2839,10 +2977,22 @@
     "First Page" : {
 
     },
+    "Fit" : {
+
+    },
     "Frame rate: %lld fps" : {
 
     },
     "Frames: %lld" : {
+
+    },
+    "from %@" : {
+
+    },
+    "from an image" : {
+
+    },
+    "From the Model Card" : {
 
     },
     "Generate a one-line session summary" : {
@@ -2889,6 +3039,15 @@
         }
       }
     },
+    "Generate from README" : {
+
+    },
+    "Generate Settings from README…" : {
+
+    },
+    "Generated" : {
+
+    },
     "Generated image" : {
 
     },
@@ -2910,7 +3069,13 @@
     "Generation activity" : {
 
     },
+    "Generation was stopped" : {
+
+    },
     "Generations" : {
+
+    },
+    "Guidance: %@" : {
 
     },
     "H3 guidance is fixed at 1.0. A fixed seed helps compare settings. Quality settings apply to future local video generations across windows." : {
@@ -2946,6 +3111,9 @@
           }
         }
       }
+    },
+    "How far a refine moves away from the source image. Lower keeps the composition; higher follows the new prompt more." : {
+
     },
     "id: optional unique identifier (UUID). Auto-generated on import if omitted." : {
       "localizations" : {
@@ -2988,6 +3156,15 @@
         }
       }
     },
+    "Image Not Found" : {
+
+    },
+    "Image quality, aspect ratio and advanced settings" : {
+
+    },
+    "Image Settings" : {
+
+    },
     "Image unavailable" : {
       "localizations" : {
         "ko" : {
@@ -3003,6 +3180,9 @@
           }
         }
       }
+    },
+    "Images" : {
+
     },
     "Import" : {
       "localizations" : {
@@ -3246,6 +3426,9 @@
         }
       }
     },
+    "Instruction" : {
+
+    },
     "Interactive (Terminal)" : {
       "localizations" : {
         "en" : {
@@ -3439,6 +3622,15 @@
         }
       }
     },
+    "Language and Length" : {
+
+    },
+    "Language code, e.g. en (automatic when empty)" : {
+
+    },
+    "Last frame added to the prompt" : {
+
+    },
     "Last Page" : {
 
     },
@@ -3543,7 +3735,16 @@
     "made in %lld s" : {
 
     },
+    "Make a Decision" : {
+
+    },
     "Make a Video" : {
+
+    },
+    "Make an Image" : {
+
+    },
+    "Make Audio" : {
 
     },
     "Manage agent configuration" : {
@@ -3722,6 +3923,9 @@
         }
       }
     },
+    "Maximum length: %lld tokens" : {
+
+    },
     "Memory of the local model process, including model weights, cache, and runtime overhead. Excludes other apps and system memory." : {
 
     },
@@ -3813,7 +4017,19 @@
         }
       }
     },
+    "Mode" : {
+
+    },
+    "Model" : {
+
+    },
     "Model RAM %@" : {
+
+    },
+    "Model Settings" : {
+
+    },
+    "Model Settings…" : {
 
     },
     "Name" : {
@@ -3903,6 +4119,9 @@
           }
         }
       }
+    },
+    "Negative prompt" : {
+
     },
     "New Command" : {
       "localizations" : {
@@ -3995,6 +4214,9 @@
     "No Hidden Views" : {
 
     },
+    "No Model Settings Yet" : {
+
+    },
     "No Parameters" : {
 
     },
@@ -4068,6 +4290,12 @@
 
     },
     "No video was generated" : {
+
+    },
+    "Nothing was generated" : {
+
+    },
+    "Offline" : {
 
     },
     "ok" : {
@@ -4194,6 +4422,9 @@
         }
       }
     },
+    "Options" : {
+
+    },
     "Orchestrate large-scale parallel changes" : {
       "localizations" : {
         "en" : {
@@ -4260,6 +4491,9 @@
         }
       }
     },
+    "Override guidance (CFG)" : {
+
+    },
     "Page %lld" : {
 
     },
@@ -4274,6 +4508,9 @@
       }
     },
     "Parameters" : {
+
+    },
+    "Pause" : {
 
     },
     "Plan" : {
@@ -4412,6 +4649,9 @@
         }
       }
     },
+    "Play" : {
+
+    },
     "Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped." : {
       "localizations" : {
         "en" : {
@@ -4434,6 +4674,9 @@
         }
       }
     },
+    "Preparing last frame…" : {
+
+    },
     "Preparing view…" : {
 
     },
@@ -4443,7 +4686,13 @@
     "Preset" : {
 
     },
+    "Presets scale the resolution and the sampling steps the model recommends. Higher presets use more memory and time." : {
+
+    },
     "Preview generated image" : {
+
+    },
+    "Preview image" : {
 
     },
     "Previous change" : {
@@ -4534,6 +4783,12 @@
         }
       }
     },
+    "Read the README again and rebuild this form" : {
+
+    },
+    "Reading the model card…" : {
+
+    },
     "Reduce permission prompts by scanning transcripts" : {
       "localizations" : {
         "en" : {
@@ -4555,6 +4810,21 @@
           }
         }
       }
+    },
+    "Refine" : {
+
+    },
+    "Refine: reword with the same voice" : {
+
+    },
+    "Refined from this image" : {
+
+    },
+    "Regenerate" : {
+
+    },
+    "Regenerate from README…" : {
+
     },
     "Register frequently used messages as shortcuts" : {
       "localizations" : {
@@ -4682,6 +4952,9 @@
         }
       }
     },
+    "Remove option" : {
+
+    },
     "Rename session" : {
       "localizations" : {
         "en" : {
@@ -4791,6 +5064,9 @@
           }
         }
       }
+    },
+    "Reset to Recommended" : {
+
     },
     "Resets in %@" : {
       "localizations" : {
@@ -5113,6 +5389,9 @@
     "Sampling steps: %lld" : {
 
     },
+    "Sampling steps: model default" : {
+
+    },
     "Save" : {
       "localizations" : {
         "en" : {
@@ -5185,7 +5464,16 @@
         }
       }
     },
+    "Search the Web" : {
+
+    },
+    "Search the web for context before deciding" : {
+
+    },
     "Seed (−1 for random)" : {
+
+    },
+    "seed %lld" : {
 
     },
     "Select/change AI model" : {
@@ -5427,6 +5715,15 @@
           }
         }
       }
+    },
+    "Setting Up…" : {
+
+    },
+    "Settings" : {
+
+    },
+    "Settings generated from this model's README" : {
+
     },
     "Settings interface" : {
       "localizations" : {
@@ -5739,6 +6036,9 @@
         }
       }
     },
+    "Speech" : {
+
+    },
     "Start a new conversation" : {
       "localizations" : {
         "en" : {
@@ -5792,6 +6092,9 @@
           }
         }
       }
+    },
+    "Steady reads repeat well; expressive reads vary pitch and pacing. A fixed seed makes a take reproducible, which helps when refining wording." : {
+
     },
     "Steer all into current response" : {
       "localizations" : {
@@ -5920,6 +6223,9 @@
     "Tabs" : {
 
     },
+    "Takes" : {
+
+    },
     "Tell Claude what to change" : {
       "localizations" : {
         "en" : {
@@ -5964,6 +6270,15 @@
         }
       }
     },
+    "The attached image is refined with your message" : {
+
+    },
+    "The audio file is no longer on this device." : {
+
+    },
+    "The image file is no longer on this device." : {
+
+    },
     "The leading slash is optional while editing names; RxCode saves names without it." : {
       "localizations" : {
         "en" : {
@@ -5986,6 +6301,15 @@
         }
       }
     },
+    "The setup agent is reading this model's README to build its settings" : {
+
+    },
+    "The setup agent reads %@'s README and builds the settings this model supports, with its recommended values." : {
+
+    },
+    "The setup agent reads each prompt and chooses these settings within the ranges below, starting from the values you set." : {
+
+    },
     "The tool returned an empty result." : {
 
     },
@@ -5993,6 +6317,9 @@
 
     },
     "The video file is no longer on this device." : {
+
+    },
+    "These values apply to every generation with this model and override the quality preset." : {
 
     },
     "This command will run in the terminal when the button is clicked" : {
@@ -6040,6 +6367,18 @@
       }
     },
     "This model generates a video from your message" : {
+
+    },
+    "This model generates an image from your message" : {
+
+    },
+    "This model judges your question against the options above" : {
+
+    },
+    "This model speaks your message, or transcribes an attached audio file" : {
+
+    },
+    "This removes the prompt and its response from this thread. Generated files will remain on disk. This cannot be undone." : {
 
     },
     "This tool was called without arguments." : {
@@ -6265,6 +6604,12 @@
         }
       }
     },
+    "Transcription" : {
+
+    },
+    "True or false — add two or more options for a choice" : {
+
+    },
     "Try a different keyword" : {
       "localizations" : {
         "en" : {
@@ -6353,10 +6698,22 @@
         }
       }
     },
+    "Type what %@ should say, or attach an audio file to transcribe." : {
+
+    },
+    "Type what to say, or attach audio to transcribe…" : {
+
+    },
     "Unable to Save" : {
 
     },
     "Untitled prompt" : {
+
+    },
+    "Untitled question" : {
+
+    },
+    "Untitled take" : {
 
     },
     "Upgrade plan" : {
@@ -6450,6 +6807,15 @@
         }
       }
     },
+    "Used when an attached audio file is sent without a message. A message replaces it, for example “Summarize this recording.”" : {
+
+    },
+    "Variation: %@" : {
+
+    },
+    "Verdict score %@" : {
+
+    },
     "Version, model, and account status" : {
       "localizations" : {
         "en" : {
@@ -6471,12 +6837,6 @@
           }
         }
       }
-    },
-    "Video" : {
-
-    },
-    "Video generation" : {
-
     },
     "Video generation failed" : {
 
@@ -6601,6 +6961,9 @@
         }
       }
     },
+    "Voice (model default when empty)" : {
+
+    },
     "Waiting for answer" : {
       "localizations" : {
         "ko" : {
@@ -6632,6 +6995,18 @@
           }
         }
       }
+    },
+    "Waveform" : {
+
+    },
+    "Web" : {
+
+    },
+    "Web Results" : {
+
+    },
+    "Web Sources" : {
+
     },
     "What should we build in %@?" : {
       "localizations" : {
@@ -6699,6 +7074,9 @@
         }
       }
     },
+    "Width, height, steps and guidance apply when the preset is Custom. Distilled models usually want guidance 1.0." : {
+
+    },
     "Width: %lld px" : {
 
     },
@@ -6723,6 +7101,15 @@
           }
         }
       }
+    },
+    "Your next prompt continues from the newest image. To branch, right-click another image and choose Continue from This Image." : {
+
+    },
+    "Zoom in" : {
+
+    },
+    "Zoom out" : {
+
     }
   },
   "version" : "1.1"

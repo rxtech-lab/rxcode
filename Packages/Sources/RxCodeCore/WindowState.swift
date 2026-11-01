@@ -325,6 +325,10 @@ public final class WindowState {
     public var diffFile: PreviewFile?
     /// A local video opened from a chat link, shown in a player sheet.
     public var playingVideo: PreviewFile?
+    /// The local studio whose engine and setup agent sheet is open.
+    public var studioSettingsKind: LocalStudioKind?
+    /// Options the decision studio sends with its next question.
+    public var decisionDraft = DecisionDraft()
     // MARK: - General Route
 
     /// The full-pane destination selected from the sidebar's "General" section.

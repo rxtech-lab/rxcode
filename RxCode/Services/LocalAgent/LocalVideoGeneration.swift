@@ -83,33 +83,12 @@ nonisolated struct LocalVideoHarnessModel: HarnessModel {
     }
 
     static func reply(to request: HarnessModelRequest, modelID: String) -> [HarnessModelChunk] {
-        // Summaries and other one-off prompts are not video requests, and a
-        // returned tool result means this turn's clip is done.
-        guard request.mode == .streaming, let last = request.messages.last, last.role == .user else {
-            return [.finished(reason: "stop")]
-        }
-        let prompt = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else {
-            return [.textDelta("Describe the video you want, for example: a red panda stepping along a mossy log in a misty forest, cinematic."),
-                    .finished(reason: "stop")]
-        }
-        let arguments: RxAgentCore.JSONValue = .object(["prompt": .string(prompt), "model": .string(modelID)])
-        let json = (try? JSONEncoder().encode(arguments)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
-        return [.toolCall(HarnessToolCall(id: "video-\(UUID().uuidString)", name: VideoGenerationProgress.toolName, argumentsJSON: json)),
-                .finished(reason: "tool_calls")]
+        LocalStudioHarnessModel.reply(to: request, modelID: modelID, kind: .video)
     }
 
     /// `2026-10-31-201502-red-panda-stepping.mp4`
     static func fileName(for prompt: String, date: Date = Date()) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        let words = prompt.lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .prefix(4)
-        let slug = words.isEmpty ? "video" : words.joined(separator: "-")
-        return "\(formatter.string(from: date))-\(slug).mp4"
+        LocalStudioTools.fileName(for: prompt, fallback: "video", extension: "mp4", date: date)
     }
 }
 
@@ -120,6 +99,8 @@ nonisolated struct LocalVideoHarnessModel: HarnessModel {
 /// notifications because the SDK drops tool progress events.
 nonisolated struct VideoGenerationTool: HarnessTool {
     struct Job: Sendable {
+        /// Picks settings per prompt when the model's settings form is in auto mode.
+        var taskModel: VideoCompanionResolver.TaskModel? = nil
         let model: LocalModelInfo
         let modelsRoot: URL
         let outputDirectory: URL
@@ -149,17 +130,25 @@ nonisolated struct VideoGenerationTool: HarnessTool {
     var isReadOnly: Bool { true }
 
     func execute(_ input: RxAgentCore.JSONValue, context: HarnessToolContext) async throws -> HarnessToolOutput {
-        let settings = VideoGenerationSettings.load()
+        let savedSettings = VideoGenerationSettings.load()
         let callID = context.callID
         let report: @Sendable (String, String?) -> Void = {
             VideoGenerationProgress.post(callID: callID, status: $0, actor: $1)
         }
         let status: @Sendable (String) -> Void = { report($0, nil) }
-        guard case .object(let fields) = input, case .string(let prompt)? = fields["prompt"],
+        guard case .object(let fields) = input, case .string(let message)? = fields["prompt"],
               case .string(let modelID)? = fields["model"], let job = await job(modelID) else {
             return Self.failure("The selected model can't generate video.")
         }
+        // Text to video: attachment lines are not part of the scene.
+        let prompt = LocalStudioPrompt(message).text
+        let settings = savedSettings.applying(
+            await StudioConfigAgent.overrides(model: job.model, modelsRoot: job.modelsRoot, prompt: prompt, taskModel: job.taskModel, status: status))
         do {
+            if job.model.format == .mlx {
+                await manager.stop()
+                return try await MLXStudioMedia.video(job: job, prompt: LocalStudioPrompt(message), settings: settings, status: status)
+            }
             let (cli, recipe) = try await job.prepare(report)
             // The denoiser and encoder need the memory a chat model holds.
             await manager.stop()
@@ -194,8 +183,7 @@ nonisolated struct VideoGenerationTool: HarnessTool {
     static func fileName(for prompt: String) -> String { LocalVideoHarnessModel.fileName(for: prompt) }
 
     static func failure(_ message: String) -> HarnessToolOutput {
-        let json = (try? JSONEncoder().encode(["displayError": message])).map { String(decoding: $0, as: UTF8.self) } ?? message
-        return HarnessToolOutput(text: json, isError: true, title: "Video generation failed")
+        LocalStudioTools.failure(message, title: "Video generation failed")
     }
 }
 
@@ -207,6 +195,8 @@ nonisolated struct VideoGenerationResult: Codable, Equatable {
     let elapsedSeconds: Int
     let width: Int
     let height: Int
+    /// The start frame this clip continued from, if any.
+    var sourcePath: String? = nil
 
     var json: String {
         let encoder = JSONEncoder()
@@ -218,11 +208,11 @@ nonisolated struct VideoGenerationResult: Codable, Equatable {
 /// Runs `sd-cli` and turns its sampling progress bar into status lines.
 nonisolated enum StableDiffusionProcess {
     enum RunError: LocalizedError {
-        case failed(Int32, String)
+        case failed(engine: String, Int32, String)
 
         var errorDescription: String? {
             switch self {
-            case .failed(let code, let log): "stable-diffusion.cpp exited with status \(code).\n\(log)"
+            case .failed(let engine, let code, let log): "\(engine) exited with status \(code).\n\(log)"
             }
         }
     }
@@ -243,39 +233,66 @@ nonisolated enum StableDiffusionProcess {
         }
     }
 
-    static func run(cli: URL, arguments: [String], status: @escaping @Sendable (String) -> Void) async throws {
+    /// Runs one engine process. stable-diffusion.cpp, `llama-tts` and
+    /// `llama-mtmd-cli` all go through here so their memory shows up in
+    /// `memoryFootprint()` and Stop terminates them.
+    /// With `capturesOutput`, standard output is kept apart from the log
+    /// and returned — `llama-mtmd-cli` prints its transcript there.
+    @discardableResult
+    static func run(
+        cli: URL, arguments: [String], engine: String = "stable-diffusion.cpp",
+        capturesOutput: Bool = false, status: @escaping @Sendable (String) -> Void
+    ) async throws -> String {
         let process = Process()
         process.executableURL = cli
         process.arguments = arguments
+        var environment = ProcessInfo.processInfo.environment
+        environment["PYTHONUNBUFFERED"] = "1"
+        process.environment = environment
         // The release keeps its dylib next to the binary.
         process.currentDirectoryURL = cli.deletingLastPathComponent()
         process.standardInput = FileHandle.nullDevice
         let pipe = Pipe()
-        process.standardOutput = pipe
+        let outputPipe = capturesOutput ? Pipe() : pipe
+        process.standardOutput = outputPipe
         process.standardError = pipe
-        let reader = ProgressReader(status: status)
+        let reader = ProgressReader(reportsTotal: engine != "MLX Audio" && engine != "llama-tts" && engine != "llama-mtmd-cli", status: status)
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if !data.isEmpty { reader.consume(data) }
         }
+        let output = OutputBuffer()
+        if capturesOutput {
+            outputPipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if !data.isEmpty { output.append(data) }
+            }
+        }
 
+        try Task.checkCancellation()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 process.terminationHandler = { process in
                     _ = running.withLock { $0.remove(process.processIdentifier) }
                     pipe.fileHandleForReading.readabilityHandler = nil
                     reader.consume(pipe.fileHandleForReading.readDataToEndOfFile())
+                    if capturesOutput {
+                        outputPipe.fileHandleForReading.readabilityHandler = nil
+                        let rest = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                        output.append(rest)
+                    }
                     if process.terminationStatus == 0 {
                         continuation.resume()
                     } else if process.terminationReason == .uncaughtSignal {
                         continuation.resume(throwing: CancellationError())
                     } else {
-                        continuation.resume(throwing: RunError.failed(process.terminationStatus, reader.tail))
+                        continuation.resume(throwing: RunError.failed(engine: engine, process.terminationStatus, reader.tail))
                     }
                 }
                 do {
                     try process.run()
                     _ = running.withLock { $0.insert(process.processIdentifier) }
+                    if Task.isCancelled, process.isRunning { process.terminate() }
                 } catch {
                     process.terminationHandler = nil
                     continuation.resume(throwing: error)
@@ -284,6 +301,17 @@ nonisolated enum StableDiffusionProcess {
         } onCancel: {
             if process.isRunning { process.terminate() }
         }
+        try Task.checkCancellation()
+        return output.text
+    }
+
+    /// Standard output collected from the pipe's reader thread.
+    final class OutputBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+
+        func append(_ chunk: Data) { lock.withLock { data.append(chunk) } }
+        var text: String { lock.withLock { String(decoding: data, as: UTF8.self) } }
     }
 
     /// Parses `|====>   | 3/4 - 12.34s/it` and remembers the last log lines.
@@ -293,8 +321,12 @@ nonisolated enum StableDiffusionProcess {
         private var buffer = ""
         private var lines: [String] = []
         private var lastStep: String?
+        private let reportsTotal: Bool
 
-        init(status: @escaping @Sendable (String) -> Void) { self.status = status }
+        init(reportsTotal: Bool = true, status: @escaping @Sendable (String) -> Void) {
+            self.reportsTotal = reportsTotal
+            self.status = status
+        }
 
         var tail: String { lock.withLock { lines.suffix(12).joined(separator: "\n") } }
 
@@ -309,7 +341,7 @@ nonisolated enum StableDiffusionProcess {
                 for part in parts where !part.trimmingCharacters(in: .whitespaces).isEmpty {
                     lines.append(part)
                     if lines.count > 200 { lines.removeFirst(lines.count - 200) }
-                    if let step = Self.step(in: part), step != lastStep {
+                    if let step = Self.step(in: part, reportsTotal: reportsTotal), step != lastStep {
                         lastStep = step
                         updates.append(step)
                     }
@@ -319,14 +351,40 @@ nonisolated enum StableDiffusionProcess {
             updates.forEach(status)
         }
 
-        /// `"Step 3/4 · 12.34s/it"` for a progress-bar line.
-        static func step(in line: String) -> String? {
-            guard let regex = try? NSRegularExpression(pattern: #"(\d+)/(\d+)\s*-\s*([0-9.]+)\s*(s/it|it/s)"#),
-                  let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                  let done = Range(match.range(at: 1), in: line), let total = Range(match.range(at: 2), in: line),
-                  let rate = Range(match.range(at: 3), in: line), let unit = Range(match.range(at: 4), in: line)
-            else { return nil }
-            return "Step \(line[done])/\(line[total]) · \(line[rate])\(line[unit])"
+        /// Normalizes native sampler and Python tqdm progress without treating
+        /// arbitrary fractions in model names or log messages as progress.
+        static func step(in rawLine: String, reportsTotal: Bool = true) -> String? {
+            let line = rawLine.replacingOccurrences(of: #"\x1B\[[0-?]*[ -/]*[@-~]"#, with: "", options: .regularExpression)
+            let patterns = [
+                #"(\d+)/(\d+)\s*-\s*([0-9.]+)\s*(s/it|it/s)"#,
+                #"\d+%\|[^|]*\|\s*(\d+)/(\d+)\s*\[[^\]]*"#
+            ]
+            for pattern in patterns {
+                guard let regex = try? NSRegularExpression(pattern: pattern),
+                      let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                      let doneRange = Range(match.range(at: 1), in: line),
+                      let totalRange = Range(match.range(at: 2), in: line),
+                      let done = Int(line[doneRange]), let total = Int(line[totalRange]),
+                      total > 0, done <= total else { continue }
+                // Audio token limits are ceilings, not known completion totals.
+                if !reportsTotal { return "Processed \(done) generation steps" }
+                var result = "Step \(done)/\(total)"
+                if match.numberOfRanges == 5,
+                   let rate = Range(match.range(at: 3), in: line),
+                   let unit = Range(match.range(at: 4), in: line) {
+                    result += " · \(line[rate])\(line[unit])"
+                }
+                return result
+            }
+            // Audio generation may have no known total. Report actual work
+            // and save/join phases without inventing a completion percentage.
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("Joining "), trimmed.contains("audio") { return trimmed }
+            if trimmed.contains("Audio successfully generated and saving as:") { return "Saving audio…" }
+            if trimmed.hasPrefix("Duration:") {
+                return "Generated audio · " + trimmed.dropFirst("Duration:".count).trimmingCharacters(in: .whitespaces)
+            }
+            return nil
         }
     }
 }

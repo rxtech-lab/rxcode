@@ -329,6 +329,7 @@ struct LocalModelDetailView: View {
                 if let library = summary.libraryName { metadataField("Library", value: library) }
                 if !summary.licenses.isEmpty { metadataField("License", value: summary.licenses.joined(separator: ", ")) }
                 if let params = LocalModelFormat.parameters(summary.parameterCount) { metadataField("Parameters", value: params) }
+                if let size = sizeSummary { metadataField("Size", value: size) }
                 if let context = summary.contextLength { metadataField("Context", value: context.formatted()) }
                 if let architecture = summary.architecture { metadataField("Architecture", value: architecture) }
                 metadataField("Downloads", value: summary.downloads.formatted())
@@ -341,6 +342,16 @@ struct LocalModelDetailView: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator, lineWidth: 0.5))
         .padding(.vertical, 6)
+    }
+
+    /// Download size from the repo's variants: one size for a single variant,
+    /// otherwise the range across quantizations. Nil when there is nothing to show.
+    private var sizeSummary: String? {
+        if loading { return String(localized: "Loading…") }
+        let sizes = variants.map(\.sizeBytes).filter { $0 > 0 }
+        guard let smallest = sizes.min(), let largest = sizes.max() else { return nil }
+        if smallest == largest { return LocalModelFormat.bytes(smallest) }
+        return String(localized: "\(LocalModelFormat.bytes(smallest)) – \(LocalModelFormat.bytes(largest)) (\(sizes.count) variants)")
     }
 
     private func metadataField(_ title: LocalizedStringKey, value: String) -> some View {
@@ -515,6 +526,57 @@ struct HFAccessBadge: View {
                 .font(.system(size: ClaudeTheme.size(10), weight: .medium))
                 .foregroundStyle(ClaudeTheme.statusWarning)
                 .help("Requires accepting the model's terms on Hugging Face")
+        }
+    }
+}
+
+/// An installed model's card: the README downloaded with it, else the repo's
+/// current one. Relative links and images resolve against the repo's files.
+struct InstalledModelCardView: View {
+    let model: LocalModelInfo
+    let modelsRoot: URL
+
+    @State private var card: String?
+    @State private var loading = true
+    @State private var errorMessage: String?
+
+    private var repoURL: URL { HuggingFaceClient.base.appending(path: model.repoID) }
+
+    var body: some View {
+        Group {
+            if loading {
+                ProgressView("Loading model card…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let card {
+                List {
+                    MarkdownContentView(text: card, baseURL: repoURL.appending(path: "resolve/main/"))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("No Model Card", systemImage: "doc.text")
+                } description: {
+                    Text(errorMessage ?? String(localized: "This repository has no model card."))
+                } actions: {
+                    Link("Open on Hugging Face", destination: repoURL)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: model.id) { await load() }
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do {
+            card = try await LocalModelCard.load(model, modelsRoot: modelsRoot)
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

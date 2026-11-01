@@ -386,7 +386,7 @@ struct MainView: View {
         }
         .sheet(item: Bindable(appState).localModelSheetRequest) { request in
             LocalModelsSheet(initialModel: request)
-                .frame(minWidth: 900, idealWidth: 1000, minHeight: 640, idealHeight: 720)
+                .localModelsSheetFrame()
                 .environment(appState)
         }
         .sheet(item: Bindable(appState).secretsSetupRequest, onDismiss: rerunNewChatHooks) { request in

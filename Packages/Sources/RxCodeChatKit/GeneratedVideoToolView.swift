@@ -12,6 +12,7 @@ struct GeneratedVideoToolView: View {
     let toolCall: ToolCall
     let isStreaming: Bool
     @State private var progress: String?
+    @State private var fileRevision = 0
     @State private var player: AVPlayer?
     @State private var showsPlayer = false
     @State private var startedAt = Date()
@@ -36,6 +37,7 @@ struct GeneratedVideoToolView: View {
     }
 
     private var phase: Phase {
+        _ = fileRevision
         if toolCall.result == nil { return isStreaming ? .generating : .failed }
         if toolCall.isError || path == nil { return .failed }
         return FileManager.default.fileExists(atPath: path ?? "") ? .ready : .missing
@@ -73,6 +75,16 @@ struct GeneratedVideoToolView: View {
         }
         .task(id: path) { loadPlayer() }
         .sheet(isPresented: $showsPlayer) { playerSheet }
+        #if os(macOS)
+        .modifier(VideoFileActions(path: phase == .ready ? path : nil, beforePlayback: { player?.pause() }))
+        .onReceive(NotificationCenter.default.publisher(for: VideoFileActions.fileDeleted)) { note in
+            guard note.object as? String == path else { return }
+            fileRevision += 1
+            player?.pause()
+            player = nil
+            showsPlayer = false
+        }
+        #endif
     }
 
     // MARK: - Header

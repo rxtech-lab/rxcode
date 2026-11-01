@@ -354,6 +354,24 @@ final class LocalModelTests: XCTestCase {
         XCTAssertFalse(GeneratedVideoSheet.canPlay(path: "/tmp/notes.md"))
     }
 
+    func testMLXMediaProgressParsing() {
+        let parse: (String) -> String? = { StableDiffusionProcess.ProgressReader.step(in: $0) }
+        XCTAssertEqual(parse("Generating:  25%|██      | 2/8 [00:04<00:12, 2.00s/it]"), "Step 2/8")
+        XCTAssertEqual(parse("\u{001B}[32m100%|████| 8/8 [00:16<00:00, 2.00s/it]\u{001B}[0m"), "Step 8/8")
+        XCTAssertEqual(parse("0%|          | 0/8 [00:00<?, ?it/s]"), "Step 0/8")
+        XCTAssertEqual(StableDiffusionProcess.ProgressReader.step(in: "Segment 1/2: 25%|xx| 2/8 [00:04<00:12, 2.00tokens/s]", reportsTotal: false), "Processed 2 generation steps")
+        XCTAssertNil(parse("model/revision 2/8"))
+        XCTAssertNil(parse("0%| | 0/0 [00:00<?, ?it/s]"))
+        XCTAssertEqual(parse("Joining 3 audio files"), "Joining 3 audio files")
+        XCTAssertEqual(parse("✅ Audio successfully generated and saving as: /tmp/a.wav"), "Saving audio…")
+        XCTAssertEqual(parse("Duration:              00:00:03.2"), "Generated audio · 00:00:03.2")
+        let lines = OSAllocatedUnfairLock(initialState: [String]())
+        let reader = StableDiffusionProcess.ProgressReader { line in lines.withLock { $0.append(line) } }
+        reader.consume(Data("25%|xx| 2/8 [00:04<00:12, 2.00s/it]\r50%|xxxx| 4/".utf8))
+        reader.consume(Data("8 [00:08<00:08, 2.00s/it]\r50%|xxxx| 4/8 [00:08<00:08, 2.00s/it]\n".utf8))
+        XCTAssertEqual(lines.withLock { $0 }, ["Step 2/8", "Step 4/8"])
+    }
+
     func testVideoModelTurnsAMessageIntoOneToolCall() throws {
         let request = HarnessModelRequest(model: "m", system: "", messages: [.user("  a fox in snow  ")])
         let chunks = LocalVideoHarnessModel.reply(to: request, modelID: "unsloth/MiniMax-H3-GGUF/x.gguf")

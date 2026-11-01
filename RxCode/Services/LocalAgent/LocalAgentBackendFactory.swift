@@ -32,13 +32,13 @@ enum LocalAgentBackendFactory {
     /// (permission approvals, background shells) must survive between turns.
     @MainActor private static var cached: (server: ObjectIdentifier, backend: any AgentBackend)?
 
-    /// The user's default task model, read when a video model first needs
-    /// its companion files looked up; nil when none can run the lookup.
-    typealias TaskModelProvider = @MainActor @Sendable () -> VideoCompanionResolver.TaskModel?
+    /// The setup agent for a studio, read when one of its models first needs
+    /// companion files looked up; nil when none can run the lookup.
+    typealias TaskModelProvider = @MainActor @Sendable (LocalStudioKind) -> VideoCompanionResolver.TaskModel?
 
     @MainActor
     static func backend(
-        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { nil }
+        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { _ in nil }
     ) -> any AgentBackend {
         if let cached, cached.server == ObjectIdentifier(permissionServer) { return cached.backend }
         let backend = makeBackend(permissionServer: permissionServer, store: store, taskModel: taskModel)
@@ -62,9 +62,10 @@ enum LocalAgentBackendFactory {
     ) -> VideoGenerationTool {
         VideoGenerationTool(job: { modelID in
             await MainActor.run {
-                guard let model = store.model(id: modelID), LocalVideoRecipe.supports(model) else { return nil }
-                let resolver = taskModel()
+                guard let model = store.model(id: modelID), model.studioKind == .video else { return nil }
+                let resolver = taskModel(.video)
                 return VideoGenerationTool.Job(
+                    taskModel: resolver,
                     model: model, modelsRoot: store.modelsRoot, outputDirectory: store.generatedVideosRoot,
                     prepare: { report in
                         try await store.prepareVideoGeneration(model: model, taskModel: resolver, report: report)
@@ -74,15 +75,92 @@ enum LocalAgentBackendFactory {
         }, manager: manager)
     }
 
+    static func imageTool(
+        store: LocalModelStore, manager: LlamaServerManager, taskModel: @escaping TaskModelProvider
+    ) -> ImageGenerationTool {
+        ImageGenerationTool(job: { modelID in
+            await MainActor.run {
+                guard let model = store.model(id: modelID), model.studioKind == .image else { return nil }
+                let resolver = taskModel(.image)
+                return ImageGenerationTool.Job(
+                    taskModel: resolver,
+                    repair: { previous, failure, report in
+                        try await store.repairImageGeneration(model: model, previous: previous, failure: failure,
+                            taskModel: resolver, report: report)
+                    },
+                    didValidate: { recipe in await store.acceptImageRecipe(recipe, model: model) },
+                    model: model, modelsRoot: store.modelsRoot, outputDirectory: store.generatedImagesRoot,
+                    prepare: { report in
+                        try await store.prepareImageGeneration(model: model, taskModel: resolver, report: report)
+                    }
+                )
+            }
+        }, manager: manager)
+    }
+
+    static func audioTool(
+        store: LocalModelStore, manager: LlamaServerManager, taskModel: @escaping TaskModelProvider
+    ) -> AudioGenerationTool {
+        AudioGenerationTool(job: { modelID in
+            await MainActor.run {
+                guard let model = store.model(id: modelID), let mode = LocalAudioMode(model: model) else { return nil }
+                let resolver = taskModel(.audio)
+                return AudioGenerationTool.Job(
+                    taskModel: resolver,
+                    model: model, mode: mode, modelsRoot: store.modelsRoot, outputDirectory: store.generatedAudioRoot,
+                    prepare: { report in
+                        try await store.prepareAudio(model: model, mode: mode, taskModel: resolver, report: report)
+                    }
+                )
+            }
+        }, manager: manager)
+    }
+
+    static func decisionTool(store: LocalModelStore) -> DecisionTool {
+        DecisionTool(job: { modelID in
+            await MainActor.run {
+                guard let model = store.model(id: modelID), model.studioKind == .decision else { return nil }
+                let root = store.modelsRoot
+                let manager = store.manager
+                return DecisionTool.Job(model: model, prepare: { status in
+                    try await store.prepareDecision(model: model, status: status)
+                }, nativeScores: model.format == .mlx ? { state, request, status in
+                    let readout = await store.decisionReadout(for: model, status: status)
+                    await manager.stop()
+                    status("Loading MLX decision model…")
+                    let scores = try await NativeMLXInference.decisionScores(
+                        directory: model.directory(in: root), state: state, request: request,
+                        readout: readout, contextSize: min(model.contextLength ?? 8192, 32_768))
+                    return (scores, readout)
+                } : nil)
+            }
+        })
+    }
+
+    /// Why a studio model can't run with its studio's engine, or nil.
+    @MainActor
+    static func studioProblem(for model: LocalModelInfo) -> String? {
+        let preferences = LocalStudioPreferences.load(for: model.studioKind)
+        guard LocalGenerationEngine.resolve(for: model, preferences: preferences) == nil else { return nil }
+        let engines = LocalGenerationEngine.engines(for: model.studioKind).filter { ($0.runtime == .mlx) == (model.format == .mlx) }
+        let reasons = engines.compactMap { $0.incompatibility(with: model) }
+        return "RxCode can't run this \(model.studioKind.rawValue) model yet. " + (reasons.first ?? "")
+    }
+
     static func makeBackend(
-        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { nil }
+        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { _ in nil }
     ) -> any AgentBackend {
         let sessions = RxCodeHarnessSessionStore(
             directory: store.appSupport.appending(path: "harness-sessions")
         )
         let manager = store.manager
         let agent = HarnessAgent(configuration: configuration(
-            store: sessions, extraTools: [videoTool(store: store, manager: manager, taskModel: taskModel)]
+            store: sessions, extraTools: [
+                videoTool(store: store, manager: manager, taskModel: taskModel),
+                imageTool(store: store, manager: manager, taskModel: taskModel),
+                audioTool(store: store, manager: manager, taskModel: taskModel),
+                decisionTool(store: store),
+            ]
         ))
 
         let resolve: HarnessAgentClient.ModelResolver = { requested in
@@ -90,11 +168,12 @@ enum LocalAgentBackendFactory {
                 (store.model(id: requested), store.modelsRoot, store.effectiveContextSize)
             }
             guard let model else { throw ResolveError.noModel }
-            if model.isVideoModel {
-                guard LocalVideoRecipe.supports(model) else {
-                    throw ResolveFailure(message: "This is a video model, but RxCode does not yet support its video architecture.")
+            if model.studioKind.isStudio {
+                if let problem = await studioProblem(for: model) { throw ResolveFailure(message: problem) }
+                if model.format == .mlx, await MainActor.run(body: { store.runtime(for: .mlx) }) == nil {
+                    throw ResolveError.noRuntime(.mlx)
                 }
-                return .init(model: LocalVideoHarnessModel(modelID: model.id), name: model.id)
+                return .init(model: LocalStudioHarnessModel(modelID: model.id, kind: model.studioKind), name: model.id)
             }
             if model.format == .mlx {
                 guard LlamaRuntimeInstaller.isAppleSilicon else { throw MLXRuntimeInstaller.InstallError.unsupportedMac }

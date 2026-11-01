@@ -7,6 +7,8 @@ import RxCodeCore
 public struct ImagePreviewSheet: View {
     let attachment: Attachment
     @Environment(\.dismiss) private var dismiss
+    @State private var zoom: CGFloat = 1
+    @GestureState private var magnification: CGFloat = 1
 
     public init(attachment: Attachment) {
         self.attachment = attachment
@@ -32,6 +34,26 @@ public struct ImagePreviewSheet: View {
 
                 Spacer()
 
+                Button { zoom = max(0.25, zoom / 1.25) } label: {
+                    Image(systemName: "minus.magnifyingglass")
+                }
+                .disabled(zoom <= 0.25)
+                .help(String(localized: "Zoom out", bundle: .module))
+
+                Text(zoom, format: .percent.precision(.fractionLength(0)))
+                    .monospacedDigit()
+                    .frame(width: 48)
+
+                Button { zoom = min(8, zoom * 1.25) } label: {
+                    Image(systemName: "plus.magnifyingglass")
+                }
+                .disabled(zoom >= 8)
+                .help(String(localized: "Zoom in", bundle: .module))
+
+                Button { zoom = 1 } label: {
+                    Text("Fit", bundle: .module)
+                }
+
                 Button {
                     dismiss()
                 } label: {
@@ -40,33 +62,42 @@ public struct ImagePreviewSheet: View {
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 .buttonStyle(.borderless)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityLabel(Text("Close preview", bundle: .module))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
             Divider()
 
-            ScrollView([.horizontal, .vertical]) {
+            GeometryReader { geometry in
                 if let nsImage = image {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .padding(16)
-                } else {
-                    VStack(spacing: 12) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 48))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        Text("Image unavailable", bundle: .module)
-                            .font(.system(size: ClaudeTheme.size(13)))
-                            .foregroundStyle(ClaudeTheme.textSecondary)
+                    let fit = min((geometry.size.width - 32) / max(1, nsImage.size.width),
+                                  (geometry.size.height - 32) / max(1, nsImage.size.height))
+                    let scale = max(0.25, min(8, zoom * magnification))
+                    ScrollView([.horizontal, .vertical]) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: max(1, nsImage.size.width * fit * scale),
+                                   height: max(1, nsImage.size.height * fit * scale))
+                            .padding(16)
+                            .frame(minWidth: geometry.size.width, minHeight: geometry.size.height)
                     }
-                    .padding(40)
+                    .gesture(MagnifyGesture()
+                        .updating($magnification) { value, state, _ in state = value.magnification }
+                        .onEnded { value in zoom = max(0.25, min(8, zoom * value.magnification)) })
+                } else {
+                    ContentUnavailableView {
+                        Label { Text("Image unavailable", bundle: .module) } icon: { Image(systemName: "photo") }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .background(ClaudeTheme.background)
         }
-        .frame(minWidth: 480, idealWidth: 720, minHeight: 360, idealHeight: 540)
+        .frame(minWidth: 600, idealWidth: 900, maxWidth: .infinity,
+               minHeight: 440, idealHeight: 680, maxHeight: .infinity)
         .background(ClaudeTheme.surfaceElevated)
     }
 }

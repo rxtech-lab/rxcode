@@ -1,5 +1,6 @@
 import Foundation
 import Metal
+import enum RxCodeCore.LocalStudioKind
 
 // MARK: - Weight format
 
@@ -48,10 +49,13 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
     var format: LocalModelWeightFormat = .gguf
     var huggingFaceMetadata: HFModelSummary? = nil
 
-    var isVideoModel: Bool {
-        guard let task = huggingFaceMetadata?.pipelineTag else { return false }
-        return ["text-to-video", "image-to-video", "video-to-video"].contains(task)
+    /// Which studio the model opens in, from its saved Hugging Face task.
+    /// Models saved without metadata are chat models.
+    var studioKind: LocalStudioKind {
+        LocalStudioKind.kind(forPipelineTag: huggingFaceMetadata?.pipelineTag)
     }
+
+    var isVideoModel: Bool { studioKind == .video }
 
     var displayName: String {
         let base = repoID.split(separator: "/").last.map(String.init) ?? repoID
@@ -91,6 +95,34 @@ extension LocalModelInfo {
         downloadedAt = try container.decode(Date.self, forKey: .downloadedAt)
         format = try container.decodeIfPresent(LocalModelWeightFormat.self, forKey: .format) ?? .gguf
         huggingFaceMetadata = try container.decodeIfPresent(HFModelSummary.self, forKey: .huggingFaceMetadata)
+    }
+}
+
+/// A file downloaded beside a model so it can run: a text encoder, VAE,
+/// vocoder, audio projector or readout config.
+nonisolated struct LocalCompanionFile: Codable, Identifiable, Hashable, Sendable {
+    var id: String { "\(repoID)/\(file)" }
+    let repoID: String
+    /// Path in the repository.
+    let file: String
+    /// What the file is for, e.g. "Text encoder" or "VAE".
+    let role: String?
+    let sizeBytes: Int64
+    var localName: String { (file as NSString).lastPathComponent }
+
+    /// A readable role for a stable-diffusion.cpp or llama.cpp companion flag.
+    static func role(forFlag flag: String) -> String {
+        switch flag {
+        case "vae": "VAE"
+        case "taesd": "Tiny VAE"
+        case "t5xxl": "T5-XXL text encoder"
+        case "clip_l": "CLIP-L text encoder"
+        case "clip_g": "CLIP-G text encoder"
+        case "clip_vision": "CLIP vision encoder"
+        case "llm", "qwen2vl": "Text encoder"
+        case "mmproj", "mm": "Audio projector"
+        default: flag
+        }
     }
 }
 
@@ -134,7 +166,7 @@ nonisolated struct HFModelPage: Sendable {
 
 /// One downloadable variant of a repo: a single GGUF, the parts of a split
 /// one, or every file of an MLX repo.
-nonisolated struct HFModelVariant: Identifiable, Hashable, Sendable {
+nonisolated struct HFModelVariant: Codable, Identifiable, Hashable, Sendable {
     var id: String { files.first ?? "" }
     let files: [String]
     let sizeBytes: Int64

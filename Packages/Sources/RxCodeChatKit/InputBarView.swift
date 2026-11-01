@@ -64,7 +64,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !windowState.attachments.isEmpty {
+            if !windowState.attachments.isEmpty || implicitStudioParent != nil {
                 attachmentPreviews
                     .padding(.horizontal, 16)
                     .transition(.offset(y: 10).combined(with: .opacity))
@@ -194,10 +194,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         HStack(spacing: 10) {
             attachButton
 
-            if chatBridge.isVideoModel {
-                VideoQualityPicker()
-                videoModeChip
+            if chatBridge.studioKind.isStudio {
+                studioControls
+                studioModeChip
                     .transition(.scale(scale: 0.95).combined(with: .opacity))
+                StudioSetupButton(kind: chatBridge.studioKind)
             }
 
             if windowState.sessionPlanMode {
@@ -212,7 +213,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
         .frame(height: 32)
         .animation(.easeInOut(duration: 0.15), value: windowState.sessionPlanMode)
-        .animation(.easeInOut(duration: 0.15), value: chatBridge.isVideoModel)
+        .animation(.easeInOut(duration: 0.15), value: chatBridge.studioKind)
     }
 
     private var hasComposerContent: Bool {
@@ -315,14 +316,35 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         .accessibilityIdentifier("plan-mode-chip")
     }
 
-    /// Shown while the selected model generates video. Not a toggle: the model
-    /// itself decides it, so it is informational and switches with the picker.
-    private var videoModeChip: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "film")
+    /// The selected studio's quality and generation settings.
+    @ViewBuilder
+    private var studioControls: some View {
+        switch chatBridge.studioKind {
+        case .video:
+            VideoQualityPicker()
+            StudioModelConfigControl(kind: .video)
+        case .image:
+            ImageQualityPicker()
+            StudioModelConfigControl(kind: .image)
+        case .audio:
+            AudioSettingsPicker()
+            StudioModelConfigControl(kind: .audio)
+        case .decision: DecisionSettingsPicker()
+        case .chat: EmptyView()
+        }
+    }
+
+    /// Shown while the selected model is a studio model. Not a toggle: the
+    /// model itself decides it, so it is informational and switches with the
+    /// picker. An attached image turns the image chip into Refine.
+    private var studioModeChip: some View {
+        let kind = chatBridge.studioKind
+        let isRefining = kind == .image && windowState.attachments.contains { $0.type == .image }
+        return HStack(spacing: 5) {
+            Image(systemName: isRefining ? "wand.and.stars" : kind.systemImage)
                 .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
 
-            Text("Video", bundle: .module)
+            Text(isRefining ? String(localized: "Refine", bundle: .module) : kind.title)
                 .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                 .lineLimit(1)
         }
@@ -334,10 +356,31 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             Capsule()
                 .strokeBorder(ClaudeTheme.accent.opacity(0.35), lineWidth: 1)
         )
-        .help(String(localized: "This model generates a video from your message", bundle: .module))
+        .help(studioChipHelp(kind, isRefining: isRefining))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("Video generation", bundle: .module))
-        .accessibilityIdentifier("video-mode-chip")
+        .accessibilityIdentifier(kind == .video ? "video-mode-chip" : "studio-mode-chip")
+    }
+
+    private func studioChipHelp(_ kind: LocalStudioKind, isRefining: Bool) -> String {
+        switch kind {
+        case .video: String(localized: "This model generates a video from your message", bundle: .module)
+        case .image: isRefining
+            ? String(localized: "The attached image is refined with your message", bundle: .module)
+            : String(localized: "This model generates an image from your message", bundle: .module)
+        case .audio: String(localized: "This model speaks your message, or transcribes an attached audio file", bundle: .module)
+        case .decision: String(localized: "This model judges your question against the options above", bundle: .module)
+        case .chat: ""
+        }
+    }
+
+    private var composerPlaceholder: String {
+        switch chatBridge.studioKind {
+        case .video: String(localized: "Describe a video…", bundle: .module)
+        case .image: String(localized: "Describe an image…", bundle: .module)
+        case .audio: String(localized: "Type what to say, or attach audio to transcribe…", bundle: .module)
+        case .decision: String(localized: "Ask a question to decide…", bundle: .module)
+        case .chat: String(localized: "Type a message...", bundle: .module)
+        }
     }
 
     /// Mirrors `windowState.sessionPlanMode` into a Binding so the Menu's `Toggle`
@@ -358,9 +401,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             focusTrigger: inputFocusTrigger,
             font: .systemFont(ofSize: ClaudeTheme.size(14)),
             textColor: NSColor(ClaudeTheme.textPrimary),
-            placeholder: chatBridge.isVideoModel
-                ? String(localized: "Describe a video…", bundle: .module)
-                : String(localized: "Type a message...", bundle: .module),
+            placeholder: composerPlaceholder,
             onReturn: handleReturnKey,
             onUpArrow: { handleUpArrow() == .handled },
             onDownArrow: { handleDownArrow() == .handled },
@@ -757,6 +798,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     private var attachmentPreviews: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                if let parent = implicitStudioParent {
+                    StudioImplicitParentCard(path: parent) {
+                        imagePreviewAttachment = Attachment(type: .image, name: URL(fileURLWithPath: parent).lastPathComponent, path: parent)
+                    }
+                }
                 ForEach(windowState.attachments) { attachment in
                     AttachmentPreviewItem(attachment: attachment) {
                         windowState.removeAttachment(attachment.id)
@@ -774,6 +820,21 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
     }
 
+    /// The image studio continues from the thread's newest image unless an
+    /// image is attached; shown so the parent of the next prompt is visible.
+    private var implicitStudioParent: String? {
+        guard chatBridge.studioKind == .image, !windowState.attachments.contains(where: { $0.type == .image }),
+              let toolName = LocalStudioKind.image.toolName else { return nil }
+        for message in chatBridge.messages.reversed() {
+            for call in message.toolCalls.reversed() where call.name.lowercased() == toolName.lowercased() && !call.isError {
+                // Same pick as the harness, even if the file is gone, so the
+                // card never shows a parent the next prompt won't use.
+                if let path = GenerationTake.decode(call.result)["savedPath"]?.stringValue, !path.isEmpty { return path }
+            }
+        }
+        return nil
+    }
+
     private func handleImageChipTap(_ index: Int) {
         let images = windowState.attachments.filter { $0.type == .image }
         guard index >= 1, index <= images.count else { return }
@@ -787,6 +848,12 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         guard !windowState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !windowState.attachments.isEmpty else { return }
         historyIndex = -1
+
+        // A decision travels as its question plus the options above the composer.
+        if chatBridge.studioKind == .decision {
+            let request = DecisionRequest(question: windowState.inputText, options: windowState.decisionDraft.options)
+            windowState.inputText = request.messageText
+        }
 
         if chatBridge.isStreaming {
             // Sending mid-turn queues by default: the message goes out when the

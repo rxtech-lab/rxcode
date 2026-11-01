@@ -55,7 +55,7 @@ struct LocalAgentSettingsRow: View {
         )
         .sheet(isPresented: $showModels) {
             LocalModelsSheet()
-                .frame(minWidth: 900, idealWidth: 1000, minHeight: 640, idealHeight: 720)
+                .localModelsSheetFrame()
         }
         .sheet(isPresented: $showRuntimes) {
             LocalRuntimesSheet()

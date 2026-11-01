@@ -78,35 +78,48 @@ extension AppState {
         return sections
     }
 
+    /// The studio a model id opens in: `.chat` for every model but a
+    /// downloaded local video, image, audio or decision model.
+    func localStudioKind(_ id: String, provider: AgentProvider) -> LocalStudioKind {
+        guard provider == .localAgent else { return .chat }
+        return localModels.model(id: id)?.studioKind ?? .chat
+    }
+
     /// Whether a model id names a downloaded local video model.
     func isLocalVideoModel(_ id: String, provider: AgentProvider) -> Bool {
-        provider == .localAgent && localModels.model(id: id).map(\.isVideoModel) == true
+        localStudioKind(id, provider: provider) == .video
     }
 
-    /// A started thread on a video model stays a video thread: its history is
-    /// prompts and clips, which a chat model can't continue. A new chat is
-    /// free to pick any model.
-    func isVideoModelLocked(in window: WindowState) -> Bool {
-        guard window.currentSessionId != nil else { return false }
+    /// The studio a started thread is locked to. Its history is prompts and
+    /// results of that kind (clips, images, audio or decisions), which a
+    /// model of another kind can't continue. A new chat is free to pick any
+    /// model.
+    func lockedStudioKind(in window: WindowState) -> LocalStudioKind? {
+        guard window.currentSessionId != nil else { return nil }
         let selection = effectiveModelSelection(in: window)
-        return isLocalVideoModel(selection.model, provider: selection.provider)
+        let kind = localStudioKind(selection.model, provider: selection.provider)
+        return kind.isStudio ? kind : nil
     }
 
-    /// The sections a window's model pickers offer: only video models once a
-    /// video thread has started, otherwise everything.
+    func isVideoModelLocked(in window: WindowState) -> Bool {
+        lockedStudioKind(in: window) == .video
+    }
+
+    /// The sections a window's model pickers offer: only models of the same
+    /// studio once a studio thread has started, otherwise everything.
     func availableAgentModelSections(in window: WindowState) -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
         let sections = availableAgentModelSections()
-        guard isVideoModelLocked(in: window) else { return sections }
+        guard let kind = lockedStudioKind(in: window) else { return sections }
         return sections.compactMap { section in
-            let models = section.models.filter { isLocalVideoModel($0.id, provider: $0.provider) }
+            let models = section.models.filter { localStudioKind($0.id, provider: $0.provider) == kind }
             return models.isEmpty ? nil : (section.id, section.title, section.provider, section.iconURL, models)
         }
     }
 
-    /// False for a non-video model while a video thread is locked.
+    /// False for a model of another kind while a studio thread is locked.
     func canSelectModel(_ model: String, provider: AgentProvider, in window: WindowState) -> Bool {
-        guard isVideoModelLocked(in: window), !isLocalVideoModel(model, provider: provider) else { return true }
-        logger.info("[Model] ignored switch to \(model, privacy: .public): video threads only take video models")
+        guard let kind = lockedStudioKind(in: window), localStudioKind(model, provider: provider) != kind else { return true }
+        logger.info("[Model] ignored switch to \(model, privacy: .public): \(kind.rawValue, privacy: .public) threads only take \(kind.rawValue, privacy: .public) models")
         return false
     }
 

@@ -21,10 +21,18 @@ struct LocalModelsSheet: View {
         case model(String)
     }
 
+    static let sidebarWidth: (min: CGFloat, ideal: CGFloat, max: CGFloat) = (440, 500, 640)
+    /// Room for the sidebar plus a readable detail column.
+    static let minSize = CGSize(width: 1040, height: 640)
+    static let idealSize = CGSize(width: 1200, height: 760)
+
     var initialModel: LocalModelSheetRequest? = nil
+    /// Off when hosted in its own window, which closes from its title bar.
+    var showsDoneButton = true
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
     @State private var section: Section = .browse
     @State private var remoteSelection: HFModelSummary?
     @State private var installedSelection: InstalledSelection?
@@ -40,7 +48,7 @@ struct LocalModelsSheet: View {
     var body: some View {
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 380, ideal: 400, max: 480)
+                .navigationSplitViewColumnWidth(min: Self.sidebarWidth.min, ideal: Self.sidebarWidth.ideal, max: Self.sidebarWidth.max)
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             detail
@@ -49,8 +57,10 @@ struct LocalModelsSheet: View {
                     ToolbarItem(placement: .automatic) {
                         HuggingFaceAccountButton(showSignIn: $showSignIn)
                     }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
+                    if showsDoneButton {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { dismiss() }
+                        }
                     }
                 }
         }
@@ -247,6 +257,7 @@ struct LocalModelsSheet: View {
                 ForEach(store.installed) { model in
                     InstalledModelRow(
                         model: model,
+                        companions: store.companionFiles(for: model),
                         isDefault: store.settings.defaultModelID == model.id,
                         fit: store.fit(bytes: model.sizeBytes)
                     )
@@ -287,14 +298,21 @@ struct LocalModelsSheet: View {
                 runtimeSettings
             case .model(let id):
                 if let model = store.installed.first(where: { $0.id == id }) {
-                    InstalledModelDetailView(
-                        model: model,
-                        directory: model.directory(in: store.modelsRoot),
-                        isDefault: store.settings.defaultModelID == model.id,
-                        fit: store.fit(bytes: model.sizeBytes),
-                        onMakeDefault: { store.settings.defaultModelID = model.id },
-                        onDelete: { pendingDeletion = model }
-                    )
+                    // A stack of its own so the model's Hugging Face page can push.
+                    NavigationStack {
+                        InstalledModelDetailView(
+                            model: model,
+                            companions: store.companionFiles(for: model),
+                            directory: model.directory(in: store.modelsRoot),
+                            isDefault: store.settings.defaultModelID == model.id,
+                            fit: store.fit(bytes: model.sizeBytes),
+                            onChat: { openChat(with: model) },
+                            onMakeDefault: { store.settings.defaultModelID = model.id },
+                            onDelete: { pendingDeletion = model },
+                            onDownload: requestDownload
+                        )
+                    }
+                    .id(model.id)
                 } else {
                     installedPlaceholder
                 }
@@ -371,6 +389,18 @@ struct LocalModelsSheet: View {
     }
 
     // MARK: - Actions
+
+    private func openChat(with model: LocalModelInfo) {
+        openWindow(
+            id: "chat-window",
+            value: ChatWindowValue(
+                instanceId: UUID(),
+                workspaceID: appState.activeWorkspace.id,
+                localModelID: model.id
+            )
+        )
+        if showsDoneButton { dismiss() }
+    }
 
     struct PendingDownload: Identifiable {
         var id: String { summary.id + "/" + variant.id }
@@ -483,6 +513,7 @@ struct LocalModelFitBadge: View {
 
 private struct InstalledModelRow: View {
     let model: LocalModelInfo
+    let companions: [LocalCompanionFile]
     let isDefault: Bool
     let fit: LocalModelFit
 
@@ -507,21 +538,119 @@ private struct InstalledModelRow: View {
             }
             .font(.system(size: ClaudeTheme.size(10)))
             .foregroundStyle(.secondary)
+            if !companions.isEmpty {
+                Label(
+                    "\(companions.count) companion file\(companions.count == 1 ? "" : "s") · \(LocalModelFormat.bytes(companions.reduce(0) { $0 + $1.sizeBytes }))",
+                    systemImage: "puzzlepiece.extension"
+                )
+                .font(.system(size: ClaudeTheme.size(10)))
+                .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 2)
     }
 }
 
-/// An installed model's details and the actions that change it.
+/// An installed model's details and the actions that change it, beside its
+/// model card. The toolbar opens the repo's full Hugging Face page, where
+/// other quantizations can be downloaded.
 private struct InstalledModelDetailView: View {
+    enum Tab: String, CaseIterable, Identifiable {
+        case details = "Details"
+        case readme = "README"
+        var id: String { rawValue }
+    }
+
     let model: LocalModelInfo
+    let companions: [LocalCompanionFile]
     let directory: URL
     let isDefault: Bool
     let fit: LocalModelFit
+    let onChat: () -> Void
     let onMakeDefault: () -> Void
     let onDelete: () -> Void
+    let onDownload: (HFModelSummary, HFModelVariant) -> Void
+
+    @Environment(AppState.self) private var appState
+    @State private var tab: Tab = .details
+    @State private var loadingPage = false
+    @State private var pageError: String?
+    @State private var page: HFModelSummary?
 
     var body: some View {
+        Group {
+            switch tab {
+            case .details: details
+            case .readme: InstalledModelCardView(model: model, modelsRoot: appState.localModels.modelsRoot)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                Picker("View", selection: $tab) {
+                    ForEach(Tab.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .padding(.vertical, 10)
+                Divider()
+            }
+            .frame(maxWidth: .infinity)
+            .background(.bar)
+        }
+        .navigationTitle(model.displayName)
+        .navigationDestination(item: $page) { summary in
+            LocalModelDetailView(summary: summary, onDownload: onDownload)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Model Page", systemImage: "cube.transparent") { openModelPage() }
+                    .help("Open this model's Hugging Face page and downloads")
+                    .disabled(loadingPage)
+                    .accessibilityIdentifier("local-model-open-page")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("Chat with Model", systemImage: "bubble.left.and.bubble.right", action: onChat)
+                    .help("Open a new chat with this model selected")
+                    .accessibilityIdentifier("local-model-start-chat")
+            }
+        }
+        .overlay {
+            if loadingPage {
+                ProgressView("Loading model page…")
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .alert("Couldn't Open the Model Page", isPresented: Binding(
+            get: { pageError != nil }, set: { if !$0 { pageError = nil } }
+        )) {
+            Button("OK", role: .cancel) { pageError = nil }
+        } message: {
+            Text(pageError ?? "")
+        }
+    }
+
+    /// The saved Hugging Face metadata when the model has it; models saved
+    /// before it was recorded look the repo up.
+    private func openModelPage() {
+        if let saved = model.huggingFaceMetadata {
+            page = saved
+            return
+        }
+        loadingPage = true
+        Task {
+            defer { loadingPage = false }
+            do {
+                page = try await HuggingFaceClient.model(model.repoID, format: model.format)
+            } catch {
+                pageError = error.localizedDescription
+            }
+        }
+    }
+
+    private var details: some View {
         Form {
             SwiftUI.Section("Model") {
                 LabeledContent("Repository", value: model.repoID)
@@ -537,6 +666,39 @@ private struct InstalledModelDetailView: View {
                 LabeledContent("Memory fit") { LocalModelFitBadge(fit: fit) }
                 LabeledContent("Downloaded", value: model.downloadedAt.formatted(date: .abbreviated, time: .shortened))
                 if model.files.count > 1 { LabeledContent("Files", value: model.files.count.formatted()) }
+                if !companions.isEmpty {
+                    LabeledContent(
+                        "Total with companions",
+                        value: LocalModelFormat.bytes(companions.reduce(model.sizeBytes) { $0 + $1.sizeBytes })
+                    )
+                }
+            }
+            if !companions.isEmpty {
+                SwiftUI.Section {
+                    ForEach(companions) { companion in
+                        LabeledContent {
+                            Text(LocalModelFormat.bytes(companion.sizeBytes))
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(companion.localName)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Text([companion.role, companion.repoID].compactMap { $0 }.joined(separator: " · "))
+                                    .font(.system(size: ClaudeTheme.size(10)))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .contextMenu {
+                            Button("Show in Finder") {
+                                NSWorkspace.shared.activateFileViewerSelecting([directory.appending(path: companion.localName)])
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Companion Files")
+                } footer: {
+                    Text("Text encoders, VAEs and other files downloaded so this model can generate. Deleting the model removes them.")
+                }
             }
             SwiftUI.Section {
                 Button(isDefault ? "Default Model" : "Make Default", action: onMakeDefault)
@@ -550,6 +712,15 @@ private struct InstalledModelDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(model.displayName)
+    }
+}
+
+extension View {
+    /// The size every Local Models sheet presents at.
+    func localModelsSheetFrame() -> some View {
+        frame(
+            minWidth: LocalModelsSheet.minSize.width, idealWidth: LocalModelsSheet.idealSize.width,
+            minHeight: LocalModelsSheet.minSize.height, idealHeight: LocalModelsSheet.idealSize.height
+        )
     }
 }

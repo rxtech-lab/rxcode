@@ -30,6 +30,7 @@ struct GeneralRouteWindowRoot: View {
                     .environment(chatBridge)
                     .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
                     .generatedVideoSheet(windowState)
+                    .localStudioSettingsSheet(windowState, appState: appState)
                     .transition(.opacity)
             } else {
                 // Plain spinner rather than `LoadingView`: the splash hides the

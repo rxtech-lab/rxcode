@@ -14,6 +14,8 @@ struct VideoTake: Identifiable, Equatable {
     let prompt: String
     let date: Date
     let toolCall: ToolCall?
+    /// Files the user attached to the prompt, e.g. a start frame.
+    var attachments: [AttachmentInfo] = []
     /// Text the model replied with instead of a clip, e.g. for an empty prompt.
     let reply: String?
     let phase: Phase
@@ -29,6 +31,9 @@ struct VideoTake: Identifiable, Equatable {
     var height: Int? { output["height"]?.numberValue.map(Int.init) }
     var elapsedSeconds: Int? { output["elapsedSeconds"]?.numberValue.map(Int.init) }
     var model: String? { output["model"]?.stringValue }
+    /// The start frame this clip continued from: recorded by the tool, else
+    /// the image attached to the prompt.
+    var sourcePath: String? { output["sourcePath"]?.stringValue ?? attachments.first(where: \.isImage)?.path }
 
     var aspectRatio: CGFloat {
         guard let width, let height, height > 0 else { return 16 / 9 }
@@ -67,7 +72,8 @@ struct VideoTake: Identifiable, Equatable {
                 phase = .failed
             }
             takes.append(VideoTake(id: message.id, prompt: prompt, date: message.timestamp,
-                                   toolCall: call, reply: reply.isEmpty ? nil : reply, phase: phase))
+                                   toolCall: call, attachments: message.attachmentPaths,
+                                   reply: reply.isEmpty ? nil : reply, phase: phase))
         }
         return takes
     }
@@ -97,6 +103,7 @@ struct VideoStudioView<Composer: View>: View {
     private let composer: Composer
 
     @State private var selectedID: UUID?
+    @State private var fileRevision = 0
     /// Latest sampler status per tool call id, posted by the running tool.
     @State private var statuses: [String: String] = [:]
     /// Every status a tool call posted, oldest first, for the activity popover.
@@ -112,7 +119,8 @@ struct VideoStudioView<Composer: View>: View {
     }
 
     private var takes: [VideoTake] {
-        VideoTake.takes(from: chatBridge.messages, isStreaming: chatBridge.isStreaming)
+        _ = fileRevision
+        return VideoTake.takes(from: chatBridge.messages, isStreaming: chatBridge.isStreaming)
     }
 
     private var selectedTake: VideoTake? {
@@ -146,11 +154,14 @@ struct VideoStudioView<Composer: View>: View {
                     selectedID: selectedTake?.id,
                     statuses: statuses,
                     activity: selectedTake?.toolCall.flatMap { activity[$0.id] } ?? [],
-                    select: { id in withAnimation(.smooth(duration: 0.25)) { selectedID = id } }
+                    select: { id in selectedID = id }
                 )
                 .frame(width: 300)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: VideoFileActions.fileDeleted)) { _ in
+            fileRevision += 1
         }
         .animation(.smooth(duration: 0.3), value: takes.isEmpty)
         .onReceive(NotificationCenter.default.publisher(for: VideoGenerationProgress.notification)) { note in
@@ -183,12 +194,16 @@ struct VideoStudioView<Composer: View>: View {
     @ViewBuilder
     private func stage(for takes: [VideoTake]) -> some View {
         if let take = selectedTake {
+            // No animated swap: an opacity transition interrupted by a sheet
+            // or by the list sliding in as a thread loads can leave the stage
+            // invisible.
             VideoStage(take: take, status: take.toolCall.flatMap { statuses[$0.id] }, bottomInset: composerHeight)
                 .id(take.id)
-                .transition(.opacity)
+                .transition(.identity)
         } else {
             VideoStudioEmptyStage()
                 .padding(.bottom, composerHeight)
+                .transition(.identity)
         }
     }
 }
@@ -206,34 +221,47 @@ private struct VideoStage: View {
 
     @State private var player: AVPlayer?
     @State private var headerHeight: CGFloat = 0
+    @State private var continueError: String?
 
     var body: some View {
         // A full-bleed black canvas: the details float over its top edge and
         // the composer over its bottom edge, with the clip fitted in between.
-        screen
-            .padding(.top, headerHeight)
-            .padding(.bottom, bottomInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
-            .overlay(alignment: .top) {
-                details
-                    .padding(.horizontal, 20)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-                    .background {
-                        LinearGradient(colors: [.black.opacity(0.75), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
-                            .allowsHitTesting(false)
-                    }
-                    .onGeometryChange(for: CGFloat.self, of: \.size.height) { headerHeight = $0 }
-            }
-        .task(id: take.path) {
+        // The black base always lays out, so the stage keeps its size and its
+        // `.task` creates the player — an empty `screen` would collapse both.
+        ZStack {
+            Color.black
+            screen
+                .padding(.top, headerHeight)
+                .padding(.bottom, bottomInset)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .top) {
+            details
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
+                .background {
+                    LinearGradient(colors: [.black.opacity(0.75), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                        .allowsHitTesting(false)
+                }
+                .onGeometryChange(for: CGFloat.self, of: \.size.height) { headerHeight = $0 }
+        }
+        .task(id: take.phase) {
             guard take.phase == .ready, let path = take.path else {
                 player = nil
                 return
             }
             player = AVPlayer(url: URL(fileURLWithPath: path))
         }
+        .onChange(of: windowState.playingVideo?.path) { _, path in
+            if path != nil { player?.pause() }
+        }
         .onDisappear { player?.pause() }
+        .alert("Couldn't Continue from Video", isPresented: Binding(
+            get: { continueError != nil }, set: { if !$0 { continueError = nil } }
+        )) {
+            Button("OK", role: .cancel) { continueError = nil }
+        } message: { Text(continueError ?? "") }
     }
 
     @ViewBuilder
@@ -245,6 +273,7 @@ private struct VideoStage: View {
                     .aspectRatio(take.aspectRatio, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityLabel(Text("Generated video player", bundle: .module))
+                    .modifier(VideoFileActions(path: take.path, beforePlayback: { player.pause() }, continues: true))
             }
         case .generating:
             VideoRenderingScreen(status: status, startedAt: take.date) {
@@ -301,6 +330,22 @@ private struct VideoStage: View {
 
             if take.phase == .ready, let path = take.path {
                 HStack(spacing: 4) {
+                    Button {
+                        Task {
+                            do {
+                                try await StudioContinuation.attachLastFrame(ofVideoAt: path, to: windowState)
+                                if windowState.inputText.isEmpty { windowState.inputText = take.prompt }
+                            } catch {
+                                continueError = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.triangle.branch")
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .help(String(localized: "Continue from this video's last frame", bundle: .module))
+
                     Button {
                         windowState.inputText = take.prompt
                     } label: {
@@ -485,10 +530,11 @@ private struct VideoTakeList: View {
                             VideoTakeRow(
                                 take: take,
                                 isSelected: take.id == selectedID,
-                                status: take.toolCall.flatMap { statuses[$0.id] }
+                                status: take.toolCall.flatMap { statuses[$0.id] },
+                                parentPrompt: parentPrompt(of: take)
                             )
                             .id(take.id)
-                            .onTapGesture { select(take.id) }
+                            .modifier(VideoFileActions(path: take.phase == .ready ? take.path : nil, select: { select(take.id) }, continues: true))
                         }
                     }
                     .padding(.horizontal, 10)
@@ -503,11 +549,17 @@ private struct VideoTakeList: View {
         .frame(maxHeight: .infinity)
         .background(ClaudeTheme.sidebarBackground)
     }
+
+    /// The prompt of the clip whose last frame started this one.
+    private func parentPrompt(of take: VideoTake) -> String? {
+        guard let source = take.sourcePath else { return nil }
+        return takes.first { $0.path.map(StudioContinuation.lastFramePath(forVideoAt:)) == source }?.prompt
+    }
 }
 
 /// The selected generation's steps, newest first: what RxCode did and what
 /// the task model is doing while it looks up the companion files.
-private struct VideoActivityPopover: View {
+struct VideoActivityPopover: View {
     let activity: [VideoGenerationActivity]
 
     var body: some View {
@@ -572,6 +624,7 @@ private struct VideoTakeRow: View {
     let take: VideoTake
     let isSelected: Bool
     let status: String?
+    let parentPrompt: String?
 
     @State private var isHovered = false
 
@@ -586,6 +639,9 @@ private struct VideoTakeRow: View {
                     .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                if let source = take.sourcePath {
+                    StudioParentLine(path: source, prompt: parentPrompt)
+                }
                 statusLine
             }
             Spacer(minLength: 0)

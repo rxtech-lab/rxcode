@@ -28,7 +28,7 @@ nonisolated enum LocalRuntimeComponent: String, CaseIterable, Identifiable, Send
 
     var summary: String {
         switch self {
-        case .mlx: "Apple MLX engine for Apple silicon, running natively through MLX Swift. Runs MLX models."
+        case .mlx: "Bundled Swift MLX for text and decision models. Image, audio and video studios use separate MLX media packages installed on first use."
         case .llamaCpp: "Apple Metal accelerated llama.cpp engine. Runs GGUF models."
         case .stableDiffusion: "Apple Metal accelerated image and video generation engine. Runs diffusion GGUF models such as MiniMax-H3, not chat models."
         }

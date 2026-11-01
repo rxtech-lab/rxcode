@@ -6,6 +6,9 @@ import SwiftUI
 /// updates or removes them. llama.cpp and stable-diffusion.cpp are downloaded; MLX is linked into
 /// RxCode, so installing or uninstalling it switches it on or off.
 struct LocalRuntimesSheet: View {
+    /// Off when hosted in its own window, which closes from its title bar.
+    var showsDoneButton = true
+
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var working: String?
@@ -41,8 +44,10 @@ struct LocalRuntimesSheet: View {
                     .help("Check for runtime updates")
                     .disabled(store.llamaUpdate == .checking || store.stableDiffusionUpdate == .checking || working != nil)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                if showsDoneButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
                 }
             }
         }

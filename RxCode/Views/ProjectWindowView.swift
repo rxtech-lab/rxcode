@@ -83,7 +83,7 @@ struct ProjectWindowView: View {
         .hookUI()
         .sheet(item: Bindable(appState).localModelSheetRequest) { request in
             LocalModelsSheet(initialModel: request)
-                .frame(minWidth: 900, idealWidth: 1000, minHeight: 640, idealHeight: 720)
+                .localModelsSheetFrame()
                 .environment(appState)
         }
         .sheet(item: Bindable(windowState).inspectorFile) { file in

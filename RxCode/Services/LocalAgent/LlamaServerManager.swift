@@ -468,6 +468,8 @@ nonisolated struct LocalLlamaHarnessModel: HarnessModel {
 nonisolated enum LocalModelContext {
     /// `VideoGenerationProgress.toolName`; this file doesn't import RxCodeCore.
     static let videoToolName = "VideoGeneration"
+    /// Every studio tool (`LocalStudioKind.toolNames`).
+    static let studioToolNames: Set<String> = [videoToolName, "ImageGeneration", "AudioGeneration", "Decision"]
 
     private static let coreTools: Set<String> = [
         "read", "glob", "grep", "bash", "edit", "write", "patch", "todowrite", "todoread", "question",
@@ -491,8 +493,9 @@ nonisolated enum LocalModelContext {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         request.tools = try input.tools.sorted { $0.name < $1.name }.compactMap { tool -> HarnessToolSpec? in
-            // Only video models call it; chat models can't produce a clip.
-            if tool.name == videoToolName { return nil }
+            // Only studio models call these; chat models can't produce a clip,
+            // an image, audio or a calibrated decision.
+            if studioToolNames.contains(tool.name) { return nil }
             // Discovery must be usable without first reading its own manual.
             if coreTools.contains(tool.name) { return tool }
             let parameters = compactSchema(tool.parameters)

@@ -112,6 +112,9 @@
         }
       }
     },
+    "· %@/s" : {
+
+    },
     "· %lld" : {
       "localizations" : {
         "ko" : {
@@ -170,9 +173,6 @@
         }
       }
     },
-    "“%@” will stop and its partial files will be removed." : {
-
-    },
     "\"%@\" will stop running. This can't be undone." : {
       "localizations" : {
         "ko" : {
@@ -188,6 +188,9 @@
           }
         }
       }
+    },
+    "“%@” will stop. Model download files are kept so you can resume later." : {
+
     },
     "(build only)" : {
       "localizations" : {
@@ -240,6 +243,16 @@
     },
     "%@" : {
 
+    },
+    "%@ – %@ (%lld variants)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ – %2$@ (%3$lld variants)"
+          }
+        }
+      }
     },
     "%@ — %@" : {
       "comment" : "Notification body for MCP disconnect: server name and error detail.",
@@ -587,6 +600,9 @@
     "%@ parameters" : {
 
     },
+    "%@ Studio Setup" : {
+
+    },
     "%@ tokens" : {
 
     },
@@ -848,6 +864,16 @@
         }
       }
     },
+    "%lld companion file%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld companion file%2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%lld custom Git source%@" : {
       "localizations" : {
         "en" : {
@@ -940,7 +966,7 @@
         }
       }
     },
-    "%lld downloads and installs will stop and their partial files will be removed." : {
+    "%lld downloads and installs will stop. Model download files are kept so you can resume later." : {
 
     },
     "%lld elements" : {
@@ -3803,6 +3829,9 @@
         }
       }
     },
+    "Ask the setup agent again, for example after choosing another agent or when generation keeps failing. Downloaded files stay on disk." : {
+
+    },
     "Assign an agent to a task and move it into a chat column to start work." : {
       "localizations" : {
         "ko" : {
@@ -4185,6 +4214,9 @@
         }
       }
     },
+    "Automatic" : {
+
+    },
     "Automatic (%@ tokens)" : {
 
     },
@@ -4203,6 +4235,9 @@
           }
         }
       }
+    },
+    "Automatic uses the first engine that can run the selected model. A chosen engine that can't run a model falls back to automatic for it." : {
+
     },
     "Automation" : {
       "localizations" : {
@@ -5053,6 +5088,9 @@
         }
       }
     },
+    "Chat with Model" : {
+
+    },
     "Chats" : {
 
     },
@@ -5216,6 +5254,9 @@
           }
         }
       }
+    },
+    "Choose a setup agent in the studio's Engine & Setup settings first. RxCode's local agent can't read model cards." : {
+
     },
     "Choose an account" : {
 
@@ -6330,6 +6371,12 @@
         }
       }
     },
+    "Companion files" : {
+
+    },
+    "Companion Files" : {
+
+    },
     "Compile" : {
       "localizations" : {
         "ko" : {
@@ -7110,6 +7157,9 @@
           }
         }
       }
+    },
+    "Couldn't Open the Model Page" : {
+
     },
     "Couldn't reach the current response — still queued, sends when it ends." : {
       "localizations" : {
@@ -8200,6 +8250,9 @@
         }
       }
     },
+    "Default task agent (%@)" : {
+
+    },
     "Default team" : {
 
     },
@@ -8493,6 +8546,12 @@
         }
       }
     },
+    "Delete Download" : {
+
+    },
+    "Delete Download…" : {
+
+    },
     "Delete Environment" : {
       "localizations" : {
         "ko" : {
@@ -8695,6 +8754,9 @@
         }
       }
     },
+    "Delete the retained files for “%@”? Installed models are kept." : {
+
+    },
     "Delete this card view?" : {
 
     },
@@ -8729,6 +8791,9 @@
           }
         }
       }
+    },
+    "Delete unfinished download?" : {
+
     },
     "Delete View" : {
       "localizations" : {
@@ -9391,6 +9456,9 @@
 
     },
     "Download a model from Browse to use the RxCode Agent." : {
+
+    },
+    "Download Action Failed" : {
 
     },
     "Download APK" : {
@@ -10318,6 +10386,9 @@
         }
       }
     },
+    "Engine" : {
+
+    },
     "Engines" : {
 
     },
@@ -11244,6 +11315,12 @@
     "Final Message" : {
 
     },
+    "Find Again" : {
+
+    },
+    "Find Again on Next Run…" : {
+
+    },
     "Find stories" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11253,6 +11330,9 @@
           }
         }
       }
+    },
+    "Find the companion files again?" : {
+
     },
     "Finished installing? Tap Refresh." : {
       "localizations" : {
@@ -11661,6 +11741,9 @@
           }
         }
       }
+    },
+    "Found and saved" : {
+
     },
     "Frequency" : {
       "localizations" : {
@@ -12653,6 +12736,9 @@
           }
         }
       }
+    },
+    "Hugging Face task" : {
+
     },
     "I found the existing onboarding view and will keep the CLI check as setup." : {
       "localizations" : {
@@ -14164,6 +14250,9 @@
     "Loading model card…" : {
 
     },
+    "Loading model page…" : {
+
+    },
     "Loading model…" : {
 
     },
@@ -14298,6 +14387,9 @@
         }
       }
     },
+    "Local Models" : {
+
+    },
     "Local on-device search · archived threads included" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14368,6 +14460,9 @@
           }
         }
       }
+    },
+    "Looked up on the next run" : {
+
     },
     "Low" : {
       "localizations" : {
@@ -14659,6 +14754,9 @@
         }
       }
     },
+    "Manage Models…" : {
+
+    },
     "Manage Project Prompts…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14700,6 +14798,9 @@
           }
         }
       }
+    },
+    "Manage Runtimes…" : {
+
     },
     "Manage Secrets" : {
       "localizations" : {
@@ -15297,6 +15398,9 @@
       }
     },
     "Model estimates" : {
+
+    },
+    "Model Page" : {
 
     },
     "Model Picker" : {
@@ -16727,6 +16831,9 @@
         }
       }
     },
+    "No Model Card" : {
+
+    },
     "No models downloaded" : {
 
     },
@@ -17981,6 +18088,9 @@
         }
       }
     },
+    "Open a new chat with this model selected" : {
+
+    },
     "Open a project to organize tasks in board or table views with custom columns and filters." : {
       "localizations" : {
         "ko" : {
@@ -18389,6 +18499,9 @@
           }
         }
       }
+    },
+    "Open this model's Hugging Face page and downloads" : {
+
     },
     "Open this run's chat thread" : {
 
@@ -21138,6 +21251,9 @@
         }
       }
     },
+    "Resources" : {
+
+    },
     "Response complete" : {
       "comment" : "Notification body when Claude finishes a response",
       "localizations" : {
@@ -21214,6 +21330,9 @@
           }
         }
       }
+    },
+    "Resume Download" : {
+
     },
     "Resume this schedule" : {
       "localizations" : {
@@ -22030,6 +22149,9 @@
           }
         }
       }
+    },
+    "Saved Setup" : {
+
     },
     "Saved to this client's launch environment." : {
       "localizations" : {
@@ -23011,6 +23133,9 @@
         }
       }
     },
+    "Selected" : {
+
+    },
     "Selected release workflow" : {
       "localizations" : {
         "ko" : {
@@ -23485,6 +23610,12 @@
       }
     },
     "Settings Default (%@)" : {
+
+    },
+    "Setup agent" : {
+
+    },
+    "Setup Agent" : {
 
     },
     "Setup templates" : {
@@ -25792,6 +25923,9 @@
         }
       }
     },
+    "Text encoders, VAEs and other files downloaded so this model can generate. Deleting the model removes them." : {
+
+    },
     "The agent didn't return any code. Try rephrasing the filter." : {
       "localizations" : {
         "zh-Hans" : {
@@ -25988,6 +26122,9 @@
         }
       }
     },
+    "The first time a model runs, this agent reads its Hugging Face card and files to find the companion files it needs. RxCode only downloads files it has seen listed in the repository. The choice applies to this studio's future setups." : {
+
+    },
     "The follow-up could not be sent to the task's chat." : {
       "localizations" : {
         "zh-Hans" : {
@@ -26077,6 +26214,9 @@
     "The model is loaded on first use and unloaded after the idle period to free memory. Larger context windows use more memory; the model's own maximum always applies." : {
 
     },
+    "The model is no longer installed." : {
+
+    },
     "The model that runs general AI tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -26125,6 +26265,9 @@
           }
         }
       }
+    },
+    "The next run looks up its setup again" : {
+
     },
     "The next version is computed by semantic-release from the commit history." : {
       "localizations" : {
@@ -26236,6 +26379,9 @@
           }
         }
       }
+    },
+    "The saved setup for %@ is cleared. The setup agent looks it up on the next generation." : {
+
     },
     "The scheduled task handles its own notification." : {
       "localizations" : {
@@ -27171,6 +27317,9 @@
           }
         }
       }
+    },
+    "Total with companions" : {
+
     },
     "Transport" : {
       "localizations" : {

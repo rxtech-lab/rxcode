@@ -1,8 +1,9 @@
 import Foundation
 
-/// Live status of a `VideoGeneration` tool call, posted on the default
+/// Live status of a local studio tool call (`VideoGeneration`,
+/// `ImageGeneration`, `AudioGeneration`, `Decision`), posted on the default
 /// `NotificationCenter` while the tool runs. The agent SDK does not forward
-/// tool progress events, so the chat's video card listens for these instead.
+/// tool progress events, so the studios listen for these instead.
 ///
 /// Every post is both the take's current headline and one line of its
 /// activity log. `actor` names who did the step when it was not RxCode itself,

@@ -2056,6 +2056,9 @@
     "Choose a setting from the sidebar." : {
 
     },
+    "Choose a thread from the sidebar to open its chat." : {
+
+    },
     "Choose from Photos" : {
       "localizations" : {
         "en" : {
@@ -11100,6 +11103,9 @@
           }
         }
       }
+    },
+    "Select a Thread" : {
+
     },
     "Select all that apply" : {
       "localizations" : {

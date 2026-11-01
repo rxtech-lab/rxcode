@@ -132,4 +132,84 @@ final class iPhoneNavigationUITests: XCTestCase {
         r.assertExists(r.threadListScreen, "thread list screen after back")
         r.assertDisappears(r.chatScreen, "chat screen after navigating back")
     }
+
+    /// Sideways and diagonal thumb movement across a row must not open it, while
+    /// a tap with ordinary finger wobble still does.
+    @MainActor
+    func testDraggingAcrossRowsDoesNotOpenThem() throws {
+        let r = try UITestRunner.launch(.phone, on: self).robot
+        r.tap(r.projectsTab, "Projects tab")
+
+        assertDragsOnlyOpenOnWobble(row: r.anyProjectRow, opened: r.threadListScreen, r)
+        r.tap(r.anyProjectRow, "a project row")
+        r.assertExists(r.threadListScreen, "thread list screen")
+        assertDragsOnlyOpenOnWobble(row: r.anyThreadRow, opened: r.chatScreen, r)
+    }
+
+    @MainActor
+    private func assertDragsOnlyOpenOnWobble(row: XCUIElement, opened: XCUIElement, _ r: MobileAppRobot) {
+        let drags: [(CGVector, XCUIGestureVelocity)] = [
+            (CGVector(dx: 16, dy: 0), .slow),
+            (CGVector(dx: 40, dy: 0), .slow),
+            (CGVector(dx: 120, dy: 0), .fast),
+            (CGVector(dx: -40, dy: 0), .slow),
+            (CGVector(dx: 24, dy: -24), .slow),
+            (CGVector(dx: 0, dy: -40), .slow),
+        ]
+        for (offset, velocity) in drags {
+            drag(row, by: offset, velocity: velocity, r)
+            XCTAssertFalse(opened.waitForExistence(timeout: 1.5), "A drag of \(offset) must not open the row")
+        }
+        drag(row, by: CGVector(dx: 4, dy: 0), velocity: .slow, r)
+        r.assertExists(opened, "row opened by a tap with slight wobble")
+        r.navigateBack()
+        r.assertDisappears(opened, "opened screen after navigating back")
+    }
+
+    @MainActor
+    private func drag(_ row: XCUIElement, by offset: CGVector, velocity: XCUIGestureVelocity, _ r: MobileAppRobot) {
+        XCTAssertTrue(row.waitForExistence(timeout: r.timeout))
+        r.waitForHittable(row, timeout: 5)
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(offset), withVelocity: velocity, thenHoldForDuration: 0)
+    }
+
+    /// Open Duo: threads and chat side by side, with a collapsible sidebar.
+    @MainActor
+    func testOpenDuoShowsThreadsBesideChatWithCollapsibleSidebar() throws {
+        let session = try UITestRunner.launch(.phone, on: self)
+        let r = session.robot
+        let app = session.app
+        try XCTSkipUnless(app.frame.width >= 600, "Open iPhone Duo only: unfold the simulator to run this.")
+
+        // Open Duo may draw its tabs as a side rail, outside `app.tabBars`.
+        r.tap(app.buttons["Projects"].firstMatch, "Projects tab")
+        r.tap(r.anyProjectRow, "a project row")
+        r.assertExists(r.threadListScreen, "thread list screen")
+        XCTAssertTrue(app.staticTexts["Select a Thread"].waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "Duo threads with empty detail")
+        // The side tab rail's safe area must not squeeze the sidebar's rows.
+        XCTAssertEqual(r.anyThreadRow.frame.width, r.threadListScreen.frame.width - 32, accuracy: 1)
+
+        let threadRow = r.anyThreadRow
+        r.tap(threadRow, "a thread row")
+        r.assertMessagesShown()
+        attachScreenshot(app, name: "Duo threads beside chat")
+        XCTAssertTrue(threadRow.isHittable, "The thread list stays beside the chat")
+        XCTAssertLessThanOrEqual(threadRow.frame.maxX, r.chatScreen.frame.minX)
+
+        let toggle = app.buttons["duo-sidebar-toggle"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        let expandedWidth = r.chatScreen.frame.width
+        toggle.tap()
+        r.assertDisappears(threadRow, "thread list after collapsing the sidebar")
+        r.assertMessagesShown()
+        XCTAssertGreaterThan(r.chatScreen.frame.width, expandedWidth, "The chat takes over the sidebar's space")
+        attachScreenshot(app, name: "Duo sidebar collapsed")
+
+        toggle.tap()
+        r.assertExists(threadRow, "thread list after expanding the sidebar")
+        XCTAssertTrue(r.waitForHittable(threadRow, timeout: 5), "Expanding restores the sidebar")
+        r.assertMessagesShown()
+    }
 }

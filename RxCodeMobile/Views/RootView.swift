@@ -13,13 +13,15 @@ private enum MobileRootTab: Hashable {
 }
 
 /// Mobile app root. iPad / wide screens use NavigationSplitView; iPhone uses
-/// bottom navigation with independent NavigationStack tabs.
+/// bottom navigation with independent NavigationStack tabs. An open iPhone Duo
+/// keeps the tabs and shows threads and the chat side by side in Projects.
 struct RemoteWorkspaceView: View {
     @Environment(\.closeRemoteWorkspace) private var closeRemoteWorkspace
     @Environment(MobileCloudState.self) private var cloud
     @State private var showOfflineTasksSheet = false
     @State private var showOfflineTasksFullScreen = false
     @Environment(\.horizontalSizeClass) private var compactClass
+    @Environment(\.verticalSizeClass) private var verticalClass
     @EnvironmentObject private var state: MobileAppState
     @State private var selectedProject: UUID?
     @State private var selectedSession: String?
@@ -29,7 +31,10 @@ struct RemoteWorkspaceView: View {
     @State private var showSettings = false
     @State private var showingTasks = true
     @State private var selectedTab: MobileRootTab = .briefing
+    /// [project, chat] on a compact iPhone. On an open Duo only the project,
+    /// since the chat is `selectedSession` in the detail column.
     @State private var projectsPath = NavigationPath()
+    @State private var isDuoSidebarVisible = true
     /// Owned here (not by the stack) so the Tasks navigation survives layout
     /// changes, and so chats opened from a task push onto it.
     @State private var tasksPath = NavigationPath()
@@ -317,6 +322,9 @@ struct RemoteWorkspaceView: View {
         Group {
             if usesPhoneLayout {
                 phoneTabs
+                    .onChange(of: usesDuoColumns) { _, usesColumns in
+                        moveProjectsNavigation(toDuoColumns: usesColumns)
+                    }
             } else {
                 ipadSplitView
             }
@@ -332,6 +340,14 @@ struct RemoteWorkspaceView: View {
         compactClass == .compact || UIDevice.current.userInterfaceIdiom == .phone
     }
 
+    /// An open iPhone Duo is regular in both directions. A large iPhone in
+    /// landscape is regular wide but compact tall, so it stays in the stack.
+    private var usesDuoColumns: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+            && compactClass == .regular
+            && verticalClass == .regular
+    }
+
     private var phoneTabs: some View {
         TabView(selection: $selectedTab) {
             Tab("Briefing", systemImage: "doc.text", value: MobileRootTab.briefing) {
@@ -345,24 +361,10 @@ struct RemoteWorkspaceView: View {
             }
 
             Tab("Projects", systemImage: "folder", value: MobileRootTab.projects) {
-                NavigationStack(path: $projectsPath) {
-                    ProjectsSidebar(
-                        selected: $selectedProject,
-                        showingBriefing: $showingBriefing,
-                        showsBriefingItem: false,
-                        usesSelection: false
-                    )
-                    .toolbar { RemoteWorkspaceCloseToolbar() }
-                    .navigationDestination(for: UUID.self) { projectID in
-                        SessionsList(
-                            projectID: projectID,
-                            selected: $selectedSession,
-                            usesSelection: false
-                        )
-                    }
-                    .navigationDestination(for: String.self) { sessionID in
-                        chatDestination(sessionID)
-                    }
+                if usesDuoColumns {
+                    duoProjectsSplitView
+                } else {
+                    phoneProjectsStack
                 }
             }
 
@@ -380,6 +382,130 @@ struct RemoteWorkspaceView: View {
                 }
             }
         }
+    }
+
+    private var phoneProjects: some View {
+        ProjectsSidebar(
+            selected: $selectedProject,
+            showingBriefing: $showingBriefing,
+            showsBriefingItem: false,
+            onOpenProject: { projectID in
+                selectedProject = projectID
+                projectsPath.append(projectID)
+            }
+        )
+    }
+
+    private var phoneProjectsStack: some View {
+        NavigationStack(path: $projectsPath) {
+            phoneProjects
+                .toolbar { RemoteWorkspaceCloseToolbar() }
+                .navigationDestination(for: UUID.self) { projectID in
+                    SessionsList(
+                        projectID: projectID,
+                        selected: $selectedSession,
+                        usesSelection: false,
+                        onOpenThread: { sessionID in
+                            selectedSession = sessionID
+                            projectsPath.append(sessionID)
+                        }
+                    )
+                }
+                .navigationDestination(for: String.self) { sessionID in
+                    chatDestination(sessionID)
+                }
+        }
+    }
+
+    /// Projects and threads in a collapsible sidebar, with the chat beside them.
+    /// Laid out directly because `NavigationSplitView` overlays its sidebar on a
+    /// screen this narrow instead of placing the columns side by side. The close
+    /// button lives in the detail column, which is always on screen.
+    private var duoProjectsSplitView: some View {
+        HStack(spacing: 0) {
+            if isDuoSidebarVisible {
+                NavigationStack(path: $projectsPath) {
+                    // The tab rail's inset belongs to the far edge of the chat column.
+                    phoneProjects
+                        .ignoresSafeArea(.container, edges: .trailing)
+                        .navigationDestination(for: UUID.self) { projectID in
+                            SessionsList(projectID: projectID, selected: $selectedSession)
+                                .ignoresSafeArea(.container, edges: .trailing)
+                        }
+                        // Thread search results push instead of selecting.
+                        .navigationDestination(for: String.self) { sessionID in
+                            chatDestination(sessionID)
+                        }
+                }
+                .containerRelativeFrame(.horizontal) { width, _ in min(280, width * 0.45) }
+                .transition(.move(edge: .leading))
+
+                Divider()
+                    .ignoresSafeArea()
+            }
+
+            NavigationStack {
+                Group {
+                    if let sessionID = selectedSession {
+                        chatDestination(sessionID)
+                    } else {
+                        ContentUnavailableView(
+                            "Select a Thread",
+                            systemImage: "bubble.left.and.bubble.right",
+                            description: Text("Choose a thread from the sidebar to open its chat.")
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .toolbar { RemoteWorkspaceCloseToolbar() }
+                    }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(
+                            isDuoSidebarVisible ? "Hide Sidebar" : "Show Sidebar",
+                            systemImage: "sidebar.left"
+                        ) {
+                            MobileHaptics.buttonTap()
+                            withAnimation(.snappy) { isDuoSidebarVisible.toggle() }
+                        }
+                        .labelStyle(.iconOnly)
+                        .accessibilityIdentifier("duo-sidebar-toggle")
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Carries the open project and chat across folding and unfolding a Duo.
+    private func moveProjectsNavigation(toDuoColumns usesColumns: Bool) {
+        if usesColumns {
+            if projectsPath.count > 1 {
+                projectsPath.removeLast(projectsPath.count - 1)
+            } else {
+                // The stack popped back past the chat, so nothing is open.
+                selectedSession = nil
+            }
+        } else if let selectedSession {
+            projectsPath = phoneProjectsPath(toSession: selectedSession, projectID: nil)
+        }
+    }
+
+    /// Projects → Threads → Chat, so back returns to the thread list.
+    private func phoneProjectsPath(toSession sessionID: String, projectID: UUID?) -> NavigationPath {
+        var path = NavigationPath()
+        if let projectID = resolvedProjectID(forSession: sessionID, projectID: projectID) {
+            path.append(projectID)
+        }
+        path.append(sessionID)
+        return path
+    }
+
+    /// Draft sessions encode the project in their ID; synced sessions are looked
+    /// up in `state`.
+    private func resolvedProjectID(forSession sessionID: String, projectID: UUID?) -> UUID? {
+        projectID
+            ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
+            ?? MobileDraftSessionID.projectID(from: sessionID)
     }
 
     private var searchContent: some View {
@@ -538,13 +664,16 @@ struct RemoteWorkspaceView: View {
     private func chatDestination(_ sessionID: String, onClose: (() -> Void)? = nil) -> some View {
         MobileChatView(sessionID: sessionID, onClose: onClose ?? { closeChat() })
             .id(sessionID)
-            .toolbar(.hidden, for: .tabBar)
+            // The detail column of an open Duo keeps the tabs reachable.
+            .toolbar(usesDuoColumns ? .automatic : .hidden, for: .tabBar)
     }
 
     /// Pop the chat view after its thread is archived or deleted. Compact mode
     /// is driven by `projectsPath`; the split view by `selectedSession`.
     private func closeChat() {
-        if usesPhoneLayout {
+        if usesDuoColumns {
+            selectedSession = nil
+        } else if usesPhoneLayout {
             if !projectsPath.isEmpty { projectsPath.removeLast() }
         } else {
             selectedSession = nil
@@ -599,29 +728,27 @@ struct RemoteWorkspaceView: View {
     /// payloads carry it) navigation works even before the session has synced
     /// into `state.sessions`; otherwise the project is looked up there.
     ///
-    /// Compact mode is driven solely by `projectsPath` while the regular split
-    /// view is driven by `selectedSession`. Keeping the two mechanisms separate
-    /// avoids pushing the same chat page twice.
+    /// Compact mode shows the chat from `projectsPath` while the split views
+    /// show it from `selectedSession`, so only one of them ever presents it.
     private func navigate(toSession sessionID: String, projectID: UUID?) {
         selectedTab = .projects
         showingBriefing = false
         showingTasks = false
 
-        // Resolve the owning project so the navigation stack keeps its
-        // Projects → Threads → Chat hierarchy. Draft sessions encode the
-        // project in their ID; synced sessions are looked up in `state`.
-        let resolvedProjectID = projectID
-            ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
-            ?? MobileDraftSessionID.projectID(from: sessionID)
+        let resolvedProjectID = resolvedProjectID(forSession: sessionID, projectID: projectID)
 
-        if usesPhoneLayout {
-            // Push the project level before the chat so the back button
-            // returns to the thread list, not the project list.
+        if usesDuoColumns {
+            selectedSession = sessionID
+            guard let resolvedProjectID else { return }
+            selectedProject = resolvedProjectID
             var path = NavigationPath()
-            if let resolvedProjectID {
-                path.append(resolvedProjectID)
+            path.append(resolvedProjectID)
+            if projectsPath != path {
+                projectsPath = path
             }
-            path.append(sessionID)
+        } else if usesPhoneLayout {
+            selectedSession = sessionID
+            let path = phoneProjectsPath(toSession: sessionID, projectID: resolvedProjectID)
             if projectsPath != path {
                 projectsPath = path
             }

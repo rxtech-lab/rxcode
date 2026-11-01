@@ -7,9 +7,6 @@ import RxCodeSync
 struct GlassThreadCard: View {
     let session: SessionSummary
     let isSelected: Bool
-    /// When true, uses NavigationLink for stack-based navigation (iPhone).
-    /// When false, uses Button with onSelect callback for selection-based navigation (iPad).
-    var usesNavigationLink: Bool = true
     var onSelect: (() -> Void)?
     /// Nesting depth; review children render one level in from their parent.
     var indentLevel: Int = 0
@@ -53,26 +50,16 @@ struct GlassThreadCard: View {
     }
 
     /// Standard card: the whole surface is one navigable button.
-    /// The UI-test identifier is applied directly on the button of each branch —
-    /// applying it to an enclosing container does not reach the button element
-    /// XCUITest queries.
-    @ViewBuilder
+    /// The UI-test identifier is applied directly on the button — applying it to
+    /// an enclosing container does not reach the button element XCUITest queries.
     private var plainCard: some View {
-        if usesNavigationLink {
-            NavigationLink(value: session.id) {
-                cardContent
-            }
-            .buttonStyle(GlassCardButtonStyle(isSelected: isSelected))
-            .accessibilityIdentifier("thread-row-\(session.id)")
-        } else {
-            Button {
-                onSelect?()
-            } label: {
-                cardContent
-            }
-            .buttonStyle(GlassCardButtonStyle(isSelected: isSelected))
-            .accessibilityIdentifier("thread-row-\(session.id)")
+        MobileRowButton {
+            onSelect?()
+        } label: {
+            cardContent
         }
+        .buttonStyle(GlassCardButtonStyle(isSelected: isSelected))
+        .accessibilityIdentifier("thread-row-\(session.id)")
     }
 
     /// Parent card with nested reviews: a leading disclosure control and the
@@ -99,17 +86,10 @@ struct GlassThreadCard: View {
         )
     }
 
-    @ViewBuilder
     private var navigableContent: some View {
-        if usesNavigationLink {
-            NavigationLink(value: session.id) { cardContent }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("thread-row-\(session.id)")
-        } else {
-            Button { onSelect?() } label: { cardContent }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("thread-row-\(session.id)")
-        }
+        MobileRowButton { onSelect?() } label: { cardContent }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("thread-row-\(session.id)")
     }
 
     /// Leading chevron + review-count column, tappable independently of the row.

@@ -11,9 +11,9 @@ struct ProjectsSidebar: View {
     /// Selection binding for the Tasks sidebar item (iPad); the item is
     /// hidden when `nil`.
     var showingTasks: Binding<Bool>?
-    /// When true, uses Button with selection callback (iPad split view).
-    /// When false, uses NavigationLink for stack-based navigation (iPhone).
-    var usesSelection = true
+    /// Opens a project in a navigation stack (iPhone). When nil, tapping a
+    /// project updates `selected` instead (iPad split view).
+    var onOpenProject: ((UUID) -> Void)?
     @State private var searchText = ""
     @State private var showingRemoteFolderPicker = false
     @State private var showingGitHubRepoPicker = false
@@ -159,13 +159,9 @@ struct ProjectsSidebar: View {
                                 threadCount: threadCount(for: project.id),
                                 activeJobCount: activeJobCount(for: project.id),
                                 lastActivity: lastActivity(for: project.id),
-                                isSelected: selected == project.id,
-                                usesNavigationLink: !usesSelection,
+                                isSelected: onOpenProject == nil && selected == project.id,
                                 namespace: glassNamespace,
-                                onSelect: usesSelection ? {
-                                    selected = project.id
-                                    showingBriefing = false
-                                } : nil
+                                onSelect: { open(project) }
                             )
                         }
                     }
@@ -222,13 +218,9 @@ struct ProjectsSidebar: View {
                                         threadCount: threadCount(for: project.id),
                                         activeJobCount: activeJobCount(for: project.id),
                                         lastActivity: lastActivity(for: project.id),
-                                        isSelected: selected == project.id,
-                                        usesNavigationLink: !usesSelection,
+                                        isSelected: onOpenProject == nil && selected == project.id,
                                         namespace: glassNamespace,
-                                        onSelect: usesSelection ? {
-                                            selected = project.id
-                                            showingBriefing = false
-                                        } : nil
+                                        onSelect: { open(project) }
                                     )
                                 }
                             }
@@ -331,6 +323,15 @@ struct ProjectsSidebar: View {
         .accessibilityLabel("Add Project")
     }
 
+    private func open(_ project: Project) {
+        if let onOpenProject {
+            onOpenProject(project.id)
+        } else {
+            selected = project.id
+            showingBriefing = false
+        }
+    }
+
     private func loadAutopilotAccountIfNeeded(force: Bool = false) async {
         guard state.isPaired, state.connectionState == .connected else { return }
         if !force, state.autopilotAccount != nil { return }
@@ -403,7 +404,7 @@ private struct SidebarNavigationCard: View {
     var onSelect: (() -> Void)?
 
     var body: some View {
-        Button { onSelect?() } label: { cardContent }
+        MobileRowButton { onSelect?() } label: { cardContent }
             .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
             .glassEffectID(glassID, in: namespace)
     }
@@ -455,9 +456,6 @@ private struct GlassProjectCard: View {
     let activeJobCount: Int
     let lastActivity: Date?
     let isSelected: Bool
-    /// When true, uses NavigationLink for stack-based navigation (iPhone).
-    /// When false, uses Button with onSelect callback for selection-based navigation (iPad).
-    var usesNavigationLink: Bool = true
     let namespace: Namespace.ID
     var onSelect: (() -> Void)?
 
@@ -467,30 +465,19 @@ private struct GlassProjectCard: View {
         cardButton
     }
 
-    @ViewBuilder
     private var cardButton: some View {
-        // The UI-test identifier is applied directly on the button of each
-        // branch — applying it to an enclosing container does not reach the
-        // button element XCUITest queries.
-        if usesNavigationLink {
-            NavigationLink(value: project.id) {
-                cardContent
-            }
-            .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
-            .glassEffectID(project.id.uuidString, in: namespace)
-            .accessibilityIdentifier("project-row-\(project.id.uuidString)")
-            .projectRemoteContextMenu(project: project)
-        } else {
-            Button {
-                onSelect?()
-            } label: {
-                cardContent
-            }
-            .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
-            .glassEffectID(project.id.uuidString, in: namespace)
-            .accessibilityIdentifier("project-row-\(project.id.uuidString)")
-            .projectRemoteContextMenu(project: project)
+        // The UI-test identifier is applied directly on the button — applying it
+        // to an enclosing container does not reach the button element XCUITest
+        // queries.
+        MobileRowButton {
+            onSelect?()
+        } label: {
+            cardContent
         }
+        .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
+        .glassEffectID(project.id.uuidString, in: namespace)
+        .accessibilityIdentifier("project-row-\(project.id.uuidString)")
+        .projectRemoteContextMenu(project: project)
     }
 
     private var cardContent: some View {
@@ -853,7 +840,7 @@ private struct GlassProjectCardButtonStyle: ButtonStyle {
     .environmentObject(state)
 }
 
-#Preview("Projects Sidebar - iPhone (NavigationLink)") {
+#Preview("Projects Sidebar - iPhone (Stack)") {
     @Previewable @State var selected: UUID? = nil
     @Previewable @State var showingBriefing = false
 
@@ -893,11 +880,8 @@ private struct GlassProjectCardButtonStyle: ButtonStyle {
             selected: $selected,
             showingBriefing: $showingBriefing,
             showsBriefingItem: false,
-            usesSelection: false
+            onOpenProject: { selected = $0 }
         )
-        .navigationDestination(for: UUID.self) { projectID in
-            Text("Sessions for project \(projectID)")
-        }
     }
     .environmentObject(state)
 }

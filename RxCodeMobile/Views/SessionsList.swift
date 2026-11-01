@@ -28,6 +28,8 @@ struct SessionsList: View {
     let projectID: UUID
     @Binding var selected: String?
     var usesSelection = true
+    /// Opens a thread when `usesSelection` is false (stack-based iPhone navigation).
+    var onOpenThread: ((String) -> Void)?
     @State private var searchText = ""
     @State private var showingNewThread = false
     @State private var createdSessionID: String?
@@ -560,9 +562,14 @@ struct SessionsList: View {
     ) -> some View {
         GlassThreadCard(
             session: session,
-            isSelected: selected == session.id,
-            usesNavigationLink: !usesSelection,
-            onSelect: usesSelection ? { selected = session.id } : nil,
+            isSelected: usesSelection && selected == session.id,
+            onSelect: {
+                if usesSelection {
+                    selected = session.id
+                } else {
+                    onOpenThread?(session.id)
+                }
+            },
             indentLevel: indentLevel,
             titleOverride: titleOverride,
             showLabelChip: indentLevel == 0,

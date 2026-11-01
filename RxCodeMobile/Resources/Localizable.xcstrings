@@ -2056,6 +2056,9 @@
     "Choose a setting from the sidebar." : {
 
     },
+    "Choose a thread from the sidebar to open its chat." : {
+
+    },
     "Choose from Photos" : {
       "localizations" : {
         "en" : {
@@ -5889,6 +5892,9 @@
       }
     },
     "Hide Project Card" : {
+
+    },
+    "Hide Sidebar" : {
 
     },
     "Hide values" : {
@@ -11101,6 +11107,9 @@
         }
       }
     },
+    "Select a Thread" : {
+
+    },
     "Select all that apply" : {
       "localizations" : {
         "en" : {
@@ -11358,6 +11367,9 @@
       }
     },
     "Show All" : {
+
+    },
+    "Show Sidebar" : {
 
     },
     "Sign In" : {

@@ -4,7 +4,7 @@ import SwiftUI
 
 struct GlobalChatView: View {
     @Environment(WindowState.self) private var windowState
-    @AppStorage("globalChatSidebarVisible") private var showsSidebar = true
+    @SceneStorage("globalChatSidebarVisible") private var showsSidebar = true
 
     var body: some View {
         HStack(spacing: 0) {

@@ -828,6 +828,7 @@ final class AppState {
     /// Sets the model for the current session and persists it in the session state.
     func setSessionModel(_ model: String, provider: AgentProvider? = nil, in window: WindowState) {
         let resolvedProvider = provider ?? window.sessionAgentProvider ?? selectedAgentProvider
+        guard canSelectModel(model, provider: resolvedProvider, in: window) else { return }
         window.sessionAgentProvider = resolvedProvider
         window.sessionModel = model
         let key = window.currentSessionId ?? window.newSessionKey
@@ -859,13 +860,6 @@ final class AppState {
             .id
         let model = selectedAgentProvider == provider ? selectedModel : (fallbackModel ?? selectedModel)
         setSessionModel(model, provider: provider, in: window)
-    }
-
-    /// Sets the effort for the current session and persists it in the session state.
-    func setSessionEffort(_ effort: String?, in window: WindowState) {
-        window.sessionEffort = effort
-        let key = window.currentSessionId ?? window.newSessionKey
-        updateState(key) { $0.effort = effort }
     }
 
     /// Sets the permission mode for the current session and persists it in the session state.
@@ -908,7 +902,8 @@ final class AppState {
     }
 
     func modelDisplayName(for model: String, provider: AgentProvider, in window: WindowState) -> String {
-        if let active = activeModelName(in: window) {
+        // The local agent reports its raw model id; keep the friendly label instead.
+        if provider != .localAgent, let active = activeModelName(in: window) {
             return active
         }
         return modelDisplayLabel(model, provider: provider)
@@ -1078,6 +1073,8 @@ final class AppState {
     /// Non-nil while a docs-setup new chat should be started (opened from the
     /// docs banner's deep link). `MainView` consumes it to start a fresh chat
     /// seeded with the docs-publishing skill.
+    var localModelSheetRequest: LocalModelSheetRequest?
+
     var docsSetupRequest: DocsSetupRequest?
     /// Set when a hook/context-menu action wants to open the global docs-capable
     /// search overlay in the current window.

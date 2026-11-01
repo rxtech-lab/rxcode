@@ -30,7 +30,29 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
 
     public var body: some View {
         VStack(spacing: 0) {
-            if isEmptyState {
+            if chatBridge.studioKind == .video {
+                // Video models get a studio — player, render progress and a
+                // list of generations — instead of the message list.
+                VideoStudioView {
+                    composer
+                    bottomAccessory
+                }
+            } else if chatBridge.studioKind == .image {
+                ImageStudioView {
+                    composer
+                    bottomAccessory
+                }
+            } else if chatBridge.studioKind == .audio {
+                AudioStudioView {
+                    composer
+                    bottomAccessory
+                }
+            } else if chatBridge.studioKind == .decision {
+                DecisionStudioView {
+                    composer
+                    bottomAccessory
+                }
+            } else if isEmptyState {
                 emptyStateLayout
             } else {
                 messageScrollView

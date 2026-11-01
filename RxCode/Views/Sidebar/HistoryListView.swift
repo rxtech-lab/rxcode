@@ -4,6 +4,7 @@ import SwiftUI
 struct HistoryListView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @Environment(\.openWindow) private var openWindow
     var scopedProjectId: UUID? = nil
     /// Selecting a row opens the thread in the Chat tab instead of the project chat.
     var opensInChatTab = false
@@ -212,6 +213,19 @@ struct HistoryListView: View {
             if let summary = appState.allSessionSummaries.first(where: { $0.id == session.id }) {
                 let chatSession = summary.makeSession()
                 let linkedTask = appState.linkedTask(forSessionId: summary.id, projectId: summary.projectId)
+
+                Button {
+                    openWindow(
+                        id: "chat-window",
+                        value: ChatWindowValue(
+                            instanceId: UUID(),
+                            workspaceID: appState.activeWorkspace.id,
+                            sessionId: session.id
+                        )
+                    )
+                } label: {
+                    Label("Open in New Window", systemImage: "macwindow")
+                }
 
                 if let linkedTask {
                     Button {

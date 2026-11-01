@@ -52,6 +52,8 @@ struct ProjectWindowValue: Codable, Hashable {
 struct ChatWindowValue: Codable, Hashable {
     let instanceId: UUID
     var workspaceID: String?
+    var sessionId: String? = nil
+    var localModelID: String? = nil
 }
 
 // MARK: - GeneralRouteWindowValue
@@ -147,7 +149,7 @@ struct RxCodeApp: App {
                 }
             }
             AutomationCommands()
-            DownloadsCommands()
+            LocalAgentCommands()
             DocumentationCommands(appState: appState)
         }
 
@@ -171,14 +173,17 @@ struct RxCodeApp: App {
             if let value {
                 ChatWindowRoot(
                     workspaceManager: workspaceManager,
-                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    sessionId: value.sessionId,
+                    localModelID: value.localModelID
                 )
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
             }
         }
-        .defaultSize(width: 800, height: 700)
+        .defaultSize(width: 1200, height: 800)
+        .windowStyle(.hiddenTitleBar)
 
         // Detached General-route window — opened from the sidebar Projects,
         // Briefing, and Scheduled rows' context menus.
@@ -219,6 +224,7 @@ struct RxCodeApp: App {
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
         }
+        .commandsRemoved()
         .defaultSize(width: 720, height: 640)
 
         Window("Hooks", id: "hooks-window") {
@@ -226,6 +232,7 @@ struct RxCodeApp: App {
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
         }
+        .commandsRemoved()
         .defaultSize(width: 760, height: 620)
 
         Window("Custom Context Menus", id: "custom-menus-window") {
@@ -233,13 +240,34 @@ struct RxCodeApp: App {
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
         }
+        .commandsRemoved()
         .defaultSize(width: 720, height: 620)
+
+        // Local model and runtime management, opened from the "Resources" menu.
+        Window("Local Models", id: LocalAgentWindows.modelsID) {
+            LocalModelsSheet(showsDoneButton: false)
+                .frame(minWidth: LocalModelsSheet.minSize.width, minHeight: LocalModelsSheet.minSize.height)
+                .environment(appState)
+                .modifier(DownloadWindowPresenter())
+        }
+        .commandsRemoved()
+        .defaultSize(LocalModelsSheet.idealSize)
+
+        Window("Runtimes", id: LocalAgentWindows.runtimesID) {
+            LocalRuntimesSheet(showsDoneButton: false)
+                .frame(minWidth: 620, minHeight: 520)
+                .environment(appState)
+                .modifier(DownloadWindowPresenter())
+        }
+        .commandsRemoved()
+        .defaultSize(width: 680, height: 580)
 
         // Download and install progress for agents, ACP clients and local models.
         Window("Downloads", id: DownloadsWindow.id) {
             DownloadsWindow()
                 .environment(appState)
         }
+        .commandsRemoved()
         .defaultSize(width: 520, height: 420)
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
@@ -277,6 +305,8 @@ struct MainWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .generatedVideoSheet(windowState)
+                    .localStudioSettingsSheet(windowState, appState: appState)
                     .transition(.opacity)
             } else {
                 LoadingView()
@@ -290,6 +320,10 @@ struct MainWindowRoot: View {
             allowing: ["*"]
         )
         .onOpenURL { url in
+            if let request = LocalModelSheetRequest.parse(url) {
+                appState.localModelSheetRequest = request
+                return
+            }
             if url.scheme == "rxcode", url.host == "widget",
                let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
                let targetID = components.queryItems?.first(where: { $0.name == "workspace" })?.value,
@@ -347,6 +381,10 @@ struct MainWindowRoot: View {
 @MainActor
 func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> OpenURLAction {
     OpenURLAction { url in
+        if let request = LocalModelSheetRequest.parse(url) {
+            appState.localModelSheetRequest = request
+            return .handled
+        }
         if let docs = DocsDeepLink.parse(url), docs.action == .setup {
             appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
             return .handled
@@ -371,6 +409,11 @@ func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> Ope
 private func openMarkdownLink(_ url: URL, in windowState: WindowState) -> OpenURLAction.Result {
     if let fileLink = LocalFileLink.parse(url) {
         let fileName = URL(fileURLWithPath: fileLink.path).lastPathComponent
+        // The inspector previews text; videos get a player.
+        if GeneratedVideoSheet.canPlay(path: fileLink.path) {
+            windowState.playingVideo = PreviewFile(path: fileLink.path, name: fileName)
+            return .handled
+        }
         windowState.inspectorFile = PreviewFile(
             path: fileLink.path,
             name: fileName.isEmpty ? fileLink.path : fileName
@@ -412,6 +455,29 @@ struct AutomationCommands: Commands {
             Button("Flowcy") { openWindow(id: "autopilot-window") }
             Button("Hooks") { openWindow(id: "hooks-window") }
             Button("Custom Context Menus") { openWindow(id: "custom-menus-window") }
+        }
+    }
+}
+
+// MARK: - Local Agent Commands
+
+enum LocalAgentWindows {
+    static let modelsID = "local-models-window"
+    static let runtimesID = "local-runtimes-window"
+}
+
+/// "Resources" menu in the top menu bar, opening local model and runtime
+/// management as standalone windows.
+struct LocalAgentCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandMenu("Resources") {
+            Button("Downloads") { openWindow(id: DownloadsWindow.id) }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+            Divider()
+            Button("Manage Models…") { openWindow(id: LocalAgentWindows.modelsID) }
+            Button("Manage Runtimes…") { openWindow(id: LocalAgentWindows.runtimesID) }
         }
     }
 }
@@ -477,6 +543,8 @@ struct ProjectWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .generatedVideoSheet(windowState)
+                    .localStudioSettingsSheet(windowState, appState: appState)
                     .transition(.opacity)
             } else {
                 LoadingView()
@@ -524,6 +592,8 @@ struct ProjectWindowRoot: View {
 struct ChatWindowRoot: View {
     let workspaceManager: WorkspaceManager
     let workspaceID: String
+    var sessionId: String? = nil
+    var localModelID: String? = nil
     @Environment(\.controlActiveState) private var controlActiveState
     @State private var windowState = WindowState()
     @State private var chatBridge = ChatBridge()
@@ -539,9 +609,14 @@ struct ChatWindowRoot: View {
                     .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, OpenURLAction { url in
-                        openMarkdownLink(url, in: windowState)
-                    })
+                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .sheet(item: Bindable(appState).localModelSheetRequest) { request in
+                        LocalModelsSheet(initialModel: request)
+                            .localModelsSheetFrame()
+                            .environment(appState)
+                    }
+                    .generatedVideoSheet(windowState)
+                    .localStudioSettingsSheet(windowState, appState: appState)
                     .navigationTitle(navigationTitleText)
                     .transition(.opacity)
             } else {
@@ -569,6 +644,13 @@ struct ChatWindowRoot: View {
             appState.setupChatBridge(chatBridge, for: windowState)
             await appState.initializeWindow(windowState)
             appState.openGlobalChat(in: windowState)
+            if let sessionId {
+                appState.selectSession(id: sessionId, inChatTab: true, in: windowState)
+            } else if let localModelID {
+                windowState.sessionAgentProvider = .localAgent
+                windowState.sessionModel = localModelID
+                windowState.requestInputFocus = true
+            }
         }
     }
 

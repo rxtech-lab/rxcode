@@ -600,7 +600,9 @@ extension AppState {
                     // (below) but must not rename the thread.
                     let resultOwnsThreadId = window.pendingPlaceholderIds.contains("pending-\(streamId.uuidString)")
                         || providerOwnsThreadId(agentProvider, threadId: sessionKey)
-                    if sessionKey != resultEvent.sessionId && resultOwnsThreadId {
+                    // A turn that failed before the agent opened a session
+                    // reports an empty id; keep the thread on its current key.
+                    if !resultEvent.sessionId.isEmpty, sessionKey != resultEvent.sessionId && resultOwnsThreadId {
                         let previousSessionKey = sessionKey
                         let wasForeground = (window.currentSessionId ?? window.newSessionKey) == previousSessionKey
                         if let state = sessionStates.removeValue(forKey: previousSessionKey) {

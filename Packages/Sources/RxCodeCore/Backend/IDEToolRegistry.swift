@@ -198,6 +198,7 @@ public enum IDEToolRegistry {
             ])
         ),
         listAgentModelsTool,
+        searchHuggingFaceModelsTool,
         showUITool,
         showConfirmationTool,
         IDETool(

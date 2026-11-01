@@ -32,9 +32,12 @@ struct StatusLineView: View {
 
             rateLimitAdviceSegment()
 
-            Divider().frame(height: 12)
+            // Studio generations have no conversation context to report.
+            if !chatBridge.studioKind.isStudio {
+                Divider().frame(height: 12)
 
-            contextSegment()
+                contextSegment()
+            }
 
             Spacer()
 

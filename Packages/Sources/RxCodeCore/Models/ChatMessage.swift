@@ -248,6 +248,8 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
         // buttons) while `result == nil`; without this the render filter would
         // drop the whole card until the countdown finished and a result landed.
         ReviewCountdownCard.toolName.lowercased(),
+        // The video card shows its progress before the clip exists.
+        VideoGenerationProgress.toolName.lowercased(),
     ]
 
     public var isKeepAlways: Bool {

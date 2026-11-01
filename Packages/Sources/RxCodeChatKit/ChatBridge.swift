@@ -30,6 +30,14 @@ public final class ChatBridge {
     /// interrupt it.
     public var canSteer: Bool = false
     public var modelDisplayName: String = ""
+    /// The studio the selected local model opens in. Anything but `.chat`
+    /// replaces the message list with that studio, and the message becomes
+    /// the prompt of one generation (or decision).
+    public var studioKind: LocalStudioKind = .chat
+    /// The selected local studio model's id; nil for chat models.
+    public var studioModelID: String?
+    /// The selected model generates video instead of chatting.
+    public var isVideoModel: Bool { studioKind == .video }
     /// Usage-limit advice for the selected provider and model, e.g. "only ~2
     /// more tasks fit in the 5-hour limit"; nil when limits need no attention.
     public var rateLimitAdvice: RateLimitAdvice?
@@ -58,6 +66,10 @@ public final class ChatBridge {
     public var sendSlashCommandHandler: ((String) async -> Void)?
     public var runTerminalCommandHandler: ((String) async -> Void)?
     public var editAndResendHandler: ((UUID, String) async -> Void)?
+    public var deleteGenerationHandler: ((String, UUID) async throws -> Void)?
+    /// Asks the studio's setup agent to build a settings form from the model's
+    /// README. Takes the model id and the form being replaced, if any.
+    public var generateStudioConfigHandler: ((String, StudioModelConfig?) async throws -> StudioModelConfig)?
     public var fetchLocalResourcesHandler: (() async -> (memory: UInt64?, gpu: UInt64?, context: Int?))?
     public var fetchRateLimitHandler: ((AgentProvider) async -> RateLimitUsage?)?
     public var setSessionProviderHandler: ((AgentProvider) -> Void)?

@@ -60,6 +60,9 @@ actor SDKAgentBackend: AgentBackend {
         var stderr: String = ""
     }
     private var turns: [UUID: Turn] = [:]
+    /// Failure detail of finalized turns. The UI finalizes on `.result` before
+    /// it reads the error bubble text, so the detail must outlive the turn.
+    private var finalizedStderr: [UUID: String] = [:]
 
     init(
         provider: RxCodeCore.AgentProvider,
@@ -114,10 +117,16 @@ actor SDKAgentBackend: AgentBackend {
     func steer(streamId: UUID, prompt: String) async -> Bool { false }
 
     func finalize(streamId: UUID) {
-        turns.removeValue(forKey: streamId)
+        guard let turn = turns.removeValue(forKey: streamId), !turn.stderr.isEmpty else { return }
+        // Background turns never read their detail; keep the buffer bounded.
+        if finalizedStderr.count >= 32, let oldest = finalizedStderr.keys.first {
+            finalizedStderr.removeValue(forKey: oldest)
+        }
+        finalizedStderr[streamId] = turn.stderr
     }
 
     func consumeStderr(for streamId: UUID) -> String? {
+        if let buffer = finalizedStderr.removeValue(forKey: streamId) { return buffer }
         guard let buffer = turns[streamId]?.stderr, !buffer.isEmpty else { return nil }
         turns[streamId]?.stderr = ""
         return buffer

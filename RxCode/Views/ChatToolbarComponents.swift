@@ -110,7 +110,7 @@ struct ChatToolbarControls: View {
 
             Menu {
                 Section("Model Picker") {
-                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                    ForEach(appState.availableAgentModelSections(in: windowState), id: \.id) { section in
                         Section {
                             ForEach(section.models, id: \.key) { model in
                                 Button {
@@ -318,6 +318,14 @@ struct ChatDetailModifiers: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.chatTranscriptEndActions, AnyView(CodingSessionRatingButton()))
+            .contentShape(Rectangle())
+            .contextMenu {
+                if let sessionID = windowState.currentSessionId,
+                   let summary = appState.allSessionSummaries.first(where: { $0.id == sessionID })
+                    ?? appState.threadStore.fetch(id: sessionID)?.toSummary() {
+                    HookContextMenuItems(items: appState.threadContextMenuItems(for: summary))
+                }
+            }
             .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
             .overlay {
                 if let request = presentedPermissionModalRequest {

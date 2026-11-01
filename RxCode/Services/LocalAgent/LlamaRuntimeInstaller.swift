@@ -92,13 +92,43 @@ nonisolated enum LlamaRuntimeInstaller {
         return Runtime(path: binary.path, version: tag)
     }
 
+    /// Whether `runtime` is the copy RxCode installed (and so may update or remove).
+    static func isManaged(_ runtime: Runtime, appSupport: URL) -> Bool {
+        runtime.path.hasPrefix(managedRoot(appSupport).path + "/")
+    }
+
+    /// Release tag of the newest llama.cpp build for this Mac.
+    static func latestVersion() async throws -> String {
+        try await latestAsset().tag
+    }
+
+    /// Whether release tag `candidate` (`b12100`) is newer than `installed`.
+    /// Non-release versions (`homebrew`) never compare as older.
+    static func isNewer(_ candidate: String, than installed: String) -> Bool {
+        guard let new = buildNumber(candidate), let old = buildNumber(installed) else { return false }
+        return new > old
+    }
+
+    private static func buildNumber(_ tag: String) -> Int? {
+        guard tag.hasPrefix("b") else { return nil }
+        return Int(tag.dropFirst())
+    }
+
+    /// Deletes RxCode's managed copy. Homebrew installs are left alone.
+    static func removeManaged(appSupport: URL) throws {
+        let root = managedRoot(appSupport)
+        guard FileManager.default.fileExists(atPath: root.path) else { return }
+        try FileManager.default.removeItem(at: root)
+    }
+
     private static func latestAsset() async throws -> (tag: String, url: URL) {
         let suffix = isAppleSilicon ? "bin-macos-arm64.tar.gz" : "bin-macos-x64.tar.gz"
         var request = URLRequest(url: URL(string: "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10")!)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         let (data, _) = try await URLSession.shared.data(for: request)
         guard let releases = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw InstallError.noAsset }
-        for release in releases where (release["draft"] as? Bool) != true && (release["prerelease"] as? Bool) != true {
+        // llama.cpp publishes every build as a prerelease, so only drafts are skipped.
+        for release in releases where (release["draft"] as? Bool) != true {
             guard let tag = release["tag_name"] as? String,
                   let assets = release["assets"] as? [[String: Any]] else { continue }
             for asset in assets {

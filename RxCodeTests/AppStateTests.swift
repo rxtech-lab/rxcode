@@ -557,6 +557,49 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.allSessionSummaries.isEmpty)
     }
 
+    func testDeleteGenerationPreservesOtherTurnsAndPersistsEmptyTranscript() async throws {
+        let project = makeProject("Studio")
+        let first = ChatMessage(role: .user, content: "First image")
+        let second = ChatMessage(role: .user, content: "Second image")
+        let reply = ChatMessage(role: .assistant, content: "Generation failed")
+        let session = ChatSession(id: "studio-delete", projectId: project.id,
+                                  messages: [first, ChatMessage(role: .assistant, content: "First result"), second, reply],
+                                  agentProvider: .localAgent, origin: .legacyRxCode)
+        appState.projects = [project]
+        appState.allSessionSummaries = [session.summary]
+        var state = SessionStreamState()
+        state.agentProvider = .localAgent
+        state.messages = session.messages
+        appState.sessionStates[session.id] = state
+        await persistence.stubFullSession(session)
+
+        try await appState.deleteGeneration(sessionID: session.id, messageID: first.id)
+        XCTAssertEqual(appState.sessionStates[session.id]?.messages.map(\.id), [second.id, reply.id])
+        let firstSave = await persistence.savedSessions().last?.session
+        XCTAssertEqual(firstSave?.messages.map(\.id), [second.id, reply.id])
+
+        try await appState.deleteGeneration(sessionID: session.id, messageID: second.id)
+        let finalSave = await persistence.savedSessions().last?.session
+        XCTAssertEqual(finalSave?.messages.count, 0)
+        XCTAssertEqual(appState.sessionStates[session.id]?.messages.count, 0)
+    }
+
+    func testDeleteGenerationRejectsStreamingThread() async {
+        var state = SessionStreamState()
+        state.agentProvider = .localAgent
+        state.isStreaming = true
+        let prompt = ChatMessage(role: .user, content: "Rendering")
+        state.messages = [prompt]
+        appState.sessionStates["rendering"] = state
+        do {
+            try await appState.deleteGeneration(sessionID: "rendering", messageID: prompt.id)
+            XCTFail("Deletion must not mutate a streaming thread")
+        } catch {}
+        XCTAssertEqual(appState.sessionStates["rendering"]?.messages.map(\.id), [prompt.id])
+        let saves = await persistence.savedSessions()
+        XCTAssertTrue(saves.isEmpty)
+    }
+
     func testSaveSessionBuildsSessionFromStateAndUpdatesSummariesAndProject() async {
         let project = makeProject("A")
         appState.projects = [project]

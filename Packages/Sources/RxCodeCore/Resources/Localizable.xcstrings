@@ -164,6 +164,9 @@
         }
       }
     },
+    "Audio" : {
+
+    },
     "Auto" : {
 
     },
@@ -234,6 +237,9 @@
           }
         }
       }
+    },
+    "Decision" : {
+
     },
     "Delayed" : {
       "localizations" : {
@@ -356,6 +362,9 @@
     "Ideas and work not planned yet" : {
 
     },
+    "Image" : {
+
+    },
     "In Progress" : {
 
     },
@@ -405,6 +414,9 @@
       }
     },
     "Lowest priority first" : {
+
+    },
+    "Manual" : {
 
     },
     "Manual order" : {
@@ -786,6 +798,9 @@
 
     },
     "Version" : {
+
+    },
+    "Video" : {
 
     },
     "Views" : {

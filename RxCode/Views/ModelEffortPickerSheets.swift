@@ -16,7 +16,7 @@ struct ModelPickerSheet: View {
 
     var effectiveModel: String { appState.effectiveModelSelection(in: windowState).model }
     var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
-    var flatModels: [AgentModel] { appState.availableAgentModelSections().flatMap(\.models) }
+    var flatModels: [AgentModel] { appState.availableAgentModelSections(in: windowState).flatMap(\.models) }
 
     private func selectModel(_ model: AgentModel) {
         appState.setSessionModel(model.id, provider: model.provider, in: windowState)
@@ -31,7 +31,7 @@ struct ModelPickerSheet: View {
 
             ScrollView {
                 VStack(spacing: 8) {
-                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                    ForEach(appState.availableAgentModelSections(in: windowState), id: \.id) { section in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 6) {
                                 if let iconURL = section.iconURL {

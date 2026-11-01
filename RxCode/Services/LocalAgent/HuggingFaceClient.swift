@@ -26,8 +26,15 @@ nonisolated enum HuggingFaceClient {
     /// With `author`, lists that user's repos instead of the whole catalog —
     /// including private ones when `author` is the signed-in account.
     static func search(
-        _ query: String, format: LocalModelWeightFormat = .gguf, author: String? = nil, limit: Int = 30
+        _ query: String, format: LocalModelWeightFormat = .gguf, author: String? = nil, category: String? = nil, limit: Int = 30
     ) async throws -> HFModelPage {
+        return try await page(at: searchURL(query, format: format, author: author, category: category, limit: limit), format: format)
+    }
+
+    static func searchURL(
+        _ query: String, format: LocalModelWeightFormat, author: String? = nil,
+        category: String? = nil, limit: Int = 30
+    ) -> URL {
         var components = URLComponents(url: base.appending(path: "api/models"), resolvingAgainstBaseURL: false)!
         var items = [
             URLQueryItem(name: "filter", value: format.rawValue),
@@ -35,16 +42,29 @@ nonisolated enum HuggingFaceClient {
             URLQueryItem(name: "direction", value: "-1"),
             URLQueryItem(name: "limit", value: String(limit)),
         ]
-        // The `mlx` library tag also covers speech, vision and embedding
-        // models; the agent needs chat models. A user's own uploads often
-        // lack a pipeline tag, so their list isn't narrowed.
-        if format == .mlx, author == nil { items.append(URLQueryItem(name: "pipeline_tag", value: "text-generation")) }
+        if let category { items.append(URLQueryItem(name: "pipeline_tag", value: category)) }
         if let author { items.append(URLQueryItem(name: "author", value: author)) }
         items += expandItems
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { items.append(URLQueryItem(name: "search", value: trimmed)) }
         components.queryItems = items
-        return try await page(at: components.url!, format: format)
+        return components.url!
+    }
+
+    struct Category: Identifiable, Sendable {
+        let id: String
+        let label: String
+    }
+
+    /// Use the Hub's task catalog so newly supported categories appear automatically.
+    static func categories() async throws -> [Category] {
+        guard let tasks = try await fetchJSON(base.appending(path: "api/tasks")) as? [String: [String: Any]] else {
+            throw ClientError.malformed
+        }
+        return tasks.compactMap { id, task in
+            guard let label = task["label"] as? String else { return nil }
+            return Category(id: id, label: label)
+        }.sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
     }
 
     /// One page of search results, plus the link to the next page if any.
@@ -185,31 +205,83 @@ nonisolated enum HuggingFaceClient {
         base.appending(path: "\(repoID)/resolve/main/\(file)")
     }
 
+    /// The repo's model card (`README.md`) as renderable markdown — its YAML
+    /// metadata header removed and inline HTML converted — or nil when the
+    /// repo has none.
+    static func modelCard(of repoID: String) async throws -> String? {
+        let (data, http) = try await fetchData(downloadURL(repoID: repoID, file: "README.md"))
+        if http.statusCode == 404 { return nil }
+        guard (200...299).contains(http.statusCode) else { throw ClientError.http(http.statusCode) }
+        let card = ModelCardMarkdown.normalize(stripFrontMatter(String(decoding: data, as: UTF8.self)))
+        return card.isEmpty ? nil : card
+    }
+
+    /// Drops a leading `---` … `---` YAML block, which holds the card's
+    /// metadata (license, tags) rather than its description.
+    static func stripFrontMatter(_ markdown: String) -> String {
+        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.first?.trimmingCharacters(in: .whitespaces) == "---",
+              let end = lines.dropFirst().firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" })
+        else { return markdown }
+        return lines[(end + 1)...].joined(separator: "\n")
+    }
+
+    /// Every file in a repo with its size, folders included, for the video
+    /// companion lookup. Capped so a huge repo can't flood the task model.
+    static func files(of repoID: String, limit: Int = 400) async throws -> [(path: String, size: Int64)] {
+        var components = URLComponents(url: base.appending(path: "api/models/\(repoID)/tree/main"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "recursive", value: "true")]
+        guard let url = components?.url, let entries = try await fetchJSON(url) as? [[String: Any]] else {
+            throw ClientError.malformed
+        }
+        return entries.prefix(limit * 2).compactMap { entry in
+            guard (entry["type"] as? String) == "file", let path = entry["path"] as? String else { return nil }
+            let lfs = entry["lfs"] as? [String: Any]
+            return (path, (lfs?["size"] as? NSNumber)?.int64Value ?? (entry["size"] as? NSNumber)?.int64Value ?? 0)
+        }
+        .prefix(limit)
+        .map { $0 }
+    }
+
+    /// The `general.*` metadata of a GGUF file (architecture, name, …), read
+    /// from its first bytes with a range request instead of a download. Empty
+    /// for diffusion GGUFs, which carry none.
+    static func ggufMetadata(repoID: String, file: String) async throws -> [String: String] {
+        let (data, http) = try await fetchData(downloadURL(repoID: repoID, file: file), range: "bytes=0-262143")
+        guard (200...299).contains(http.statusCode) else { throw ClientError.http(http.statusCode) }
+        return GGUFHeader.generalMetadata(in: data)
+    }
+
     // MARK: - Private
 
     private static let expandItems = ["gguf", "safetensors", "config", "author", "downloads", "likes", "lastModified",
-                                      "private", "gated"]
+                                      "private", "gated", "pipeline_tag", "library_name", "tags"]
         .map { URLQueryItem(name: "expand[]", value: $0) }
 
     private static func fetchJSON(_ url: URL) async throws -> Any {
         try await fetch(url).json
     }
 
-    /// Retries once with a refreshed token when the Hub rejects the current one.
     private static func fetch(_ url: URL) async throws -> (json: Any, response: HTTPURLResponse) {
-        let token = try await HuggingFaceCredentials.shared.accessToken()
-        let (data, http) = try await send(url, token: token)
-        if http.statusCode == 401, let token,
-           let renewed = try await HuggingFaceCredentials.shared.accessToken(rejecting: token) {
-            let (retryData, retry) = try await send(url, token: renewed)
-            return try decode(retryData, retry)
-        }
+        let (data, http) = try await fetchData(url, accept: "application/json")
         return try decode(data, http)
     }
 
-    private static func send(_ url: URL, token: String?) async throws -> (Data, HTTPURLResponse) {
+    /// Retries once with a refreshed token when the Hub rejects the current one.
+    private static func fetchData(_ url: URL, accept: String? = nil, range: String? = nil) async throws -> (Data, HTTPURLResponse) {
+        let token = try await HuggingFaceCredentials.shared.accessToken()
+        let (data, http) = try await send(url, token: token, accept: accept, range: range)
+        if http.statusCode == 401, let token,
+           let renewed = try await HuggingFaceCredentials.shared.accessToken(rejecting: token) {
+            return try await send(url, token: renewed, accept: accept, range: range)
+        }
+        return (data, http)
+    }
+
+    private static func send(_ url: URL, token: String?, accept: String?, range: String? = nil) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url, timeoutInterval: 30)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let accept { request.setValue(accept, forHTTPHeaderField: "Accept") }
+        if let range { request.setValue(range, forHTTPHeaderField: "Range") }
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await URLSession.shared.data(for: request, delegate: HuggingFaceRedirectGuard.shared)
         guard let http = response as? HTTPURLResponse else { throw ClientError.malformed }
@@ -240,7 +312,10 @@ nonisolated enum HuggingFaceClient {
             format: format,
             isPrivate: (object["private"] as? Bool) ?? false,
             // `gated` is `false`, `"auto"` or `"manual"`.
-            isGated: object["gated"].map { !(($0 as? Bool) == false) } ?? false
+            isGated: object["gated"].map { !(($0 as? Bool) == false) } ?? false,
+            pipelineTag: object["pipeline_tag"] as? String,
+            libraryName: object["library_name"] as? String,
+            tags: object["tags"] as? [String] ?? []
         )
     }
 }

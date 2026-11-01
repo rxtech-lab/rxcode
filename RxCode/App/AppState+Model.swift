@@ -78,6 +78,58 @@ extension AppState {
         return sections
     }
 
+    /// The studio a model id opens in: `.chat` for every model but a
+    /// downloaded local video, image, audio or decision model.
+    func localStudioKind(_ id: String, provider: AgentProvider) -> LocalStudioKind {
+        guard provider == .localAgent else { return .chat }
+        return localModels.model(id: id)?.studioKind ?? .chat
+    }
+
+    /// Whether a model id names a downloaded local video model.
+    func isLocalVideoModel(_ id: String, provider: AgentProvider) -> Bool {
+        localStudioKind(id, provider: provider) == .video
+    }
+
+    /// The studio a started thread is locked to. Its history is prompts and
+    /// results of that kind (clips, images, audio or decisions), which a
+    /// model of another kind can't continue. A new chat is free to pick any
+    /// model.
+    func lockedStudioKind(in window: WindowState) -> LocalStudioKind? {
+        guard window.currentSessionId != nil else { return nil }
+        let selection = effectiveModelSelection(in: window)
+        let kind = localStudioKind(selection.model, provider: selection.provider)
+        return kind.isStudio ? kind : nil
+    }
+
+    func isVideoModelLocked(in window: WindowState) -> Bool {
+        lockedStudioKind(in: window) == .video
+    }
+
+    /// The sections a window's model pickers offer: only models of the same
+    /// studio once a studio thread has started, otherwise everything.
+    func availableAgentModelSections(in window: WindowState) -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
+        let sections = availableAgentModelSections()
+        guard let kind = lockedStudioKind(in: window) else { return sections }
+        return sections.compactMap { section in
+            let models = section.models.filter { localStudioKind($0.id, provider: $0.provider) == kind }
+            return models.isEmpty ? nil : (section.id, section.title, section.provider, section.iconURL, models)
+        }
+    }
+
+    /// False for a model of another kind while a studio thread is locked.
+    func canSelectModel(_ model: String, provider: AgentProvider, in window: WindowState) -> Bool {
+        guard let kind = lockedStudioKind(in: window), localStudioKind(model, provider: provider) != kind else { return true }
+        logger.info("[Model] ignored switch to \(model, privacy: .public): \(kind.rawValue, privacy: .public) threads only take \(kind.rawValue, privacy: .public) models")
+        return false
+    }
+
+    /// Sets the effort for the current session and persists it in the session state.
+    func setSessionEffort(_ effort: String?, in window: WindowState) {
+        window.sessionEffort = effort
+        let key = window.currentSessionId ?? window.newSessionKey
+        updateState(key) { $0.effort = effort }
+    }
+
     static func localModelDescription(_ model: LocalModelInfo) -> String {
         [LocalModelFormat.parameters(model.parameterCount).map { "\($0) parameters" },
          LocalModelFormat.bytes(model.sizeBytes), "by \(model.author)"]
@@ -169,6 +221,12 @@ extension AppState {
                 return parts.model.isEmpty ? "ACP · Default" : "ACP · \(parts.model)"
             }
             return "\(client.displayName) · \(acpModelDisplayName(client: client, model: parts.model))"
+        }
+        if provider == .localAgent {
+            if let info = localModels.installed.first(where: { $0.id == model }) { return info.displayName }
+            // Not installed (anymore): show the file or repo name without its path or extension.
+            let name = model.split(separator: "/").last.map(String.init) ?? model
+            return name.hasSuffix(".gguf") ? String(name.dropLast(5)) : name
         }
         return Self.modelDisplayName(model, provider: provider)
     }

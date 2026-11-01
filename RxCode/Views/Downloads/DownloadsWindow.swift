@@ -1,3 +1,4 @@
+import AppKit
 import RxCodeCore
 import SwiftUI
 
@@ -24,6 +25,34 @@ struct DownloadsWindow: View {
     private let center = DownloadCenter.shared
     @State private var pendingCancel: DownloadCenter.Item?
     @State private var confirmCancelAll = false
+    @State private var pendingDelete: DownloadCenter.Item?
+    @State private var actionStatus: String?
+    @State private var actionError: String?
+
+    private func resume(_ item: DownloadCenter.Item) {
+        guard let recovery = item.recovery else { return }
+        actionStatus = "Resuming download…"
+        Task {
+            do { try await LocalModelStore.shared.download(summary: recovery.summary, variant: recovery.variant) }
+            catch { actionError = error.localizedDescription }
+        }
+    }
+
+    private func delete(_ item: DownloadCenter.Item) {
+        guard let recovery = item.recovery else { return }
+        actionStatus = "Deleting download…"
+        Task {
+            do {
+                try await Task.detached {
+                    if FileManager.default.fileExists(atPath: recovery.stagingDirectory.path) {
+                        try FileManager.default.removeItem(at: recovery.stagingDirectory)
+                    }
+                }.value
+                center.remove(item.id)
+                actionStatus = "Download deleted"
+            } catch { actionStatus = nil; actionError = error.localizedDescription }
+        }
+    }
 
     var body: some View {
         Group {
@@ -41,7 +70,9 @@ struct DownloadsWindow: View {
                             item: item,
                             isCancellable: center.isCancellable(item.id),
                             onCancel: { pendingCancel = item },
-                            onRemove: { center.remove(item.id) }
+                            onRemove: { center.remove(item.id) },
+                            onResume: { resume(item) },
+                            onDelete: { pendingDelete = item }
                         )
                     }
                 }
@@ -49,6 +80,9 @@ struct DownloadsWindow: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: center.persistenceError) { _, error in
+            if let error { actionError = "Could not save download history: \(error)" }
+        }
         .navigationTitle(center.activeCount > 0 ? "Downloads (\(center.activeCount))" : "Downloads")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -59,6 +93,24 @@ struct DownloadsWindow: View {
                 Button("Clear Completed") { center.clearCompleted() }
                     .disabled(!center.items.contains { !$0.phase.isActive })
             }
+        }
+        .overlay(alignment: .bottom) {
+            if let actionStatus {
+                Text(actionStatus).padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
+                    .task(id: actionStatus) {
+                        try? await Task.sleep(for: .seconds(3))
+                        self.actionStatus = nil
+                    }
+            }
+        }
+        .alert("Download Action Failed", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+            Button("OK") { actionError = nil }
+        } message: { Text(actionError ?? "") }
+        .confirmationDialog("Delete unfinished download?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { item in
+            Button("Delete Download", role: .destructive) { delete(item); pendingDelete = nil }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { item in
+            Text("Delete the retained files for “\(item.title)”? Installed models are kept.")
         }
         .confirmationDialog(
             "Cancel this download?",
@@ -71,13 +123,13 @@ struct DownloadsWindow: View {
             }
             Button("Keep Downloading", role: .cancel) { pendingCancel = nil }
         } message: { item in
-            Text("“\(item.title)” will stop and its partial files will be removed.")
+            Text("“\(item.title)” will stop. Model download files are kept so you can resume later.")
         }
         .confirmationDialog("Cancel all downloads?", isPresented: $confirmCancelAll) {
             Button("Cancel All Downloads", role: .destructive) { center.cancelAll() }
             Button("Keep Downloading", role: .cancel) {}
         } message: {
-            Text("\(center.activeCount) downloads and installs will stop and their partial files will be removed.")
+            Text("\(center.activeCount) downloads and installs will stop. Model download files are kept so you can resume later.")
         }
     }
 }
@@ -87,6 +139,8 @@ private struct DownloadItemRow: View {
     let isCancellable: Bool
     let onCancel: () -> Void
     let onRemove: () -> Void
+    let onResume: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -111,7 +165,17 @@ private struct DownloadItemRow: View {
                         ProgressView().progressViewStyle(.linear)
                     }
                 }
-                Text(statusText)
+                HStack(spacing: 6) {
+                    Text(statusText)
+                    if item.phase == .downloading {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            if let speed = DownloadCenter.shared.bytesPerSecond(item.id, at: context.date) {
+                                Text("· \(ByteCountFormatter.string(fromByteCount: Int64(min(speed, Double(Int64.max / 2))), countStyle: .file))/s")
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                }
                     .font(.system(size: ClaudeTheme.size(10)))
                     .foregroundStyle(statusColor)
                     .lineLimit(2)
@@ -120,12 +184,26 @@ private struct DownloadItemRow: View {
 
             Spacer(minLength: 8)
 
+            if let recovery = item.recovery {
+                Menu {
+                    Button("Show in Finder") {
+                        let url = item.phase == .finished ? recovery.directory : recovery.stagingDirectory
+                        NSWorkspace.shared.activateFileViewerSelecting([FileManager.default.fileExists(atPath: url.path) ? url : recovery.directory])
+                    }
+                    if !item.phase.isActive && item.phase != .finished {
+                        Button("Resume Download", action: onResume)
+                        Button("Delete Download…", role: .destructive, action: onDelete)
+                    }
+                } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
             if item.phase.isActive {
                 if isCancellable {
                     Button("Cancel", action: onCancel)
                         .controlSize(.small)
                 }
-            } else {
+            } else if item.recovery == nil || item.phase == .finished {
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
                 }
@@ -153,6 +231,8 @@ private struct DownloadItemRow: View {
             return String(localized: "Installed")
         case .failed(let message):
             return String(localized: "Failed: \(message)")
+        case .interrupted:
+            return item.recovery == nil ? "Interrupted — restart from its installer" : "Interrupted — ready to resume"
         case .cancelled:
             return String(localized: "Cancelled")
         }
@@ -163,18 +243,6 @@ private struct DownloadItemRow: View {
         case .finished: ClaudeTheme.statusSuccess
         case .failed: ClaudeTheme.statusError
         default: .secondary
-        }
-    }
-}
-
-/// Window → Downloads, to reopen the window after closing it.
-struct DownloadsCommands: Commands {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some Commands {
-        CommandGroup(before: .windowList) {
-            Button("Downloads") { openWindow(id: DownloadsWindow.id) }
-                .keyboardShortcut("l", modifiers: [.command, .option])
         }
     }
 }

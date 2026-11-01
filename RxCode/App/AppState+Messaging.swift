@@ -6,6 +6,31 @@ import RxCodeSync
 import SwiftUI
 
 extension AppState {
+    func deleteGeneration(sessionID: String, messageID: UUID) async throws {
+        guard let state = sessionStates[sessionID], !state.isStreaming,
+              state.agentProvider == .localAgent,
+              let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
+              let project = projects.first(where: { $0.id == summary.projectId }),
+              var session = await persistence.loadFullSession(summary: summary, cwd: project.path) else {
+            throw CocoaError(.userCancelled)
+        }
+        guard let current = sessionStates[sessionID], !current.isStreaming,
+              let start = current.messages.firstIndex(where: { $0.id == messageID && $0.role == .user }) else {
+            throw CocoaError(.userCancelled)
+        }
+        let end = current.messages[(start + 1)...].firstIndex(where: { $0.role == .user }) ?? current.messages.endIndex
+        let removedIDs = Set(current.messages[start..<end].map(\.id))
+        session.messages = current.messages.filter { !removedIDs.contains($0.id) }
+        // Save even an empty transcript, so deleting the last take survives relaunch.
+        try await persistence.saveSession(session)
+        updateState(sessionID) { $0.messages.removeAll { removedIDs.contains($0.id) } }
+        if let index = allSessionSummaries.firstIndex(where: { $0.id == sessionID }) {
+            allSessionSummaries[index] = session.summary
+        }
+        threadStore.upsert(session.summary)
+        await searchService.indexThread(session)
+    }
+
     // MARK: - Edit & Resend
 
     func editAndResend(messageId: UUID, newContent: String, in window: WindowState) async {

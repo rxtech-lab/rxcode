@@ -6,6 +6,7 @@ import SwiftUI
 struct LocalAgentSettingsRow: View {
     @Environment(AppState.self) private var appState
     @State private var showModels = false
+    @State private var showRuntimes = false
 
     private var store: LocalModelStore { appState.localModels }
 
@@ -38,8 +39,12 @@ struct LocalAgentSettingsRow: View {
                     .font(.system(size: ClaudeTheme.size(10)))
                     .foregroundStyle(.secondary)
             }
-            Button("Manage Models…") { showModels = true }
-                .controlSize(.small)
+            Menu("Manage…") {
+                Button("Models…") { showModels = true }
+                Button("Runtimes…") { showRuntimes = true }
+            }
+            .fixedSize()
+            .controlSize(.small)
         }
         .padding(10)
         .background(Color(NSColor.controlBackgroundColor))
@@ -50,7 +55,11 @@ struct LocalAgentSettingsRow: View {
         )
         .sheet(isPresented: $showModels) {
             LocalModelsSheet()
-                .frame(minWidth: 760, idealWidth: 820, minHeight: 640, idealHeight: 720)
+                .localModelsSheetFrame()
+        }
+        .sheet(isPresented: $showRuntimes) {
+            LocalRuntimesSheet()
+                .frame(minWidth: 620, idealWidth: 680, minHeight: 520, idealHeight: 580)
         }
     }
 

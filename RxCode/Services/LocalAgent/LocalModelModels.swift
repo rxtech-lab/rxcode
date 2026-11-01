@@ -1,5 +1,6 @@
 import Foundation
 import Metal
+import enum RxCodeCore.LocalStudioKind
 
 // MARK: - Weight format
 
@@ -46,6 +47,15 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
     let quantization: String?
     let downloadedAt: Date
     var format: LocalModelWeightFormat = .gguf
+    var huggingFaceMetadata: HFModelSummary? = nil
+
+    /// Which studio the model opens in, from its saved Hugging Face task.
+    /// Models saved without metadata are chat models.
+    var studioKind: LocalStudioKind {
+        LocalStudioKind.kind(forPipelineTag: huggingFaceMetadata?.pipelineTag)
+    }
+
+    var isVideoModel: Bool { studioKind == .video }
 
     var displayName: String {
         let base = repoID.split(separator: "/").last.map(String.init) ?? repoID
@@ -68,7 +78,7 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
 
 extension LocalModelInfo {
     private enum CodingKeys: String, CodingKey {
-        case repoID, author, files, sizeBytes, parameterCount, contextLength, architecture, quantization, downloadedAt, format
+        case repoID, author, files, sizeBytes, parameterCount, contextLength, architecture, quantization, downloadedAt, format, huggingFaceMetadata
     }
 
     /// Entries saved before MLX support have no `format`; they are GGUF.
@@ -84,12 +94,41 @@ extension LocalModelInfo {
         quantization = try container.decodeIfPresent(String.self, forKey: .quantization)
         downloadedAt = try container.decode(Date.self, forKey: .downloadedAt)
         format = try container.decodeIfPresent(LocalModelWeightFormat.self, forKey: .format) ?? .gguf
+        huggingFaceMetadata = try container.decodeIfPresent(HFModelSummary.self, forKey: .huggingFaceMetadata)
+    }
+}
+
+/// A file downloaded beside a model so it can run: a text encoder, VAE,
+/// vocoder, audio projector or readout config.
+nonisolated struct LocalCompanionFile: Codable, Identifiable, Hashable, Sendable {
+    var id: String { "\(repoID)/\(file)" }
+    let repoID: String
+    /// Path in the repository.
+    let file: String
+    /// What the file is for, e.g. "Text encoder" or "VAE".
+    let role: String?
+    let sizeBytes: Int64
+    var localName: String { (file as NSString).lastPathComponent }
+
+    /// A readable role for a stable-diffusion.cpp or llama.cpp companion flag.
+    static func role(forFlag flag: String) -> String {
+        switch flag {
+        case "vae": "VAE"
+        case "taesd": "Tiny VAE"
+        case "t5xxl": "T5-XXL text encoder"
+        case "clip_l": "CLIP-L text encoder"
+        case "clip_g": "CLIP-G text encoder"
+        case "clip_vision": "CLIP vision encoder"
+        case "llm", "qwen2vl": "Text encoder"
+        case "mmproj", "mm": "Audio projector"
+        default: flag
+        }
     }
 }
 
 // MARK: - Hugging Face catalog
 
-nonisolated struct HFModelSummary: Identifiable, Hashable, Sendable {
+nonisolated struct HFModelSummary: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let author: String
     let downloads: Int
@@ -103,6 +142,17 @@ nonisolated struct HFModelSummary: Identifiable, Hashable, Sendable {
     var isPrivate = false
     /// Public, but downloads need a signed-in account granted access.
     var isGated = false
+    var pipelineTag: String? = nil
+    var libraryName: String? = nil
+    var tags: [String] = []
+
+    var licenses: [String] {
+        tags.filter { $0.hasPrefix("license:") }.map { String($0.dropFirst("license:".count)) }
+    }
+
+    var categoryLabel: String? {
+        pipelineTag?.split(separator: "-").map { $0.capitalized }.joined(separator: " ")
+    }
 
     var name: String { id.split(separator: "/").last.map(String.init) ?? id }
 }
@@ -116,7 +166,7 @@ nonisolated struct HFModelPage: Sendable {
 
 /// One downloadable variant of a repo: a single GGUF, the parts of a split
 /// one, or every file of an MLX repo.
-nonisolated struct HFModelVariant: Identifiable, Hashable, Sendable {
+nonisolated struct HFModelVariant: Codable, Identifiable, Hashable, Sendable {
     var id: String { files.first ?? "" }
     let files: [String]
     let sizeBytes: Int64

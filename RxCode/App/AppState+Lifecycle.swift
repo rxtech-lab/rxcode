@@ -164,6 +164,11 @@ extension AppState {
         let launchStart = ContinuousClock.now
 
         ThemeStore.shared.current = selectedTheme
+        // Settings forms in progress didn't survive the last quit.
+        StudioModelConfig.clearPending()
+        localModels.onModelInstalled = { [weak self] model in
+            self?.generateStudioConfigAfterDownload(model)
+        }
         ThemeStore.shared.fontSizeAdjustment = fontSizeAdjustment
         ThemeStore.shared.messageFontSizeAdjustment = messageFontSizeAdjustment
 
@@ -616,9 +621,22 @@ extension AppState {
             guard let self, let window else { return }
             await self.editAndResend(messageId: messageId, newContent: newContent, in: window)
         }
+        bridge.deleteGenerationHandler = { [weak self] sessionID, messageID in
+            guard let self else { throw CocoaError(.userCancelled) }
+            try await self.deleteGeneration(sessionID: sessionID, messageID: messageID)
+        }
+        bridge.generateStudioConfigHandler = { [weak self] modelID, previous in
+            guard let self else { throw CocoaError(.userCancelled) }
+            return try await self.generateStudioConfig(modelID: modelID, previous: previous)
+        }
         bridge.fetchLocalResourcesHandler = { [weak self, weak window] in
             guard let self, let window,
                   let model = self.localModels.model(id: self.effectiveModelSelection(in: window).model) else { return (nil, nil, nil) }
+            // Video, image and audio models run as a short-lived engine
+            // process per generation; decision models use the server.
+            if model.studioKind.isStudio, model.studioKind != .decision {
+                return (StableDiffusionProcess.memoryFootprint(), nil, nil)
+            }
             let usage = await self.localModels.manager.resourceUsage(modelID: model.id)
             return (usage.memory, usage.gpu,
                     usage.context ?? min(self.localModels.effectiveContextSize,
@@ -695,6 +713,10 @@ extension AppState {
                 bridge.agentProvider = provider
                 bridge.canSteer = self.canSteer(in: window)
                 bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
+                let studioKind = localStudioKind(currentModel, provider: provider)
+                if bridge.studioKind != studioKind { bridge.studioKind = studioKind }
+                let studioModelID = studioKind.isStudio ? currentModel : nil
+                if bridge.studioModelID != studioModelID { bridge.studioModelID = studioModelID }
                 let advice = rateLimitAdvice(for: provider, model: currentModel)
                 if bridge.rateLimitAdvice != advice {
                     bridge.rateLimitAdvice = advice

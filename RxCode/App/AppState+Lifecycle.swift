@@ -629,6 +629,16 @@ extension AppState {
             guard let self else { throw CocoaError(.userCancelled) }
             return try await self.generateStudioConfig(modelID: modelID, previous: previous)
         }
+        bridge.fetchLocalModelFooterHandler = { [weak self, weak window] in
+            guard let self, let window else { return ("", 0, false, false) }
+            let modelID = self.effectiveModelSelection(in: window).model
+            let state = await self.localModels.manager.footerState(modelID: modelID)
+            return (modelID, state.cached, state.preparing, state.canRelease)
+        }
+        bridge.releaseLocalModelHandler = { [weak self] modelID in
+            guard let self else { return false }
+            return await self.localModels.manager.releaseIfAvailable(modelID: modelID)
+        }
         bridge.fetchLocalResourcesHandler = { [weak self, weak window] in
             guard let self, let window,
                   let model = self.localModels.model(id: self.effectiveModelSelection(in: window).model) else { return (nil, nil, nil) }
@@ -711,6 +721,10 @@ extension AppState {
                 let provider = selection.provider
                 let currentModel = selection.model
                 bridge.agentProvider = provider
+                let acpUsage = provider == .acp ? acpUsageSnapshot(for: currentModel) : nil
+                if bridge.acpUsageSnapshot != acpUsage {
+                    bridge.acpUsageSnapshot = acpUsage
+                }
                 bridge.canSteer = self.canSteer(in: window)
                 bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
                 let studioKind = localStudioKind(currentModel, provider: provider)

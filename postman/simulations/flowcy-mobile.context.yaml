@@ -1,0 +1,23 @@
+purpose:
+  stands_in_for: Flowcy account APIs used by the mobile client
+  unblocks: Mobile task draft generation without spending live AI credits
+assumptions:
+  - id: draft-chat-without-tools
+    status: supported
+    claim: The chat route accepts an empty tools array and emits text and finish NDJSON events.
+    reason: The owning route validates tools with a maximum length and no minimum, and emits these event types. The draft caller declares no tools and rejects tool-call events.
+    verification: The focused MobileTaskDraftTests suite passed against the local simulation. Its log recorded five chat requests covering a complete classified draft, HTTP 503, interrupted output, a model error event, and an unexpected tool call. Failed responses produced no usable draft. This verifies the client against the stand-in, not the deployed service.
+    source: github-pm/app/api/v1/agent/chat/route.ts; RxCodeMobile/State/MobileTaskDraftService.swift; RxCodeMobileTests/MobileTaskDraftTests.swift; postman/mocks/flowcy-mobile/default.js
+    updated_at: "2026-11-02"
+  - id: deployed-model-classification-quality
+    status: unknown
+    claim: The deployed Flowcy model reliably supplies classification fields from task requests.
+    reason: The simulation supplies deterministic JSON. It cannot establish live model quality, account metering configuration, or model availability.
+    verification: No live model generation was requested. Apple on-device generation also requires validation on an eligible device with its model downloaded.
+    source: RxCodeMobile/State/MobileTaskDraftService.swift; github-pm/app/api/v1/agent/chat/route.ts
+    updated_at: "2026-11-02"
+fingerprints:
+  - id: mobile-task-classification
+    date: "2026-11-02"
+    commit: null
+    cli: Postman CLI 1.75.0

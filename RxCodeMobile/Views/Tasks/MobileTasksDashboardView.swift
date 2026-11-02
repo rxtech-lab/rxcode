@@ -118,6 +118,7 @@ struct MobileTasksDashboardView: View {
         }
         .navigationDestination(item: $openingProject) { id in
             MobileTaskBoardView(projectID: id, onOpenChat: onOpenChat, isModal: false)
+                .toolbar { RemoteWorkspaceCloseToolbar(regularWidthOnly: true) }
         }
         .modifier(MobileTaskDestinations(onOpenChat: onOpenChat))
         .toolbar { projectToolbar }
@@ -199,24 +200,27 @@ struct MobileTasksDashboardView: View {
             Section("Projects") {
                 ForEach(visibleProjects) { project in
                     HStack {
-                        MobileProjectTaskSummaryRow(
-                            project: project,
-                            snapshot: state.taskSnapshots[project.id]
-                        )
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        MobileHaptics.buttonTap()
-                        openingProject = project.id
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityIdentifier("tasks-dashboard-project-\(project.id.uuidString)")
-                    .swipeActions {
-                        Button("Hide Project Card", systemImage: "eye.slash") { setHidden(true, project: project) }
+                        HStack {
+                            MobileProjectTaskSummaryRow(
+                                project: project,
+                                snapshot: state.taskSnapshots[project.id]
+                            )
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            MobileHaptics.buttonTap()
+                            openingProject = project.id
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityIdentifier("tasks-dashboard-project-\(project.id.uuidString)")
+                        MobileProjectCardMenu(projectID: project.id, onOpen: {
+                            MobileHaptics.buttonTap()
+                            openingProject = project.id
+                        }, onHide: { setHidden(true, project: project) })
                     }
                     .mobileReorderItem()
                 }
@@ -379,6 +383,20 @@ struct MobileProjectTaskSummaryRow: View {
 /// One project on the iPad overview, like a project card on the Mac's Tasks
 /// overview: the board summary, then the most recently active stories, both
 /// narrowed by the project's default view. The full board is one tap away.
+private struct MobileProjectCardMenu: View {
+    let projectID: UUID
+    let onOpen: () -> Void
+    let onHide: () -> Void
+
+    var body: some View {
+        MobileCardMenu(label: "Project Card Actions", identifier: "tasks-project-actions-\(projectID.uuidString)") {
+            Button("Open Project Board", systemImage: "rectangle.split.3x1", action: onOpen)
+            Divider()
+            Button("Hide Project Card", systemImage: "eye.slash", action: onHide)
+        }
+    }
+}
+
 struct MobileProjectTaskCard: View {
     @EnvironmentObject private var state: MobileAppState
     let project: Project
@@ -417,14 +435,7 @@ struct MobileProjectTaskCard: View {
                     .accessibilityAddTraits(.isButton)
                     .accessibilityHint("Opens the project board. Long press and drag to reorder.")
                     .accessibilityIdentifier("tasks-dashboard-project-\(project.id.uuidString)")
-                Menu {
-                    Button("Open Project Board", systemImage: "rectangle.split.3x1", action: onOpen)
-                    Button("Hide Project Card", systemImage: "eye.slash", action: onHide)
-                } label: {
-                    Image(systemName: "ellipsis").padding(8).contentShape(Rectangle())
-                }
-                .accessibilityLabel("Project Card Actions")
-                .accessibilityIdentifier("tasks-project-actions-\(project.id.uuidString)")
+                MobileProjectCardMenu(projectID: project.id, onOpen: onOpen, onHide: onHide)
             }
             .padding(14)
 

@@ -5182,6 +5182,9 @@
     "Checking for updates…" : {
 
     },
+    "Checking for Updates…" : {
+
+    },
     "Checking which device runs this task…" : {
 
     },
@@ -7063,6 +7066,9 @@
           }
         }
       }
+    },
+    "Could not check for updates. Retry from Manage." : {
+
     },
     "Could Not Create Task" : {
       "localizations" : {

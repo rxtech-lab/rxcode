@@ -410,6 +410,7 @@ struct RemoteWorkspaceView: View {
                             projectsPath.append(sessionID)
                         }
                     )
+                    .toolbar { RemoteWorkspaceCloseToolbar(regularWidthOnly: true) }
                 }
                 .navigationDestination(for: String.self) { sessionID in
                     chatDestination(sessionID)
@@ -578,9 +579,11 @@ struct RemoteWorkspaceView: View {
                         }
                     }
                 }
+                .toolbar { RemoteWorkspaceCloseToolbar() }
                 .navigationDestination(for: String.self) { sessionID in
                     MobileChatView(sessionID: sessionID, onClose: { closeBriefingChat() })
                         .id(sessionID)
+                        .toolbar { RemoteWorkspaceCloseToolbar() }
                         .task(id: sessionID) {
                             if !MobileDraftSessionID.isDraft(sessionID) {
                                 await state.subscribe(to: sessionID)
@@ -640,6 +643,7 @@ struct RemoteWorkspaceView: View {
             } else {
                 Text("Select a thread")
                     .foregroundStyle(.secondary)
+                    .toolbar { RemoteWorkspaceCloseToolbar() }
             }
         }
     }
@@ -651,7 +655,6 @@ struct RemoteWorkspaceView: View {
             showingTasks: $showingTasks
         )
             .toolbar {
-                if !showingTasks { RemoteWorkspaceCloseToolbar() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gear")
@@ -666,6 +669,7 @@ struct RemoteWorkspaceView: View {
             .id(sessionID)
             // The detail column of an open Duo keeps the tabs reachable.
             .toolbar(usesDuoColumns ? .automatic : .hidden, for: .tabBar)
+            .toolbar { RemoteWorkspaceCloseToolbar(regularWidthOnly: true) }
     }
 
     /// Pop the chat view after its thread is archived or deleted. Compact mode
@@ -765,10 +769,14 @@ extension EnvironmentValues {
 }
 
 struct RemoteWorkspaceCloseToolbar: ToolbarContent {
+    /// Pushed screens keep the button on open Duo and iPad, where the workspace
+    /// has room for it. Compact iPhones close from the root of each tab.
+    var regularWidthOnly = false
     @Environment(\.closeRemoteWorkspace) private var closeRemoteWorkspace
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some ToolbarContent {
-        if let closeRemoteWorkspace {
+        if let closeRemoteWorkspace, !regularWidthOnly || sizeClass != .compact {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Close", systemImage: "xmark") {
                     MobileHaptics.buttonTap()

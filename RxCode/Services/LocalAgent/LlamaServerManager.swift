@@ -64,6 +64,7 @@ actor LlamaServerManager {
     private var port = 0
     private var contextSize = 0
     private var activeRequests = 0
+    private var cacheReadTokens = 0
     private var lastActivity = Date()
     private var idleTimeout: TimeInterval = 15 * 60
     private var idleMonitor: Task<Void, Never>?
@@ -81,6 +82,25 @@ actor LlamaServerManager {
     }
 
     var currentStatus: LlamaServerStatus { status }
+
+    func footerState(modelID: String) -> (cached: Int, preparing: Bool, canRelease: Bool) {
+        let matches = status.modelID == modelID
+        let preparing: Bool
+        if case .loading = status { preparing = matches } else { preparing = false }
+        return (matches ? cacheReadTokens : 0, preparing,
+                matches && !preparing && activeRequests == 0 && nativeOperation == nil && loading == nil)
+    }
+
+    func recordCacheRead(_ tokens: Int) {
+        cacheReadTokens = max(0, tokens)
+    }
+
+    /// Recheck on the actor so a request starting after the UI refresh is protected.
+    func releaseIfAvailable(modelID: String) -> Bool {
+        guard footerState(modelID: modelID).canRelease else { return false }
+        stop()
+        return true
+    }
 
     /// MLX allocator memory or resident RAM used by the GGUF server.
     func loadedModelMemoryBytes() -> UInt64? {
@@ -267,9 +287,13 @@ actor LlamaServerManager {
                     // The SDK sends checkpoint summaries in generation mode.
                     // Keep those one-off prompts out of the streaming chat cache.
                     promptCache: request.mode == .streaming ? nativePromptCache : NativeMLXPromptCache(),
-                    continuation: continuation)
+                    continuation: continuation,
+                    onCacheRead: { [weak self] tokens in await self?.recordCacheRead(tokens) })
             } catch {
-                if request.mode == .streaming { nativePromptCache = NativeMLXPromptCache() }
+                if request.mode == .streaming {
+                    nativePromptCache = NativeMLXPromptCache()
+                    cacheReadTokens = 0
+                }
                 if !Task.isCancelled, nativeContainer == nil { publish(.failed(error.localizedDescription)) }
                 throw error
             }
@@ -298,6 +322,7 @@ actor LlamaServerManager {
 
     /// Ends the server and frees the model's memory.
     func stop() {
+        cacheReadTokens = 0
         nativePromptCache = NativeMLXPromptCache()
         if nativeContainer != nil || nativeTask != nil {
             nativeTask?.cancel()
@@ -447,6 +472,7 @@ nonisolated struct LocalLlamaHarnessModel: HarnessModel {
                     }
                     for try await chunk in base.send(request) {
                         if case .usage(let usage) = chunk {
+                            await manager.recordCacheRead(usage.cacheReadTokens)
                             Logger(subsystem: "com.rxlab.RxCode", category: "LocalPromptCache")
                                 .info("prompt_tokens=\(usage.inputTokens) cached_tokens=\(usage.cacheReadTokens)")
                         }

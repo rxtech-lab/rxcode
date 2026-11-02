@@ -122,6 +122,8 @@ struct SessionsList: View {
                     }
                     .environmentObject(state)
                 }
+                // This sheet closes with its own Done button, not the workspace's.
+                .environment(\.closeRemoteWorkspace, nil)
                 .mobileSheetPresentation([.large])
             }
             .modifier(SessionsListSearchModifier(

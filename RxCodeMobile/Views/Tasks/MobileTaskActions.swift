@@ -14,6 +14,7 @@ struct MobileTaskDraggable: ViewModifier {
             content
                 .draggable(containerItemID: task.id)
                 .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 10))
+                .mobileDeliberateDragLift()
         } else if #available(iOS 27.0, *) {
             content.moveDisabled(true)
         } else if isEnabled {
@@ -24,6 +25,7 @@ struct MobileTaskDraggable: ViewModifier {
                     .padding(.vertical, 8)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             }
+            .mobileDeliberateDragLift()
         } else {
             content
         }
@@ -46,14 +48,17 @@ struct MobileTaskDestinations: ViewModifier {
     func body(content: Content) -> some View {
         if isEnabled {
             content.navigationDestination(for: MobileTaskRoute.self) { route in
-                switch route {
-                case .board(let projectID):
-                    MobileTaskBoardView(projectID: projectID, onOpenChat: onOpenChat, isModal: false)
-                case .task(let projectID, let taskID):
-                    MobileTaskDetailView(projectID: projectID, taskID: taskID, onOpenChat: onOpenChat)
-                case .story(let projectID, let storyID):
-                    MobileStoryDetailView(projectID: projectID, storyID: storyID, onOpenChat: onOpenChat)
+                Group {
+                    switch route {
+                    case .board(let projectID):
+                        MobileTaskBoardView(projectID: projectID, onOpenChat: onOpenChat, isModal: false)
+                    case .task(let projectID, let taskID):
+                        MobileTaskDetailView(projectID: projectID, taskID: taskID, onOpenChat: onOpenChat)
+                    case .story(let projectID, let storyID):
+                        MobileStoryDetailView(projectID: projectID, storyID: storyID, onOpenChat: onOpenChat)
+                    }
                 }
+                .toolbar { RemoteWorkspaceCloseToolbar(regularWidthOnly: true) }
             }
         } else {
             content
@@ -83,8 +88,7 @@ struct MobileTaskDetailButton<Label: View>: View {
     }
 
     var body: some View {
-        Button {
-            MobileHaptics.buttonTap()
+        MobileRowButton {
             if let task = runningTask {
                 openRunSession(task)
             } else {
@@ -169,6 +173,27 @@ struct MobileTaskDetailButton<Label: View>: View {
 
 /// Shared task actions. Native reorderable cards use an explicit menu;
 /// other rows retain their long-press menu and swipe actions.
+/// The dropdown that holds a card's actions. Cards have no swipe actions, so
+/// long press stays free for reordering and swipes stay free for scrolling.
+struct MobileCardMenu<Actions: View>: View {
+    let label: LocalizedStringKey
+    let identifier: String
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        Menu {
+            actions()
+        } label: {
+            Image(systemName: "ellipsis")
+                .padding(10)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 struct MobileTaskActions: ViewModifier {
     @EnvironmentObject private var state: MobileAppState
     let task: ProjectTask
@@ -176,7 +201,6 @@ struct MobileTaskActions: ViewModifier {
     let onEdit: () -> Void
     let onOpenChat: (String) -> Void
     let onError: (String) -> Void
-    var nativeReordering = false
 
     @State private var runRequest: MobileTaskRunRequest?
 
@@ -192,49 +216,13 @@ struct MobileTaskActions: ViewModifier {
         if !state.canEditCard(task) {
             content
         } else {
-            taskContent(content)
-                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                    if canRun {
-                        Button {
-                            requestRun()
-                        } label: {
-                            Label("Run", systemImage: "play.fill")
-                        }
-                        .tint(.green)
+            content
+                .overlay(alignment: .topTrailing) {
+                    MobileCardMenu(label: "Task Actions", identifier: "task-actions-\(task.id)") {
+                        menuActions
                     }
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        perform { try await state.deleteTask(task) }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    Button(action: onEdit) {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    .tint(.blue)
                 }
                 .mobileTaskRunDevicePicker($runRequest)
-        }
-    }
-
-    @ViewBuilder
-    private func taskContent(_ content: Content) -> some View {
-        if #available(iOS 27.0, *), nativeReordering {
-            // Reserve long press for native reordering; the same actions
-            // remain available through an explicit card menu.
-            content.overlay(alignment: .topTrailing) {
-                Menu { menuActions } label: {
-                    Image(systemName: "ellipsis")
-                        .padding(10)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Task Actions")
-                .accessibilityIdentifier("task-actions-\(task.id)")
-            }
-        } else {
-            content.contextMenu { menuActions }
         }
     }
 
@@ -243,19 +231,23 @@ struct MobileTaskActions: ViewModifier {
         Button(action: onEdit) {
             Label("Edit", systemImage: "pencil")
         }
-        if let sessionID = state.taskSessionID(task) {
-            Button {
-                onOpenChat(sessionID)
-            } label: {
-                Label("Open Chat", systemImage: "bubble.left.and.text.bubble.right")
+        Divider()
+        if state.taskSessionID(task) != nil || canRun {
+            if let sessionID = state.taskSessionID(task) {
+                Button {
+                    onOpenChat(sessionID)
+                } label: {
+                    Label("Open Chat", systemImage: "bubble.left.and.text.bubble.right")
+                }
             }
-        }
-        if canRun {
-            Button {
-                requestRun()
-            } label: {
-                Label("Run with Agent", systemImage: "play")
+            if canRun {
+                Button {
+                    requestRun()
+                } label: {
+                    Label("Run with Agent", systemImage: "play")
+                }
             }
+            Divider()
         }
         Menu {
             ForEach(board.effectiveColumns) { column in
@@ -304,6 +296,11 @@ struct MobileTaskActions: ViewModifier {
 }
 
 extension View {
+    /// Keeps a card's content clear of its `MobileCardMenu`.
+    func mobileCardMenuInset() -> some View {
+        padding(.trailing, 32)
+    }
+
     /// Presents a task-board error as an alert while `message` is non-nil.
     func mobileTaskErrorAlert(_ message: Binding<String?>) -> some View {
         alert(

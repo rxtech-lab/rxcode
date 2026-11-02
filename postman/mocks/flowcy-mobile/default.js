@@ -69,6 +69,17 @@ http.createServer(async (req, res) => {
     const body = req.body ?? JSON.parse(raw);
     const messages = body.messages ?? [];
     const prompt = messages.findLast(m => m.role === 'user')?.content ?? '';
+    if (prompt.includes('Draft a software')) {
+      if (body.tools?.length !== 0) return json(400, {error:'Drafts must not declare tools'});
+      if (prompt.includes('HTTPFailure')) return json(503, {error:'Unavailable'});
+      res.writeHead(200, {'Content-Type':'application/x-ndjson'});
+      if (prompt.includes('StreamFailure')) return res.end(JSON.stringify({type:'error'})+'\n');
+      if (prompt.includes('UnexpectedTool')) return res.end(JSON.stringify({type:'tool-call', name:'create_task'})+'\n');
+      if (prompt.includes('Interrupted')) return res.end(JSON.stringify({type:'text',text:'{"title":"Partial"}'})+'\n');
+      const draft = {title:'Fix mobile task creation',details:'## Acceptance criteria\nAutofill task fields using the selected AI provider.',type:'Bug',priority:'urgent',version:'v2.0.0',size:'m',tags:['mobile']};
+      res.write(JSON.stringify({type:'text',text:JSON.stringify(draft)})+'\n');
+      return res.end(JSON.stringify({type:'finish'})+'\n');
+    }
     const hasResult = messages.at(-1)?.role === 'tool';
     const shouldReject = prompt.includes('RateLimit') && (!prompt.includes('Tool') || hasResult);
     if (shouldReject && !rejectedChats.has(prompt)) {

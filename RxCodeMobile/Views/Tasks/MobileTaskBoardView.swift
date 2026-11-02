@@ -62,10 +62,6 @@ struct MobileTaskBoardView: View {
         return "\(owner)|\(project?.cloudId ?? projectID.uuidString)"
     }
 
-    private var taskMenuInset: CGFloat {
-        if #available(iOS 27.0, *) { 32 } else { 0 }
-    }
-
     private var visibleColumns: [TaskColumn] {
         let columns = currentView.visibleColumns(in: board.effectiveColumns)
         let orders = (try? JSONDecoder().decode([String: [TaskStatus]].self, from: savedColumnOrders)) ?? [:]
@@ -361,7 +357,7 @@ struct MobileTaskBoardView: View {
             ForEach(tasks) { task in
                 MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
                     MobileTaskRow(task: task, board: board)
-                        .padding(.trailing, taskMenuInset)
+                        .mobileCardMenuInset()
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
                         .background(
@@ -382,8 +378,7 @@ struct MobileTaskBoardView: View {
                     board: board,
                     onEdit: { editingTask = task },
                     onOpenChat: openChat,
-                    onError: { errorMessage = $0 },
-                    nativeReordering: true
+                    onError: { errorMessage = $0 }
                 ))
                 .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task) && state.canEditCard(task)))
                 .mobileLegacyDrop { items, _ in
@@ -395,7 +390,7 @@ struct MobileTaskBoardView: View {
             .mobileReorderable()
         }
         .frame(width: 300, height: height, alignment: .top)
-        // Keep swiped cards and their actions inside the column.
+        // Keep scrolling cards inside the column's rounded corners.
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .background(column.tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(column.tint.opacity(0.18)))
@@ -420,6 +415,7 @@ struct MobileTaskBoardView: View {
             }) { task in
                 MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
                     MobileTaskRow(task: task, board: board)
+                        .mobileCardMenuInset()
                 }
                 .modifier(MobileTaskActions(
                     task: task,
@@ -442,15 +438,14 @@ struct MobileTaskBoardView: View {
                         ForEach(tasks) { task in
                             MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
                                 MobileTaskRow(task: task, board: board)
-                                    .padding(.trailing, taskMenuInset)
+                                    .mobileCardMenuInset()
                             }
                             .modifier(MobileTaskActions(
                                 task: task,
                                 board: board,
                                 onEdit: { editingTask = task },
                                 onOpenChat: openChat,
-                                onError: { errorMessage = $0 },
-                                nativeReordering: true
+                                onError: { errorMessage = $0 }
                             ))
                             .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task) && state.canEditCard(task)))
                             .mobileLegacyDrop { items, _ in
@@ -512,19 +507,24 @@ struct MobileTaskBoardView: View {
             ForEach(stories) { story in
                 MobileTaskDetailButton(route: MobileTaskRoute.story(projectID: projectID, storyID: story.id), onOpenChat: openChat) {
                     MobileStoryRow(story: story, board: board, rollup: rollups[story.id])
+                        .mobileCardMenuInset()
                 }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        perform { try await state.deleteStory(story) }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                .overlay(alignment: .topTrailing) {
+                    if state.canEditCard(story) {
+                        MobileCardMenu(label: "Story Actions", identifier: "story-actions-\(story.id)") {
+                            Button {
+                                editingStory = story
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            Divider()
+                            Button(role: .destructive) {
+                                perform { try await state.deleteStory(story) }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
-                    Button {
-                        editingStory = story
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    .tint(.blue)
                 }
             }
         }

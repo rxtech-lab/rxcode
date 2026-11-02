@@ -40,6 +40,7 @@
       "selectedTests": [
         "FlowcyProtocolTests",
         "FlowcyDraftSimulationTests",
+        "MobileTaskDraftTests",
         "FlowcyTransportSimulationTests",
         "FlowcyAgentSimulationTests",
         "ProjectCloudServiceTests",

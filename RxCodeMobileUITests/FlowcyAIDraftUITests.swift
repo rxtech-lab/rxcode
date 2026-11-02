@@ -35,6 +35,8 @@ final class FlowcyAIDraftUITests: XCTestCase {
             let apply = app.buttons["ai-draft-apply"]
             XCTAssertTrue(apply.waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["Support offline work"].exists)
+            XCTAssertTrue(app.staticTexts["v2.0.0"].exists)
+            XCTAssertTrue(app.staticTexts["Urgent"].exists)
             let attachment = XCTAttachment(screenshot: app.screenshot())
             attachment.name = kind + " AI draft review"
             attachment.lifetime = .keepAlways

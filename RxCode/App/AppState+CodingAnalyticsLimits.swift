@@ -2,6 +2,16 @@ import Foundation
 import RxCodeCore
 
 extension AppState {
+    func acpUsageSnapshot(for model: String?, clientID: String? = nil) -> UsagePluginSnapshot? {
+        let resolvedClientID = clientID ?? acpSelectionParts(for: model)?.clientId ?? selectedACPClientId
+        guard let client = acpClients.first(where: { $0.id == resolvedClientID }),
+              let provider = ACPUsageProvider.provider(for: client),
+              let integration = usageDashboard.integrations.first(where: {
+                  $0.resource == resolvedClientID && $0.pluginID == provider.pluginID
+              }) else { return nil }
+        return usageDashboard.snapshots.first { $0.id == integration.id && $0.pluginID == integration.pluginID }
+    }
+
     /// Reads the same cached data used by usage cards. Recording never triggers
     /// an extra provider request or treats an account quota as a model quota.
     func codingAnalyticsLimits(
@@ -22,12 +32,7 @@ extension AppState {
         let selectedModel = selection?.model ?? model
         let client = acpClients.first { $0.id == resolvedClientID }
         let usageProvider = client.flatMap { ACPUsageProvider.provider(for: $0) }
-        let integration = usageDashboard.integrations.first {
-            $0.resource == resolvedClientID && $0.pluginID == usageProvider?.pluginID
-        }
-        let snapshot = integration.flatMap { integration in
-            usageDashboard.snapshots.first { $0.id == integration.id && $0.pluginID == integration.pluginID }
-        }
+        let snapshot = acpUsageSnapshot(for: model, clientID: resolvedClientID)
         let hasValues = snapshot?.metrics.contains { $0.value != nil } == true
         return .init(phase: phase, provider: provider.rawValue, acpClientID: resolvedClientID, model: selectedModel,
                      status: usageProvider == nil ? .unsupported : (!hasValues ? .unavailable : (snapshot?.isStale(at: now) == true ? .stale : .available)),

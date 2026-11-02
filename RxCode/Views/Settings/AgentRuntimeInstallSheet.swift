@@ -23,6 +23,7 @@ struct AgentRuntimeInstallSheet: View {
 
     let runtime: AgentRuntimeInstaller.Runtime
     let installedVersion: String?
+    var initialVersion: String? = nil
     let onInstalled: () async -> Void
 
     @State private var availableVersions: [String] = []
@@ -40,11 +41,12 @@ struct AgentRuntimeInstallSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             versionPicker
-            Color.clear.frame(height: 50)
+            Spacer(minLength: 50)
             footer
         }
         .padding(20)
         .frame(width: 420)
+        .frame(minHeight: 280, idealHeight: 280, maxHeight: .infinity, alignment: .topLeading)
         .overlay(alignment: .bottom) {
             if isInstalling || didFinish {
                 progressSection
@@ -62,7 +64,10 @@ struct AgentRuntimeInstallSheet: View {
             Text(errorMessage ?? "")
         }
         .interactiveDismissDisabled(isInstalling)
-        .task { await loadVersions() }
+        .task {
+            selectedVersion = initialVersion ?? "latest"
+            await loadVersions()
+        }
         .onDisappear { installTask?.cancel() }
     }
 
@@ -81,6 +86,9 @@ struct AgentRuntimeInstallSheet: View {
             HStack(spacing: 8) {
                 Picker("Version", selection: $selectedVersion) {
                     Text("Latest").tag("latest")
+                    if let initialVersion, !availableVersions.contains(initialVersion) {
+                        Text(initialVersion).tag(initialVersion)
+                    }
                     ForEach(availableVersions, id: \.self) { version in
                         Text(version).tag(version)
                     }
@@ -177,7 +185,9 @@ struct AgentRuntimeInstallSheet: View {
         defer { isLoadingVersions = false }
         do {
             availableVersions = try await AgentVersionCatalog.shared.versions(for: runtime)
-            if selectedVersion == "latest", let installedVersion, availableVersions.contains(installedVersion) {
+            if let initialVersion, availableVersions.contains(initialVersion) {
+                selectedVersion = initialVersion
+            } else if selectedVersion == "latest", let installedVersion, availableVersions.contains(installedVersion) {
                 selectedVersion = installedVersion
             }
         } catch is CancellationError {

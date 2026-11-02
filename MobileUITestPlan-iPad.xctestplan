@@ -15,6 +15,7 @@
   "testTargets" : [
     {
       "selectedTests" : [
+        "MobileNativeReorderingUITests/testOnlyDeliberateHoldLiftsTaskCard()",
         "TaskDetailSheetUITests/testTaskAndStoryCardsOpenDismissibleDetailSheets()",
         "FlowcyProductionUITests/testDashboardWithoutPairingAndRootNavigation()",
         "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",

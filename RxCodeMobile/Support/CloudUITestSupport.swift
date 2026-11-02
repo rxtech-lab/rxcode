@@ -17,7 +17,16 @@ final class CloudUITestProtocol: URLProtocol, @unchecked Sendable {
         defer { Self.lock.unlock() }
         let path = request.url!.path
         var object: Any
-        if path == "/api/v1/agent/draft" {
+        if path == "/api/v1/agent/chat" {
+            let draft = ###"{"title":"Support offline work","details":"## Acceptance criteria\nBoard data remains available offline.","type":"Bug","priority":"urgent","version":"v2.0.0","size":"m","tags":[]}"###
+            let events: [[String: Any]] = [["type": "text", "text": draft], ["type": "finish"]]
+            let data = events.map { try! JSONSerialization.data(withJSONObject: $0) + Data([10]) }.reduce(Data(), +)
+            client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/x-ndjson"])!, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        } else if path == "/api/v1/agent/draft" {
             object = ["title": "Support offline work", "details": "## Acceptance criteria\nBoard data remains available offline."]
         } else if path.hasSuffix("/board-views"), request.httpMethod == "GET" {
             object = ["views": [], "revision": 0]

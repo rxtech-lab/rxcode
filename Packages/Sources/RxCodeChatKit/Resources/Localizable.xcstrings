@@ -174,6 +174,16 @@
         }
       }
     },
+    "%@: highest usage bucket. View all limits and reset details.%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: highest usage bucket. View all limits and reset details.%2$@"
+          }
+        }
+      }
+    },
     "%lld" : {
       "localizations" : {
         "ko" : {
@@ -616,6 +626,9 @@
           }
         }
       }
+    },
+    "ACP usage limits" : {
+
     },
     "Activity" : {
 
@@ -1152,6 +1165,9 @@
           }
         }
       }
+    },
+    "Cached %@ tokens" : {
+
     },
     "Cancel" : {
       "localizations" : {
@@ -3678,6 +3694,9 @@
         }
       }
     },
+    "Loading model…" : {
+
+    },
     "Log in to Anthropic account" : {
       "localizations" : {
         "en" : {
@@ -4736,6 +4755,9 @@
         }
       }
     },
+    "Prompt tokens reused from cache by the latest model request. Resets when the model is released." : {
+
+    },
     "Pull a web session into this terminal" : {
       "localizations" : {
         "en" : {
@@ -4891,6 +4913,15 @@
           }
         }
       }
+    },
+    "Release model" : {
+
+    },
+    "Release model from memory" : {
+
+    },
+    "Release model from memory?" : {
+
     },
     "Reload plugins" : {
       "localizations" : {
@@ -6301,6 +6332,9 @@
         }
       }
     },
+    "The model will load again when you send the next message." : {
+
+    },
     "The setup agent is reading this model's README to build its settings" : {
 
     },
@@ -6764,6 +6798,9 @@
 
     },
     "Usage limit tip" : {
+
+    },
+    "Usage unavailable" : {
 
     },
     "Usage:" : {

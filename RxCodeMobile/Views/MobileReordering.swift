@@ -1,6 +1,7 @@
 import CoreTransferable
 import RxCodeCore
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 private struct MobileTaskDragItem: Identifiable, Codable, Transferable {
@@ -53,6 +54,11 @@ extension View {
         } else { self }
     }
 
+    /// Requires a deliberate hold before this view's drag lifts. See `MobileDragLiftDelayView`.
+    func mobileDeliberateDragLift() -> some View {
+        background(MobileDragLiftDelay())
+    }
+
     /// A fixed layout root keeps conditional modifiers and presentations in
     /// a row from changing the identity SwiftUI uses for its drag payload.
     func mobileReorderItem() -> some View {
@@ -100,6 +106,43 @@ extension View {
     @ViewBuilder
     func mobileLegacyDrop(_ action: @escaping ([String], CGPoint) -> Bool) -> some View {
         if #available(iOS 27.0, *) { self } else { dropDestination(for: String.self, action: action) }
+    }
+}
+
+private struct MobileDragLiftDelay: UIViewRepresentable {
+    func makeUIView(context: Context) -> MobileDragLiftDelayView { MobileDragLiftDelayView() }
+    func updateUIView(_ uiView: MobileDragLiftDelayView, context: Context) {}
+}
+
+/// Lengthens the hold that lifts a drag.
+///
+/// The system lifts after 0.325s, so resting a thumb on a card before scrolling
+/// picked it up. SwiftUI has no setting for this, and installs one drag interaction
+/// on the hosting view for every drag source under it, so the delay applies to the
+/// whole hosting view. If UIKit renames the recognizer, drags keep the system delay.
+private final class MobileDragLiftDelayView: UIView {
+    private static let liftRecognizerName = "com.apple.UIKit.dragInitiation"
+    private static let minimumPressDuration: TimeInterval = 0.6
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else { return }
+        isUserInteractionEnabled = false
+        // SwiftUI installs the interaction after the row joins the window.
+        DispatchQueue.main.async { [weak self] in self?.applyDelay() }
+    }
+
+    private func applyDelay() {
+        var ancestor = superview
+        while let view = ancestor {
+            if view.interactions.contains(where: { $0 is UIDragInteraction }) {
+                for recognizer in view.gestureRecognizers ?? []
+                where recognizer.name == Self.liftRecognizerName {
+                    (recognizer as? UILongPressGestureRecognizer)?.minimumPressDuration = Self.minimumPressDuration
+                }
+            }
+            ancestor = view.superview
+        }
     }
 }
 

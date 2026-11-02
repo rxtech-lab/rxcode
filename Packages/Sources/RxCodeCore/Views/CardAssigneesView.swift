@@ -24,7 +24,14 @@ public struct CardAssigneesView: View {
                     .frame(width: 24, height: 24)
                     .clipShape(Circle())
                     #if os(iOS)
-                    .frame(minWidth: 44, minHeight: 44)
+                    // Grows the tap target to 44pt tall without taking up card
+                    // layout. Horizontal padding stays within the stack spacing
+                    // so a tap can't land on the neighboring avatar.
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                    .padding(.horizontal, -2)
+                    .padding(.vertical, -10)
                     #endif
                 }
                 .buttonStyle(.plain)

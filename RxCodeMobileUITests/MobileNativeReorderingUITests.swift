@@ -102,4 +102,69 @@ final class MobileNativeReorderingUITests: XCTestCase {
         app.buttons["Done"].tap()
         XCTAssertTrue(backlogWasFirst ? backlog.frame.minX > pending.frame.minX : pending.frame.minX > backlog.frame.minX)
     }
+
+    /// Resting a thumb before scrolling must not lift a card, and a drag that
+    /// never lifted must not open it. Tapping and a deliberate hold still work.
+    @MainActor
+    func testOnlyDeliberateHoldLiftsTaskCard() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest-cloud", "-uitest-flowcy", "-uitest-reset-column-order"]
+        app.launch()
+        XCUIDevice.shared.orientation = .portrait
+        let deny = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
+            .matching(NSPredicate(format: "label IN %@", ["Don’t Allow", "Don't Allow"])).firstMatch
+        if deny.waitForExistence(timeout: 3) { deny.tap() }
+        let project = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS 'Cloud Project'")).firstMatch
+        XCTAssertTrue(project.waitForExistence(timeout: 15))
+        project.tap()
+
+        for title in ["First hold card", "Second hold card"] {
+            let add = app.buttons["task-board-add"]
+            XCTAssertTrue(add.waitForExistence(timeout: 10))
+            add.tap()
+            app.buttons["New Task"].tap()
+            let field = app.textFields["task-form-title"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText(title)
+            app.buttons["task-form-save"].tap()
+        }
+
+        let first = app.buttons.matching(NSPredicate(format: "label CONTAINS 'First hold card'")).firstMatch
+        let second = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Second hold card'")).firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        let upper = first.frame.minY < second.frame.minY ? first : second
+        let lower = first.frame.minY < second.frame.minY ? second : first
+        let detailDone = app.buttons["task-detail-done"]
+
+        func dragLowerOntoUpper(holding duration: TimeInterval) {
+            lower.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
+                forDuration: duration,
+                thenDragTo: upper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)),
+                withVelocity: .slow,
+                thenHoldForDuration: 1
+            )
+        }
+
+        // 0.4s is past the system's default lift delay of 0.325s.
+        for duration in [0.05, 0.2, 0.4] {
+            dragLowerOntoUpper(holding: duration)
+            XCTAssertFalse(detailDone.waitForExistence(timeout: 2), "A \(duration)s drag must not open the card")
+            XCTAssertLessThan(upper.frame.minY, lower.frame.minY, "A \(duration)s hold must not lift the card")
+        }
+
+        lower.tap()
+        XCTAssertTrue(detailDone.waitForExistence(timeout: 5), "A tap must still open the card")
+        detailDone.tap()
+        XCTAssertFalse(detailDone.waitForExistence(timeout: 2))
+
+        dragLowerOntoUpper(holding: 1.2)
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            upper.frame.minY > lower.frame.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 10), .completed, "A deliberate hold must still lift the card")
+    }
 }

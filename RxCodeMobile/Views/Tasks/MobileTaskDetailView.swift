@@ -385,6 +385,7 @@ struct MobileStoryDetailView: View {
                 ForEach(tasks) { task in
                     MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: onOpenChat) {
                         MobileTaskRow(task: task, board: board, showsColumn: true, showsStory: false)
+                            .mobileCardMenuInset()
                     }
                     .modifier(MobileTaskActions(
                         task: task,

@@ -1103,10 +1103,13 @@
         }
       }
     },
-    "AI repair of failing dependency CI" : {
+    "AI fills the title, description, type, priority, version, and size. Review the draft before adding it to your board." : {
 
     },
-    "AI writes a title and description. Review the draft before adding it to your board." : {
+    "AI Provider" : {
+
+    },
+    "AI repair of failing dependency CI" : {
 
     },
     "All" : {
@@ -10472,6 +10475,9 @@
         }
       }
     },
+    "Runs privately on this device without a paired Mac." : {
+
+    },
     "RxCode keeps this browser session separate from your regular Safari data." : {
       "localizations" : {
         "ko" : {
@@ -11347,6 +11353,9 @@
     "Settings menu item" : {
 
     },
+    "Shorten the request to %lld characters for this provider." : {
+
+    },
     "Show" : {
 
     },
@@ -11935,6 +11944,9 @@
           }
         }
       }
+    },
+    "Story Actions" : {
+
     },
     "Story Not Found" : {
       "localizations" : {

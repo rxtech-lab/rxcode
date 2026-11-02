@@ -32,20 +32,21 @@ struct MobileTaskFormView: View {
 
     var body: some View {
         Form {
-            if isNew, state.usesCloudTasks,
-               let remoteID = state.taskProjects.first(where: { $0.id == task.projectId })?.cloudId {
+            if isNew {
                 Section {
                     Button("Create with AI", systemImage: "sparkles") {
                         MobileHaptics.buttonTap()
                         showsAIDraft = true
                     }
-                    .disabled(!task.title.isEmpty || !task.details.isEmpty)
                     .accessibilityIdentifier("task-form-ai")
                 }
                 .sheet(isPresented: $showsAIDraft) {
-                    MobileAIDraftSheet(projectID: remoteID, kind: .task) { draft in
+                    MobileAIDraftSheet(board: board, kind: .task, initialPrompt: [task.title, task.details].filter { !$0.isEmpty }.joined(separator: "\n\n"),
+                                       storyTitle: board.stories.first { $0.id == task.storyId }?.title,
+                                       candidates: TaskClassification.startsAfterCandidates(for: task, board: board).map(\.title)) { draft in
                         task.title = draft.title
                         task.details = draft.details
+                        draft.classification.apply(to: &task, board: board)
                     }
                 }
             }
@@ -298,20 +299,19 @@ struct MobileStoryFormView: View {
 
     var body: some View {
         Form {
-            if isNew, state.usesCloudTasks,
-               let remoteID = state.taskProjects.first(where: { $0.id == story.projectId })?.cloudId {
+            if isNew {
                 Section {
                     Button("Create with AI", systemImage: "sparkles") {
                         MobileHaptics.buttonTap()
                         showsAIDraft = true
                     }
-                    .disabled(!story.title.isEmpty || !story.details.isEmpty)
                     .accessibilityIdentifier("story-form-ai")
                 }
                 .sheet(isPresented: $showsAIDraft) {
-                    MobileAIDraftSheet(projectID: remoteID, kind: .story) { draft in
+                    MobileAIDraftSheet(board: board, kind: .story, initialPrompt: [story.title, story.details].filter { !$0.isEmpty }.joined(separator: "\n\n")) { draft in
                         story.title = draft.title
                         story.details = draft.details
+                        draft.classification.apply(to: &story, board: board)
                     }
                 }
             }

@@ -16,7 +16,8 @@ nonisolated enum NativeMLXInference {
   static func generate(
     container: ModelContainer, request: HarnessModelRequest, contextSize: Int,
     promptCache: NativeMLXPromptCache,
-    continuation: AsyncThrowingStream<HarnessModelChunk, Error>.Continuation
+    continuation: AsyncThrowingStream<HarnessModelChunk, Error>.Continuation,
+    onCacheRead: @escaping @Sendable (Int) async -> Void
   ) async throws {
     guard request.messages.allSatisfy({ $0.images.isEmpty }) else {
       throw HarnessModelError.unavailable(
@@ -39,6 +40,7 @@ nonisolated enum NativeMLXInference {
       let parameters = GenerateParameters(
         maxTokens: outputLimit, temperature: Float(request.temperature ?? 0.6))
       let reused = promptCache.prepare(tokens: tokens)
+      await onCacheRead(reused)
       if promptCache.layers.isEmpty {
         promptCache.layers = try context.model.newCache(parameters: parameters)
       }

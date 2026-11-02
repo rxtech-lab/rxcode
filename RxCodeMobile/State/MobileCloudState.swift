@@ -22,6 +22,7 @@ final class MobileCloudState {
         _ = try await FlowcyAPI(notifySessionExpiry: false).read("notifications/devices", method: method, body: body)
     }
     @ObservationIgnored private lazy var service = ProjectCloudService(rxAuth: auth)
+    @ObservationIgnored private var draftAPI = FlowcyAPI()
 
     var accountID: String? {
         #if DEBUG
@@ -47,6 +48,7 @@ final class MobileCloudState {
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [CloudUITestProtocol.self]
             self.service = ProjectCloudService(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud-ui.test")!) { _ in "ui-test" }
+            draftAPI = FlowcyAPI(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud-ui.test")!, token: { _ in "ui-test" })
             isRestoring = false
         }
         #endif
@@ -161,6 +163,15 @@ final class MobileCloudState {
         let current = generation
         guard isSignedIn else { throw CancellationError() }
         let draft = try await service.generateDraft(projectId: projectID, kind: kind, prompt: prompt)
+        try Task.checkCancellation()
+        try checkSession(current)
+        return draft
+    }
+
+    func generateClassifiedDraft(prompt: String) async throws -> MobileTaskDraft {
+        let current = generation
+        guard isSignedIn else { throw FlowcyError.signIn }
+        let draft = try await MobileTaskDraftService.flowcy(prompt: prompt, api: draftAPI)
         try Task.checkCancellation()
         try checkSession(current)
         return draft

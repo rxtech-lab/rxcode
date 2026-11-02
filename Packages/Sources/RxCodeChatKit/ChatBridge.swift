@@ -41,6 +41,8 @@ public final class ChatBridge {
     /// Usage-limit advice for the selected provider and model, e.g. "only ~2
     /// more tasks fit in the 5-hour limit"; nil when limits need no attention.
     public var rateLimitAdvice: RateLimitAdvice?
+    /// Usage from the integration linked to this window's selected ACP client.
+    public var acpUsageSnapshot: UsagePluginSnapshot?
     public var sessionStats: ChatSessionStats = ChatSessionStats()
     public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
     public var appVersion: String = ""
@@ -70,6 +72,8 @@ public final class ChatBridge {
     /// Asks the studio's setup agent to build a settings form from the model's
     /// README. Takes the model id and the form being replaced, if any.
     public var generateStudioConfigHandler: ((String, StudioModelConfig?) async throws -> StudioModelConfig)?
+    public var fetchLocalModelFooterHandler: (() async -> (modelID: String, cached: Int, preparing: Bool, canRelease: Bool))?
+    public var releaseLocalModelHandler: ((String) async -> Bool)?
     public var fetchLocalResourcesHandler: (() async -> (memory: UInt64?, gpu: UInt64?, context: Int?))?
     public var fetchRateLimitHandler: ((AgentProvider) async -> RateLimitUsage?)?
     public var setSessionProviderHandler: ((AgentProvider) -> Void)?

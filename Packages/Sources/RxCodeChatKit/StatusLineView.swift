@@ -4,11 +4,17 @@ import RxCodeCore
 struct StatusLineView: View {
     @Environment(ChatBridge.self) private var chatBridge
     @State private var localResources: (memory: UInt64?, gpu: UInt64?, context: Int?)?
+    @State private var localFooter: (modelID: String, cached: Int, preparing: Bool, canRelease: Bool)?
+    @State private var showReleaseConfirmation = false
+    @State private var releaseModelID: String?
+    @State private var isReleasing = false
+    @State private var releaseStatus: String?
     @State private var rateLimit: RateLimitUsage?
     @State private var showFiveHourPopover = false
     @State private var showSevenDayPopover = false
     @State private var showContextPopover = false
     @State private var showAdvicePopover = false
+    @State private var showACPUsage = false
 
     private var totalResponseDuration: Double {
         chatBridge.messages
@@ -61,14 +67,43 @@ struct StatusLineView: View {
         .overlay(alignment: .top) {
             ClaudeTheme.borderSubtle.frame(height: 0.5)
         }
-        .task(id: chatBridge.agentProvider) {
+        .task(id: "\(chatBridge.agentProvider.rawValue):\(chatBridge.modelDisplayName)") {
             localResources = nil
+            localFooter = nil
             guard chatBridge.agentProvider == .localAgent else { return }
             while !Task.isCancelled {
                 let resources = await chatBridge.fetchLocalResourcesHandler?()
+                let footer = await chatBridge.fetchLocalModelFooterHandler?()
                 guard !Task.isCancelled else { return }
                 localResources = resources
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                localFooter = footer
+                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            }
+        }
+        .confirmationDialog("Release model from memory?", isPresented: $showReleaseConfirmation) {
+            Button("Release model") {
+                guard let releaseModelID, !isReleasing else { return }
+                isReleasing = true
+                releaseStatus = "Releasing model…"
+                Task {
+                    let released = await chatBridge.releaseLocalModelHandler?(releaseModelID) ?? false
+                    isReleasing = false
+                    releaseStatus = released ? "Model released" : "Model is busy or already released"
+                    try? await Task.sleep(for: .seconds(3))
+                    releaseStatus = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { releaseModelID = nil }
+        } message: {
+            Text("The model will load again when you send the next message.")
+        }
+        .overlay(alignment: .bottom) {
+            if let releaseStatus {
+                Text(releaseStatus)
+                    .padding(10)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .offset(y: -36)
+                    .accessibilityAddTraits(.updatesFrequently)
             }
         }
         .task {
@@ -87,6 +122,26 @@ struct StatusLineView: View {
         .onChange(of: chatBridge.agentProvider) {
             rateLimit = nil
             Task { await refreshRateLimit() }
+        }
+        .onChange(of: chatBridge.acpUsageSnapshot?.id) {
+            showACPUsage = false
+        }
+        .sheet(isPresented: $showACPUsage) {
+            NavigationStack {
+                ScrollView {
+                    if let snapshot = chatBridge.acpUsageSnapshot {
+                        UsagePluginDetailView(snapshot: snapshot, configuration: .init(integrationID: snapshot.id))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle("ACP usage limits")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showACPUsage = false }
+                    }
+                }
+            }
+            .frame(minWidth: 480, minHeight: 400)
         }
     }
 
@@ -203,8 +258,49 @@ struct StatusLineView: View {
         case .localAgent:
             Label("Model RAM \(resourceBytes(localResources?.memory))", systemImage: "memorychip")
                 .help("Memory of the local model process, including model weights, cache, and runtime overhead. Excludes other apps and system memory.")
+            if !chatBridge.studioKind.isStudio || chatBridge.studioKind == .decision {
+                Label("Cached \(localFooter?.cached.formatted() ?? "—") tokens", systemImage: "arrow.trianglehead.2.clockwise")
+                    .help("Prompt tokens reused from cache by the latest model request. Resets when the model is released.")
+                if localFooter?.preparing == true {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.mini)
+                        Text("Loading model…")
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                Button {
+                    releaseModelID = localFooter?.modelID
+                    showReleaseConfirmation = true
+                } label: {
+                    Image(systemName: "eject")
+                }
+                .buttonStyle(.plain)
+                .disabled(localFooter?.canRelease != true || chatBridge.isStreaming || isReleasing)
+                .help("Release model from memory")
+                .accessibilityLabel("Release model from memory")
+            }
         case .acp:
-            EmptyView()
+            if let snapshot = chatBridge.acpUsageSnapshot {
+                Button { showACPUsage = true } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chart.bar")
+                        if let metric = snapshot.metrics.filter({ $0.unit == "%" && $0.value?.isFinite == true })
+                            .max(by: { ($0.value ?? 0) < ($1.value ?? 0) }) {
+                            Text(metric.title).lineLimit(1)
+                            Text(metric.formattedValue)
+                                .foregroundStyle(colorForPercent(metric.value ?? 0))
+                        } else {
+                            Text("Usage unavailable")
+                        }
+                        if snapshot.isStale() {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundStyle(ClaudeTheme.statusWarning)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("\(snapshot.title): highest usage bucket. View all limits and reset details.\(snapshot.isStale() ? " Data is stale or the last refresh failed." : "")")
+            }
         }
     }
 

@@ -10,6 +10,19 @@ struct AgentRuntimeSettingsView: View {
     @State private var installSheetRuntime: AgentRuntimeInstaller.Runtime?
     @State private var runtimeMessage: String?
     @State private var pendingRemoval: AgentRuntimeInstaller.Runtime?
+    @State private var latestVersion: String?
+    @State private var updateCheckFailed = false
+    @State private var isCheckingForUpdates = false
+    @State private var initialInstallVersion: String?
+
+    private var currentVersion: String? {
+        runtime == .claude ? appState.claudeVersion : appState.codexVersion
+    }
+
+    private var availableUpdate: String? {
+        guard let latestVersion, AgentRuntimeVersion.isUpdate(latestVersion, for: currentVersion) else { return nil }
+        return latestVersion
+    }
 
     var body: some View {
         agentRuntimeRow(
@@ -23,9 +36,13 @@ struct AgentRuntimeSettingsView: View {
             .sheet(item: $installSheetRuntime) { runtime in
                 AgentRuntimeInstallSheet(
                     runtime: runtime,
-                    installedVersion: installedVersion(in: runtime == .claude ? appState.claudeVersion : appState.codexVersion),
+                    installedVersion: AgentRuntimeVersion.parse(currentVersion),
+                    initialVersion: initialInstallVersion,
                     onInstalled: { await appState.refreshAgentInstallations() },
                 )
+            }
+            .task(id: currentVersion) {
+                await checkForUpdates()
             }
             .alert("Remove managed runtime?", isPresented: Binding(
                 get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } },
@@ -56,7 +73,21 @@ struct AgentRuntimeSettingsView: View {
         let signedIn = runtime == .claude ? appState.claudeSignedIn : appState.codexSignedIn
         let path = runtime == .claude ? appState.claudeBinaryPath : appState.codexBinaryPath
         return Menu("Manage…") {
-            Button("Install Version…") { installSheetRuntime = runtime }
+            if let availableUpdate {
+                Button("Update to \(availableUpdate)…") {
+                    initialInstallVersion = availableUpdate
+                    installSheetRuntime = runtime
+                }
+            }
+            Button("Install Version…") {
+                initialInstallVersion = nil
+                installSheetRuntime = runtime
+            }
+            Button(isCheckingForUpdates ? "Checking for Updates…" : "Check for Updates") {
+                Task { await checkForUpdates(forceRefresh: true) }
+            }
+            .disabled(isCheckingForUpdates)
+            Divider()
             Button(signedIn ? "Re-sign In" : "Sign In") { signIn(runtime) }
             if signedIn { Button("Sign Out") { signOut(runtime) } }
             if path == AgentRuntimeInstaller.executablePath(for: runtime) {
@@ -108,6 +139,15 @@ struct AgentRuntimeSettingsView: View {
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
+                if installed, let availableUpdate {
+                    Text("Update available: \(availableUpdate)")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
+                } else if installed, updateCheckFailed {
+                    Text("Could not check for updates. Retry from Manage.")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: 0)
@@ -116,7 +156,10 @@ struct AgentRuntimeSettingsView: View {
                 ProgressView().controlSize(.small)
             }
             if catalog {
-                Button("Install…") { installSheetRuntime = runtime }
+                Button("Install…") {
+                    initialInstallVersion = nil
+                    installSheetRuntime = runtime
+                }
                     .controlSize(.small)
                     .disabled(signingInRuntime != nil || installingRuntime != nil)
             } else {
@@ -132,14 +175,22 @@ struct AgentRuntimeSettingsView: View {
         )
     }
 
-    private func installedVersion(in output: String?) -> String? {
-        guard let output,
-              let range = output.range(
-                  of: #"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?"#,
-                  options: .regularExpression,
-              )
-        else { return nil }
-        return String(output[range])
+    private func checkForUpdates(forceRefresh: Bool = false) async {
+        guard !catalog, currentVersion != nil else { return }
+        isCheckingForUpdates = true
+        updateCheckFailed = false
+        defer { isCheckingForUpdates = false }
+        do {
+            let version = try await AgentVersionCatalog.shared.latestVersion(for: runtime, forceRefresh: forceRefresh)
+            try Task.checkCancellation()
+            latestVersion = version
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            latestVersion = nil
+            updateCheckFailed = true
+        }
     }
 
     private func remove(_ runtime: AgentRuntimeInstaller.Runtime) {

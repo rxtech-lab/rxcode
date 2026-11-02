@@ -35,17 +35,19 @@ struct MobileTaskRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if let type = board.itemType(id: task.typeId) {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 7))
-                        .foregroundStyle(type.tint)
+            HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let type = board.itemType(id: task.typeId) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 7))
+                            .foregroundStyle(type.tint)
+                    }
+                    Text(task.title.isEmpty ? String(localized: "Untitled Task") : task.title)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(2)
                 }
-            CardAssigneesView(ids: task.assigneeIds, profiles: task.assigneeProfiles)
-                Text(task.title.isEmpty ? String(localized: "Untitled Task") : task.title)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(2)
                 Spacer(minLength: 4)
+                CardAssigneesView(ids: task.assigneeIds, profiles: task.assigneeProfiles)
                 statusIndicator
             }
 
@@ -208,14 +210,16 @@ struct MobileStoryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Image(systemName: "rectangle.stack")
-                    .foregroundStyle(.secondary)
-            CardAssigneesView(ids: story.assigneeIds, profiles: story.assigneeProfiles)
-                Text(story.title.isEmpty ? String(localized: "Untitled Story") : story.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
+            HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Image(systemName: "rectangle.stack")
+                        .foregroundStyle(.secondary)
+                    Text(story.title.isEmpty ? String(localized: "Untitled Story") : story.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+                }
                 Spacer(minLength: 4)
+                CardAssigneesView(ids: story.assigneeIds, profiles: story.assigneeProfiles)
             }
             if let rollup, rollup.progress.total > 0 {
                 MobileStoryProgressBar(progress: rollup.progress)

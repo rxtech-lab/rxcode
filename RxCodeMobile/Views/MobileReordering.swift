@@ -121,7 +121,8 @@ private struct MobileDragLiftDelay: UIViewRepresentable {
 /// on the hosting view for every drag source under it, so the delay applies to the
 /// whole hosting view. If UIKit renames the recognizer, drags keep the system delay.
 private final class MobileDragLiftDelayView: UIView {
-    private static let liftRecognizerName = "com.apple.UIKit.dragInitiation"
+    /// iPadOS 27.0 suffixes this with the input type, such as " (touch)".
+    private static let liftRecognizerPrefix = "com.apple.UIKit.dragInitiation"
     private static let minimumPressDuration: TimeInterval = 0.6
 
     override func didMoveToWindow() {
@@ -137,7 +138,7 @@ private final class MobileDragLiftDelayView: UIView {
         while let view = ancestor {
             if view.interactions.contains(where: { $0 is UIDragInteraction }) {
                 for recognizer in view.gestureRecognizers ?? []
-                where recognizer.name == Self.liftRecognizerName {
+                where recognizer.name?.hasPrefix(Self.liftRecognizerPrefix) == true {
                     (recognizer as? UILongPressGestureRecognizer)?.minimumPressDuration = Self.minimumPressDuration
                 }
             }

@@ -12212,6 +12212,9 @@
         }
       }
     },
+    "Task description" : {
+
+    },
     "Task Not Found" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13700,6 +13703,9 @@
           }
         }
       }
+    },
+    "Use Text" : {
+
     },
     "Use This Computer" : {
 

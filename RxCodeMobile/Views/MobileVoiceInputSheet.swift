@@ -512,3 +512,65 @@ private struct RecordedWaveform: View {
         .accessibilityIdentifier("voice-input-recorded-waveform")
     }
 }
+
+
+/// Reviews dictated task text before applying it to the creation form.
+struct MobileTaskVoiceButton: View {
+    @Binding var text: String
+    @State private var showingVoice = false
+
+    var body: some View {
+        Button("Voice Input", systemImage: "mic") {
+            MobileHaptics.buttonTap()
+            showingVoice = true
+        }
+        .sheet(isPresented: $showingVoice) {
+            MobileTaskVoiceSheet(text: $text)
+                .mobileSheetPresentation([.large])
+        }
+    }
+}
+
+private struct MobileTaskVoiceSheet: View {
+    @Binding var text: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var session = MobileVoiceInputSession()
+    @State private var draft = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Task description", text: $draft, axis: .vertical)
+                        .lineLimit(4...12)
+                        .disabled(session.mode == .recording)
+                    if session.mode == .recording {
+                        MobileVoiceRecordingContent(session: session)
+                    } else {
+                        MobileVoiceMicButton(text: $draft, session: session)
+                    }
+                }
+            }
+            .navigationTitle("Voice Input")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        _ = session.discard()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Use Text") {
+                        MobileHaptics.buttonTap()
+                        text = draft
+                        dismiss()
+                    }
+                    .disabled(session.mode == .recording || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .mobileVoiceInput(session: session, text: $draft)
+            .onAppear { draft = text }
+        }
+    }
+}

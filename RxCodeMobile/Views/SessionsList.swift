@@ -84,7 +84,9 @@ struct SessionsList: View {
     var body: some View {
         glassThreadList
             .navigationTitle("Threads")
-            .toolbar { toolbarContent }
+            .toolbar {
+                if selected == nil { toolbarContent }
+            }
             .toolbar(usesSelection ? .automatic : .hidden, for: .tabBar)
             .toolbar {
                 // Show search button in bottom bar on iPhone when tab bar is hidden

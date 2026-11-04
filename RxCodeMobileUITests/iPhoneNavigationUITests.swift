@@ -143,11 +143,22 @@ final class iPhoneNavigationUITests: XCTestCase {
         assertDragsOnlyOpenOnWobble(row: r.anyProjectRow, opened: r.threadListScreen, r)
         r.tap(r.anyProjectRow, "a project row")
         r.assertExists(r.threadListScreen, "thread list screen")
-        assertDragsOnlyOpenOnWobble(row: r.anyThreadRow, opened: r.chatScreen, r)
+        assertDragsOnlyOpenOnWobble(row: r.anyThreadRow, opened: r.chatScreen, r) {
+            // A rightward drag can invoke the system's full-screen back gesture.
+            // Restore the thread list only after verifying that exact destination.
+            r.assertExists(r.anyProjectRow, "Projects after the system back gesture")
+            r.tap(r.anyProjectRow, "project after the system back gesture")
+            r.assertExists(r.threadListScreen, "restored thread list")
+        }
     }
 
     @MainActor
-    private func assertDragsOnlyOpenOnWobble(row: XCUIElement, opened: XCUIElement, _ r: MobileAppRobot) {
+    private func assertDragsOnlyOpenOnWobble(
+        row: XCUIElement,
+        opened: XCUIElement,
+        _ r: MobileAppRobot,
+        restoreAfterBackGesture: (() -> Void)? = nil
+    ) {
         let drags: [(CGVector, XCUIGestureVelocity)] = [
             (CGVector(dx: 16, dy: 0), .slow),
             (CGVector(dx: 40, dy: 0), .slow),
@@ -159,6 +170,10 @@ final class iPhoneNavigationUITests: XCTestCase {
         for (offset, velocity) in drags {
             drag(row, by: offset, velocity: velocity, r)
             XCTAssertFalse(opened.waitForExistence(timeout: 1.5), "A drag of \(offset) must not open the row")
+            if offset.dx > 0, !row.exists, let restoreAfterBackGesture {
+                restoreAfterBackGesture()
+            }
+            r.assertExists(row, "row remains available for the next gesture")
         }
         drag(row, by: CGVector(dx: 4, dy: 0), velocity: .slow, r)
         r.assertExists(opened, "row opened by a tap with slight wobble")

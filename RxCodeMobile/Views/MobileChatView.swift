@@ -4,6 +4,9 @@ import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
+#if DEBUG
+import QuartzCore
+#endif
 
 private let mobileChatLogger = Logger(
     subsystem: "com.idealapp.RxCodeMobile",
@@ -18,7 +21,6 @@ struct MobileChatView: View {
     /// Invoked after the thread is archived or deleted so the parent can pop
     /// this view — the thread is no longer reachable from the active list.
     var onClose: () -> Void = {}
-    @State var composer: String = ""
     @State var isNearBottom: Bool = true
     @State var showingQueueSheet = false
     /// Set once the thread has been scrolled to its newest message on open.
@@ -163,7 +165,10 @@ struct MobileChatView: View {
             .sheet(isPresented: $showingQueueSheet) {
                 QueuedMessagesSheet(
                     messages: queuedMessages,
-                    onRemove: removeQueued
+                    onRemove: removeQueued,
+                    onAction: { message, text in
+                        try await state.queueMessageAction(sessionID: sessionID, queuedID: message.id, text: text)
+                    }
                 )
             }
             .sheet(isPresented: $showingRenameSheet) {
@@ -282,22 +287,28 @@ struct MobileChatView: View {
 
     private var activeThreadLayout: some View {
         ZStack(alignment: .bottom) {
-            ChatTranscriptList(
-                items: mobileTranscriptItems,
-                isStreaming: isStreaming,
-                shouldScrollToBottom: packageShouldScrollToBottom,
-                scrollToBottomAnimated: packageScrollAnimated,
-                isAtBottom: $isNearBottom,
-                hasMorePrevious: {
-                    didSettleInitialScroll
+            MobileChatTranscript(
+                snapshot: MobileChatTranscriptSnapshot(
+                    sessionID: resolvedSessionID,
+                    items: mobileTranscriptItems,
+                    isStreaming: isStreaming,
+                    isThinking: isThinking,
+                    shouldScrollToBottom: packageShouldScrollToBottom,
+                    scrollToBottomAnimated: packageScrollAnimated,
+                    hasMorePrevious: didSettleInitialScroll
                         && state.hasMoreMessages(sessionID: sessionID)
-                        && !state.isLoadingMoreMessages(sessionID: sessionID)
-                },
-                loadMorePrevious: loadMorePreviousMessages,
-                rowPadding: EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16),
-                accessibilityIdentifier: "chat-message-list"
-            ) { accessory in
-                mobileTranscriptAccessory(accessory)
+                        && !state.isLoadingMoreMessages(sessionID: sessionID),
+                    tailSpacer: minTailSpacer
+                ),
+                isAtBottom: $isNearBottom,
+                loadMorePrevious: loadMorePreviousMessages
+            )
+            .equatable()
+            .background {
+                #if DEBUG
+                MobileChatFrameMonitor(messageCount: messages.count, isStreaming: isStreaming)
+                    .allowsHitTesting(false)
+                #endif
             }
             .opacity(isInitialMessageListHidden && !messages.isEmpty ? 0 : 1)
             .animation(.easeInOut(duration: 0.18), value: isInitialMessageListHidden)
@@ -397,8 +408,7 @@ struct MobileChatView: View {
                         .padding(.bottom, 4)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                MobileInputBar(
-                    text: $composer,
+                MobileChatComposer(
                     isStreaming: isStreaming,
                     onSend: handleSend,
                     onStop: handleStop
@@ -442,43 +452,30 @@ struct MobileChatView: View {
     }
 
     private var mobileTranscriptItems: [ChatTranscriptListItem] {
+        #if DEBUG
+        let preparationStart = CACurrentMediaTime()
+        #endif
+        let currentMessages = messages
         var items: [ChatTranscriptListItem] = [
             .accessory(.init(id: "mobile-top-padding", kind: .topPadding)),
         ]
         if isLoadingMore {
             items.append(.accessory(.init(id: "mobile-loading-previous", kind: .loadingPrevious)))
         }
-        items += ChatTranscriptListItem.items(for: messages)
+        items += ChatTranscriptListItem.items(for: currentMessages)
         if shouldShowEndLoadingIndicator {
             items.append(.accessory(.init(id: "mobile-end-loading-indicator", kind: .loadingNext)))
         }
         items.append(.accessory(.init(id: "mobile-bottom-spacer", kind: .custom)))
+        #if DEBUG
+        MobileChatPerformanceDiagnostics.record("transcript_build", since: preparationStart,
+                                                messages: currentMessages.count, rows: items.count)
+        #endif
         return items
     }
 
     private var shouldShowEndLoadingIndicator: Bool {
         isStreaming || (isThreadLoadingMessages && messages.isEmpty)
-    }
-
-    @ViewBuilder
-    private func mobileTranscriptAccessory(_ accessory: ChatTranscriptAccessory) -> some View {
-        switch accessory.kind {
-        case .topPadding:
-            Color.clear.frame(height: 8)
-        case .loadingPrevious:
-            loadMoreSpinner
-        case .loadingNext, .streamingIndicator:
-            MobileStreamingIndicator(isThinking: isThinking)
-                .transition(.opacity)
-        case .endActions:
-            EmptyView()
-        case .custom:
-            if accessory.id == "mobile-bottom-spacer" {
-                Color.clear.frame(height: minTailSpacer)
-            } else {
-                EmptyView()
-            }
-        }
     }
 
     private var messages: [ChatMessage] {
@@ -641,18 +638,6 @@ struct MobileChatView: View {
 
     // MARK: - Message paging
 
-    /// Spinner shown at the top of the list while an older page is loading.
-    private var loadMoreSpinner: some View {
-        HStack {
-            Spacer()
-            ProgressView()
-            Spacer()
-        }
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        .transition(.opacity)
-    }
-
     private func loadMorePreviousMessages() async throws {
         _ = await state.loadMoreMessages(sessionID: sessionID)
     }
@@ -711,7 +696,6 @@ struct MobileChatView: View {
         autoScrollEnabled = false
         Task {
             await state.sendUserMessage(trimmed, sessionID: sessionID)
-            composer = ""
         }
     }
 
@@ -799,4 +783,17 @@ struct MobileChatView: View {
         .accessibilityLabel("Scroll to bottom")
     }
 
+}
+
+/// Keep draft edits local so typing does not rebuild the transcript or refresh
+/// its collection view cells. MobileInputBar clears the draft before sending.
+private struct MobileChatComposer: View {
+    let isStreaming: Bool
+    let onSend: (String) -> Void
+    let onStop: () -> Void
+    @State private var text = ""
+
+    var body: some View {
+        MobileInputBar(text: $text, isStreaming: isStreaming, onSend: onSend, onStop: onStop)
+    }
 }

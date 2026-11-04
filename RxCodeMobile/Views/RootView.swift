@@ -208,7 +208,6 @@ struct RemoteWorkspaceView: View {
             logger.info("Desktop sync ready changed: \(ready, privacy: .public) hasShownWorkspace=\(hasShownWorkspace, privacy: .public) connection=\(String(describing: state.connectionState), privacy: .public) unavailable=\(state.desktopTaskUnavailable, privacy: .public)")
             if ready {
                 connectionTimedOut = false
-                minimumLoadingTimeElapsed = true
             }
         }
         .onChange(of: isInitialSyncComplete) { _, complete in
@@ -263,6 +262,9 @@ struct RemoteWorkspaceView: View {
     private func initialLoad() async {
         logger.info("initialLoad started, current hasReceivedInitialSnapshot: \(state.hasReceivedInitialSnapshot)")
 
+        let clock = ContinuousClock()
+        let minimumLoadingDeadline = clock.now.advanced(by: .seconds(2))
+
         // Send the snapshot request (returns immediately, snapshot arrives async)
         consumePendingDeepLink()
         if !state.isDesktopTaskSyncReady {
@@ -283,6 +285,11 @@ struct RemoteWorkspaceView: View {
                 logger.debug("Still waiting for snapshot... polls=\(pollCount)/\(maxPolls)")
             }
         }
+
+        // Count sync work toward the minimum splash duration. Fast or cached
+        // connections still show the loading screen for at least two seconds.
+        do { try await clock.sleep(until: minimumLoadingDeadline) }
+        catch { return }
 
         let hasSnapshot = state.isDesktopTaskSyncReady
         logger.info("Wait completed: hasSnapshot=\(hasSnapshot), polls=\(pollCount)/\(maxPolls)")

@@ -801,6 +801,13 @@ final class LocalModelStore {
         companions = listed
     }
 
+    func setAlias(_ alias: String, for modelID: String) {
+        guard let index = installed.firstIndex(where: { $0.id == modelID }) else { return }
+        let value = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        installed[index].alias = value.isEmpty ? nil : value
+        persist()
+    }
+
     private func persist() {
         do {
             try FileManager.default.createDirectory(at: modelsRoot, withIntermediateDirectories: true)

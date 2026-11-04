@@ -4588,6 +4588,9 @@
         }
       }
     },
+    "Edit Queued Message" : {
+
+    },
     "Edit Story" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11860,6 +11863,9 @@
         }
       }
     },
+    "Steer Now" : {
+
+    },
     "Stop" : {
       "localizations" : {
         "en" : {
@@ -13700,6 +13706,9 @@
           }
         }
       }
+    },
+    "Use Text" : {
+
     },
     "Use This Computer" : {
 

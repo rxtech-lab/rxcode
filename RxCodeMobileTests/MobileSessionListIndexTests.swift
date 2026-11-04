@@ -1,10 +1,51 @@
 import XCTest
+import Combine
+import RxCodeCore
 import RxCodeSync
 @testable import RxCodeMobile
 
 @MainActor
 final class MobileSessionListIndexTests: XCTestCase {
     private let projectID = UUID()
+
+    func testRepeatedThinkingFlagsDoNotInvalidateChat() {
+        let state = MobileAppState()
+        var publications = 0
+        let observation = state.$thinkingSessions.dropFirst().sink { _ in publications += 1 }
+        defer { observation.cancel() }
+
+        state.setSessionThinking(sessionID: "chat", isThinking: false)
+        XCTAssertEqual(publications, 0)
+        state.setSessionThinking(sessionID: "chat", isThinking: true)
+        state.setSessionThinking(sessionID: "chat", isThinking: true)
+        XCTAssertEqual(publications, 1)
+        state.setSessionThinking(sessionID: "chat", isThinking: false)
+        state.setSessionThinking(sessionID: "chat", isThinking: false)
+        XCTAssertEqual(publications, 2)
+    }
+
+    func testUnchangedStreamMessageDoesNotRepublishHistory() {
+        let state = MobileAppState()
+        let message = ChatMessage(role: .assistant, content: "First token", isStreaming: true)
+        state.messagesBySession["chat"] = [message]
+        var publications = 0
+        let observation = state.$messagesBySession.dropFirst().sink { _ in publications += 1 }
+        defer { observation.cancel() }
+
+        state.applySessionUpdate(.init(sessionID: "chat", kind: .messageUpdated, message: message))
+        XCTAssertEqual(publications, 0)
+
+        var updated = message
+        updated.blocks[0].text = "First token and more"
+        state.applySessionUpdate(.init(sessionID: "chat", kind: .messageUpdated, message: updated))
+        XCTAssertEqual(publications, 1)
+        XCTAssertEqual(state.messages(sessionID: "chat"), [updated])
+
+        updated.isStreaming = false
+        state.applySessionUpdate(.init(sessionID: "chat", kind: .messageUpdated, message: updated))
+        XCTAssertEqual(publications, 2)
+        XCTAssertFalse(state.messages(sessionID: "chat")[0].isStreaming)
+    }
 
     private func session(_ id: String, time: Double = 1, pinned: Bool = false,
                          archived: Bool = false, parent: String? = nil,

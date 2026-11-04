@@ -28,6 +28,7 @@
 		8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */; };
 		8922514EE346610B67C3AE53 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD91B5F821965BD23C5EA360 /* Cocoa.framework */; };
 		92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9993BB72A5307039A88B729 /* Cocoa.framework */; };
+		A14C90F00000000000000001 /* LocalModelRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14C90F00000000000000002 /* LocalModelRuntimeTests.swift */; };
 		A180BD3C246793C79C3C49BB /* ClaudeLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */; };
 		A30000000000000000000000 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000000 /* MLXLLM */; };
 		A30000000000000000000001 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000001 /* MLXLMCommon */; };
@@ -60,7 +61,6 @@
 		BA0E00012FCB400000000002 /* BriefingNotificationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */; };
 		BBD2456729416901FAFBD00D /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */; };
 		BEC12E505C6B3EF5C950BEC9 /* LocalModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCAA31501FDBEDDC060182B /* LocalModelTests.swift */; };
-		A14C90F00000000000000001 /* LocalModelRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14C90F00000000000000002 /* LocalModelRuntimeTests.swift */; };
 		C0DE70C00000000000000002 /* CodexTokenUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE70C00000000000000001 /* CodexTokenUsageTests.swift */; };
 		C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000002 /* ChatHistoryTests.swift */; };
 		C93BD2F51A0D4DCA8209E491 /* AgentConfirmationAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3DA07D5F884B7A9F233FD1 /* AgentConfirmationAttentionTests.swift */; };
@@ -233,6 +233,7 @@
 		82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunQueueTests.swift; sourceTree = "<group>"; };
 		85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
 		89C3D140648C4A64B7165620 /* ImageEngineValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageEngineValidationTests.swift; sourceTree = "<group>"; };
+		A14C90F00000000000000002 /* LocalModelRuntimeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalModelRuntimeTests.swift; sourceTree = "<group>"; };
 		A4E201000000000000000001 /* CustomMenuModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CustomMenuModelSelectionTests.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
@@ -295,7 +296,6 @@
 		E8C010000000000000000001 /* MCPConnectionRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPConnectionRoutingTests.swift; sourceTree = "<group>"; };
 		E92A867810EB489390421B01 /* GlobalChatTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalChatTests.swift; sourceTree = "<group>"; };
 		EBCAA31501FDBEDDC060182B /* LocalModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalModelTests.swift; sourceTree = "<group>"; };
-		A14C90F00000000000000002 /* LocalModelRuntimeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalModelRuntimeTests.swift; sourceTree = "<group>"; };
 		EE5650BC7C47EAD5F996C021 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F298966B9AA8AA6C5552E8DA /* DesktopWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DesktopWidgets.swift; sourceTree = "<group>"; };
 		FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTaskStateTests.swift; sourceTree = "<group>"; };
@@ -2053,7 +2053,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK";
 			requirement = {
 				kind = exactVersion;
-				version = 1.2.0;
+				version = 1.4.0;
 			};
 		};
 		E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {

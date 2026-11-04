@@ -86,6 +86,7 @@ struct MobileAIDraftSheet: View {
                             }
                         }
                         Section {
+                            MobileTaskVoiceButton(text: $prompt)
                             TextField("What needs to be done?", text: $prompt, axis: .vertical)
                                 .lineLimit(6...14)
                                 .accessibilityIdentifier("ai-draft-prompt")

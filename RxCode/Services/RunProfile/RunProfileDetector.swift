@@ -5,15 +5,50 @@ import RxCodeCore
 // `RxCodeCore` so the sync protocol can carry detection results to mobile.
 
 /// Read-only scanner that surfaces Xcode schemes, npm scripts, and Make
-/// targets at a project root. Errors are swallowed — a broken `xcodebuild`
+/// targets throughout a project tree. Errors are swallowed — a broken `xcodebuild`
 /// or unreadable file yields an empty list, not a thrown error.
 @MainActor
 final class RunProfileDetector {
     func detect(in projectPath: String) async -> DetectedRunnables {
-        async let xcode = detectXcode(at: projectPath)
-        async let npm = detectPackageScripts(at: projectPath)
-        async let make = detectMake(at: projectPath)
-        return await DetectedRunnables(xcode: xcode, npm: npm, make: make)
+        // zsh's recursive glob prunes generated/dependency trees before descent.
+        let (paths, _) = await runProcess(
+            executable: "/bin/zsh",
+            arguments: ["-f", "-c", #"setopt extendedglob; scan() { local dir; for dir in "$1"/^(node_modules|Pods|Carthage|build|dist|DerivedData|*.xcodeproj|*.xcworkspace)(N/); do print -rNC1 -- "$dir"; scan "$dir"; done }; scan ."#],
+            cwd: projectPath,
+            timeoutSeconds: 8
+        )
+        let directories = [""] + paths.split(separator: "\0").map(String.init)
+            .filter { !$0.contains(".xcodeproj/") && !$0.contains(".xcworkspace/") }
+            .sorted()
+        var result = DetectedRunnables()
+        for relative in directories {
+            if Task.isCancelled { break }
+            let root = relative.isEmpty ? projectPath : (projectPath as NSString).appendingPathComponent(relative)
+            async let xcode = detectXcode(at: root)
+            async let npm = detectPackageScripts(at: root)
+            async let make = detectMake(at: root)
+            let found = await DetectedRunnables(xcode: xcode, npm: npm, make: make)
+            func scoped(_ item: DetectedRunnable) -> DetectedRunnable {
+                guard !relative.isEmpty else { return item }
+                let folder = relative.hasPrefix("./") ? String(relative.dropFirst(2)) : relative
+                // Nested recommendations retain a portable, project-relative command.
+                let quoted = "'" + folder.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+                var xcode = item.xcode
+                if let container = xcode?.container {
+                    xcode?.container = (folder as NSString).appendingPathComponent(container)
+                }
+                return DetectedRunnable(
+                    id: "\(item.id):\(folder)", source: item.source,
+                    displayName: "\(folder) · \(item.displayName)",
+                    command: "cd \(quoted) && \(item.command)",
+                    xcode: xcode
+                )
+            }
+            result.xcode += found.xcode.map(scoped)
+            result.npm += found.npm.map(scoped)
+            result.make += found.make.map(scoped)
+        }
+        return result
     }
 
     // MARK: - Xcode

@@ -118,24 +118,35 @@ extension MobileAppState {
 
     /// Fold an older page returned by the desktop into the local window.
     func applyMoreMessages(_ page: MoreMessagesPayload) {
-        guard let sessionID = pendingLoadMoreRequests.removeValue(forKey: page.clientRequestID)
-        else { return }
-        loadingMoreSessions.remove(sessionID)
-
-        if !page.messages.isEmpty {
-            var current = messagesBySession[sessionID] ?? []
-            let known = Set(current.map(\.id))
-            let fresh = page.messages.filter { !known.contains($0.id) }
-            if !fresh.isEmpty {
-                current.insert(contentsOf: fresh, at: 0)
-                messagesBySession[sessionID] = current
+        guard let sessionID = pendingLoadMoreRequests[page.clientRequestID] else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Keep the request pending until preparation and publication finish.
+            // Live tokens may arrive while the worker prepares the older page.
+            while pendingLoadMoreRequests[page.clientRequestID] == sessionID {
+                let current = messagesBySession[sessionID] ?? []
+                let worker = Task.detached(priority: .userInitiated) {
+                    var known = Set(current.map(\.id))
+                    let fresh = page.messages.filter { known.insert($0.id).inserted }
+                    return fresh + current
+                }
+                let merged = await worker.value
+                guard pendingLoadMoreRequests[page.clientRequestID] == sessionID else { return }
+                // Never overwrite a streaming update or refreshed snapshot with
+                // the window captured before the suspension point.
+                guard (messagesBySession[sessionID] ?? []) == current else { continue }
+                if merged.count != current.count {
+                    messagesBySession[sessionID] = merged
+                }
+                if page.hasMore {
+                    sessionsWithMoreMessages.insert(sessionID)
+                } else {
+                    sessionsWithMoreMessages.remove(sessionID)
+                }
+                pendingLoadMoreRequests.removeValue(forKey: page.clientRequestID)
+                loadingMoreSessions.remove(sessionID)
+                return
             }
-        }
-
-        if page.hasMore {
-            sessionsWithMoreMessages.insert(sessionID)
-        } else {
-            sessionsWithMoreMessages.remove(sessionID)
         }
     }
 

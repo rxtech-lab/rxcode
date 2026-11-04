@@ -48,6 +48,7 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
     let downloadedAt: Date
     var format: LocalModelWeightFormat = .gguf
     var huggingFaceMetadata: HFModelSummary? = nil
+    var alias: String? = nil
 
     /// Which studio the model opens in, from its saved Hugging Face task.
     /// Models saved without metadata are chat models.
@@ -58,6 +59,7 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
     var isVideoModel: Bool { studioKind == .video }
 
     var displayName: String {
+        if let alias, !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return alias }
         let base = repoID.split(separator: "/").last.map(String.init) ?? repoID
         let trimmed = LocalModelFormat.trimmingFormatSuffix(base)
         // MLX repo names usually carry the quantization already (`…-4bit`).
@@ -78,7 +80,7 @@ nonisolated struct LocalModelInfo: Codable, Identifiable, Hashable, Sendable {
 
 extension LocalModelInfo {
     private enum CodingKeys: String, CodingKey {
-        case repoID, author, files, sizeBytes, parameterCount, contextLength, architecture, quantization, downloadedAt, format, huggingFaceMetadata
+        case repoID, author, files, sizeBytes, parameterCount, contextLength, architecture, quantization, downloadedAt, format, huggingFaceMetadata, alias
     }
 
     /// Entries saved before MLX support have no `format`; they are GGUF.
@@ -95,6 +97,7 @@ extension LocalModelInfo {
         downloadedAt = try container.decode(Date.self, forKey: .downloadedAt)
         format = try container.decodeIfPresent(LocalModelWeightFormat.self, forKey: .format) ?? .gguf
         huggingFaceMetadata = try container.decodeIfPresent(HFModelSummary.self, forKey: .huggingFaceMetadata)
+        alias = try container.decodeIfPresent(String.self, forKey: .alias)
     }
 }
 

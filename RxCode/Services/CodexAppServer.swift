@@ -1,4 +1,5 @@
 import Foundation
+import struct RxAgentSDK.CodexClient
 import RxCodeCore
 import os
 
@@ -162,38 +163,11 @@ actor CodexAppServer {
     }
 
     func fetchModels() async -> [AgentModel] {
-        guard let binary = await findCodexBinary() else {
-            logger.warning("Skipping Codex model fetch because no codex binary was found")
-            return []
+        guard let binary = await findCodexBinary() else { return [] }
+        return await CodexClient(binaryPath: binary).availableModels().map {
+            AgentModel(provider: .codex, id: $0.id, displayName: $0.displayName,
+                       description: $0.modelDescription ?? "")
         }
-        do {
-            let streamId = UUID()
-            let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: nil)
-            defer { finalize(streamId: streamId) }
-            try Self.writeJSONLine(Self.request(id: 1, method: "initialize", params: initializeParams()), to: handles.stdin)
-            try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
-            try Self.writeJSONLine(Self.request(id: 2, method: "model/list", params: ["includeHidden": .bool(false)]), to: handles.stdin)
-
-            for await line in handles.stdout.fileHandleForReading.lineStream() {
-                guard let object = Self.decodeObject(line),
-                      Self.idString(object["id"]) == "2",
-                      let result = object["result"] else { continue }
-                let models = Self.parseModels(from: result)
-                logger.info("Codex app-server model/list returned \(models.count) models")
-                if !models.isEmpty { return models }
-                logger.warning("Codex app-server model/list returned no parseable models; trying codex debug models")
-                break
-            }
-        } catch {
-            logger.warning("Codex model/list failed: \(error.localizedDescription)")
-        }
-        let debugModels = await fetchModelsFromDebugCommand(binary: binary)
-        if !debugModels.isEmpty {
-            logger.info("Codex debug models returned \(debugModels.count) models")
-        } else {
-            logger.warning("Codex debug models returned no parseable models; UI will use built-in fallback models")
-        }
-        return debugModels
     }
 
     func fetchRateLimits(forceRefresh: Bool = false) async -> RateLimitUsage? {

@@ -29,7 +29,7 @@ extension AppState {
 
     func availableAgentModelSections() -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
         var sections: [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] = [
-            ("claudeCode", AgentProvider.claudeCode.displayNameText, .claudeCode, nil, Self.availableClaudeModels),
+            ("claudeCode", AgentProvider.claudeCode.displayNameText, .claudeCode, nil, claudeModels.isEmpty ? Self.availableClaudeModels : claudeModels),
             ("codex", AgentProvider.codex.displayNameText, .codex, nil, Self.availableCodexModels(codexModels)),
         ]
 

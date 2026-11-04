@@ -1,7 +1,16 @@
 name: Create Release
 on:
     workflow_dispatch:
+        inputs:
+            next_version:
+                description: "Exact stable version (e.g. 1.5.0); leave blank for automatic versioning"
+                required: false
+                type: string
     push:
+
+concurrency:
+    group: create-release-${{ github.ref }}
+    cancel-in-progress: false
 
 jobs:
     create-release:
@@ -11,6 +20,8 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
             - uses: actions/setup-node@v7
               with:
                   node-version: "22"
@@ -35,10 +46,22 @@ jobs:
                       @semantic-release/exec
             - name: Create Release
               uses: cycjimmy/semantic-release-action@v8
-              if: github.event_name == 'workflow_dispatch'
+              if: github.event_name == 'workflow_dispatch' && inputs.next_version == ''
               env:
                   GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
               with:
                   branch: main
                   extra_plugins: |
                       @semantic-release/exec
+            - name: Validate explicit version
+              id: version
+              if: github.event_name == 'workflow_dispatch' && inputs.next_version != ''
+              env:
+                  NEXT_VERSION: ${{ inputs.next_version }}
+              run: node scripts/validate-release-version.cjs
+            - name: Create explicit version release
+              if: github.event_name == 'workflow_dispatch' && inputs.next_version != ''
+              env:
+                  GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+                  RELEASE_TAG: ${{ steps.version.outputs.tag }}
+              run: gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --generate-notes --latest

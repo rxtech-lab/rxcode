@@ -9,7 +9,15 @@ final class FlowcyAPI {
     private let notifySessionExpiry: Bool
     private let token: (Bool) async -> String?
 
-    init(session: URLSession = .shared, baseURL: URL = URL(string: "https://www.flowcy.dev")!,
+    nonisolated static var defaultBaseURL: URL {
+        #if DEBUG
+        URL(string: "http://localhost:3000")!
+        #else
+        URL(string: "https://www.flowcy.dev")!
+        #endif
+    }
+
+    init(session: URLSession = .shared, baseURL: URL = FlowcyAPI.defaultBaseURL,
          notifySessionExpiry: Bool = true, token: @escaping (Bool) async -> String? = { await RxAuthService.shared.accessToken(forceRefresh: $0) }) {
         self.notifySessionExpiry = notifySessionExpiry
         self.session = session

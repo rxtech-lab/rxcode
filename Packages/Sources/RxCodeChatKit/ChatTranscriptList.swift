@@ -129,10 +129,12 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
     private func rowContent(for item: ChatTranscriptListItem) -> some View {
         switch item.kind {
         case .message(let message):
-            ChatMessageBubble(message: message)
+            ChatTranscriptMessageRow(item: item)
+                .equatable()
                 .transition(messageFadeTransition(role: message.role))
-        case .transientGroup(let messages):
-            ChatTransientGroupSummaryView(messages: messages)
+        case .transientGroup:
+            ChatTranscriptMessageRow(item: item)
+                .equatable()
                 .transition(messageFadeTransition(role: .assistant))
         case .accessory(let accessory):
             accessoryContent(accessory)
@@ -154,5 +156,23 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
         #else
         EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
         #endif
+    }
+}
+
+/// The native list refreshes visible hosting configurations even when only a
+/// streaming accessory changed. Compare complete message values so settled
+/// markdown and tool history can skip that repeated rendering work.
+struct ChatTranscriptMessageRow: View, Equatable {
+    let item: ChatTranscriptListItem
+
+    var body: some View {
+        switch item.kind {
+        case .message(let message):
+            ChatMessageBubble(message: message)
+        case .transientGroup(let messages):
+            ChatTransientGroupSummaryView(messages: messages)
+        case .accessory:
+            EmptyView()
+        }
     }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import RxCodeChatKit
 import TipKit
 
 struct MCPSettingsTab: View {
@@ -200,6 +201,7 @@ struct MCPSettingsTab: View {
                 }
             }
         }
+
     }
 
     // MARK: - Bindings
@@ -232,7 +234,7 @@ private struct MCPServerRow: View {
     let onProjectOverrideChange: (MCPProjectOverride) -> Void
     let onRemove: () -> Void
 
-    @State private var expanded = false
+    @State private var showDetails = false
 
     private var inProject: Bool { projectPath != nil }
 
@@ -276,8 +278,8 @@ private struct MCPServerRow: View {
                     }
                     Button(isProbing ? "Testing…" : "Test connection", action: onTest)
                         .disabled(isProbing || !server.effectiveEnabled)
-                    if let probe, !probe.tools.isEmpty || probe.error != nil {
-                        Button(expanded ? "Hide details" : "View details") { expanded.toggle() }
+                    if probe != nil {
+                        Button("View details") { showDetails = true }
                     }
 
                     if inProject {
@@ -313,12 +315,6 @@ private struct MCPServerRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
 
-            if expanded, let probe {
-                Divider()
-                probeDetail(probe)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-            }
         }
         .background(Color(NSColor.controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -326,6 +322,9 @@ private struct MCPServerRow: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
         )
+        .sheet(isPresented: $showDetails) {
+            MCPServerDetailsSheet(server: server, probe: probe)
+        }
     }
 
     // MARK: - Bindings
@@ -416,41 +415,187 @@ private struct MCPServerRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    private func probeDetail(_ probe: MCPProbeResult) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let error = probe.error, !probe.ok {
-                Text(verbatim: error)
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.red)
-            } else {
-                if let serverName = probe.serverName {
-                    let suffix = probe.serverVersion.map { " v\($0)" } ?? ""
-                    Text(verbatim: "Server: \(serverName)\(suffix)")
-                        .font(.system(size: ClaudeTheme.size(11)))
+}
+
+private struct MCPServerDetailsSheet: View {
+    let server: MCPServerInfo
+    let probe: MCPProbeResult?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+    @State private var selectedTool: MCPTool?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "server.rack")
+                    .font(.title2)
+                    .foregroundStyle(ClaudeTheme.accent)
+                    .frame(width: 42, height: 42)
+                    .background(ClaudeTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: server.name).font(.headline)
+                    Text("MCP Server Details")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if probe.tools.isEmpty {
-                    Text("No tools advertised.")
-                        .font(.system(size: ClaudeTheme.size(11)))
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(20)
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text(verbatim: server.endpoint)
+                    .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                HStack(spacing: 8) {
+                    Text(verbatim: server.transport.displayNameText)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
+                    if let name = probe?.serverName {
+                        Text(verbatim: name + (probe?.serverVersion.map { " · v\($0)" } ?? ""))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(verbatim: "\(probe?.tools.count ?? 0) tools")
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
+                }
+                TextField("Search tools", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Search tools")
+            }
+            .padding(20)
+            Divider()
+
+            if let probe, !probe.ok, let error = probe.error {
+                ContentUnavailableView {
+                    Label("Connection failed", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(verbatim: error).textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let probe {
+                let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                let tools = probe.tools.filter {
+                    query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)
+                        || ($0.description?.localizedCaseInsensitiveContains(query) ?? false)
+                }
+                if tools.isEmpty {
+                    ContentUnavailableView(
+                        query.isEmpty ? "No tools advertised" : "No matching tools",
+                        systemImage: "wrench.and.screwdriver",
+                        description: Text(query.isEmpty ? "This server has not advertised any tools." : "Try a different name or keyword.")
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Text(verbatim: "\(probe.tools.count) tools")
-                        .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                    ForEach(probe.tools) { tool in
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(verbatim: tool.name)
-                                .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
-                            if let description = tool.description, !description.isEmpty {
-                                Text(verbatim: description)
-                                    .font(.system(size: ClaudeTheme.size(10)))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(tools) { tool in
+                                Button { selectedTool = tool } label: {
+                                    HStack {
+                                        Text(verbatim: tool.name)
+                                            .font(.system(size: ClaudeTheme.size(13), weight: .semibold, design: .monospaced))
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(16)
+                                    .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .strokeBorder(Color(NSColor.separatorColor).opacity(0.5))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .help("View description and schemas")
                             }
                         }
-                        .padding(.leading, 4)
+                        .padding(20)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            } else {
+                ContentUnavailableView("No connection details", systemImage: "server.rack")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(width: 640, height: 680)
+        .sheet(item: $selectedTool) { tool in
+            MCPToolDetailsSheet(tool: tool)
+        }
+    }
+}
+
+private struct MCPToolDetailsSheet: View {
+    let tool: MCPTool
+    @Environment(\.dismiss) private var dismiss
+    @State private var section = Section.description
+
+    private enum Section: String, CaseIterable {
+        case description = "Description"
+        case input = "Input"
+        case output = "Output"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(verbatim: tool.name)
+                    .font(.system(size: ClaudeTheme.size(14), weight: .semibold, design: .monospaced))
+                    .textSelection(.enabled)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(20)
+            Picker("Tool details", selection: $section) {
+                ForEach(Section.allCases, id: \.self) { section in
+                    Text(section.rawValue).tag(section)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+            Divider()
+            if let content {
+                ScrollView {
+                    MarkdownContentView(text: content, style: .rxCodeCompact)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(20)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ContentUnavailableView(
+                    section == .description ? "No description" : "No schema provided",
+                    systemImage: "doc.text",
+                    description: Text(section == .description
+                        ? "The server did not provide a description for this tool."
+                        : "The server did not advertise an \(section.rawValue.lowercased()) schema for this tool.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(width: 620, height: 640)
+    }
+
+    private var content: String? {
+        if section == .description {
+            guard let description = tool.description, !description.isEmpty else { return nil }
+            return description
+        }
+        guard let schema = section == .input ? tool.inputSchema : tool.outputSchema else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(schema), let json = String(data: data, encoding: .utf8) else { return nil }
+        return "```json\n" + json + "\n```"
     }
 }

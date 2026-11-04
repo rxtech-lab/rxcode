@@ -169,9 +169,37 @@ struct HistoryListView: View {
     // MARK: - Session List
 
     private var sessionList: some View {
-        List(sessions, selection: selectedSessionBinding) { session in
-            sessionRow(session)
-                .tag(session.id)
+        let calendar = Calendar.current
+        let visibleSessions = sessions
+        let pinned = visibleSessions.filter(\.isPinned)
+        let days = Dictionary(grouping: visibleSessions.filter { !$0.isPinned }) {
+            calendar.startOfDay(for: $0.updatedAt)
+        }
+        return List(selection: selectedSessionBinding) {
+            if !pinned.isEmpty {
+                Section("Pinned") {
+                    ForEach(pinned) { session in
+                        sessionRow(session)
+                            .tag(session.id)
+                    }
+                }
+            }
+            ForEach(days.keys.sorted(by: >), id: \.self) { day in
+                Section {
+                    ForEach(days[day] ?? []) { session in
+                        sessionRow(session)
+                            .tag(session.id)
+                    }
+                } header: {
+                    if calendar.isDateInToday(day) {
+                        Text("Today")
+                    } else if calendar.isDateInYesterday(day) {
+                        Text("Yesterday")
+                    } else {
+                        Text(day, format: .dateTime.year().month(.wide).day())
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
         .animation(.default, value: sessions)

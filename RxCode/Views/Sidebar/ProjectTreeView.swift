@@ -532,9 +532,9 @@ private struct ProjectTreeRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                isExpanded.toggle()
-            }
+            windowState.generalRoute = .tasks
+            windowState.taskDetailProjectId = project.id
+            appState.focusProject(id: project.id, in: windowState)
         }
         .contextMenu {
             projectMenuItems

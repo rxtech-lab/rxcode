@@ -300,8 +300,13 @@ public struct MCPTool: Sendable, Equatable, Identifiable, Hashable {
     public let name: String
     public let description: String?
 
-    public init(name: String, description: String?) {
+    public let inputSchema: JSONValue?
+    public let outputSchema: JSONValue?
+
+    public init(name: String, description: String?, inputSchema: JSONValue? = nil, outputSchema: JSONValue? = nil) {
         self.name = name
         self.description = description
+        self.inputSchema = inputSchema
+        self.outputSchema = outputSchema
     }
 }

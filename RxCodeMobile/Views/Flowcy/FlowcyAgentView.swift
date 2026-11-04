@@ -7,6 +7,7 @@ struct FlowcyAgentView: View {
     @Environment(FlowcyToolsState.self) private var tools
     @Environment(MobileCloudState.self) private var cloud
     @State private var prompt = ""
+    @State private var showingModels = false
     @State private var voiceSession = MobileVoiceInputSession()
     @FocusState private var composerFocused: Bool
     @State private var confirmingNewChat = false
@@ -30,7 +31,43 @@ struct FlowcyAgentView: View {
             pinnedUserMessageID = id
         }
         .navigationTitle("Agent")
+        .sheet(isPresented: $showingModels) {
+            NavigationStack {
+                Group {
+                    if agent.loadingModels {
+                        ProgressView("Loading models…")
+                    } else if let error = agent.modelError {
+                        ContentUnavailableView { Label("Unable to Load Models", systemImage: "exclamationmark.triangle") } description: { Text(error) } actions: {
+                            Button("Retry") { Task { await agent.loadModels() } }
+                        }
+                    } else if agent.models.isEmpty {
+                        ContentUnavailableView("No Cloud Models", systemImage: "cloud", description: Text("An administrator must enable models in Flowcy settings."))
+                    } else {
+                        List {
+                            Button("Server Default") { agent.selectedModelID = nil; MobileHaptics.buttonTap(); showingModels = false }
+                            ForEach(agent.models) { model in
+                                Button { agent.selectedModelID = model.id; MobileHaptics.buttonTap(); showingModels = false } label: {
+                                    HStack {
+                                        VStack(alignment: .leading) { Text(model.alias); Text(model.id).font(.caption).foregroundStyle(.secondary) }
+                                        Spacer()
+                                        if agent.selectedModelID == model.id { Image(systemName: "checkmark") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle("Flowcy Cloud Models")
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingModels = false } } }
+                .task { await agent.loadModels() }
+            }
+        }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Cloud Model", systemImage: "cloud") { showingModels = true; MobileHaptics.buttonTap() }
+                    .disabled(agent.isStreaming)
+            }
             ToolbarItem(placement: .topBarLeading) {
                 Button("New Chat", systemImage: "square.and.pencil") { confirmingNewChat = true }
             }

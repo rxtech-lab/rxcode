@@ -191,7 +191,7 @@ struct RunConfigurationsView: View {
 
     var addMenu: some View {
         Menu {
-            Section("Xcode") {
+            Section("Xcode Recommendations") {
                 Button {
                     addXcodeProfile()
                 } label: {
@@ -206,7 +206,7 @@ struct RunConfigurationsView: View {
                 }
             }
 
-            Section("Make") {
+            Section("Make Recommendations") {
                 Button {
                     addMakeProfile()
                 } label: {
@@ -221,7 +221,7 @@ struct RunConfigurationsView: View {
                 }
             }
 
-            Section("Node.js") {
+            Section("Node.js Recommendations") {
                 Button {
                     addPackageProfile()
                 } label: {

@@ -1,4 +1,5 @@
 import Foundation
+import struct RxAgentSDK.ClaudeCodeClient
 import os
 import RxCodeChatKit
 import RxCodeCore
@@ -372,6 +373,14 @@ extension AppState {
         claudeBinaryPath = claudeBinary
         claudeInstalled = claudeBinary != nil
         claudeVersion = nil
+        if let claudeBinary {
+            claudeModels = await ClaudeCodeClient(binaryPath: claudeBinary).availableModels().map {
+                AgentModel(provider: .claudeCode, id: $0.id, displayName: $0.displayName,
+                           description: $0.modelDescription ?? "")
+            }
+        } else {
+            claudeModels = []
+        }
 
         if claudeBinary != nil {
             do {

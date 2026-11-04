@@ -112,6 +112,10 @@ extension AppState {
             object: nil,
             queue: nil
         ) { [weak self] notification in
+            if let action = notification.userInfo?["payload"] as? QueueMessageActionPayload {
+                Task { @MainActor [weak self] in await self?.handleMobileQueueAction(action) }
+                return
+            }
             guard let payload = notification.userInfo?["payload"] as? RemoveQueuedMessagePayload
             else { return }
             Task { @MainActor [weak self] in

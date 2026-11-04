@@ -3142,6 +3142,9 @@
         }
       }
     },
+    "Alias" : {
+
+    },
     "All" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6803,6 +6806,9 @@
     "Connection" : {
 
     },
+    "Connection failed" : {
+
+    },
     "connection lost" : {
       "comment" : "Fallback MCP disconnect detail when no error message is available.",
       "localizations" : {
@@ -9854,6 +9860,9 @@
         }
       }
     },
+    "Edit Alias…" : {
+
+    },
     "Edit card view" : {
 
     },
@@ -12290,6 +12299,7 @@
       }
     },
     "Hide details" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -13854,6 +13864,9 @@
     "Leave blank to register automatically when the server supports it." : {
 
     },
+    "Leave blank to use the original model name." : {
+
+    },
     "Leave the database blank for organization usage in the current billing period, or enter a database for its usage over the last 30 days." : {
 
     },
@@ -14531,6 +14544,9 @@
         }
       }
     },
+    "Make Recommendations" : {
+
+    },
     "Makefile" : {
       "localizations" : {
         "ko" : {
@@ -15099,6 +15115,9 @@
         }
       }
     },
+    "MCP Server Details" : {
+
+    },
     "MCP server disconnected" : {
       "comment" : "Notification title when an MCP server transitions from connected to failed.",
       "localizations" : {
@@ -15383,6 +15402,9 @@
           }
         }
       }
+    },
+    "Model Alias" : {
+
     },
     "Model and provider breakdowns appear after agent activity." : {
 
@@ -16426,6 +16448,9 @@
         }
       }
     },
+    "No connection details" : {
+
+    },
     "No custom Git sources" : {
       "localizations" : {
         "ko" : {
@@ -16501,6 +16526,9 @@
           }
         }
       }
+    },
+    "No description" : {
+
     },
     "No destinations found" : {
       "localizations" : {
@@ -16779,6 +16807,9 @@
       }
     },
     "No matching tasks. Change this column’s filters." : {
+
+    },
+    "No matching tools" : {
 
     },
     "No measured tasks in this window yet." : {
@@ -17249,6 +17280,9 @@
         }
       }
     },
+    "No schema provided" : {
+
+    },
     "No secrets yet. Add a .env file or enter values manually." : {
       "localizations" : {
         "ko" : {
@@ -17511,7 +17545,11 @@
         }
       }
     },
+    "No tools advertised" : {
+
+    },
     "No tools advertised." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -17620,6 +17658,9 @@
           }
         }
       }
+    },
+    "Node.js Recommendations" : {
+
     },
     "Non-zero → agent continues" : {
       "extractionState" : "stale",
@@ -19232,6 +19273,9 @@
           }
         }
       }
+    },
+    "Pinned" : {
+
     },
     "Plan" : {
       "localizations" : {
@@ -22828,6 +22872,9 @@
         }
       }
     },
+    "Search tools" : {
+
+    },
     "Search your %@ models" : {
 
     },
@@ -26419,6 +26466,12 @@
         }
       }
     },
+    "The server did not advertise an %@ schema for this tool." : {
+
+    },
+    "The server did not provide a description for this tool." : {
+
+    },
     "The session id of the thread to continue. Leave a {{sessionId}} placeholder to target the tapped thread." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -26898,6 +26951,9 @@
         }
       }
     },
+    "This server has not advertised any tools." : {
+
+    },
     "This session will be deleted. This action cannot be undone." : {
       "localizations" : {
         "ko" : {
@@ -27284,6 +27340,9 @@
         }
       }
     },
+    "Tool details" : {
+
+    },
     "Tools to Expose" : {
       "localizations" : {
         "zh-Hans" : {
@@ -27430,6 +27489,9 @@
           }
         }
       }
+    },
+    "Try a different name or keyword." : {
+
     },
     "Try Again" : {
 
@@ -28411,6 +28473,9 @@
         }
       }
     },
+    "View description and schemas" : {
+
+    },
     "View details" : {
       "localizations" : {
         "ko" : {
@@ -29130,6 +29195,9 @@
           }
         }
       }
+    },
+    "Xcode Recommendations" : {
+
     },
     "XHigh" : {
       "localizations" : {

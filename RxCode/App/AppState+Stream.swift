@@ -470,6 +470,7 @@ extension AppState {
     ///   handled either way so a trailing `.result` can't re-fire them.
     func cancelStreaming(in window: WindowState, fireStopHooks: Bool = true) async {
         let key = window.currentSessionId ?? window.newSessionKey
+        usageLimitResumeTasks.removeValue(forKey: key)?.cancel()
         let streamToCancel = sessionStates[key]?.activeStreamId
         sessionStates[key]?.streamTask?.cancel()
 

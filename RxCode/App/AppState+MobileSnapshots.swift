@@ -512,9 +512,8 @@ extension AppState {
     }
 
     func mobileSettingsSnapshot() -> MobileSettingsSnapshot {
-        // Local models run only on this Mac and mobile builds before the
-        // RxCode Agent cannot decode the provider, so they are not offered.
-        let sections = availableAgentModelSections().filter { $0.provider != .localAgent }.map {
+        // Tasks launched from mobile run on this Mac, including local agents.
+        let sections = availableAgentModelSections().map {
             AgentModelSection(
                 id: $0.id,
                 title: $0.title,

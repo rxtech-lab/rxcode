@@ -31,11 +31,6 @@ final class RxAuthService {
     /// can be delivered.
     nonisolated static let requestedScopes = ["openid", "read:profile", "read:email"]
 
-    /// Set once this launch has signed out a session granted fewer scopes than
-    /// `requestedScopes`, so a server that keeps narrowing scopes can't cause
-    /// a sign-out loop.
-    private var didResetOutdatedScopeSession = false
-
     let manager: OAuthManager
     let keychainService: String
     private let logger = Logger(subsystem: "com.claudework", category: "RxAuthService")
@@ -106,28 +101,10 @@ final class RxAuthService {
     /// despite its name, so we gate it ourselves with the keychain `expires_at`
     /// to avoid a token rotation + userinfo round trip on every autopilot call.
     func accessToken(forceRefresh: Bool = false) async -> String? {
-        let token = await resolveAccessToken(forceRefresh: forceRefresh)
-        if let token, await resetSessionIfScopesOutdated(token) {
-            return nil
-        }
-        return token
-    }
-
-    /// A refresh reuses the scopes of the stored refresh token, so a session
-    /// signed in before `requestedScopes` grew never gains the new scopes.
-    /// Signs such a session out (once per launch) so the next sign-in
-    /// requests them. Returns true when it signed out.
-    private func resetSessionIfScopesOutdated(_ token: String) async -> Bool {
-        guard !didResetOutdatedScopeSession,
-              let granted = Self.grantedScopes(in: token)
-        else { return false }
-        let missing = Set(Self.requestedScopes).subtracting(granted)
-        guard !missing.isEmpty else { return false }
-        didResetOutdatedScopeSession = true
-        logger.notice("RxAuth session is missing scopes \(missing.sorted().joined(separator: " "), privacy: .public); signing out so the next sign-in grants them")
-        await signOut()
-        NotificationCenter.default.post(name: .rxAuthSessionExpired, object: nil)
-        return true
+        // OAuthManager owns scope upgrades and records the scopes requested at
+        // sign-in. Comparing JWT grants here would repeatedly discard a valid
+        // session when the server intentionally grants a narrower scope set.
+        await resolveAccessToken(forceRefresh: forceRefresh)
     }
 
     /// The space-separated `scope` claim of a JWT access token, or nil when

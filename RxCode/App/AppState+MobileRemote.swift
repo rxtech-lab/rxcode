@@ -612,6 +612,36 @@ extension AppState {
         await sendMobileSnapshot(toHex: fromHex, activeSessionID: window.currentSessionId)
     }
 
+    func handleMobileQueueAction(_ payload: QueueMessageActionPayload) async {
+        let sessionID = resolveCurrentSessionId(payload.sessionID)
+        guard let target = threadStore.loadQueue(sessionKey: sessionID).first(where: { $0.id == payload.queuedMessageID }) else { return }
+        if let text = payload.text {
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            threadStore.editQueued(id: target.id, text: text)
+            for window in registeredWindows() {
+                if window.currentSessionId == sessionID,
+                   let index = window.messageQueue.firstIndex(where: { $0.id == target.id }) {
+                    window.messageQueue[index].text = text
+                }
+                if let index = window.draftQueues[sessionID]?.firstIndex(where: { $0.id == target.id }) {
+                    window.draftQueues[sessionID]?[index].text = text
+                }
+            }
+        } else {
+            guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
+                  let project = projects.first(where: { $0.id == summary.projectId }) else { return }
+            let window = WindowState()
+            window.currentSessionId = sessionID
+            window.selectedProject = project
+            window.sessionAgentProvider = sessionStates[sessionID]?.agentProvider ?? summary.agentProvider
+            window.sessionModel = sessionStates[sessionID]?.model ?? summary.model
+            if await steerActiveStream(text: target.text, attachments: target.attachments, in: window) {
+                handleMobileRemoveQueuedMessage(.init(sessionID: sessionID, queuedMessageID: target.id))
+            }
+        }
+        broadcastMobileSessionStatus(sessionID: sessionID)
+    }
+
     func handleMobileRemoveQueuedMessage(_ payload: RemoveQueuedMessagePayload) {
         threadStore.removeQueued(id: payload.queuedMessageID)
         evictFromWindowQueueMirrors(sessionID: payload.sessionID, queuedID: payload.queuedMessageID)

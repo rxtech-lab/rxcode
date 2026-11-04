@@ -1,4 +1,5 @@
 import RxCodeCore
+import RxCodeSync
 import SwiftUI
 
 /// Asks which paired Mac runs a task before it enters a chat column. The
@@ -196,14 +197,28 @@ struct MobileTaskRunDeviceSheet: View {
         do {
             try await state.activateDesktop(desktop)
             try Task.checkCancellation()
-            guard state.activePairedDesktop?.id == desktop.id, state.desktopSettings != nil else {
+            guard state.activePairedDesktop?.id == desktop.id, let settings = state.desktopSettings else {
                 throw AutopilotRemoteError.server(String(localized: "This Mac hasn't shared its models yet. Reconnect and try again."))
             }
             modelSections = state.taskModelSections
             let models = modelSections.flatMap(\.models)
-            selectedModel = models.first {
-                $0.provider == request.task.agent.provider && $0.id == request.task.agent.model
-            } ?? models.first
+            let provider = request.task.agent.provider ?? settings.selectedAgentProvider
+            let modelID = request.task.agent.model.flatMap { $0.isEmpty ? nil : $0 }
+                ?? (provider == settings.selectedAgentProvider ? settings.selectedModel : nil)
+            if let modelID, !modelID.isEmpty {
+                // Preserve the assignment even while a dynamic catalogue is incomplete.
+                let model = models.first { $0.provider == provider && $0.id == modelID }
+                    ?? AgentModel(provider: provider, id: modelID, displayName: modelID)
+                selectedModel = model
+                if !models.contains(where: { $0.key == model.key }) {
+                    modelSections.append(AgentModelSection(
+                        id: "assigned-model", title: provider.displayNameText,
+                        provider: provider, models: [model]
+                    ))
+                }
+            } else {
+                selectedModel = models.first { $0.provider == provider }
+            }
             loadedDesktopID = desktop.id
         } catch is CancellationError {
             return

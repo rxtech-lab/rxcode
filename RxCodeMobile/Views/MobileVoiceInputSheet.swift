@@ -514,9 +514,10 @@ private struct RecordedWaveform: View {
 }
 
 
-/// Reviews dictated task text before applying it to the creation form.
+/// Reviews dictated text before applying it to the creation form.
 struct MobileTaskVoiceButton: View {
     @Binding var text: String
+    var placeholder: String = "Task description"
     @State private var showingVoice = false
 
     var body: some View {
@@ -525,7 +526,7 @@ struct MobileTaskVoiceButton: View {
             showingVoice = true
         }
         .sheet(isPresented: $showingVoice) {
-            MobileTaskVoiceSheet(text: $text)
+            MobileTaskVoiceSheet(text: $text, placeholder: placeholder)
                 .mobileSheetPresentation([.large])
         }
     }
@@ -533,6 +534,7 @@ struct MobileTaskVoiceButton: View {
 
 private struct MobileTaskVoiceSheet: View {
     @Binding var text: String
+    let placeholder: String
     @Environment(\.dismiss) private var dismiss
     @State private var session = MobileVoiceInputSession()
     @State private var draft = ""
@@ -541,7 +543,7 @@ private struct MobileTaskVoiceSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Task description", text: $draft, axis: .vertical)
+                    TextField(placeholder, text: $draft, axis: .vertical)
                         .lineLimit(4...12)
                         .disabled(session.mode == .recording)
                     if session.mode == .recording {

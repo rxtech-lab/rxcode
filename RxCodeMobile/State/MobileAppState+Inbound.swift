@@ -7,6 +7,9 @@ import RxCodeSync
 import SwiftUI
 import UIKit
 import os.log
+#if DEBUG
+import QuartzCore
+#endif
 extension MobileAppState {
     // MARK: - Inbound events
 
@@ -113,6 +116,7 @@ extension MobileAppState {
             // Every @Published write re-renders all views observing this
             // object, so only write values the snapshot actually changed.
             let applyStart = Date()
+            let previousWidgetJobCount = sessions.count(where: \.isStreaming)
             var changedFields: [String] = []
             func apply<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<MobileAppState, T>, _ value: T, _ name: String) {
                 guard self[keyPath: keyPath] != value else { return }
@@ -207,6 +211,12 @@ extension MobileAppState {
             logger.info("PERFORMANCE: [MobileSync] applied snapshot seq=\(snap.seq ?? 0, privacy: .public) in \(applyMillis, privacy: .public)ms changed=[\(changedFields.joined(separator: ","), privacy: .public)]")
             if !changedFields.isEmpty {
                 scheduleTaskCacheSave()
+            }
+            // Host metrics and transcript snapshots arrive during scrolling.
+            // Only widget inputs justify synchronous App Group writes/reloads.
+            if changedFields.contains("usageDashboard")
+                || changedFields.contains("usage")
+                || sessions.count(where: \.isStreaming) != previousWidgetJobCount {
                 refreshWidgetData()
             }
         case .moreMessages(let page):
@@ -214,8 +224,22 @@ extension MobileAppState {
             applyMoreMessages(page)
         case .sessionUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "session_update") else { return }
+            #if DEBUG
+            let updateStart = CACurrentMediaTime()
+            defer {
+                let phase = activeSessionID == update.sessionID ? "session_update_active" : "session_update_background"
+                MobileChatPerformanceDiagnostics.record(phase, since: updateStart,
+                    messages: messagesBySession[update.sessionID]?.count ?? 0)
+            }
+            #endif
+            let previousJobCount = sessions.count(where: \.isStreaming)
             applySessionUpdate(update)
-            refreshWidgetData()
+            // Chat tokens do not affect widget content. Saving every token
+            // writes App Group defaults and requests WidgetKit timeline reloads
+            // on the main actor while the user is scrolling the transcript.
+            if sessions.count(where: \.isStreaming) != previousJobCount {
+                refreshWidgetData()
+            }
         case .permissionRequest(let req):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "permission_request") else { return }
             pendingPermission = req
@@ -574,7 +598,7 @@ extension MobileAppState {
         }
         // A session that is no longer streaming cannot still be thinking.
         if update.isStreaming == false {
-            thinkingSessions.remove(update.sessionID)
+            setSessionThinking(sessionID: update.sessionID, isThinking: false)
         }
 
         switch update.kind {
@@ -585,12 +609,13 @@ extension MobileAppState {
         case .messageUpdated:
             if let m = update.message,
                var list = messagesBySession[update.sessionID],
-               let idx = list.firstIndex(where: { $0.id == m.id }) {
+               let idx = list.firstIndex(where: { $0.id == m.id }),
+               list[idx] != m {
                 list[idx] = m
                 messagesBySession[update.sessionID] = list
             }
         case .streamingFinished:
-            thinkingSessions.remove(update.sessionID)
+            setSessionThinking(sessionID: update.sessionID, isThinking: false)
             // Soft success cue, but only when the user is actually looking at
             // (or last looked at) the session that just finished. Avoids
             // buzzing on background-session completions.
@@ -642,6 +667,7 @@ extension MobileAppState {
     }
 
     func setSessionThinking(sessionID: String, isThinking: Bool) {
+        guard thinkingSessions.contains(sessionID) != isThinking else { return }
         if isThinking {
             thinkingSessions.insert(sessionID)
         } else {

@@ -767,3 +767,16 @@ public struct PongPayload: Codable, Sendable {
     public let t: Date
     public init(t: Date = .now) { self.t = t }
 }
+
+/// Edits queued text when `text` is present; otherwise requests live steering.
+/// A separate wire type prevents older desktops from treating edits as removals.
+public struct QueueMessageActionPayload: Codable, Sendable {
+    public let sessionID: String
+    public let queuedMessageID: UUID
+    public let text: String?
+    public init(sessionID: String, queuedMessageID: UUID, text: String? = nil) {
+        self.sessionID = sessionID
+        self.queuedMessageID = queuedMessageID
+        self.text = text
+    }
+}

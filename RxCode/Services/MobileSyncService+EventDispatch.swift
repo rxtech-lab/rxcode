@@ -254,6 +254,13 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": payload]
             )
+        case .queueMessageAction(let payload):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "queue_message_action") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncRemoveQueuedRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": payload]
+            )
         case .newSessionRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "new_session_request") else { return }
             NotificationCenter.default.post(

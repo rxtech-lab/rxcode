@@ -48,6 +48,11 @@ extension MobileAppState {
         try? await client.send(.cancelStream(payload), toHex: pairedDesktopPubkey)
     }
 
+    func queueMessageAction(sessionID: String, queuedID: UUID, text: String?) async throws {
+        guard isPaired else { throw URLError(.notConnectedToInternet) }
+        try await client.send(.queueMessageAction(.init(sessionID: resolveSessionID(sessionID), queuedMessageID: queuedID, text: text)), toHex: pairedDesktopPubkey)
+    }
+
     func removeQueuedMessage(sessionID: String, queuedID: UUID) async {
         guard isPaired else { return }
         let payload = RemoveQueuedMessagePayload(sessionID: resolveSessionID(sessionID), queuedMessageID: queuedID)

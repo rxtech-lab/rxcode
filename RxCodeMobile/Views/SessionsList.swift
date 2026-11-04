@@ -85,7 +85,7 @@ struct SessionsList: View {
         glassThreadList
             .navigationTitle("Threads")
             .toolbar {
-                if selected == nil { toolbarContent }
+                toolbarContent
             }
             .toolbar(usesSelection ? .automatic : .hidden, for: .tabBar)
             .toolbar {

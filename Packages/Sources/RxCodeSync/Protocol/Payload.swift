@@ -21,6 +21,7 @@ public enum Payload: Sendable {
     case userMessage(UserMessagePayload)
     case cancelStream(CancelStreamPayload)
     case removeQueuedMessage(RemoveQueuedMessagePayload)
+    case queueMessageAction(QueueMessageActionPayload)
     case newSessionRequest(NewSessionRequestPayload)
     case threadActionRequest(ThreadActionRequestPayload)
     case loadMoreMessages(LoadMoreMessagesRequestPayload)
@@ -99,6 +100,7 @@ public extension Payload {
         case .userMessage: return "user_message"
         case .cancelStream: return "cancel_stream"
         case .removeQueuedMessage: return "remove_queued_message"
+        case .queueMessageAction: return "queue_message_action"
         case .newSessionRequest: return "new_session_request"
         case .threadActionRequest: return "thread_action_request"
         case .loadMoreMessages: return "load_more_messages"
@@ -611,6 +613,7 @@ extension Payload: Codable {
         case userMessage = "user_message"
         case cancelStream = "cancel_stream"
         case removeQueuedMessage = "remove_queued_message"
+        case queueMessageAction = "queue_message_action"
         case newSessionRequest = "new_session_request"
         case threadActionRequest = "thread_action_request"
         case loadMoreMessages = "load_more_messages"
@@ -691,6 +694,7 @@ extension Payload: Codable {
         case .userMessage: self = .userMessage(try container.decode(UserMessagePayload.self, forKey: .data))
         case .cancelStream: self = .cancelStream(try container.decode(CancelStreamPayload.self, forKey: .data))
         case .removeQueuedMessage: self = .removeQueuedMessage(try container.decode(RemoveQueuedMessagePayload.self, forKey: .data))
+        case .queueMessageAction: self = .queueMessageAction(try container.decode(QueueMessageActionPayload.self, forKey: .data))
         case .newSessionRequest: self = .newSessionRequest(try container.decode(NewSessionRequestPayload.self, forKey: .data))
         case .threadActionRequest: self = .threadActionRequest(try container.decode(ThreadActionRequestPayload.self, forKey: .data))
         case .loadMoreMessages: self = .loadMoreMessages(try container.decode(LoadMoreMessagesRequestPayload.self, forKey: .data))
@@ -767,6 +771,7 @@ extension Payload: Codable {
         case .userMessage(let p): try container.encode(TypeKey.userMessage.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .cancelStream(let p): try container.encode(TypeKey.cancelStream.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .removeQueuedMessage(let p): try container.encode(TypeKey.removeQueuedMessage.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .queueMessageAction(let p): try container.encode(TypeKey.queueMessageAction.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .newSessionRequest(let p): try container.encode(TypeKey.newSessionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .threadActionRequest(let p): try container.encode(TypeKey.threadActionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .loadMoreMessages(let p): try container.encode(TypeKey.loadMoreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)

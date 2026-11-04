@@ -251,6 +251,8 @@ extension AppState {
         includeIDEMCP: Bool = true,
         in window: WindowState
     ) async -> UUID? {
+        let resumeKey = window.currentSessionId ?? window.newSessionKey
+        usageLimitResumeTasks.removeValue(forKey: resumeKey)?.cancel()
         guard let project = window.selectedProject else {
             handleError(AppError.noProjectSelected, in: window)
             return nil

@@ -1,7 +1,4 @@
-import Combine
-import RxCodeChatKit
 import RxCodeCore
-import RxCodeSync
 import SwiftUI
 
 // MARK: - Streaming Indicator
@@ -12,8 +9,6 @@ import SwiftUI
 /// bouncing dots throughout.
 struct MobileStreamingIndicator: View {
     var isThinking: Bool = false
-    @State private var phase: Int = 0
-    private let timer = Timer.publish(every: 0.18, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -28,27 +23,46 @@ struct MobileStreamingIndicator: View {
                 }
                 .transition(.opacity)
             }
-            dots
+            MobileStreamingDots()
         }
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: isThinking)
-        .onReceive(timer) { _ in
-            phase = (phase + 1) % 3
-        }
         .accessibilityLabel(isThinking ? "Thinking" : "Response in progress")
     }
+}
 
-    private var dots: some View {
+/// Animate fixed-size dots without a timer publishing state changes into a
+/// self-sizing collection cell on every beat.
+private struct MobileStreamingDots: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var isPulsing = false
+
+    private var shouldAnimate: Bool { !reduceMotion && scenePhase == .active }
+
+    var body: some View {
         HStack(spacing: 5) {
             ForEach(0 ..< 3, id: \.self) { i in
                 Circle()
                     .fill(ClaudeTheme.textTertiary)
                     .frame(width: 7, height: 7)
-                    .opacity(phase == i ? 1.0 : 0.3)
-                    .scaleEffect(phase == i ? 1.0 : 0.85)
-                    .animation(.easeInOut(duration: 0.25), value: phase)
+                    .opacity(isPulsing ? 1 : 0.35)
+                    .scaleEffect(isPulsing ? 1 : 0.85)
+                    .animation(
+                        shouldAnimate
+                            ? .easeInOut(duration: 0.45)
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(i) * 0.15)
+                            : nil,
+                        value: isPulsing
+                    )
             }
         }
+        .frame(width: 31, height: 7)
+        .accessibilityHidden(true)
+        .onAppear { isPulsing = shouldAnimate }
+        .onChange(of: shouldAnimate) { _, active in isPulsing = active }
+        .onDisappear { isPulsing = false }
     }
 }

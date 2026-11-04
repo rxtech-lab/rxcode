@@ -52,6 +52,13 @@ extension ThreadStore {
         save()
     }
 
+    func editQueued(id: UUID, text: String) {
+        let descriptor = FetchDescriptor<QueuedMessageRecord>(predicate: #Predicate { $0.id == id })
+        guard let row = (try? context.fetch(descriptor))?.first else { return }
+        row.text = text
+        save()
+    }
+
     func removeQueued(id: UUID) {
         var descriptor = FetchDescriptor<QueuedMessageRecord>(
             predicate: #Predicate { $0.id == id }

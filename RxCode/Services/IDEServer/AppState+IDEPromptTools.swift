@@ -83,6 +83,18 @@ extension AppState {
             await withCheckedContinuation { continuation in
                 agentPrompts.continuations.byId[id] = continuation
                 agentPrompts.confirmations.append(confirmation)
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          self.agentPrompts.continuations.byId[id] != nil else { return }
+                    let projectName = self.projects.first { $0.id == projectId }?.name
+                    await self.hookManager.dispatchPermissionAsk(PermissionAskPayload(
+                        toolUseId: id.uuidString,
+                        toolName: request.title,
+                        sessionId: self.resolveCurrentSessionId(sessionKey),
+                        projectId: projectId,
+                        projectName: projectName
+                    ))
+                }
             }
         } onCancel: {
             Task { @MainActor [weak self] in

@@ -122,13 +122,13 @@ public struct ToolActivityGroupView: View {
     private var activitySheet: some View {
         NavigationStack {
             List {
-                ForEach(tools) { tool in
+                ForEach(Array(tools.reversed())) { tool in
                     Button { selectedID = tool.id } label: {
                         ToolActivityStepRow(
                             tool: tool,
                             status: ToolActivityStatus(tool: tool, isStreaming: isStreaming),
-                            isFirst: tool.id == tools.first?.id,
-                            isLast: tool.id == tools.last?.id
+                            isFirst: tool.id == tools.last?.id,
+                            isLast: tool.id == tools.first?.id
                         )
                     }
                     .buttonStyle(.plain)

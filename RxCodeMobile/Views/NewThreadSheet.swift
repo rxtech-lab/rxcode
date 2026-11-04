@@ -242,6 +242,7 @@ private struct NewThreadComposer: View {
     let onSubmit: (String) -> Void
     @State private var text = ""
     @State private var didSeedText = false
+    @State private var voiceSession = MobileVoiceInputSession()
     @FocusState private var isFocused: Bool
 
     private var canSend: Bool {
@@ -259,6 +260,11 @@ private struct NewThreadComposer: View {
 
     var body: some View {
         composer
+            .mobileVoiceInput(session: voiceSession, text: $text)
+            .animation(.spring(duration: 0.35, bounce: 0.15), value: voiceSession.mode)
+            .onChange(of: voiceSession.mode) { _, mode in
+                if mode != .idle { isFocused = false }
+            }
             .onChange(of: focusDismissalGeneration) { _, _ in isFocused = false }
             .task {
                 guard !didSeedText else { return }
@@ -267,7 +273,7 @@ private struct NewThreadComposer: View {
                 // Let the sheet mount before asking the keyboard to attach.
                 do { try await Task.sleep(for: .milliseconds(200)) }
                 catch { return }
-                guard focusDismissalGeneration == 0 else { return }
+                guard focusDismissalGeneration == 0, !voiceSession.isPresented else { return }
                 isFocused = true
                 newThreadLogger.debug("PERFORMANCE: mobile new-thread composer ready")
             }
@@ -276,21 +282,56 @@ private struct NewThreadComposer: View {
     // MARK: - Composer (multiline input with embedded send)
 
     private var composer: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            TextField(
-                "Describe what to build…",
-                text: $text,
-                axis: .vertical
-            )
-            .lineLimit(4 ... 14)
-            .textFieldStyle(.plain)
-            .font(.body)
-            .focused($isFocused)
-            .disabled(isSubmitting)
-            .submitLabel(.return)
-            .accessibilityIdentifier("new-thread-input")
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .trailing, spacing: 8) {
+                TextField(
+                    "Describe what to build…",
+                    text: $text,
+                    axis: .vertical
+                )
+                .lineLimit(4 ... 14)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .focused($isFocused)
+                .disabled(isSubmitting)
+                .submitLabel(.return)
+                .accessibilityIdentifier("new-thread-input")
 
-            sendButton
+                HStack {
+                    MobileVoiceMicButton(text: $text, session: voiceSession)
+                        .disabled(isSubmitting)
+                        .accessibilityIdentifier("new-thread-voice-input")
+                    Spacer()
+                    sendButton
+                }
+            }
+            .opacity(voiceSession.isPresented ? 0 : 1)
+            .allowsHitTesting(!voiceSession.isPresented)
+            .accessibilityHidden(voiceSession.isPresented)
+            if voiceSession.isPresented {
+                VStack(alignment: .leading, spacing: 8) {
+                    MobileVoiceCancelButton { text = voiceSession.discard() }
+                    switch voiceSession.mode {
+                    case .recording:
+                        MobileVoiceRecordingContent(session: voiceSession)
+                    case .review:
+                        MobileVoiceReviewContent(session: voiceSession, canSend: !isSubmitting) {
+                            text = voiceSession.draft
+                            voiceSession.endReview()
+                            isFocused = false
+                            onSubmit(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                        } onEdit: {
+                            text = voiceSession.draft
+                            voiceSession.endReview()
+                            isFocused = true
+                        }
+                    case .idle:
+                        EmptyView()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .transition(.blurReplace)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)

@@ -818,7 +818,13 @@ actor MCPService {
         }
         return tools.compactMap { dict in
             guard let name = dict["name"] as? String else { return nil }
-            return MCPTool(name: name, description: dict["description"] as? String)
+            func schema(_ key: String) -> JSONValue? {
+                guard let object = dict[key],
+                      let data = try? JSONSerialization.data(withJSONObject: object, options: [.fragmentsAllowed]) else { return nil }
+                return try? JSONDecoder().decode(JSONValue.self, from: data)
+            }
+            return MCPTool(name: name, description: dict["description"] as? String,
+                           inputSchema: schema("inputSchema"), outputSchema: schema("outputSchema"))
         }
     }
 

@@ -36,6 +36,8 @@ struct LocalModelsSheet: View {
     @State private var section: Section = .browse
     @State private var remoteSelection: HFModelSummary?
     @State private var installedSelection: InstalledSelection?
+    @State private var aliasModel: LocalModelInfo?
+    @State private var aliasDraft = ""
     @State private var status: String?
     @State private var errorMessage: String?
     @State private var pendingDownload: PendingDownload?
@@ -92,6 +94,31 @@ struct LocalModelsSheet: View {
             if case .model(let id) = installedSelection, !store.installed.contains(where: { $0.id == id }) {
                 installedSelection = nil
             }
+        }
+        .sheet(item: $aliasModel) { model in
+            NavigationStack {
+                Form {
+                    TextField("Alias", text: $aliasDraft)
+                    Text("Leave blank to use the original model name.")
+                        .foregroundStyle(.secondary)
+                }
+                .formStyle(.grouped)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle("Model Alias")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { aliasModel = nil }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            store.setAlias(aliasDraft, for: model.id)
+                            aliasModel = nil
+                            showStatus("Model alias updated.")
+                        }
+                    }
+                }
+            }
+            .frame(width: 480, height: 360)
         }
         .sheet(isPresented: $showSignIn) {
             HuggingFaceSignInSheet()
@@ -265,6 +292,10 @@ struct LocalModelsSheet: View {
                         installedSelection = .model(model.id)
                     }
                     .contextMenu {
+                        Button("Edit Alias…") {
+                            aliasDraft = model.alias ?? ""
+                            aliasModel = model
+                        }
                         Button("Make Default") { store.settings.defaultModelID = model.id }
                             .disabled(store.settings.defaultModelID == model.id)
                         Divider()

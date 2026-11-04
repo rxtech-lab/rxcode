@@ -56,6 +56,7 @@ struct MobileTaskFormView: View {
                     .accessibilityIdentifier("task-form-title")
                 TextField("Description", text: $task.details, axis: .vertical)
                     .lineLimit(4...12)
+                MobileTaskVoiceButton(text: $task.details)
             }
 
             Section {
@@ -420,6 +421,7 @@ struct MobileQuickAddTaskView: View {
                     .lineLimit(3...10)
                     .focused($isFocused)
                     .accessibilityIdentifier("task-quick-add-text")
+                MobileTaskVoiceButton(text: $text)
             } footer: {
                 Text("Your Mac titles and classifies the task in the background.")
             }

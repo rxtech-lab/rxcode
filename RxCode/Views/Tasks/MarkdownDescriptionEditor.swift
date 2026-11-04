@@ -71,10 +71,7 @@ struct MarkdownDescriptionEditor: View {
         .onAppear {
             displayText = chips.display(for: text)
             controller.fallbackAppend = { [binding = $displayText] snippet in
-                let current = binding.wrappedValue
-                binding.wrappedValue = current.isEmpty || current.hasSuffix("\n")
-                    ? current + snippet
-                    : current + "\n" + snippet
+                binding.wrappedValue += snippet
             }
         }
         .onChange(of: text) { _, newValue in
@@ -192,7 +189,11 @@ struct MarkdownDescriptionEditor: View {
         let resolved = AttachmentFactory.resolvingClipboardImages([attachment]).resolved
         for item in resolved {
             let reference = Self.markdownReference(for: item)
-            controller.insertBlock(item.type == .image ? chips.token(for: reference) : reference)
+            if item.type == .image {
+                controller.insert(chips.token(for: reference))
+            } else {
+                controller.insertBlock(reference)
+            }
             guard let attachments, !item.path.isEmpty else { continue }
             let dto = item.persistableInTaskBoard().dto
             guard !attachments.wrappedValue.contains(where: { $0.path == dto.path }) else { continue }

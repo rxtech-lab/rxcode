@@ -672,6 +672,7 @@ final class AppState {
     /// Last-fetched usage percentages for the menu-bar status popup. Updated by
     /// `refreshRateLimitUsage()`; nil until first successful fetch (or when not
     /// signed in to Claude Code).
+    @ObservationIgnored var usageLimitResumeTasks: [String: Task<Void, Never>] = [:]
     var latestRateLimitUsage: RateLimitUsage?
     var latestCodexRateLimitUsage: RateLimitUsage?
     @ObservationIgnored var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]

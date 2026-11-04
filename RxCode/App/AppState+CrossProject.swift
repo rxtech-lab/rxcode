@@ -721,11 +721,15 @@ extension AppState {
 
                     if isFg {
                         window.currentSessionId = sessionKey
-                        if resultEvent.isError {
-                            let errText = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
-                                ?? "\(agentProvider.displayNameText) returned an error."
-                            addErrorMessage(errText, in: window)
+                    }
+                    if resultEvent.isError {
+                        let errText = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
+                            ?? "\(agentProvider.displayNameText) returned an error."
+                        let failureText = stateForSession(sessionKey).messages.suffix(2).map(\.content).joined(separator: "\n") + "\n" + errText
+                        updateState(sessionKey) { state in
+                            state.messages.append(ChatMessage(role: .assistant, content: errText, isError: true))
                         }
+                        scheduleUsageLimitResume(error: failureText, sessionKey: sessionKey, provider: agentProvider, projectId: projectId)
                     }
 
                     await saveSession(

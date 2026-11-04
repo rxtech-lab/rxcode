@@ -59,9 +59,10 @@ struct RunProfileToolbarGroup: View {
                 destinationPicker
             }
 
-            Divider().frame(height: 14)
-
-            runButton
+            if !isSelectedProfileRunning {
+                Divider().frame(height: 14)
+                runButton
+            }
 
             if !activeTasks.isEmpty {
                 Divider().frame(height: 14)

@@ -19,6 +19,32 @@ struct FlowcyPendingTool: Identifiable {
 /// Chat lifetime is independent of tabs and the paired remote workspace.
 @MainActor @Observable
 final class FlowcyAgentState {
+    struct CloudModel: Identifiable { let id: String; let alias: String }
+    private(set) var models: [CloudModel] = []
+    private(set) var loadingModels = false
+    var selectedModelID: String? { didSet { persist() } }
+    var modelError: String?
+
+    func loadModels() async {
+        let account = accountID
+        loadingModels = true
+        modelError = nil
+        defer { loadingModels = false }
+        do {
+            let response = try await api.read("agent/models")
+            guard account == accountID else { return }
+            guard let entries = response["models"]?.arrayValue else { throw FlowcyError.protocolError }
+            models = try entries.map { entry in
+                guard let id = entry["modelId"]?.stringValue, let alias = entry["alias"]?.stringValue else { throw FlowcyError.protocolError }
+                return CloudModel(id: id, alias: alias)
+            }
+            if !models.contains(where: { $0.id == selectedModelID }) { selectedModelID = nil }
+        } catch {
+            guard account == accountID else { return }
+            modelError = error.localizedDescription
+        }
+    }
+
     private(set) var messages: [FlowcyChatMessage] = []
     private(set) var isStreaming = false
     private(set) var progress: String?
@@ -43,7 +69,7 @@ final class FlowcyAgentState {
         FlowcyTool(name: JSONUITool.flowcyName, description: JSONUITool.description, inputSchema: JSONUITool.inputSchema, annotations: .object(["readOnlyHint": .bool(true)])),
     ]
 
-    private struct Saved: Codable { let messages: [FlowcyChatMessage]; let history: [JSONValue] }
+    private struct Saved: Codable { let messages: [FlowcyChatMessage]; let history: [JSONValue]; var selectedModelID: String? = nil }
     private var file: URL? {
         guard let accountID else { return nil }
         let name = Data(accountID.utf8).base64EncodedString().replacingOccurrences(of: "/", with: "_")
@@ -56,13 +82,18 @@ final class FlowcyAgentState {
         cancel()
         retryAt = nil
         error = nil
+        self.accountID = nil
+        models = []
+        selectedModelID = nil
         self.accountID = accountID
+        modelError = nil
         messages = []
         history = []
         guard let file, let data = try? Data(contentsOf: file), data.count <= 4_000_000,
               let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return }
         messages = saved.messages
         history = saved.history
+        selectedModelID = saved.selectedModelID
     }
 
     func newChat() {
@@ -159,7 +190,9 @@ final class FlowcyAgentState {
                 let declared = try available.map { tool -> JSONValue in
                     try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(tool))
                 }
-                let body: JSONValue = .object(["messages": .array(history), "tools": .array(declared)])
+                var fields: [String: JSONValue] = ["messages": .array(history), "tools": .array(declared)]
+                if let selectedModelID { fields["modelId"] = .string(selectedModelID) }
+                let body: JSONValue = .object(fields)
                 return try await api.request(path: "agent/chat", body: body)
             }
             let bytes: URLSession.AsyncBytes, response: HTTPURLResponse
@@ -263,7 +296,7 @@ final class FlowcyAgentState {
         guard let file else { return }
         do {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let data = try JSONEncoder().encode(Saved(messages: messages, history: history))
+            let data = try JSONEncoder().encode(Saved(messages: messages, history: history, selectedModelID: selectedModelID))
             guard data.count <= 4_000_000 else { error = "This chat is too large to save. Start a new chat."; return }
             try data.write(to: file, options: [.atomic, .completeFileProtection])
         } catch { self.error = "Could not save this conversation on the device." }

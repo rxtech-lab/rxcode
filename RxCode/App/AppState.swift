@@ -363,6 +363,7 @@ final class AppState {
         didSet { workspaceDefaults.set(globalChatLastModel, for: "globalChatLastModel") }
     }
 
+    var claudeModels: [AgentModel] = []
     var codexModels: [AgentModel] = []
 
     // MARK: - ACP

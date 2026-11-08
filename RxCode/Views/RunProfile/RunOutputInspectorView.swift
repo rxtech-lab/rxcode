@@ -59,7 +59,7 @@ struct RunOutputInspectorView: View {
                         } label: {
                             HStack {
                                 statusDot(for: task.status)
-                                Text("\(task.profile.name) · \(task.status.label)")
+                                Text("\(appState.runService.displayName(for: task)) · \(task.status.label)")
                                 if selectedTask?.id == task.id {
                                     Image(systemName: "checkmark")
                                 }
@@ -71,7 +71,7 @@ struct RunOutputInspectorView: View {
                 HStack(spacing: 4) {
                     if let task = selectedTask {
                         statusDot(for: task.status)
-                        Text("\(task.profile.name) · \(task.status.label)")
+                        Text("\(appState.runService.displayName(for: task)) · \(task.status.label)")
                             .lineLimit(1)
                     } else {
                         Text("No tasks")
@@ -96,7 +96,7 @@ struct RunOutputInspectorView: View {
                         Image(systemName: "stop.fill")
                     }
                     .buttonStyle(.borderless)
-                    .help("Stop \(task.profile.name)")
+                    .help("Stop \(appState.runService.displayName(for: task))")
                 } else {
                     Button {
                         _ = appState.runService.start(profile: task.profile, project: task.project)
@@ -105,7 +105,7 @@ struct RunOutputInspectorView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
-                    .help("Re-run \(task.profile.name)")
+                    .help("Re-run \(appState.runService.displayName(for: task))")
 
                     Button {
                         appState.runService.remove(taskId: task.id)

@@ -7,14 +7,16 @@ struct PendingAttention: Equatable {
     var setups = 0
     var confirmations = 0
     var runningThreads = 0
+    var unreadThreads = 0
 
-    var count: Int { permissions + setups + confirmations + runningThreads }
+    var count: Int { permissions + setups + confirmations + runningThreads + unreadThreads }
     var label: String {
         var parts: [String] = []
         if permissions > 0 { parts.append(String(localized: "Permissions: \(permissions)")) }
         if setups > 0 { parts.append(String(localized: "Setups: \(setups)")) }
         if confirmations > 0 { parts.append(String(localized: "Confirmations: \(confirmations)")) }
         if runningThreads > 0 { parts.append(String(localized: "Running threads: \(runningThreads)")) }
+        if unreadThreads > 0 { parts.append(String(localized: "Unread threads: \(unreadThreads)")) }
         return parts.joined(separator: ", ")
     }
 }
@@ -47,7 +49,8 @@ extension AppState {
             confirmations: agentPrompts.confirmations.filter {
                 $0.projectId == projectId || sessionIds.contains(resolveCurrentSessionId($0.sessionKey))
             }.count,
-            runningThreads: sessionIds.filter { sessionActivity[$0]?.isStreaming == true }.count
+            runningThreads: sessionIds.filter { sessionActivity[$0]?.isStreaming == true }.count,
+            unreadThreads: sessionIds.filter { sessionActivity[$0]?.hasUncheckedCompletion == true }.count
         )
     }
 

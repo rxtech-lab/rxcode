@@ -95,7 +95,7 @@ struct RunProfileToolbarGroup: View {
                         windowState.selectedRunProfileId = profile.id
                     } label: {
                         HStack {
-                            Text(profile.name.prefix(150) + (profile.name.count > 150 ? "…" : ""))
+                            Text(profileLabel(profile))
                             if selectedProfile?.id == profile.id {
                                 Image(systemName: "checkmark")
                             }
@@ -112,7 +112,7 @@ struct RunProfileToolbarGroup: View {
             HStack(spacing: 4) {
                 Image(systemName: "play.rectangle")
                     .font(.system(size: 11))
-                Text(selectedProfile?.name ?? "Run")
+                Text(selectedProfile.map { profileLabel($0) } ?? "Run")
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -130,6 +130,11 @@ struct RunProfileToolbarGroup: View {
         .accessibilityIdentifier("run-profile-menu")
     }
 
+    private func profileLabel(_ profile: RunProfile) -> String {
+        guard let project else { return profile.name }
+        return appState.runService.displayName(for: profile, project: project)
+    }
+
     // MARK: - Run button
 
     private var runButton: some View {
@@ -144,8 +149,8 @@ struct RunProfileToolbarGroup: View {
                 .contentShape(Rectangle())
         }
         .help(isSelectedProfileRunning
-            ? "\(selectedProfile?.name ?? "") is already running"
-            : "Run \(selectedProfile?.name ?? "")")
+            ? "\(selectedProfile.map { profileLabel($0) } ?? "") is already running"
+            : "Run \(selectedProfile.map { profileLabel($0) } ?? "")")
         .disabled(selectedProfile == nil || project == nil || isSelectedProfileRunning)
         .accessibilityIdentifier("run-profile-run-button")
     }
@@ -160,7 +165,7 @@ struct RunProfileToolbarGroup: View {
             } label: {
                 stopIcon
             }
-            .help("Stop \(only.profile.name)")
+            .help("Stop \(appState.runService.displayName(for: only))")
             .accessibilityIdentifier("run-profile-stop-button")
         } else {
             Menu {
@@ -168,7 +173,7 @@ struct RunProfileToolbarGroup: View {
                     Button {
                         appState.runService.stop(taskId: task.id)
                     } label: {
-                        Text("Stop '\(task.profile.name)'")
+                        Text("Stop '\(appState.runService.displayName(for: task))'")
                     }
                 }
                 Divider()

@@ -24,23 +24,28 @@ final class FlowcyAgentState {
     private(set) var loadingModels = false
     var selectedModelID: String? { didSet { persist() } }
     var modelError: String?
+    @ObservationIgnored private var catalogRequest = UUID()
 
     func loadModels() async {
-        let account = accountID
+        guard let account = accountID else { return }
+        let request = UUID()
+        catalogRequest = request
         loadingModels = true
         modelError = nil
-        defer { loadingModels = false }
+        defer { if catalogRequest == request { loadingModels = false } }
         do {
             let response = try await api.read("agent/models")
-            guard account == accountID else { return }
+            guard account == accountID, catalogRequest == request else { return }
+            try Task.checkCancellation()
             guard let entries = response["models"]?.arrayValue else { throw FlowcyError.protocolError }
             models = try entries.map { entry in
                 guard let id = entry["modelId"]?.stringValue, let alias = entry["alias"]?.stringValue else { throw FlowcyError.protocolError }
                 return CloudModel(id: id, alias: alias)
             }
             if !models.contains(where: { $0.id == selectedModelID }) { selectedModelID = nil }
+        } catch is CancellationError {
         } catch {
-            guard account == accountID else { return }
+            guard account == accountID, catalogRequest == request else { return }
             modelError = error.localizedDescription
         }
     }
@@ -83,6 +88,8 @@ final class FlowcyAgentState {
         retryAt = nil
         error = nil
         self.accountID = nil
+        catalogRequest = UUID()
+        loadingModels = false
         models = []
         selectedModelID = nil
         self.accountID = accountID
@@ -148,6 +155,7 @@ final class FlowcyAgentState {
         retryAt = nil
         isStreaming = true
         let current = generation
+        let modelID = selectedModelID
         run = Task {
             defer {
                 if generation == current { isStreaming = false; progress = nil; run = nil; persist() }
@@ -160,15 +168,17 @@ final class FlowcyAgentState {
                 try Task.checkCancellation()
                 guard generation == current else { throw CancellationError() }
                 guard tools.isConnected else { throw tools.failure ?? FlowcyError.message(tools.error ?? "Could not load Flowcy tools. Try again.") }
-                try await turn(tools: tools, cloud: cloud, current: current)
+                try await turn(tools: tools, cloud: cloud, current: current, modelID: modelID)
                 try Task.checkCancellation()
                 if generation == current { MobileHaptics.streamFinished() }
             } catch is CancellationError { }
             catch {
                 guard generation == current else { return }
-                if case let FlowcyError.rateLimited(_, date) = error {
+                switch error {
+                case let FlowcyError.rateLimited(_, date), let FlowcyError.spendingLimited(date):
                     canRetry = true
                     retryAt = date
+                default: break
                 }
                 self.error = error.localizedDescription
                 if canRetry { self.error? += " Your prompt is saved; it will not be sent automatically." }
@@ -180,7 +190,7 @@ final class FlowcyAgentState {
         }
     }
 
-    private func turn(tools: FlowcyToolsState, cloud: MobileCloudState, current: UUID) async throws {
+    private func turn(tools: FlowcyToolsState, cloud: MobileCloudState, current: UUID, modelID: String?) async throws {
         // Each model step is separated from tool execution so writes can require native consent.
         for _ in 0..<8 {
             try Task.checkCancellation()
@@ -191,7 +201,7 @@ final class FlowcyAgentState {
                     try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(tool))
                 }
                 var fields: [String: JSONValue] = ["messages": .array(history), "tools": .array(declared)]
-                if let selectedModelID { fields["modelId"] = .string(selectedModelID) }
+                if let modelID { fields["modelId"] = .string(modelID) }
                 let body: JSONValue = .object(fields)
                 return try await api.request(path: "agent/chat", body: body)
             }

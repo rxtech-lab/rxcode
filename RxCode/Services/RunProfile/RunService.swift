@@ -223,6 +223,18 @@ final class RunService {
         tasks.filter { !$0.status.isTerminal }
     }
 
+    /// Include retained runs so toolbar and inspector labels stay consistent.
+    func displayName(for profile: RunProfile, project: Project) -> String {
+        let hasDuplicate = tasks.contains {
+            $0.profile.name == profile.name && $0.project.id != project.id
+        }
+        return hasDuplicate ? "\(profile.name) (\(project.name))" : profile.name
+    }
+
+    func displayName(for task: RunTask) -> String {
+        displayName(for: task.profile, project: task.project)
+    }
+
     @discardableResult
     func start(profile: RunProfile, project: Project) -> RunTask {
         // Replace any previous task for the same profile+project so a re-run

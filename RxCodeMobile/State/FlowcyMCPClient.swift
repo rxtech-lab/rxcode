@@ -13,6 +13,7 @@ nonisolated struct FlowcyTool: Codable, Identifiable, Sendable {
 enum FlowcyError: LocalizedError {
     case signIn, denied, transport(Int), protocolError, toolFailed, message(String)
     case rateLimited(service: String, retryAt: Date?)
+    case spendingLimited(retryAt: Date?)
     var errorDescription: String? {
         switch self {
         case .signIn: "Your account session is unavailable. Sign in to Flowcy again."
@@ -24,10 +25,29 @@ enum FlowcyError: LocalizedError {
             } else {
                 "\(service) is rate limited (HTTP 429). The service did not provide a retry time. Wait before retrying."
             }
+        case .spendingLimited(let retryAt):
+            if let retryAt {
+                "Flowcy spending allowance is exhausted. Try again after \(retryAt.formatted(date: .abbreviated, time: .shortened))."
+            } else {
+                "The remaining Flowcy allowance cannot cover this model request. Choose a less expensive model or wait for your allowance to reset."
+            }
         case .protocolError: "Flowcy returned an invalid protocol response."
         case .toolFailed: "The tool reported an error. Review its result before retrying."
         case .message(let message): message
         }
+    }
+
+    static func chatLimit(_ response: HTTPURLResponse, body: Data) -> FlowcyError {
+        if let value = try? JSONDecoder().decode(JSONValue.self, from: body),
+           let message = value["error"]?.stringValue,
+           ["Agent spending limit reached", "Remaining allowance cannot cover this model's maximum request cost"].contains(message) {
+            let raw = value["resetsAt"]?.stringValue
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let date = raw.flatMap { formatter.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
+            return .spendingLimited(retryAt: date)
+        }
+        return rateLimit(response, service: "Flowcy Chat")
     }
 
     /// Only server-provided timing is used; a missing header is not a one-minute promise.

@@ -1,18 +1,20 @@
 import Foundation
 import RxCodeCore
 
-/// Pending decisions and setup prompts used by sidebar and native tab badges.
+/// Pending decisions, setup prompts, and project activity used by tab badges.
 struct PendingAttention: Equatable {
     var permissions = 0
     var setups = 0
     var confirmations = 0
+    var runningThreads = 0
 
-    var count: Int { permissions + setups + confirmations }
+    var count: Int { permissions + setups + confirmations + runningThreads }
     var label: String {
         var parts: [String] = []
         if permissions > 0 { parts.append(String(localized: "Permissions: \(permissions)")) }
         if setups > 0 { parts.append(String(localized: "Setups: \(setups)")) }
         if confirmations > 0 { parts.append(String(localized: "Confirmations: \(confirmations)")) }
+        if runningThreads > 0 { parts.append(String(localized: "Running threads: \(runningThreads)")) }
         return parts.joined(separator: ", ")
     }
 }
@@ -44,7 +46,8 @@ extension AppState {
             setups: setupAttentionCount(projectId: projectId),
             confirmations: agentPrompts.confirmations.filter {
                 $0.projectId == projectId || sessionIds.contains(resolveCurrentSessionId($0.sessionKey))
-            }.count
+            }.count,
+            runningThreads: sessionIds.filter { sessionActivity[$0]?.isStreaming == true }.count
         )
     }
 

@@ -69,7 +69,22 @@ private struct AgentConfirmationSheet: View {
     let confirmation: AgentConfirmation
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Confirmation")
+                    .font(.headline)
+                Spacer()
+                Button("Hide") {
+                    appState.setAgentConfirmationMinimized(id: confirmation.id, minimized: true)
+                }
+                .keyboardShortcut(.cancelAction)
+                .help("Hide without deciding. Reopen from the banner above the input box.")
+                .accessibilityIdentifier("agent-confirmation-hide")
+            }
+            .padding(20)
+
+            Divider()
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(confirmation.request.title)
@@ -82,28 +97,21 @@ private struct AgentConfirmationSheet: View {
                 .padding(24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle("Confirmation")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Minimize", systemImage: "minus") {
-                        appState.setAgentConfirmationMinimized(id: confirmation.id, minimized: true)
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    .help("Minimize to the banner above the input box")
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button(confirmation.request.cancelLabel) {
+                    appState.resolveAgentConfirmation(id: confirmation.id, confirmed: false)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    HStack {
-                        Button(confirmation.request.cancelLabel) {
-                            appState.resolveAgentConfirmation(id: confirmation.id, confirmed: false)
-                        }
-                        Button(confirmation.request.confirmLabel, role: confirmation.request.isDestructive ? .destructive : nil) {
-                            appState.resolveAgentConfirmation(id: confirmation.id, confirmed: true)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                    }
+                Button(confirmation.request.confirmLabel, role: confirmation.request.isDestructive ? .destructive : nil) {
+                    appState.resolveAgentConfirmation(id: confirmation.id, confirmed: true)
                 }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
             }
+            .padding(20)
         }
         .frame(minWidth: 480, idealWidth: 560, maxWidth: .infinity,
                minHeight: 320, idealHeight: 420, maxHeight: .infinity)

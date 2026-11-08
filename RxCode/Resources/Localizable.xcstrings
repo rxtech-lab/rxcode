@@ -5091,6 +5091,9 @@
         }
       }
     },
+    "Chat with enabled Flowcy models. This conversation does not access local project files or tools." : {
+
+    },
     "Chat with Model" : {
 
     },
@@ -5721,6 +5724,9 @@
           }
         }
       }
+    },
+    "Clear this conversation?" : {
+
     },
     "Click + in the toolbar to add one." : {
       "localizations" : {
@@ -11488,6 +11494,12 @@
         }
       }
     },
+    "Flowcy Cloud Chat" : {
+
+    },
+    "Flowcy Cloud Chat…" : {
+
+    },
     "Flowcy project" : {
       "localizations" : {
         "ko" : {
@@ -12424,6 +12436,9 @@
 
     },
     "Hide View" : {
+
+    },
+    "Hide without deciding. Reopen from the banner above the input box." : {
 
     },
     "High" : {
@@ -14220,6 +14235,9 @@
     "Loading Categories…" : {
 
     },
+    "Loading cloud models…" : {
+
+    },
     "Loading current branches…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -15332,12 +15350,6 @@
           }
         }
       }
-    },
-    "Minimize" : {
-
-    },
-    "Minimize to the banner above the input box" : {
-
     },
     "Minute" : {
       "localizations" : {
@@ -21794,6 +21806,9 @@
         }
       }
     },
+    "Running threads: %lld" : {
+
+    },
     "Runs `%@`. Arguments are appended after the script — use `-- <flags>` to forward flags through npm/pnpm." : {
       "localizations" : {
         "ko" : {
@@ -22947,6 +22962,9 @@
           }
         }
       }
+    },
+    "Select a model" : {
+
     },
     "Select a Model" : {
 
@@ -25110,6 +25128,9 @@
           }
         }
       }
+    },
+    "Stop" : {
+
     },
     "Stop '%@'" : {
       "localizations" : {

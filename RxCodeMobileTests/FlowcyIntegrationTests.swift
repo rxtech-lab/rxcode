@@ -26,6 +26,23 @@ final class FlowcyProtocolTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testChatSpendingLimitPreservesResetTime() throws {
+        let response = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://www.flowcy.dev")!, statusCode: 429, httpVersion: nil, headerFields: nil))
+        let body = Data(#"{"error":"Agent spending limit reached","resetsAt":"2026-11-06T12:00:00.000Z"}"#.utf8)
+        guard case .spendingLimited(let date) = FlowcyError.chatLimit(response, body: body) else { return XCTFail("Expected spending limit") }
+        XCTAssertEqual(date, ISO8601DateFormatter().date(from: "2026-11-06T12:00:00Z"))
+        guard case .rateLimited = FlowcyError.chatLimit(response, body: Data("invalid".utf8)) else { return XCTFail("Expected rate-limit fallback") }
+    }
+
+    @MainActor
+    func testInsufficientRequestBudgetDoesNotInventResetTime() throws {
+        let response = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://www.flowcy.dev")!, statusCode: 429, httpVersion: nil, headerFields: nil))
+        let body = Data(#"{"error":"Remaining allowance cannot cover this model's maximum request cost"}"#.utf8)
+        guard case .spendingLimited(let date) = FlowcyError.chatLimit(response, body: body) else { return XCTFail("Expected spending limit") }
+        XCTAssertNil(date)
+    }
+
     func testNotificationUsesSubjectInsteadOfIdentifier() {
         let value: JSONValue = .object([
             "id": .string("bbb5fa72-9f1f-41c6-84ac-5380b0e08262"),

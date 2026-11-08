@@ -117,13 +117,15 @@ extension AppState {
 
     /// Applies the user's decision on prompt `id`. When the turn that asked has
     /// already ended, nothing is waiting for the tool result anymore, so a
-    /// confirmation is sent to the thread as a new message to continue the work.
+    /// decision is sent to the thread as a new message to continue the work.
     func resolveAgentConfirmation(id: UUID, confirmed: Bool) {
         guard let confirmation = agentPrompts.confirmations.first(where: { $0.id == id }) else { return }
         let turnEnded = !isSessionTurnRunning(confirmation.sessionKey)
         guard settleAgentConfirmation(id: id, confirmed: confirmed) else { return }
-        guard confirmed, turnEnded else { return }
-        let prompt = "I confirmed \"\(confirmation.request.title)\". Go ahead."
+        guard turnEnded else { return }
+        let prompt = confirmed
+            ? "I confirmed \"\(confirmation.request.title)\". Go ahead."
+            : "I rejected \"\(confirmation.request.title)\". Do not perform the rejected action. Continue with this decision."
         Task { await sendLatePromptAnswer(prompt, sessionKey: confirmation.sessionKey) }
     }
 

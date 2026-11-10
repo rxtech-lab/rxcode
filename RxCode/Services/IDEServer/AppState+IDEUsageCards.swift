@@ -2,6 +2,27 @@ import Foundation
 import RxCodeCore
 
 extension AppState {
+    func handleGetIntegrationUsage(_ arguments: JSONValue) async throws -> JSONValue {
+        let query = try IntegrationUsageQuery(arguments: arguments)
+        let workspaceURL = activeWorkspace.storageURL
+        if query.refresh {
+            for integration in query.integrations(in: usageDashboard) {
+                let snapshot = await refreshedUsageSnapshot(integration)
+                guard activeWorkspace.storageURL == workspaceURL else {
+                    throw IDEToolError.handlerFailed("Workspace changed during usage refresh. Retry in the current workspace.")
+                }
+                guard usageDashboard.integrations.contains(integration) else { continue }
+                usageDashboard.snapshots.removeAll { $0.id == integration.id }
+                usageDashboard.snapshots.append(snapshot)
+            }
+            await persistUsageDashboard()
+            guard activeWorkspace.storageURL == workspaceURL else {
+                throw IDEToolError.handlerFailed("Workspace changed during usage refresh. Retry in the current workspace.")
+            }
+        }
+        return jsonTextResult(query.report(from: usageDashboard))
+    }
+
     func handleUsageCards(_ arguments: JSONValue) async throws -> JSONValue {
         var dashboard = usageDashboard
         let operation = arguments["operation"]?.stringValue ?? "get"

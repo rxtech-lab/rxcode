@@ -595,6 +595,7 @@ extension AppState {
         if error == nil {
             reconcileTaskCompletionLabel(sessionId: sessionId, assistantText: assistantText)
         }
+        broadcastMobileTaskReview(sessionId: sessionId)
         let completion = StreamCompletion(
             sessionId: sessionId,
             assistantText: assistantText,

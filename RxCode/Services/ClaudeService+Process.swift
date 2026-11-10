@@ -374,6 +374,7 @@ extension ClaudeCodeServer {
     messages.
     - `mcp__rxcode-ide__ide__update_task` / `mcp__rxcode-ide__ide__delete_task` — edit task \
     fields (including provider/model) or delete a task by id. Deleting keeps its chat thread.
+    - `mcp__rxcode-ide__ide__task_views` — list, create, update, delete, or reorder saved task views, including filters, layout, visibility, default selection, and column sorting.
     - `mcp__rxcode-ide__ide__list_agent_models` — list Claude, Codex, and enabled ACP clients with their supported model ids.
     - `mcp__rxcode-ide__ide__run_task` — start a task's agent in its project, \
     or send a follow-up to its thread. This triggers a real agent run that \

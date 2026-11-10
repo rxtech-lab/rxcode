@@ -8,23 +8,10 @@ import SwiftUI
 /// on both iPhone and iPad. The same board UI supports
 /// desktop-backed and direct cloud projects. Agent runs require a connected Mac.
 struct MobileTaskBoardView: View {
-    enum Mode: String, CaseIterable, Identifiable {
-        case tasks
-        case stories
-
-        var id: String { rawValue }
-
-        var title: LocalizedStringKey {
-            switch self {
-            case .tasks: "Tasks"
-            case .stories: "Stories"
-            }
-        }
-    }
-
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isTaskSyncSuspended) private var isTaskSyncSuspended
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var taskCardNamespace
@@ -47,6 +34,9 @@ struct MobileTaskBoardView: View {
     @State private var errorMessage: String?
     @State private var editingTask: ProjectTask?
     @State private var editingStory: ProjectStory?
+    @State private var aiCreationMode: Mode?
+    @State private var pendingAITask: ProjectTask?
+    @State private var pendingAIStory: ProjectStory?
     @State private var showingQuickAdd = false
     @State private var collapsedColumns: Set<TaskStatus> = []
     @State private var showingColumnOrder = false
@@ -176,7 +166,8 @@ struct MobileTaskBoardView: View {
             viewFeedback = nil
         }
         .modifier(MobileTaskDestinations(isEnabled: isModal, onOpenChat: openChat))
-        .task(id: "\(state.taskSyncReloadKey)|\(scenePhase)") {
+        .task(id: "\(state.taskSyncReloadKey)|\(scenePhase)|\(isTaskSyncSuspended)") {
+            guard !isTaskSyncSuspended else { return }
             state.restoreCloudTaskCacheIfNeeded()
             guard state.isTaskSyncReady, scenePhase == .active else { return }
             await load()
@@ -198,6 +189,22 @@ struct MobileTaskBoardView: View {
                 MobileStoryFormView(story: story, isNew: board.story(id: story.id) == nil)
                     .environmentObject(state)
             }
+            .mobileSheetPresentation([.large])
+        }
+        .sheet(item: $aiCreationMode, onDismiss: {
+            if let task = pendingAITask {
+                pendingAITask = nil
+                editingTask = task
+            }
+            if let story = pendingAIStory {
+                pendingAIStory = nil
+                editingStory = story
+            }
+        }) { mode in
+            MobileBoardAICreationSheet(
+                board: board, task: newTaskDraft(), isStory: mode == .stories,
+                onTask: { pendingAITask = $0 }, onStory: { pendingAIStory = $0 }
+            )
             .mobileSheetPresentation([.large])
         }
         .sheet(isPresented: $showingQuickAdd) {
@@ -605,6 +612,13 @@ struct MobileTaskBoardView: View {
                 } label: {
                     Label("New Task", systemImage: "square.and.pencil")
                 }
+                Button {
+                    MobileHaptics.buttonTap()
+                    aiCreationMode = .tasks
+                } label: {
+                    Label("New Task with AI", systemImage: "sparkles")
+                }
+                .accessibilityIdentifier("task-board-new-task-ai")
                 if !state.usesCloudTasks {
                 Button {
                     showingQuickAdd = true
@@ -612,11 +626,19 @@ struct MobileTaskBoardView: View {
                     Label("Quick Add Task", systemImage: "sparkles")
                 }
                 }
+                Divider()
                 Button {
                     editingStory = ProjectStory(projectId: projectID, title: "")
                 } label: {
                     Label("New Story", systemImage: "rectangle.stack.badge.plus")
                 }
+                Button {
+                    MobileHaptics.buttonTap()
+                    aiCreationMode = .stories
+                } label: {
+                    Label("New Story with AI", systemImage: "sparkles")
+                }
+                .accessibilityIdentifier("task-board-new-story-ai")
             } label: {
                 Image(systemName: "plus")
             }

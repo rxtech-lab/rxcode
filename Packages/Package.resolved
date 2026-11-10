@@ -1,5 +1,5 @@
 {
-  "originHash" : "3753cf73597a11b66cb1edfaf45e8db987a900f0008d70130cde7db2adf4fe55",
+  "originHash" : "ca1b2cc1f92e930e020a47269af00263e2ed00469fbc56cc25ccfab52ac5769b",
   "pins" : [
     {
       "identity" : "libwebp-xcode",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rxtech-lab/RxAgentSDK.git",
       "state" : {
-        "revision" : "d022769b6feaf818ed02fcb0003c8514dd2cd861",
-        "version" : "1.2.0"
+        "revision" : "c089bd4833f598714ff81cd045b3144c4f58d8f9",
+        "version" : "1.4.0"
       }
     },
     {

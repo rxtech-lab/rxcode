@@ -251,6 +251,7 @@ public struct CloudTaskFields: Codable, Sendable, Hashable {
         try c.encode(size, forKey: .size)
         try c.encode(delays, forKey: .delays)
         try c.encode(reviewerId, forKey: .reviewerId)
+        // Review content is uploaded only through the E2E-encrypted activity API.
     }
 }
 
@@ -667,6 +668,7 @@ public extension TaskBoard {
         }
         task.parentTaskIds = cloudParent.map { [$0] } ?? []
         task.parentTaskIds.append(contentsOf: retainedParents)
+        // Review feedback is populated from decrypted activity, never public board fields.
         task.assignedDeviceId = fields.assignedDeviceId
         task.sortIndex = fields.sortIndex
         task.deadline = fields.deadline

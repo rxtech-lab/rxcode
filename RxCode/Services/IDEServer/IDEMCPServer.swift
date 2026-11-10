@@ -657,6 +657,7 @@ actor IDEMCPServer {
             "ide__memory_search",
             "memory_search",
             "ide__get_usage",
+            "ide__get_integration_usage",
             "ide__briefing_list",
             "ide__briefing_get",
         ]

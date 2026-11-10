@@ -210,6 +210,7 @@ final class MobileAppState: ObservableObject {
     var relaySuspendedForBackground = false
     @Published var usesCloudTasks = false
     @Published var cloudTaskProjects: [Project] = []
+    @Published var cloudTaskActivityByProject: [UUID: [String: CloudTaskActivity]] = [:]
     @Published var cloudTaskBoards: [UUID: MobileTaskBoardSnapshot] = [:]
     // Serialize each cloud board's reads and writes so a late fetch cannot undo a view edit.
     var cloudTaskBoardCalls: [UUID: (id: UUID, task: Task<TaskBoardResultPayload, Error>)] = [:]
@@ -274,6 +275,9 @@ final class MobileAppState: ObservableObject {
     /// answer, across all sessions. Mirrored from the desktop's queue; the chat
     /// view filters it by session to drive the question banner and sheet.
     @Published var pendingQuestions: [PendingQuestionPayload] = []
+    /// Every `ide__show_confirmation` prompt the desktop currently has awaiting
+    /// a decision, across all sessions. The chat view filters it by session.
+    @Published var pendingConfirmations: [PendingConfirmationPayload] = []
 
     @Published var searchQuery: String = ""
     @Published var searchProjectIDs: [UUID] = []

@@ -43,7 +43,8 @@ enum CloudProjectSyncPhase: Int {
 /// Sync is a three-way merge per story and task: the local fields, the remote
 /// fields, and the fields both agreed on at the last sync
 /// (`TaskBoard.cloudSync`). Whichever side changed wins; when both did, the
-/// newer edit wins. Agent settings, runs, and attachments stay on the device.
+/// newer edit wins. Agent settings and attachments stay on the device; run
+/// history and review feedback use E2E-encrypted cloud activity snapshots.
 extension AppState {
 
     /// How often cloud boards are pulled while signed in.
@@ -366,6 +367,7 @@ extension AppState {
             cloudSyncPhaseByProjectId[projectId] = .syncingTasks
             try await syncTasks(remote.tasks, cloudId: cloudId, projectId: projectId, sync: &sync, remoteStarts: &remoteStarts)
             try await syncSavedViews(cloudId: cloudId, projectId: projectId, sync: &sync)
+            try await publishEncryptedTaskActivity(projectID: projectId, cloudID: cloudId, sync: sync)
             editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
                 for index in board.tasks.indices {
                     board.tasks[index].assigneeProfiles = (remote.members ?? []).filter { board.tasks[index].assigneeIds.contains($0.userId) }

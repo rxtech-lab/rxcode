@@ -253,6 +253,24 @@ extension MobileAppState {
         pendingQuestions.removeAll { $0.toolUseID == toolUseID }
     }
 
+    // MARK: - Confirmation tool
+
+    /// Pending `ide__show_confirmation` prompts for one session, oldest first.
+    func pendingConfirmations(sessionID: String) -> [PendingConfirmationPayload] {
+        let sessionID = resolveSessionID(sessionID)
+        return pendingConfirmations.filter { resolveSessionID($0.sessionID) == sessionID }
+    }
+
+    /// Sends the user's confirm / reject decision for prompt `id` to the
+    /// desktop. The prompt is dropped locally right away; the desktop
+    /// re-broadcasts the authoritative queue once it settles the tool call.
+    func respondToConfirmation(id: String, confirmed: Bool) async {
+        guard isPaired else { return }
+        pendingConfirmations.removeAll { $0.id == id }
+        let payload = ConfirmationDecisionPayload(id: id, confirmed: confirmed)
+        try? await client.send(.confirmationDecision(payload), toHex: pairedDesktopPubkey)
+    }
+
     func updateDesktopSettings(_ update: MobileSettingsUpdatePayload) async {
         guard isPaired else { return }
         applySettingsUpdateLocally(update)
@@ -597,6 +615,7 @@ extension MobileAppState {
         activeSessionID = nil
         pendingPermission = nil
         pendingQuestions = []
+        pendingConfirmations = []
         skillCatalog = []
         skillCatalogLoading = false
         skillCatalogError = nil

@@ -1237,9 +1237,6 @@
         }
       }
     },
-    "%lld tasks in progress" : {
-
-    },
     "%lld tasks measured" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1715,6 +1712,12 @@
         }
       }
     },
+    "7-day allowance" : {
+
+    },
+    "7-day forecast" : {
+
+    },
     "7-day limit" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1745,6 +1748,9 @@
           }
         }
       }
+    },
+    "7-day usage forecast" : {
+
     },
     "7d" : {
       "extractionState" : "stale",
@@ -1822,6 +1828,9 @@
           }
         }
       }
+    },
+    "A forecast needs two completed days of activity and at least three isolated cost measurements for each active model. Partial days and overlapping task costs are excluded." : {
+
     },
     "A workflow failed" : {
       "comment" : "CI failure notification body when the workflow name is unknown.",
@@ -3407,6 +3416,9 @@
         }
       }
     },
+    "Allowance used up" : {
+
+    },
     "Always" : {
       "localizations" : {
         "ko" : {
@@ -4274,6 +4286,15 @@
         }
       }
     },
+    "Average daily limit use" : {
+
+    },
+    "Average daily session time" : {
+
+    },
+    "Average daily tokens" : {
+
+    },
     "Average of 5-hour · 7-day per task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4397,6 +4418,9 @@
     "Bad" : {
 
     },
+    "Based on %lld completed calendar days, including idle days." : {
+
+    },
     "Based on %lld tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4436,6 +4460,9 @@
           }
         }
       }
+    },
+    "Based on daily sessions and tokens" : {
+
     },
     "Bash" : {
       "localizations" : {
@@ -10587,6 +10614,9 @@
         }
       }
     },
+    "Estimates use recent daily activity and measured limit costs for each model. Cache reads are excluded. Session time is used when token measurements are unavailable. Work outside RxCode and provider accounting changes can affect the result." : {
+
+    },
     "Every" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10817,6 +10847,9 @@
           }
         }
       }
+    },
+    "Expected to last until reset" : {
+
     },
     "Expired" : {
       "localizations" : {
@@ -11739,6 +11772,9 @@
           }
         }
       }
+    },
+    "Forecast" : {
+
     },
     "Form" : {
       "localizations" : {
@@ -15088,6 +15124,9 @@
         }
       }
     },
+    "May run out %@" : {
+
+    },
     "MCP" : {
       "localizations" : {
         "ko" : {
@@ -17744,6 +17783,9 @@
           }
         }
       }
+    },
+    "Not enough daily activity yet" : {
+
     },
     "Not enough measured tasks to estimate." : {
       "localizations" : {
@@ -21297,6 +21339,9 @@
         }
       }
     },
+    "Resets" : {
+
+    },
     "Resets %@" : {
       "localizations" : {
         "ko" : {
@@ -23665,6 +23710,7 @@
       }
     },
     "Settings" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -24242,6 +24288,9 @@
           }
         }
       }
+    },
+    "Show the daily activity behind the 7-day depletion forecast." : {
+
     },
     "Show the model and provider breakdown." : {
       "localizations" : {
@@ -25831,6 +25880,9 @@
           }
         }
       }
+    },
+    "Tasks in progress: %lld" : {
+
     },
     "Tasks left in 5-hour · 7-day limits" : {
       "localizations" : {

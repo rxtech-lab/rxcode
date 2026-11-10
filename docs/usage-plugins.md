@@ -53,6 +53,18 @@ Configuration and last successful snapshots are stored atomically in
 tokens are separate Keychain items. Each workspace owns its dashboard and optional RxCode project associations.
 Only the frontmost workspace publishes mobile and widget data.
 
+Agents use `ide__get_integration_usage` to discover configured connections and read
+usage/billing metrics without requiring a visible card. Optional `plugin_id` and
+`integration_id` filters combine; no matches returns an empty `integrations` array.
+Cached reads are the default. Set `refresh: true` to fetch matching connections via
+the existing OAuth/Keychain services. Responses include account/resource scope,
+period, numeric metrics with explicit units, ISO 8601 `fetched_at`, `available`,
+`stale`, and per-connection `error`. Failed refreshes retain the previous data and
+observation time and mark it stale. Unfetched connections have `available: false`,
+`stale: true`, and a null timestamp. Credentials and OAuth configuration are omitted.
+For example, `{"plugin_id":"vercel","refresh":true}` refreshes Vercel connections.
+`ide__get_usage` continues to report the active agent provider's rate limits.
+
 Agents use `ide__usage_cards` to read normalized data or upsert/delete card views.
 Authentication is only configured in the native integration sheet. Do not edit
 the JSON while RxCode is running: the in-memory state owns writes. No secret is

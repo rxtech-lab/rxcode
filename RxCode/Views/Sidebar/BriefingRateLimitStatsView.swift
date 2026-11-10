@@ -13,6 +13,7 @@ struct BriefingRateLimitStatsView: View {
 
     @State private var summaries: [AgentProvider: RateLimitTaskCostSummary] = [:]
     @State private var activePopover: DetailPopover?
+    @State private var showsForecast = false
 
     private enum DetailPopover {
         case history
@@ -59,6 +60,7 @@ struct BriefingRateLimitStatsView: View {
             }
         taskCostTile
         remainingTile
+        forecastTile
     }
 
     /// Popover for `kind`, anchored to the tile that opened it.
@@ -82,6 +84,23 @@ struct BriefingRateLimitStatsView: View {
     }
 
     // MARK: - Tiles
+
+    private var forecastTile: some View {
+        Button { showsForecast = true } label: {
+            BriefingProviderStatTile(
+                icon: "calendar.badge.clock", title: "7-day forecast",
+                rows: providers.map { provider in
+                    let forecast = appState.rateLimitProviderStats[provider]?.weeklyForecast ?? RateLimitWeeklyForecast()
+                    return .init(id: provider.rawValue, label: provider.displayNameText,
+                                 value: RateLimitForecastView.status(forecast), detail: nil)
+                },
+                footnote: String(localized: "Based on daily sessions and tokens"),
+                accessoryIcon: "calendar", help: "Show the daily activity behind the 7-day depletion forecast."
+            )
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showsForecast) { RateLimitForecastSheet() }
+    }
 
     private var limitsTile: some View {
         Button {

@@ -22,9 +22,14 @@ extension AppState {
         }
         // Cloud sync bookkeeping is desktop-only and would roughly double the
         // payload; mobile edits come back as per-item operations.
+        let taskCloudIDs = Dictionary(uniqueKeysWithValues: board.tasks.compactMap { task in
+            board.cloudSync?.taskRemoteId(task.id).map { (task.id.uuidString, $0) }
+        })
         board.cloudSync = nil
         var sessionIDs: [String: String] = [:]
+        var linkedSessions: [String: [MobileTaskLinkedSession]] = [:]
         for task in board.tasks {
+            linkedSessions[task.id.uuidString] = await mobileTaskLinkedSessions(for: task)
             if let sessionId = chatSessionId(for: task) {
                 sessionIDs[task.id.uuidString] = sessionId
             }
@@ -34,9 +39,50 @@ extension AppState {
             projectID: projectId,
             board: board,
             taskSessionIDs: sessionIDs,
+            taskLinkedSessions: linkedSessions,
+            taskCloudIDs: taskCloudIDs,
             classifyingTaskIDs: classifyingTaskIds.filter { taskIDs.contains($0) }.sorted { $0.uuidString < $1.uuidString },
             defaultAgent: defaultTaskAgent()
         )
+    }
+
+    func mobileTaskLinkedSessions(for task: ProjectTask) async -> [MobileTaskLinkedSession] {
+        var links: [MobileTaskLinkedSession] = []
+        let runID = task.sessionKey.map(resolveCurrentSessionId)
+        let sourceID = task.sourceSessionKey.map(resolveCurrentSessionId)
+        let summaries = allSessionSummaries.filter { summary in
+            summary.id == runID || summary.id == sourceID ||
+                summary.parentThreadId.map { resolveCurrentSessionId($0) == runID } == true
+        }.sorted { $0.updatedAt < $1.updatedAt }
+        for summary in summaries {
+            let kind: MobileTaskLinkedSession.Kind = summary.id == runID ? .run
+                : (summary.id == sourceID ? .source : .review)
+            var feedback: String?
+            if kind == .review {
+                let live = sessionStates[summary.id]?.messages ?? []
+                let persisted = await persistedMessages(sessionId: summary.id) ?? []
+                let messages = live.count >= persisted.count ? live : persisted
+                feedback = messages.last(where: {
+                    $0.role == .assistant && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                })?.content
+            }
+            links.append(MobileTaskLinkedSession(id: summary.id,
+                title: summary.threadLabel ?? summary.title, kind: kind, feedback: feedback))
+        }
+        return links
+    }
+
+    /// Review threads do not move every card, so explicitly push their feedback.
+    func broadcastMobileTaskReview(sessionId: String) {
+        let resolved = resolveCurrentSessionId(sessionId)
+        let parent = allSessionSummaries.first(where: { $0.id == resolved })?.parentThreadId
+        let parentID = parent.map(resolveCurrentSessionId) ?? resolved
+        for (projectID, board) in taskBoards where board.tasks.contains(where: {
+            $0.sessionKey.map { resolveCurrentSessionId($0) == parentID } == true
+        }) {
+            scheduleMobileTaskBoardBroadcast(for: projectID)
+            scheduleCloudBoardSync(for: projectID)
+        }
     }
 
     /// Pushes `projectId`'s board to every paired device shortly after it

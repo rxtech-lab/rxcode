@@ -137,13 +137,13 @@ extension AppState {
 
     // MARK: - Per-model estimates and advice
 
-    /// Window of task costs behind the per-model estimates and advice.
-    static let rateLimitAdviceRange: UsageStatsRange = .week
-
     /// Recomputes `rateLimitProviderStats` off the main actor from the stored
     /// task costs and the latest limits. Called whenever either changes.
     func refreshRateLimitProviderStats() {
-        let since = Self.rateLimitAdviceRange.cutoff(now: .now)
+        let now = Date.now
+        let calendar = Calendar.current
+        let since = calendar.date(byAdding: .day, value: -7, to: calendar.startOfDay(for: now)) ?? now
+        let dailyBuckets = threadStore.usageBuckets(range: .month, now: now)
         let inputs = Self.rateLimitedProviders.map { provider in
             (
                 provider: provider,
@@ -156,7 +156,12 @@ extension AppState {
             let stats = await Task.detached(priority: .utility) {
                 var result: [AgentProvider: RateLimitTaskCostSummary] = [:]
                 for input in inputs {
-                    result[input.provider] = RateLimitTaskCostSummary.aggregate(input.costs, current: input.usage)
+                    var summary = RateLimitTaskCostSummary.aggregate(input.costs, current: input.usage)
+                    summary.weeklyForecast = RateLimitWeeklyForecast.estimate(
+                        providerRaw: input.provider.rawValue, usage: input.usage,
+                        costs: input.costs, dailyBuckets: dailyBuckets, now: now, calendar: calendar
+                    )
+                    result[input.provider] = summary
                 }
                 return result
             }.value

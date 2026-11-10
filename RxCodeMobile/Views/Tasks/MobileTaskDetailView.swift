@@ -3,14 +3,13 @@ import RxCodeCore
 import RxCodeSync
 import SwiftUI
 
-/// A single task, in two tabs like the Mac task form: Runs (each prompt the
-/// agent was sent and its answer, with follow-ups) and Config (description,
-/// classification, agent, and the actions the desktop offers).
+/// A task with separate run history, connected chats and reviews, and configuration.
 struct MobileTaskDetailView: View {
     @Environment(MobileCloudState.self) private var cloud
     enum Tab: Hashable {
         case runs
         case config
+        case connections
     }
 
     @EnvironmentObject private var state: MobileAppState
@@ -22,6 +21,7 @@ struct MobileTaskDetailView: View {
     @State private var editingTask: ProjectTask?
     @State private var followUpTask: ProjectTask?
     @State private var isWorking = false
+    @State private var isLoadingConnections = false
     @State private var errorMessage: String?
     @State private var showingDeleteConfirm = false
     /// `nil` until the user picks one: Runs for a task that has a thread,
@@ -33,7 +33,7 @@ struct MobileTaskDetailView: View {
     private var task: ProjectTask? { board.tasks.first { $0.id == taskID } }
 
     private func tab(for task: ProjectTask) -> Tab {
-        state.usesCloudTasks ? .config : (selectedTab ?? (state.taskSessionID(task) != nil ? .runs : .config))
+        selectedTab ?? (state.usesCloudTasks ? (state.cloudTaskActivity(for: task) != nil ? .runs : .config) : (state.taskSessionID(task) != nil ? .runs : .config))
     }
 
     var body: some View {
@@ -48,6 +48,17 @@ struct MobileTaskDetailView: View {
                     )
                 case .config:
                     content(task)
+                case .connections:
+                    connections(task)
+                        .task(id: task.id) { await refreshConnections(task) }
+                        .refreshable { await refreshConnections(task) }
+                        .overlay {
+                            if isLoadingConnections {
+                                ProgressView()
+                                    .padding()
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
                 }
             } else {
                 ContentUnavailableView("Task Not Found", systemImage: "checklist", description: Text("It may have been deleted."))
@@ -60,17 +71,18 @@ struct MobileTaskDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let task, !state.usesCloudTasks {
+            if let task {
                 ToolbarItem(placement: .principal) {
                     Picker("View", selection: Binding(
                         get: { tab(for: task) },
-                        set: { selectedTab = $0 }
+                        set: { MobileHaptics.buttonTap(); selectedTab = $0 }
                     )) {
                         Text("Runs").tag(Tab.runs)
+                        Text("Connected Chats").tag(Tab.connections)
                         Text("Config").tag(Tab.config)
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 200)
+                    .frame(maxWidth: 340)
                     .accessibilityIdentifier("task-detail-tab")
                 }
             }
@@ -91,6 +103,51 @@ struct MobileTaskDetailView: View {
         }
         .mobileTaskRunDevicePicker($runRequest)
         .mobileTaskErrorAlert($errorMessage)
+    }
+
+    private func refreshConnections(_ task: ProjectTask) async {
+        isLoadingConnections = true
+        defer { isLoadingConnections = false }
+        do { try await state.refreshTaskConnections(task) }
+        catch where MobileCloudState.isCancellation(error) {}
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    @ViewBuilder
+    private func connections(_ task: ProjectTask) -> some View {
+        let links = state.taskLinkedSessions(task)
+        if links.isEmpty, task.attentionReason == nil {
+            ContentUnavailableView("No Connected Chats", systemImage: "bubble.left.and.bubble.right",
+                description: Text("Chats and review feedback appear here after this task runs on your Mac."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List {
+                if let reason = task.attentionReason {
+                    Section("Needs Attention") {
+                        MarkdownContentView(text: reason)
+                            .textSelection(.enabled)
+                    }
+                }
+                ForEach(links) { link in
+                    Section {
+                        Button {
+                            MobileHaptics.buttonTap()
+                            if state.usesCloudTasks {
+                                state.openThreadFromNotification(sessionID: link.id, projectID: nil)
+                            }
+                            onOpenChat(link.id)
+                        } label: {
+                            Label(link.title, systemImage: link.kind == .review ? "checkmark.bubble" : "bubble.left.and.text.bubble.right")
+                        }
+                        .disabled(state.usesCloudTasks && !state.isDesktopTaskSyncReady)
+                        if let feedback = link.feedback, !feedback.isEmpty {
+                            MarkdownContentView(text: feedback)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func content(_ task: ProjectTask) -> some View {
@@ -127,7 +184,7 @@ struct MobileTaskDetailView: View {
 
             if let reason = task.attentionReason {
                 Section("Needs Attention") {
-                    Label(reason, systemImage: "exclamationmark.triangle.fill")
+                    MarkdownContentView(text: reason)
                         .foregroundStyle(.orange)
                         .font(.subheadline)
                 }

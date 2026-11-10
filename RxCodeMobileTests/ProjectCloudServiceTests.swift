@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
 import RxCodeCore
+import CryptoKit
+import RxCodeSync
 @testable import RxCodeMobile
 
 private final class CloudURLProtocol: URLProtocol, @unchecked Sendable {
@@ -24,6 +26,27 @@ final class ProjectCloudServiceTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [CloudURLProtocol.self]
         return ProjectCloudService(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud.test")!, tokenProvider: token)
+    }
+
+    func testEncryptedActivityHTTPRoundTrip() async throws {
+        guard let base = ProcessInfo.processInfo.environment["RXCODE_TASK_ACTIVITY_SIMULATION"],
+              let baseURL = URL(string: base) else { throw XCTSkip("Requires the local Postman task activity simulation") }
+        let api = ProjectCloudService(session: .shared, baseURL: baseURL) { _ in "simulation-token" }
+        let desktop = DeviceIdentity(privateKey: .init()), phone = DeviceIdentity(privateKey: .init())
+        let activity = CloudTaskActivity(projectID: "project", taskID: "task", updatedAt: Date(),
+            sourceProjectID: UUID(), sourceTaskID: UUID(), senderPublicKey: desktop.publicKeyHex, sessionID: "chat",
+            runs: [TaskRunTurn(id: 0, prompt: "Secret follow-up", response: "Secret response", didError: false)],
+            connections: [], attentionReason: "Secret feedback")
+        let envelope = try EncryptedTaskActivity.seal(activity, identity: desktop, recipientKeys: [phone.publicKeyHex])
+        try await api.saveTaskActivity(projectId: "project", taskId: "task", envelope: envelope)
+        let records = try await api.taskActivity(projectId: "project", recipient: phone.publicKeyHex)
+        let record = try XCTUnwrap(records.first { $0.envelope.sender == desktop.publicKeyHex })
+        XCTAssertEqual(try record.envelope.open(identity: phone, trustedSenders: [desktop.publicKeyHex],
+            projectID: "project", taskID: record.taskId), activity)
+        do {
+            _ = try await api.taskActivity(projectId: "failure", recipient: phone.publicKeyHex)
+            XCTFail("Expected storage error")
+        } catch AutopilotService.ServiceError.apiError(let status, _) { XCTAssertEqual(status, 503) }
     }
 
     func testCloudReadDoesNotRequirePairedDesktopAndRefreshesUnauthorizedToken() async throws {

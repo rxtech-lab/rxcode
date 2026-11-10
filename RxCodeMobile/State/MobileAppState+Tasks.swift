@@ -114,7 +114,24 @@ extension MobileAppState {
 
     /// Applies a board snapshot, or holds it back while card moves in its
     /// project are settling. Only the newest held snapshot is kept.
-    func storeTaskBoardSnapshot(_ snapshot: MobileTaskBoardSnapshot, cloud: Bool) {
+    func storeTaskBoardSnapshot(_ incoming: MobileTaskBoardSnapshot, cloud: Bool) {
+        let snapshot: MobileTaskBoardSnapshot
+        if cloud {
+            // A cloud reload must retain review state received from the paired Mac.
+            var merged = incoming
+            let desktopSnapshots = taskBoardsByProject.merging(deferredTaskBoardSnapshots) { _, latest in latest }
+            for desktop in desktopSnapshots.values { merged = merged.mergingDesktopFeedback(from: desktop) }
+            snapshot = applyingDecryptedTaskActivity(to: merged)
+        } else {
+            snapshot = incoming
+            // A desktop push must update visible cloud cards as well as the Mac mirror.
+            for (id, board) in cloudTaskBoards {
+                cloudTaskBoards[id] = board.mergingDesktopFeedback(from: incoming)
+            }
+            for (id, board) in deferredCloudTaskBoardSnapshots {
+                deferredCloudTaskBoardSnapshots[id] = board.mergingDesktopFeedback(from: incoming)
+            }
+        }
         let projectID = snapshot.projectID
         if !cloud { refreshTaskRunLinks(from: snapshot) }
         let isSettling = taskMovesInFlight[projectID, default: 0] > 0 || taskBoardSettleTasks[projectID] != nil
@@ -174,7 +191,7 @@ extension MobileAppState {
     var taskSyncReloadKey: String {
         // Cloud loading discovers the projects itself. Including those results
         // would cancel the initial load as soon as it publishes its project list.
-        if usesCloudTasks { return "cloud|\(isTaskSyncReady)|\(taskCloud?.accountID ?? "")" }
+        if usesCloudTasks { return "cloud|\(isTaskSyncReady)|\(taskCloud?.accountID ?? "")|\(isDesktopTaskSyncReady)|\(pairedDesktopPubkey)" }
         return "\(usesCloudTasks)|\(isTaskSyncReady)|\(pairedDesktopPubkey)|" + taskProjects.map(\.id.uuidString).joined(separator: ",")
     }
 
@@ -185,6 +202,37 @@ extension MobileAppState {
     /// The chat thread a task was dispatched into, if it still exists.
     func taskSessionID(_ task: ProjectTask) -> String? {
         taskSnapshots[task.projectId]?.sessionID(for: task.id)
+    }
+
+    /// Connected chats remain available after a task leaves its run column.
+    /// Cloud cards use the Mac's IDs recorded when this phone dispatched them.
+    func taskLinkedSessions(_ task: ProjectTask) -> [MobileTaskLinkedSession] {
+        if let links = taskSnapshots[task.projectId]?.taskLinkedSessions[task.id.uuidString] {
+            return links
+        }
+        if let key = taskRunLinkKey(for: task), let link = taskRunLinks[key],
+           link.desktopID == activePairedDesktop?.id {
+            return taskBoardsByProject[link.projectID]?.taskLinkedSessions[link.taskID.uuidString] ?? []
+        }
+        if usesCloudTasks, let remoteID = taskBoard(for: task.projectId).cloudSync?.taskRemoteId(task.id) {
+            for snapshot in taskBoardsByProject.values {
+                if let id = snapshot.taskCloudIDs.first(where: { $0.value == remoteID })?.key {
+                    return snapshot.taskLinkedSessions[id] ?? []
+                }
+            }
+        }
+        // Older desktops still provide the primary chat mapping.
+        guard let id = taskSessionID(task) else { return [] }
+        return [MobileTaskLinkedSession(id: id, title: String(localized: "Task Chat"), kind: .run)]
+    }
+
+    /// Cloud history is read from encrypted storage and does not require the Mac online.
+    func refreshTaskConnections(_ task: ProjectTask) async throws {
+        if usesCloudTasks {
+            try await refreshEncryptedTaskActivity(projectID: task.projectId)
+        } else {
+            try await loadTaskBoard(projectID: task.projectId)
+        }
     }
 
     /// True while the task's linked thread is mid-turn.
@@ -219,6 +267,7 @@ extension MobileAppState {
         loadingTaskBoardProjects.insert(projectID)
         defer { loadingTaskBoardProjects.remove(projectID) }
         try await taskBoardCall(TaskBoardRequestPayload(projectID: projectID, operation: .fetch))
+
     }
 
     /// Fetches every project's board concurrently. Returns the first error
@@ -343,6 +392,10 @@ extension MobileAppState {
     }
 
     func sendTaskFollowUp(_ task: ProjectTask, text: String) async throws {
+        if usesCloudTasks {
+            try await sendEncryptedCloudTaskFollowUp(task, text: text)
+            return
+        }
         try await taskBoardCall(TaskBoardRequestPayload(
             projectID: task.projectId,
             operation: .followUp,
@@ -354,7 +407,11 @@ extension MobileAppState {
     /// The task's runs (prompt → final agent answer), read from its thread on
     /// the desktop. `nil` when the task has no thread.
     func fetchTaskRuns(_ task: ProjectTask) async throws -> [TaskRunTurn]? {
-        try await taskBoardCall(TaskBoardRequestPayload(
+        if usesCloudTasks {
+            try await refreshEncryptedTaskActivity(projectID: task.projectId)
+            return cloudTaskActivity(for: task)?.runs
+        }
+        return try await taskBoardCall(TaskBoardRequestPayload(
             projectID: task.projectId,
             operation: .fetchRuns,
             taskID: task.id

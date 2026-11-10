@@ -1,0 +1,11 @@
+contract: Flowcy encrypted task activity API v1
+scope: Local HTTP contract fixture; no production credentials or user data.
+verified_by: ProjectCloudServiceTests.testEncryptedActivityHTTPRoundTrip
+assumptions:
+  - PUT replaces the snapshot for one sender; GET lists envelopes addressed to the recipient.
+  - The server cannot decrypt the content; sender trust and task binding are checked on-device.
+cases:
+  - Ciphertext-only PUT and GET with successful mobile decryption.
+  - Storage returns 503; client reports failure without plaintext fallback.
+unverified:
+  - Production deployment, migration, and real-device delivery.

@@ -56,6 +56,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -473,6 +474,35 @@ fun ChatScreen(
             onAllow = { viewModel.respondToPermission(allow = true) },
             onDeny = { viewModel.respondToPermission(allow = false, denyReason = "Denied") },
             onDismiss = { viewModel.respondToPermission(allow = false, denyReason = "Dismissed") },
+        )
+    }
+    state.pendingConfirmations.firstOrNull { it.sessionID == resolvedId }?.let { confirmation ->
+        val confirmationHaptics = rememberHaptics()
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(confirmation.title) },
+            text = confirmation.message?.let { message -> { Text(message) } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmationHaptics.play(
+                            if (confirmation.isDestructive) HapticEvent.HeavyImpact else HapticEvent.LightTap
+                        )
+                        viewModel.respondToConfirmation(confirmation.id, confirmed = true)
+                    },
+                    colors = if (confirmation.isDestructive) {
+                        ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    } else {
+                        ButtonDefaults.textButtonColors()
+                    },
+                ) { Text(confirmation.confirmLabel) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    confirmationHaptics.play(HapticEvent.LightTap)
+                    viewModel.respondToConfirmation(confirmation.id, confirmed = false)
+                }) { Text(confirmation.cancelLabel) }
+            },
         )
     }
     (openQuestion ?: pendingQuestion)?.let { q ->

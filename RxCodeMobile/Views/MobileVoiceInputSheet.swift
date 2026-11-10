@@ -359,6 +359,7 @@ struct MobileVoiceReviewContent: View {
     var canSend: Bool
     var onSend: () -> Void
     var onEdit: () -> Void
+    var sendTitle: LocalizedStringKey = "Send Voice Message"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -369,7 +370,7 @@ struct MobileVoiceReviewContent: View {
                 Text(MobileVoiceDuration.format(session.duration))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
-                MobileComposerButton("Send Voice Message", systemImage: "arrow.up", style: .accent) {
+                MobileComposerButton(sendTitle, systemImage: "arrow.up", style: .accent) {
                     MobileHaptics.buttonTap()
                     onSend()
                 }
@@ -514,65 +515,47 @@ private struct RecordedWaveform: View {
 }
 
 
-/// Reviews dictated text before applying it to the creation form.
-struct MobileTaskVoiceButton: View {
-    @Binding var text: String
-    var placeholder: String = "Task description"
-    @State private var showingVoice = false
-
-    var body: some View {
-        Button("Voice Input", systemImage: "mic") {
-            MobileHaptics.buttonTap()
-            showingVoice = true
-        }
-        .sheet(isPresented: $showingVoice) {
-            MobileTaskVoiceSheet(text: $text, placeholder: placeholder)
-                .mobileSheetPresentation([.large])
-        }
-    }
-}
-
-private struct MobileTaskVoiceSheet: View {
+/// Plain task input with inline recording and transcript review.
+struct MobileTaskVoiceField: View {
     @Binding var text: String
     let placeholder: String
-    @Environment(\.dismiss) private var dismiss
     @State private var session = MobileVoiceInputSession()
-    @State private var draft = ""
+    @FocusState private var isFocused: Bool
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField(placeholder, text: $draft, axis: .vertical)
-                        .lineLimit(4...12)
-                        .disabled(session.mode == .recording)
-                    if session.mode == .recording {
-                        MobileVoiceRecordingContent(session: session)
-                    } else {
-                        MobileVoiceMicButton(text: $draft, session: session)
-                    }
+        HStack(alignment: .center, spacing: 8) {
+            if session.isPresented {
+                MobileComposerButton("Discard Recording", systemImage: "xmark") {
+                    MobileHaptics.buttonTap()
+                    text = session.discard()
                 }
             }
-            .navigationTitle("Voice Input")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        _ = session.discard()
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Use Text") {
-                        MobileHaptics.buttonTap()
-                        text = draft
-                        dismiss()
-                    }
-                    .disabled(session.mode == .recording || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+            switch session.mode {
+            case .idle:
+                TextField(placeholder, text: $text, axis: .vertical)
+                    .lineLimit(1...8)
+                    .textFieldStyle(.plain)
+                    .focused($isFocused)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                MobileVoiceMicButton(text: $text, session: session)
+            case .recording:
+                MobileVoiceRecordingContent(session: session)
+            case .review:
+                MobileVoiceReviewContent(session: session, canSend: true, onSend: {
+                    text = session.draft
+                    session.endReview()
+                }, onEdit: {
+                    text = session.draft
+                    session.endReview()
+                    isFocused = true
+                }, sendTitle: "Use Text")
             }
-            .mobileVoiceInput(session: session, text: $draft)
-            .onAppear { draft = text }
+        }
+        .frame(minHeight: 44)
+        .animation(.snappy, value: session.mode)
+        .mobileVoiceInput(session: session, text: $text)
+        .onChange(of: session.mode) { _, mode in
+            if mode == .recording { isFocused = false }
         }
     }
 }

@@ -1,0 +1,10 @@
+version: 1
+name: cloud-task-activity
+slug: cloud-task-activity
+protocol: http
+port: 4592
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

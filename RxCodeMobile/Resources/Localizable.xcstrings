@@ -331,6 +331,9 @@
     "%lld inputs" : {
 
     },
+    "%lld more waiting" : {
+
+    },
     "%lld of %lld" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1103,6 +1106,9 @@
         }
       }
     },
+    "AI Draft" : {
+
+    },
     "AI fills the title, description, type, priority, version, and size. Review the draft before adding it to your board." : {
 
     },
@@ -1213,6 +1219,9 @@
       }
     },
     "Allow %@?" : {
+
+    },
+    "An administrator must enable models in Flowcy settings." : {
 
     },
     "another device" : {
@@ -2034,6 +2043,9 @@
     "Channel" : {
 
     },
+    "Chats and review feedback appear here after this task runs on your Mac." : {
+
+    },
     "Checking account…" : {
       "localizations" : {
         "ko" : {
@@ -2351,6 +2363,9 @@
     "Closing pull request…" : {
 
     },
+    "Cloud Model" : {
+
+    },
     "Code Review" : {
       "localizations" : {
         "ko" : {
@@ -2544,6 +2559,9 @@
     "Confirm Tool Action" : {
 
     },
+    "Confirmation needed: %@. Tap to review." : {
+
+    },
     "Confirmation required before execution" : {
 
     },
@@ -2721,6 +2739,12 @@
 
     },
     "Connected · Tools discovered" : {
+
+    },
+    "Connected Chats" : {
+
+    },
+    "Connected Chats: %lld" : {
 
     },
     "Connecting to %@" : {
@@ -3256,9 +3280,6 @@
 
     },
     "Create Task with AI" : {
-
-    },
-    "Create with AI" : {
 
     },
     "Create your first task using the + button." : {
@@ -4304,6 +4325,9 @@
     "Discard changes?" : {
 
     },
+    "Discard Recording" : {
+
+    },
     "Discard Voice Message" : {
 
     },
@@ -4742,6 +4766,9 @@
           }
         }
       }
+    },
+    "End-to-end encrypted history" : {
+
     },
     "Endpoint" : {
       "localizations" : {
@@ -5574,6 +5601,9 @@
 
     },
     "Flowcy can send notifications to this device without a paired Mac." : {
+
+    },
+    "Flowcy Cloud Models" : {
 
     },
     "Flowcy currently syncs one Starts after task per cloud task." : {
@@ -6582,6 +6612,9 @@
     "Loading models from %@…" : {
 
     },
+    "Loading models…" : {
+
+    },
     "Loading project…" : {
 
     },
@@ -7416,6 +7449,9 @@
         }
       }
     },
+    "New Story with AI" : {
+
+    },
     "New tag" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7435,6 +7471,9 @@
           }
         }
       }
+    },
+    "New Task with AI" : {
+
     },
     "New Template" : {
       "localizations" : {
@@ -7689,7 +7728,13 @@
     "No CI Update Pull Requests" : {
 
     },
+    "No Cloud Models" : {
+
+    },
     "No Columns" : {
+
+    },
+    "No Connected Chats" : {
 
     },
     "No custom Git sources added." : {
@@ -8886,9 +8931,6 @@
     "Opening notification…" : {
 
     },
-    "Opening on %@…" : {
-
-    },
     "Opens the project board. Long press and drag to reorder." : {
 
     },
@@ -9051,6 +9093,9 @@
           }
         }
       }
+    },
+    "Pair with the Mac that runs this task, then let it sync encrypted history to the cloud." : {
+
     },
     "Pair with your Mac" : {
       "localizations" : {
@@ -9475,6 +9520,9 @@
       }
     },
     "Projects, automation, and your agent. Sign in with your RxLab account." : {
+
+    },
+    "Properties" : {
 
     },
     "Provider" : {
@@ -10229,6 +10277,9 @@
     "Retry Response" : {
 
     },
+    "Return to your request to generate a new draft." : {
+
+    },
     "Review" : {
       "localizations" : {
         "en" : {
@@ -10251,6 +10302,9 @@
         }
       }
     },
+    "Review Draft" : {
+
+    },
     "Review project briefings" : {
       "localizations" : {
         "en" : {
@@ -10272,6 +10326,9 @@
           }
         }
       }
+    },
+    "Review the suggestion. You can edit every detail after choosing Use Draft." : {
+
     },
     "Reviewed by %@" : {
       "extractionState" : "stale",
@@ -10305,6 +10362,9 @@
           }
         }
       }
+    },
+    "Revise Request" : {
+
     },
     "Run" : {
       "localizations" : {
@@ -11264,6 +11324,9 @@
         }
       }
     },
+    "Server Default" : {
+
+    },
     "Set as Default View" : {
       "localizations" : {
         "ko" : {
@@ -12217,6 +12280,9 @@
           }
         }
       }
+    },
+    "Task Chat" : {
+
     },
     "Task Not Found" : {
       "localizations" : {
@@ -13344,6 +13410,9 @@
     "Unable to Load Log" : {
 
     },
+    "Unable to Load Models" : {
+
+    },
     "Unable to Load Projects" : {
 
     },
@@ -13958,6 +14027,7 @@
       }
     },
     "What needs to be done?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {

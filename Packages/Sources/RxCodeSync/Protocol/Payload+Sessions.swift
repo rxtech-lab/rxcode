@@ -653,6 +653,59 @@ public struct QuestionAnswerPayload: Codable, Sendable {
     }
 }
 
+/// One `ide__show_confirmation` prompt awaiting the user's decision, mirrored
+/// to mobile so it can show the same confirm / cancel dialog as the desktop.
+public struct PendingConfirmationPayload: Codable, Sendable, Identifiable, Equatable {
+    /// The desktop's prompt id; echoed back in `ConfirmationDecisionPayload`.
+    public let id: String
+    public let sessionID: String
+    public let projectID: UUID?
+    public let title: String
+    public let message: String?
+    public let confirmLabel: String
+    public let cancelLabel: String
+    public let isDestructive: Bool
+    public init(
+        id: String,
+        sessionID: String,
+        projectID: UUID?,
+        title: String,
+        message: String?,
+        confirmLabel: String,
+        cancelLabel: String,
+        isDestructive: Bool
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.projectID = projectID
+        self.title = title
+        self.message = message
+        self.confirmLabel = confirmLabel
+        self.cancelLabel = cancelLabel
+        self.isDestructive = isDestructive
+    }
+}
+
+/// Desktop → mobile: every `ide__show_confirmation` prompt currently awaiting
+/// a decision. The desktop re-broadcasts the full set whenever a prompt is
+/// queued or settled, so mobile mirrors it exactly.
+public struct ConfirmationQueuePayload: Codable, Sendable {
+    public let confirmations: [PendingConfirmationPayload]
+    public init(confirmations: [PendingConfirmationPayload]) {
+        self.confirmations = confirmations
+    }
+}
+
+/// Mobile → desktop: the user confirmed or rejected prompt `id`.
+public struct ConfirmationDecisionPayload: Codable, Sendable {
+    public let id: String
+    public let confirmed: Bool
+    public init(id: String, confirmed: Bool) {
+        self.id = id
+        self.confirmed = confirmed
+    }
+}
+
 /// Mobile → desktop: the user's decision on a Claude `ExitPlanMode` plan card.
 /// Uses a flat wire shape (string action + optional reason) because
 /// `PlanDecisionAction` carries an associated value (`rejectWithFeedback`).

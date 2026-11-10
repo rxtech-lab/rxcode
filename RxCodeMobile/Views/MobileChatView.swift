@@ -38,6 +38,8 @@ struct MobileChatView: View {
     @State var presentedQuestion: PendingQuestionPayload?
     /// The plan whose review sheet is currently presented, if any.
     @State var presentedPlan: PendingPlan?
+    /// The `ide__show_confirmation` prompt shown in the native alert.
+    @State var presentedConfirmation: PendingConfirmationPayload?
     /// Local file link tapped in rendered markdown. Mobile fetches the content
     /// from the paired desktop before presenting it.
     @State var presentedFileLink: LocalFileLink?
@@ -234,6 +236,45 @@ struct MobileChatView: View {
                     presentedQuestion = nil
                 }
             }
+            .alert(
+                presentedConfirmation?.title ?? "",
+                isPresented: Binding(
+                    get: { presentedConfirmation != nil },
+                    set: { if !$0 { presentedConfirmation = nil } }
+                ),
+                presenting: presentedConfirmation
+            ) { confirmation in
+                Button(confirmation.confirmLabel, role: confirmation.isDestructive ? .destructive : nil) {
+                    respondToConfirmation(confirmation, confirmed: true)
+                }
+                Button(confirmation.cancelLabel, role: .cancel) {
+                    respondToConfirmation(confirmation, confirmed: false)
+                }
+            } message: { confirmation in
+                if let message = confirmation.message {
+                    Text(message)
+                }
+            }
+            .onChange(of: sessionConfirmations) { old, confirmations in
+                // A prompt settled elsewhere (desktop or another device) closes
+                // the now-stale alert; a newly queued one opens right away.
+                if let presented = presentedConfirmation,
+                   !confirmations.contains(where: { $0.id == presented.id })
+                {
+                    presentedConfirmation = nil
+                }
+                let known = Set(old.map(\.id))
+                if presentedConfirmation == nil,
+                   let arrived = confirmations.first(where: { !known.contains($0.id) })
+                {
+                    presentedConfirmation = arrived
+                }
+            }
+            .onAppear {
+                if presentedConfirmation == nil {
+                    presentedConfirmation = sessionConfirmations.first
+                }
+            }
             .sheet(item: $presentedPlan) { plan in
                 PlanSheetView(
                     plan: plan,
@@ -390,6 +431,12 @@ struct MobileChatView: View {
                         .padding(.bottom, 4)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                if !sessionConfirmations.isEmpty {
+                    confirmationBanner
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 if !sessionQuestions.isEmpty {
                     questionQueueBanner
                         .padding(.horizontal, 12)
@@ -416,6 +463,7 @@ struct MobileChatView: View {
             }
             .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
             .animation(.easeInOut(duration: 0.2), value: sessionQuestions.count)
+            .animation(.easeInOut(duration: 0.2), value: sessionConfirmations.count)
             .animation(.easeInOut(duration: 0.2), value: pendingPlans.count)
             .animation(.easeInOut(duration: 0.2), value: shouldShowDiffBanner)
             .background(Color.clear)
@@ -548,6 +596,21 @@ struct MobileChatView: View {
     /// `AskUserQuestion` calls awaiting an answer for this thread.
     var sessionQuestions: [PendingQuestionPayload] {
         state.pendingQuestions(sessionID: sessionID)
+    }
+
+    /// `ide__show_confirmation` prompts awaiting a decision for this thread.
+    var sessionConfirmations: [PendingConfirmationPayload] {
+        state.pendingConfirmations(sessionID: sessionID)
+    }
+
+    func respondToConfirmation(_ confirmation: PendingConfirmationPayload, confirmed: Bool) {
+        if confirmed && confirmation.isDestructive {
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        } else {
+            MobileHaptics.buttonTap()
+        }
+        presentedConfirmation = nil
+        Task { await state.respondToConfirmation(id: confirmation.id, confirmed: confirmed) }
     }
 
     /// Every plan card for this thread (pending + decided), derived from the

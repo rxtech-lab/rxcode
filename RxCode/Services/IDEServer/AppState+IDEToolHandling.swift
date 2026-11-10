@@ -41,6 +41,8 @@ extension AppState: IDEToolHandling {
             return handleGetProjects()
         case "ide__get_stories":
             return try await handleGetStories(arguments: arguments, sessionKey: sessionKey)
+        case TaskViewsTool.name:
+            return try await handleTaskViews(arguments: arguments, sessionKey: sessionKey)
         case "ide__create_story":
             return try await handleCreateStory(arguments: arguments, sessionKey: sessionKey)
         case "ide__create_task":
@@ -83,6 +85,8 @@ extension AppState: IDEToolHandling {
             return try await handleSendToThread(arguments: arguments)
         case "ide__usage_cards":
             return try await handleUsageCards(arguments)
+        case "ide__get_integration_usage":
+            return try await handleGetIntegrationUsage(arguments)
         case "ide__get_usage":
             return await handleGetUsage()
         case "ide__search_docs":
@@ -137,7 +141,7 @@ extension AppState: IDEToolHandling {
     }
 
     @MainActor
-    private func taskToolProjectId(arguments: JSONValue, sessionKey: String) throws -> UUID {
+    func taskToolProjectId(arguments: JSONValue, sessionKey: String) throws -> UUID {
         let explicit = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
         guard let id = explicit ?? threadStore.fetch(id: sessionKey)?.projectId
                 ?? allSessionSummaries.first(where: { $0.id == resolveCurrentSessionId(sessionKey) })?.projectId,

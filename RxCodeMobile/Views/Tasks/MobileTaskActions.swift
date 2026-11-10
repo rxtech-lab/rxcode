@@ -67,50 +67,24 @@ struct MobileTaskDestinations: ViewModifier {
 }
 
 /// Presents card details locally so dashboard navigation cannot intercept a card tap.
-/// A task this phone ran on a paired Mac opens its session there instead while it runs.
+/// Every task opens the same detail sheet, including active and reviewed tasks.
 struct MobileTaskDetailButton<Label: View>: View {
-    @EnvironmentObject private var state: MobileAppState
     let route: MobileTaskRoute
     let onOpenChat: (String) -> Void
     @ViewBuilder let label: () -> Label
 
     @State private var showingDetail = false
     @State private var pendingChat: String?
-    @State private var openingOn: String?
-    @State private var errorMessage: String?
-
-    private var runningTask: ProjectTask? {
-        guard case .task(let projectID, let taskID) = route,
-              let task = state.taskBoard(for: projectID).tasks.first(where: { $0.id == taskID }),
-              state.activeTaskRunLink(for: task) != nil
-        else { return nil }
-        return task
-    }
 
     var body: some View {
         MobileRowButton {
-            if let task = runningTask {
-                openRunSession(task)
-            } else {
-                showingDetail = true
-            }
+            showingDetail = true
         } label: {
             label()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(openingOn != nil)
-        .overlay(alignment: .trailing) {
-            if let openingOn {
-                ProgressView("Opening on \(openingOn)…")
-                    .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.regularMaterial, in: Capsule())
-            }
-        }
-        .mobileTaskErrorAlert($errorMessage)
         .sheet(isPresented: $showingDetail, onDismiss: {
             if let sessionID = pendingChat {
                 pendingChat = nil
@@ -145,27 +119,6 @@ struct MobileTaskDetailButton<Label: View>: View {
     private func openChat(_ sessionID: String) {
         pendingChat = sessionID
         showingDetail = false
-    }
-
-    /// Switches to the Mac running `task` and opens its session.
-    private func openRunSession(_ task: ProjectTask) {
-        openingOn = state.activeTaskRunLink(for: task)?.desktopName
-        let isCloud = state.usesCloudTasks
-        Task {
-            defer { openingOn = nil }
-            do {
-                let session = try await state.openTaskRunSession(for: task)
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                if isCloud {
-                    // Cloud hosts open the Mac's workspace from a deep link.
-                    state.openThreadFromNotification(sessionID: session.sessionID, projectID: session.projectID)
-                }
-                onOpenChat(session.sessionID)
-            } catch {
-                errorMessage = error.localizedDescription
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
-            }
-        }
     }
 }
 

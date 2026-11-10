@@ -8,6 +8,9 @@ final class FlowcyAPI {
     private let baseURL: URL
     private let notifySessionExpiry: Bool
     private let token: (Bool) async -> String?
+    /// Whether the account session itself is still valid. A missing token while
+    /// it is (offline, auth server unreachable) must not sign the user out.
+    private let isSessionActive: @MainActor () -> Bool
 
     nonisolated static var defaultBaseURL: URL {
         #if DEBUG
@@ -18,8 +21,11 @@ final class FlowcyAPI {
     }
 
     init(session: URLSession = .shared, baseURL: URL = FlowcyAPI.defaultBaseURL,
-         notifySessionExpiry: Bool = true, token: @escaping (Bool) async -> String? = { await RxAuthService.shared.accessToken(forceRefresh: $0) }) {
+         notifySessionExpiry: Bool = true,
+         isSessionActive: @escaping @MainActor () -> Bool = { RxAuthService.shared.isAuthenticated },
+         token: @escaping (Bool) async -> String? = { await RxAuthService.shared.accessToken(forceRefresh: $0) }) {
         self.notifySessionExpiry = notifySessionExpiry
+        self.isSessionActive = isSessionActive
         self.session = session
         self.baseURL = baseURL
         self.token = token
@@ -30,6 +36,12 @@ final class FlowcyAPI {
               let url = URL(string: baseURL.appendingPathComponent("api/v1").absoluteString + "/" + path)?.absoluteURL else { throw FlowcyError.protocolError }
         for refresh in [false, true] {
             guard let bearer = await token(refresh) else {
+                // RxAuth signs out by itself when the server rejects the session.
+                // A nil token from a session that's still active means the refresh
+                // couldn't reach the server, so report that and keep the session.
+                if isSessionActive() {
+                    throw FlowcyError.message("Couldn't reach your account. Check your connection and try again.")
+                }
                 if notifySessionExpiry { NotificationCenter.default.post(name: .rxAuthSessionExpired, object: nil) }
                 throw FlowcyError.signIn
             }

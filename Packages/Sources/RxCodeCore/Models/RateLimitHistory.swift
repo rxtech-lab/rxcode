@@ -238,6 +238,7 @@ public struct RateLimitTaskCostSummary: Sendable, Equatable {
     public var leastExpensive: RateLimitTaskCostSnapshot?
     public var remainingFiveHour: Estimate = .insufficientData
     public var remainingSevenDay: Estimate = .insufficientData
+    public var weeklyForecast = RateLimitWeeklyForecast()
     /// Per-model costs and estimates, most measured tasks first.
     public var models: [ModelStats] = []
 

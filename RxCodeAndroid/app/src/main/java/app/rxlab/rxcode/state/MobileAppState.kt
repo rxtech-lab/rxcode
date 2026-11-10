@@ -23,6 +23,7 @@ import app.rxlab.rxcode.proto.LoadMoreMessagesRequestPayload
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
 import app.rxlab.rxcode.proto.NewSessionRequestPayload
 import app.rxlab.rxcode.proto.PairRequestPayload
+import app.rxlab.rxcode.proto.ConfirmationDecisionPayload
 import app.rxlab.rxcode.proto.Payload
 import app.rxlab.rxcode.proto.PermissionMode
 import app.rxlab.rxcode.proto.PermissionResponsePayload
@@ -236,6 +237,10 @@ class MobileAppState @Inject constructor(
             is Payload.QuestionQueue -> {
                 if (!isActiveDesktop(fromHex)) return
                 _state.update { it.copy(pendingQuestions = payload.data.questions) }
+            }
+            is Payload.ConfirmationQueue -> {
+                if (!isActiveDesktop(fromHex)) return
+                _state.update { it.copy(pendingConfirmations = payload.data.confirmations) }
             }
             is Payload.BranchOpResult -> {
                 if (!isActiveDesktop(fromHex)) return
@@ -999,6 +1004,16 @@ class MobileAppState @Inject constructor(
         viewModelScope.launch {
             client.send(
                 Payload.QuestionAnswer(QuestionAnswerPayload(toolUseID, answers)),
+                _state.value.activeDesktopPubkey,
+            )
+        }
+    }
+
+    fun respondToConfirmation(id: String, confirmed: Boolean) {
+        _state.update { it.copy(pendingConfirmations = it.pendingConfirmations.filterNot { c -> c.id == id }) }
+        viewModelScope.launch {
+            client.send(
+                Payload.ConfirmationDecision(ConfirmationDecisionPayload(id, confirmed)),
                 _state.value.activeDesktopPubkey,
             )
         }

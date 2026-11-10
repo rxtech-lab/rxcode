@@ -24,7 +24,9 @@ struct RootView: View {
             } else if cloud.isRestoring {
                 MobileRestoringSessionView()
             } else if cloud.isSignedIn {
-                if showingRemote { Color.clear } else { dashboard }
+                // Stays mounted under the remote cover so closing it returns
+                // to the same tab, board, and pushed screens.
+                dashboard
             } else {
                 MobileSignInView()
             }
@@ -42,8 +44,9 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .rxAuthSessionExpired)) { _ in
             Task {
                 // Legacy feature services also emit this after a service-specific 401.
-                // Only end the account session when the identity token is unavailable.
-                guard await cloud.auth.accessToken() == nil else { return }
+                // Only end the account session once RxAuth has rejected it; a nil
+                // token can also mean the auth server was briefly unreachable.
+                guard !cloud.auth.isAuthenticated else { return }
                 await cloud.signOut(requiresPushRemoval: false)
             }
         }
@@ -113,10 +116,8 @@ struct RootView: View {
         TabView(selection: $selected) {
             Tab("Tasks", systemImage: "checklist", value: FlowcyTab.tasks) {
                 NavigationStack {
-                    if !showingRemote {
-                        MobileTasksDashboardView(onOpenChat: { _ in openRemote() })
-                            .toolbar { FlowcyRemoteToolbar() }
-                    }
+                    MobileTasksDashboardView(onOpenChat: { _ in openRemote() })
+                        .toolbar { FlowcyRemoteToolbar() }
                 }
             }
             Tab("Projects", systemImage: "square.grid.2x2", value: FlowcyTab.projects) {
@@ -132,6 +133,9 @@ struct RootView: View {
             }
         }
         .environment(\.flowcyRemoteActions, FlowcyRemoteActions(connect: { showingPairing = true }, open: openRemote, showInSidebar: sizeClass == .compact))
+        // The remote workspace switches the shared task store to the desktop.
+        // The covered cloud views must not reload or alert against that data.
+        .environment(\.isTaskSyncSuspended, showingRemote)
         .onChange(of: selected) { _, _ in MobileHaptics.buttonTap() }
     }
 
@@ -165,6 +169,9 @@ struct FlowcyRemoteActions {
 
 extension EnvironmentValues {
     @Entry var flowcyRemoteActions: FlowcyRemoteActions?
+    /// True while these task views are covered by a workspace that reads a
+    /// different task source. They keep their navigation but stop loading.
+    @Entry var isTaskSyncSuspended = false
 }
 
 /// Attach to navigation column content so SwiftUI keeps the menu when columns collapse.

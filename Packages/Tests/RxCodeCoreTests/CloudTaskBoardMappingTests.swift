@@ -4,6 +4,21 @@ import Testing
 
 @Suite("Cloud task board projection")
 struct CloudTaskBoardMappingTests {
+    @Test func reviewFeedbackNeverEntersPublicCloudTaskFields() throws {
+        let task = ProjectTask(projectId: UUID(), title: "Task", attentionReason: "Secret review feedback")
+        let fields = TaskBoard(tasks: [task]).cloudFields(for: task, sync: CloudBoardSyncState())
+        let json = String(decoding: try JSONEncoder().encode(fields), as: UTF8.self)
+        #expect(!json.contains("Secret review feedback"))
+        #expect(!json.contains("attentionReason"))
+    }
+
+    @Test func olderCloudResponsesDoNotEraseLocalReviewFeedback() throws {
+        let fields = try JSONDecoder().decode(CloudTaskFields.self, from: Data(#"{"title":"Task","status":"pending"}"#.utf8))
+        let task = ProjectTask(projectId: UUID(), title: "Task", attentionReason: "Review rejected")
+        let result = TaskBoard().applying(fields, to: task, sync: CloudBoardSyncState(), updatedAt: nil)
+        #expect(result.attentionReason == task.attentionReason)
+    }
+
     @Test func keepsNavigationIdentityAndResolvesStoryAndParent() {
         let projectID = UUID()
         let remote = CloudRemoteBoard(

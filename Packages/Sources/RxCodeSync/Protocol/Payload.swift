@@ -39,6 +39,8 @@ public enum Payload: Sendable {
     case permissionResponse(PermissionResponsePayload)
     case questionQueue(QuestionQueuePayload)
     case questionAnswer(QuestionAnswerPayload)
+    case confirmationQueue(ConfirmationQueuePayload)
+    case confirmationDecision(ConfirmationDecisionPayload)
     case planDecision(PlanDecisionPayload)
     case branchOpRequest(BranchOpRequestPayload)
     case branchOpResult(BranchOpResultPayload)
@@ -118,6 +120,8 @@ public extension Payload {
         case .permissionResponse: return "permission_response"
         case .questionQueue: return "question_queue"
         case .questionAnswer: return "question_answer"
+        case .confirmationQueue: return "confirmation_queue"
+        case .confirmationDecision: return "confirmation_decision"
         case .planDecision: return "plan_decision"
         case .branchOpRequest: return "branch_op_request"
         case .branchOpResult: return "branch_op_result"
@@ -631,6 +635,8 @@ extension Payload: Codable {
         case permissionResponse = "permission_response"
         case questionQueue = "question_queue"
         case questionAnswer = "question_answer"
+        case confirmationQueue = "confirmation_queue"
+        case confirmationDecision = "confirmation_decision"
         case planDecision = "plan_decision"
         case branchOpRequest = "branch_op_request"
         case branchOpResult = "branch_op_result"
@@ -712,6 +718,8 @@ extension Payload: Codable {
         case .permissionResponse: self = .permissionResponse(try container.decode(PermissionResponsePayload.self, forKey: .data))
         case .questionQueue: self = .questionQueue(try container.decode(QuestionQueuePayload.self, forKey: .data))
         case .questionAnswer: self = .questionAnswer(try container.decode(QuestionAnswerPayload.self, forKey: .data))
+        case .confirmationQueue: self = .confirmationQueue(try container.decode(ConfirmationQueuePayload.self, forKey: .data))
+        case .confirmationDecision: self = .confirmationDecision(try container.decode(ConfirmationDecisionPayload.self, forKey: .data))
         case .planDecision: self = .planDecision(try container.decode(PlanDecisionPayload.self, forKey: .data))
         case .branchOpRequest: self = .branchOpRequest(try container.decode(BranchOpRequestPayload.self, forKey: .data))
         case .branchOpResult: self = .branchOpResult(try container.decode(BranchOpResultPayload.self, forKey: .data))
@@ -789,6 +797,8 @@ extension Payload: Codable {
         case .permissionResponse(let p): try container.encode(TypeKey.permissionResponse.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .questionQueue(let p): try container.encode(TypeKey.questionQueue.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .questionAnswer(let p): try container.encode(TypeKey.questionAnswer.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .confirmationQueue(let p): try container.encode(TypeKey.confirmationQueue.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .confirmationDecision(let p): try container.encode(TypeKey.confirmationDecision.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .planDecision(let p): try container.encode(TypeKey.planDecision.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpRequest(let p): try container.encode(TypeKey.branchOpRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpResult(let p): try container.encode(TypeKey.branchOpResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)

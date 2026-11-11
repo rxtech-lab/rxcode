@@ -14,6 +14,7 @@ import app.rxlab.rxcode.proto.MobileSkillPlugin
 import app.rxlab.rxcode.proto.MobileSkillSource
 import app.rxlab.rxcode.proto.MobileThreadSummary
 import app.rxlab.rxcode.proto.MobileWebProxyInfo
+import app.rxlab.rxcode.proto.PendingConfirmationPayload
 import app.rxlab.rxcode.proto.PendingQuestionPayload
 import app.rxlab.rxcode.proto.PermissionRequestPayload
 import app.rxlab.rxcode.proto.Project
@@ -67,6 +68,8 @@ data class MobileState(
 
     val pendingPermission: PermissionRequestPayload? = null,
     val pendingQuestions: List<PendingQuestionPayload> = emptyList(),
+    /** `ide__show_confirmation` prompts awaiting a decision, across all sessions. */
+    val pendingConfirmations: List<PendingConfirmationPayload> = emptyList(),
 
     /** Project ids with an in-flight branch op (init / switch / create). */
     val pendingBranchOps: Set<UUID> = emptySet(),

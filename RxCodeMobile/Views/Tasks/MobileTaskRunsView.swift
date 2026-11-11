@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The task detail's Runs tab, like the Mac task form's Run tab: what the
 /// agent was asked, what it answered, and any follow-ups, read from the
-/// task's thread on the desktop. A floating capsule shows the task's column;
+/// desktop or decrypted from its stored cloud snapshot. A floating capsule shows the task's column;
 /// a toolbar menu continues the thread or opens its chat.
 struct MobileTaskRunsView: View {
     @EnvironmentObject private var state: MobileAppState
@@ -24,7 +24,7 @@ struct MobileTaskRunsView: View {
 
     /// Reload when a run starts or ends, or the task changes column.
     private var reloadKey: String {
-        "\(task.status.rawValue)|\(isAgentRunning)|\(task.sessionKey ?? "")|\(sessionID ?? "")"
+        "\(task.status.rawValue)|\(isAgentRunning)|\(task.sessionKey ?? "")|\(sessionID ?? "")|\(task.updatedAt)|\(task.attentionReason ?? "")|\(state.cloudTaskActivity(for: task)?.updatedAt.description ?? "")"
     }
 
     var body: some View {
@@ -43,18 +43,27 @@ struct MobileTaskRunsView: View {
         if isLoading, turns.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if !hasThread {
+        } else if !hasThread || turns.isEmpty {
             ContentUnavailableView(
                 "No Runs Yet",
                 systemImage: "bubble.left.and.exclamationmark.bubble.right",
-                description: Text(task.agent.isAssigned
+                description: Text(state.usesCloudTasks
+                    ? "Pair with the Mac that runs this task, then let it sync encrypted history to the cloud."
+                    : task.agent.isAssigned
                     ? "Run the task with its agent to see what it was asked and what it answered."
                     : "Assign an agent in Config, then run the task.")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
+                        if let reason = task.attentionReason {
+                            MarkdownContentView(text: reason)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                        }
                         ForEach(turns) { turn in
                             turnView(turn, isLast: turn.id == turns.last?.id)
                                 .id(turn.id)
@@ -127,6 +136,10 @@ struct MobileTaskRunsView: View {
                 Image(systemName: column.systemImage)
                     .foregroundStyle(column.tint)
             }
+            if state.usesCloudTasks, state.cloudTaskActivity(for: task) != nil {
+                Image(systemName: "lock.shield")
+                    .accessibilityLabel("End-to-end encrypted history")
+            }
             Text(column.name)
                 .font(.subheadline.weight(.medium))
             if isAgentRunning {
@@ -149,7 +162,7 @@ struct MobileTaskRunsView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        let canFollowUp = hasThread && sessionID != nil && !board.isStatusLocked(task) && !isAgentRunning
+        let canFollowUp = hasThread && (sessionID != nil || state.cloudTaskActivity(for: task)?.sessionID != nil) && !board.isStatusLocked(task) && !isAgentRunning
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Button(action: onFollowUp) {

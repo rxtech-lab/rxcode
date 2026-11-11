@@ -32,6 +32,9 @@ extension AppState {
         )
         threadStore.recordUsage(sample, at: now)
         usageStatsRevision += 1
+        if Self.rateLimitedProviders.contains(agentProvider) {
+            refreshRateLimitProviderStats()
+        }
         refreshLocalUsagePlugins()
     }
 

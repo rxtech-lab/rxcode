@@ -215,6 +215,52 @@ extension MobileChatView {
         .accessibilityLabel("\(queuedMessages.count) queued messages. Tap to view all.")
     }
 
+    // MARK: - Confirmation banner
+
+    /// Pill above the input bar while the agent waits on an
+    /// `ide__show_confirmation` prompt. Tapping it reopens the native alert.
+    var confirmationBanner: some View {
+        let first = sessionConfirmations.first
+        let isDestructive = first?.isDestructive == true
+        let tint = isDestructive ? Color.red : ClaudeTheme.accent
+        return Button {
+            MobileHaptics.buttonTap()
+            presentedConfirmation = first
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: isDestructive ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(tint)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(first?.title ?? "")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .lineLimit(1)
+                    if sessionConfirmations.count > 1 {
+                        Text("\(sessionConfirmations.count - 1) more waiting")
+                            .font(.system(size: 11))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Text("Review")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(tint, in: Capsule())
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.tint(tint).interactive(), in: .rect(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Confirmation needed: \(first?.title ?? ""). Tap to review.")
+    }
+
     // MARK: - Question queue banner
 
     /// Compact pill shown directly above the input bar whenever the agent has

@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
@@ -59,10 +60,22 @@ struct MobileTaskRow: View {
             }
 
             if let reason = task.attentionReason {
-                Label(reason, systemImage: "exclamationmark.triangle.fill")
+                HStack(alignment: .top, spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    MarkdownContentView(text: reason)
+                        .lineLimit(2)
+                }
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .accessibilityIdentifier("task-review-feedback-\(task.id.uuidString)")
+            }
+
+            let connections = state.taskLinkedSessions(task)
+            if !connections.isEmpty {
+                Label("Connected Chats: \(connections.count)", systemImage: "bubble.left.and.bubble.right")
                     .font(.caption)
-                    .foregroundStyle(.orange)
-                    .lineLimit(2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("task-connected-chats-\(task.id.uuidString)")
             }
 
             if let deviceName = state.taskRunDeviceName(for: task) {

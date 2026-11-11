@@ -5,6 +5,32 @@ import XCTest
 
 @MainActor
 final class AgentConfirmationAttentionTests: XCTestCase {
+    func testProjectBadgeCountsSharedTaskAndThreadOnce() {
+        let app = AppState(startBackgroundServices: false)
+        let window = WindowState()
+        let project = UUID()
+        app.allSessionSummaries = ["shared", "running", "unread"].map { summary($0, project: project) }
+        app.sessionIdRedirect["pending-shared"] = "shared"
+        app.taskBoards[project] = TaskBoard(tasks: [
+            ProjectTask(projectId: project, title: "Linked", status: .inProgress, sessionKey: "pending-shared"),
+            ProjectTask(projectId: project, title: "Same thread", status: .inProgress, sessionKey: "shared"),
+            ProjectTask(projectId: project, title: "Queued", status: .inProgress),
+            ProjectTask(projectId: project, title: "Done", status: .done),
+        ])
+        app.sessionActivity = [
+            "shared": SessionActivity(isStreaming: true, hasUncheckedCompletion: true),
+            "running": SessionActivity(isStreaming: true, hasUncheckedCompletion: true),
+            "unread": SessionActivity(hasUncheckedCompletion: true),
+        ]
+
+        XCTAssertEqual(app.projectAttention(projectId: project, in: window),
+                       PendingAttention(runningThreads: 1, unreadThreads: 1, inProgressTasks: 2))
+        app.taskBoards[project]?.tasks.removeAll()
+        XCTAssertEqual(app.projectAttention(projectId: project, in: window).count, 3)
+        app.sessionActivity.removeAll()
+        XCTAssertEqual(app.projectAttention(projectId: project, in: window).count, 0)
+    }
+
     func testConfirmationQueuesStayWithTheirOriginalThreadAfterSessionRename() {
         let app = AppState(startBackgroundServices: false)
         let project = UUID()

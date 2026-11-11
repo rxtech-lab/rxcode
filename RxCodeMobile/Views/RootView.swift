@@ -71,6 +71,9 @@ struct RemoteWorkspaceView: View {
         }
         .animation(.smooth(duration: 0.3), value: cloud.isSignedIn)
         .onReceive(NotificationCenter.default.publisher(for: .rxAuthSessionExpired)) { _ in
+            // Feature services post this too; sign out only once RxAuth itself
+            // has rejected the session, never for a transient token failure.
+            guard !cloud.auth.isAuthenticated else { return }
             Task { await cloud.signOut(requiresPushRemoval: false) }
         }
         .onChange(of: cloud.isSignedIn) { _, signedIn in

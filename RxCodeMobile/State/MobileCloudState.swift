@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import UIKit
 import RxCodeCore
+import RxCodeSync
 import RxAuthSwift
 
 /// Direct account access to Autopilot, independent of the paired desktop transport.
@@ -129,6 +130,10 @@ final class MobileCloudState {
 
     static func isCancellation(_ error: Error) -> Bool {
         Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
+
+    func taskActivity(projectID: String, recipient: String) async throws -> [CloudTaskActivityRecord] {
+        try await service.taskActivity(projectId: projectID, recipient: recipient)
     }
 
     func loadBoard(_ projectID: String) async throws {

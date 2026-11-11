@@ -10,6 +10,22 @@ import RxCodeCore
 // runs moving cards, background classification, edits on the Mac) is pushed
 // to every paired device as `taskBoardUpdate`.
 
+/// A task's connected chat or review, independent of its current column.
+public struct MobileTaskLinkedSession: Codable, Sendable, Identifiable, Equatable {
+    public enum Kind: String, Codable, Sendable { case run, source, review }
+    public let id: String
+    public let title: String
+    public let kind: Kind
+    public let feedback: String?
+
+    public init(id: String, title: String, kind: Kind, feedback: String? = nil) {
+        self.id = id
+        self.title = title
+        self.kind = kind
+        self.feedback = feedback
+    }
+}
+
 /// One project's board as mobile renders it, plus the desktop-only state the
 /// board alone can't express.
 public struct MobileTaskBoardSnapshot: Codable, Sendable {
@@ -22,6 +38,9 @@ public struct MobileTaskBoardSnapshot: Codable, Sendable {
     /// still exist are listed, so mobile can offer "Open Chat" exactly when the
     /// desktop would.
     public let taskSessionIDs: [String: String]
+    public let taskLinkedSessions: [String: [MobileTaskLinkedSession]]
+    /// Desktop task UUID → cloud task ID for matching a direct-cloud mobile board.
+    public let taskCloudIDs: [String: String]
     /// Tasks whose title/classification the desktop is still generating.
     public let classifyingTaskIDs: [UUID]
     /// The desktop's default task agent, used to prefill new task drafts.
@@ -31,18 +50,22 @@ public struct MobileTaskBoardSnapshot: Codable, Sendable {
         projectID: UUID,
         board: TaskBoard,
         taskSessionIDs: [String: String] = [:],
+        taskLinkedSessions: [String: [MobileTaskLinkedSession]] = [:],
+        taskCloudIDs: [String: String] = [:],
         classifyingTaskIDs: [UUID] = [],
         defaultAgent: TaskAgentConfig? = nil
     ) {
         self.projectID = projectID
         self.board = board
         self.taskSessionIDs = taskSessionIDs
+        self.taskLinkedSessions = taskLinkedSessions
+        self.taskCloudIDs = taskCloudIDs
         self.classifyingTaskIDs = classifyingTaskIDs
         self.defaultAgent = defaultAgent
     }
 
     private enum CodingKeys: String, CodingKey {
-        case projectID, board, taskSessionIDs, classifyingTaskIDs, defaultAgent
+        case projectID, board, taskSessionIDs, taskLinkedSessions, taskCloudIDs, classifyingTaskIDs, defaultAgent
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,8 +73,34 @@ public struct MobileTaskBoardSnapshot: Codable, Sendable {
         projectID = try c.decode(UUID.self, forKey: .projectID)
         board = try c.decodeIfPresent(TaskBoard.self, forKey: .board) ?? TaskBoard()
         taskSessionIDs = try c.decodeIfPresent([String: String].self, forKey: .taskSessionIDs) ?? [:]
+        taskCloudIDs = try c.decodeIfPresent([String: String].self, forKey: .taskCloudIDs) ?? [:]
+        taskLinkedSessions = try c.decodeIfPresent([String: [MobileTaskLinkedSession]].self, forKey: .taskLinkedSessions) ?? [:]
         classifyingTaskIDs = try c.decodeIfPresent([UUID].self, forKey: .classifyingTaskIDs) ?? []
         defaultAgent = try c.decodeIfPresent(TaskAgentConfig.self, forKey: .defaultAgent)
+    }
+
+    /// Adds Mac-owned review state to a cloud board whose task UUIDs differ.
+    /// Cloud refreshes do not carry this state, so apply it after each refresh.
+    public func mergingDesktopFeedback(from desktop: MobileTaskBoardSnapshot) -> MobileTaskBoardSnapshot {
+        var mergedBoard = board
+        var links = taskLinkedSessions
+        let tasksByID = Dictionary(uniqueKeysWithValues: desktop.board.tasks.map { ($0.id.uuidString, $0) })
+        let desktopIDs = Dictionary(desktop.taskCloudIDs.map { ($0.value, $0.key) }, uniquingKeysWith: { first, _ in first })
+        for index in mergedBoard.tasks.indices {
+            let id = mergedBoard.tasks[index].id
+            guard let remoteID = mergedBoard.cloudSync?.taskRemoteId(id),
+                  let desktopID = desktopIDs[remoteID], let task = tasksByID[desktopID] else { continue }
+            // Nil is authoritative too: a successful retry clears the warning.
+            if task.updatedAt >= mergedBoard.tasks[index].updatedAt {
+                mergedBoard.tasks[index].attentionReason = task.attentionReason
+            }
+            if let connected = desktop.taskLinkedSessions[desktopID] {
+                links[id.uuidString] = connected
+            }
+        }
+        return MobileTaskBoardSnapshot(projectID: projectID, board: mergedBoard,
+            taskSessionIDs: taskSessionIDs, taskLinkedSessions: links, taskCloudIDs: taskCloudIDs,
+            classifyingTaskIDs: classifyingTaskIDs, defaultAgent: defaultAgent)
     }
 
     /// The resolved chat thread for `taskID`, if it has one.

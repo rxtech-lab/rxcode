@@ -88,6 +88,12 @@ sealed class Payload {
     data class QuestionAnswer(val data: QuestionAnswerPayload) : Payload() {
         override val type = "question_answer"
     }
+    data class ConfirmationQueue(val data: ConfirmationQueuePayload) : Payload() {
+        override val type = "confirmation_queue"
+    }
+    data class ConfirmationDecision(val data: ConfirmationDecisionPayload) : Payload() {
+        override val type = "confirmation_decision"
+    }
     data class PlanDecision(val data: PlanDecisionPayload) : Payload() {
         override val type = "plan_decision"
     }
@@ -361,6 +367,27 @@ data class QuestionAnswerPayload(
     val toolUseID: String,
     val answers: List<QuestionAnswerEntry>,
 )
+
+/** One `ide__show_confirmation` prompt the desktop is waiting on. */
+@Serializable
+data class PendingConfirmationPayload(
+    val id: String,
+    val sessionID: String,
+    @Serializable(with = UuidSerializer::class) val projectID: UUID? = null,
+    val title: String,
+    val message: String? = null,
+    val confirmLabel: String = "Confirm",
+    val cancelLabel: String = "Cancel",
+    val isDestructive: Boolean = false,
+)
+
+/** Desktop -> mobile: every pending confirmation prompt (full set). */
+@Serializable
+data class ConfirmationQueuePayload(val confirmations: List<PendingConfirmationPayload>)
+
+/** Mobile -> desktop: the user confirmed or rejected prompt [id]. */
+@Serializable
+data class ConfirmationDecisionPayload(val id: String, val confirmed: Boolean)
 
 @Serializable
 data class PlanDecisionPayload(
@@ -643,6 +670,8 @@ object PayloadSerializer : KSerializer<Payload> {
             "permission_response" -> Payload.PermissionResponse(json.decodeFromJsonElement(PermissionResponsePayload.serializer(), data))
             "question_queue" -> Payload.QuestionQueue(json.decodeFromJsonElement(QuestionQueuePayload.serializer(), data))
             "question_answer" -> Payload.QuestionAnswer(json.decodeFromJsonElement(QuestionAnswerPayload.serializer(), data))
+            "confirmation_queue" -> Payload.ConfirmationQueue(json.decodeFromJsonElement(ConfirmationQueuePayload.serializer(), data))
+            "confirmation_decision" -> Payload.ConfirmationDecision(json.decodeFromJsonElement(ConfirmationDecisionPayload.serializer(), data))
             "plan_decision" -> Payload.PlanDecision(json.decodeFromJsonElement(PlanDecisionPayload.serializer(), data))
             "branch_op_request" -> Payload.BranchOpRequest(json.decodeFromJsonElement(BranchOpRequestPayload.serializer(), data))
             "branch_op_result" -> Payload.BranchOpResult(json.decodeFromJsonElement(BranchOpResultPayload.serializer(), data))
@@ -706,6 +735,8 @@ object PayloadSerializer : KSerializer<Payload> {
             is Payload.PermissionResponse -> value.type to json.encodeToJsonElement(PermissionResponsePayload.serializer(), value.data)
             is Payload.QuestionQueue -> value.type to json.encodeToJsonElement(QuestionQueuePayload.serializer(), value.data)
             is Payload.QuestionAnswer -> value.type to json.encodeToJsonElement(QuestionAnswerPayload.serializer(), value.data)
+            is Payload.ConfirmationQueue -> value.type to json.encodeToJsonElement(ConfirmationQueuePayload.serializer(), value.data)
+            is Payload.ConfirmationDecision -> value.type to json.encodeToJsonElement(ConfirmationDecisionPayload.serializer(), value.data)
             is Payload.PlanDecision -> value.type to json.encodeToJsonElement(PlanDecisionPayload.serializer(), value.data)
             is Payload.BranchOpRequest -> value.type to json.encodeToJsonElement(BranchOpRequestPayload.serializer(), value.data)
             is Payload.BranchOpResult -> value.type to json.encodeToJsonElement(BranchOpResultPayload.serializer(), value.data)

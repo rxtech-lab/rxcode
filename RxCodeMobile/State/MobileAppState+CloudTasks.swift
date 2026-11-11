@@ -14,6 +14,7 @@ extension MobileAppState {
         cloudTaskBoardCalls = [:]
         cloudTaskProjects = []
         cloudTaskBoards = [:]
+        cloudTaskActivityByProject = [:]
         deferredCloudTaskBoardSnapshots = [:]
         pruneTaskCache(keepCloud: false)
     }
@@ -139,6 +140,7 @@ extension MobileAppState {
         }
         let snapshot = MobileTaskBoardSnapshot(projectID: request.projectID, board: board)
         storeTaskBoardSnapshot(snapshot, cloud: true)
+        if request.operation == .fetch { try await refreshEncryptedTaskActivity(projectID: request.projectID) }
         return TaskBoardResultPayload(clientRequestID: request.clientRequestID, projectID: request.projectID, ok: true, snapshot: snapshot, taskID: request.task?.id ?? request.taskID)
     }
 

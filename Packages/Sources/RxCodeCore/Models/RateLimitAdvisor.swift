@@ -106,7 +106,10 @@ public enum RateLimitAdvisor {
         if hasFiveHour, let early = exhaustionLead(used: usage.fiveHourPercent, resetsAt: usage.fiveHourResetsAt, window: fiveHourWindow, now: now) {
             warnings.append(String(localized: "At this pace the 5-hour limit runs out about \(formatInterval(early)) before it resets.", bundle: .module))
         }
-        if let early = exhaustionLead(used: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt, window: sevenDayWindow, now: now) {
+        if case .depletes(let date) = summary.weeklyForecast.outcome, date > now {
+            warnings.append(String(localized: "Based on daily sessions and tokens, the 7-day limit may run out in about \(formatInterval(date.timeIntervalSince(now))).", bundle: .module))
+        } else if summary.weeklyForecast.outcome == .insufficientData,
+                  let early = exhaustionLead(used: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt, window: sevenDayWindow, now: now) {
             warnings.append(String(localized: "At this pace the 7-day limit runs out about \(formatInterval(early)) before it resets.", bundle: .module))
         }
 

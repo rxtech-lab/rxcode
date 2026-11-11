@@ -255,13 +255,17 @@ public extension TaskBoard {
     /// Tasks in In Progress or a custom agent-running column, including queued
     /// tasks. Uses the whole board, independent of saved views and filters.
     var inProgressTaskCount: Int {
+        inProgressTasks.count
+    }
+
+    var inProgressTasks: [ProjectTask] {
         let columns = effectiveColumns
         let activeStatuses = Set(columns.filter {
             !$0.countsAsDone && ($0.id == .inProgress || $0.triggersChat)
         }.map(\.id))
-        return tasks.reduce(into: 0) { count, task in
+        return tasks.filter { task in
             let status = columns.first(where: { $0.id == task.status })?.id ?? columns[0].id
-            if activeStatuses.contains(status) { count += 1 }
+            return activeStatuses.contains(status)
         }
     }
 

@@ -115,6 +115,27 @@ final class FlowcyTransportSimulationTests: XCTestCase {
         await fulfillment(of: [expired], timeout: 0.1)
     }
 
+    @MainActor
+    func testUnreachableAuthServerDoesNotExpireActiveSession() async throws {
+        let expired = expectation(forNotification: .rxAuthSessionExpired, object: nil)
+        expired.isInverted = true
+        let api = FlowcyAPI(baseURL: URL(string: "\(FlowcySimulation.baseURL)")!,
+                            isSessionActive: { true }) { _ in nil }
+        do { _ = try await api.read("simulation/rejected-feature"); XCTFail("Expected an error") }
+        catch FlowcyError.message { }
+        await fulfillment(of: [expired], timeout: 0.1)
+    }
+
+    @MainActor
+    func testRejectedSessionExpiresAccount() async throws {
+        let expired = expectation(forNotification: .rxAuthSessionExpired, object: nil)
+        let api = FlowcyAPI(baseURL: URL(string: "\(FlowcySimulation.baseURL)")!,
+                            isSessionActive: { false }) { _ in nil }
+        do { _ = try await api.read("simulation/rejected-feature"); XCTFail("Expected sign-in error") }
+        catch FlowcyError.signIn { }
+        await fulfillment(of: [expired], timeout: 0.1)
+    }
+
     func testToolDiscoveryRefreshesAccountTokenOnce() async throws {
         let client = FlowcyMCPClient(endpoint: URL(string: "\(FlowcySimulation.baseURL)/api/v1/agent/tools")!,
                                     session: .shared, token: { refresh in refresh ? "simulation" : "expired" })

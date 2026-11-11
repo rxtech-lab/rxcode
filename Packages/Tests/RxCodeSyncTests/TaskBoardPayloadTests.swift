@@ -7,6 +7,29 @@ import RxCodeCore
 struct TaskBoardPayloadTests {
     private let projectID = UUID(uuidString: "11111111-AAAA-BBBB-CCCC-000000000001")!
 
+    @Test("connected chats and review feedback sync in every task column",
+          arguments: [TaskStatus.pending, .inProgress, .pendingReview, .done])
+    func connectedChatsRoundTrip(status: TaskStatus) throws {
+        let task = ProjectTask(projectId: projectID, title: "Mobile task", status: status,
+                               attentionReason: "**Fix** the failing check")
+        let links = [
+            MobileTaskLinkedSession(id: "coding", title: "Task Chat", kind: .run),
+            MobileTaskLinkedSession(id: "source", title: "Original Chat", kind: .source),
+            MobileTaskLinkedSession(id: "review", title: "Code Review", kind: .review,
+                                    feedback: "## Feedback\nAdd the missing validation.")
+        ]
+        let update = TaskBoardUpdatePayload(snapshot: MobileTaskBoardSnapshot(
+            projectID: projectID, board: TaskBoard(tasks: [task]),
+            taskLinkedSessions: [task.id.uuidString: links],
+            taskCloudIDs: [task.id.uuidString: "cloud-task"]
+        ))
+        let decoded = try JSONDecoder().decode(TaskBoardUpdatePayload.self, from: JSONEncoder().encode(update))
+        #expect(decoded.snapshot.taskLinkedSessions[task.id.uuidString] == links)
+        #expect(decoded.snapshot.taskCloudIDs[task.id.uuidString] == "cloud-task")
+        #expect(decoded.snapshot.board.tasks.first?.attentionReason == task.attentionReason)
+        #expect(decoded.snapshot.board.tasks.first?.status == status)
+    }
+
     @Test("column sorting travels from phone mutation to desktop board update")
     func columnSortRoundTrips() throws {
         var view = TaskSavedView.defaultView
@@ -130,6 +153,8 @@ struct TaskBoardPayloadTests {
         let snapshot = try JSONDecoder().decode(MobileTaskBoardSnapshot.self, from: Data(json.utf8))
         #expect(snapshot.projectID == projectID)
         #expect(snapshot.taskSessionIDs.isEmpty)
+        #expect(snapshot.taskLinkedSessions.isEmpty)
+        #expect(snapshot.taskCloudIDs.isEmpty)
         #expect(snapshot.classifyingTaskIDs.isEmpty)
         #expect(snapshot.defaultAgent == nil)
     }

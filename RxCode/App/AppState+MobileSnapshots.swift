@@ -196,6 +196,10 @@ extension AppState {
             .questionQueue(QuestionQueuePayload(questions: mobilePendingQuestionPayloads())),
             toHex: hex
         )
+        await MobileSyncService.shared.send(
+            .confirmationQueue(ConfirmationQueuePayload(confirmations: mobilePendingConfirmationPayloads())),
+            toHex: hex
+        )
         logger.info(
             "[MobileSync] sent snapshot projects=\(self.projects.count, privacy: .public) sessions=\(payload.sessions.count, privacy: .public) runProfileProjects=\(runProfiles.count, privacy: .public) runProfileTotal=\(runProfiles.reduce(0) { $0 + $1.profiles.count }, privacy: .public) runTasks=\(runTasks.count, privacy: .public) active=\(active.id ?? "<nil>", privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public)"
         )
@@ -222,75 +226,6 @@ extension AppState {
                     changedFileCount: fileEditCounts[summary.id] ?? 0
                 )
             }
-    }
-
-    func mobileRunProfiles() async -> [MobileProjectRunProfiles] {
-        var result: [MobileProjectRunProfiles] = []
-        for project in projects {
-            await ensureRunProfilesLoaded(for: project.id)
-            let profiles = runProfiles(for: project.id)
-            result.append(MobileProjectRunProfiles(
-                projectId: project.id,
-                profiles: profiles
-            ))
-        }
-        return result
-    }
-
-    func mobileRunTaskSnapshots() -> [MobileRunTaskSnapshot] {
-        runService.tasks.map(mobileRunTaskSnapshot)
-    }
-
-    func mobileRunTaskSnapshot(_ task: RunTask) -> MobileRunTaskSnapshot {
-        MobileRunTaskSnapshot(
-            taskId: task.id,
-            projectId: task.project.id,
-            profileId: task.profile.id,
-            profileName: task.profile.name,
-            status: mobileRunTaskStatus(task.status),
-            statusLabel: task.status.label,
-            exitCode: task.exitCode,
-            startedAt: task.startedAt,
-            resolvedCwd: task.resolvedCwd,
-            commandPreview: mobileRunTaskCommandPreview(task),
-            terminalOutputTail: String(task.terminalOutputTail.suffix(8_000))
-        )
-    }
-
-    func mobileRunTaskStatus(_ status: RunTaskStatus) -> MobileRunTaskSnapshot.Status {
-        switch status {
-        case .running: return .running
-        case .succeeded: return .succeeded
-        case .failed: return .failed
-        case .signaled: return .signaled
-        case .stopped: return .stopped
-        }
-    }
-
-    func mobileRunTaskCommandPreview(_ task: RunTask) -> String {
-        let lines = task.wrapperScript
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map(String.init)
-        if let mainIndex = lines.firstIndex(of: "# --- main ---") {
-            return lines.dropFirst(mainIndex + 1)
-                .prefix(8)
-                .joined(separator: "\n")
-        }
-        return lines.suffix(8).joined(separator: "\n")
-    }
-
-    func broadcastMobileRunTasks() {
-        guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
-        let currentSnapshots = runService.tasks.prefix(5).map(mobileRunTaskSnapshot)
-        let currentById = Dictionary(uniqueKeysWithValues: currentSnapshots.map { ($0.taskId, $0) })
-        let removedIds = Set(lastBroadcastRunTaskSnapshots.keys).subtracting(currentById.keys)
-        if !removedIds.isEmpty {
-            scheduleMobileSnapshotBroadcast()
-        }
-        for snapshot in currentSnapshots where lastBroadcastRunTaskSnapshots[snapshot.taskId] != snapshot {
-            MobileSyncService.shared.broadcastRunTaskUpdate(snapshot)
-        }
-        lastBroadcastRunTaskSnapshots = currentById
     }
 
     func mobileSessionSummary(for sessionID: String) -> RxCodeSync.SessionSummary? {
@@ -447,6 +382,29 @@ extension AppState {
     func broadcastMobileQuestionQueue() {
         guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
         MobileSyncService.shared.broadcastQuestionQueue(mobilePendingQuestionPayloads())
+    }
+
+    /// Wire representation of every `ide__show_confirmation` prompt awaiting
+    /// the user, used to mirror the desktop's confirmation queue to mobile.
+    func mobilePendingConfirmationPayloads() -> [PendingConfirmationPayload] {
+        agentPrompts.confirmations.map { confirmation in
+            PendingConfirmationPayload(
+                id: confirmation.id.uuidString,
+                sessionID: resolveCurrentSessionId(confirmation.sessionKey),
+                projectID: confirmation.projectId,
+                title: confirmation.request.title,
+                message: confirmation.request.message,
+                confirmLabel: confirmation.request.confirmLabel,
+                cancelLabel: confirmation.request.cancelLabel,
+                isDestructive: confirmation.request.isDestructive
+            )
+        }
+    }
+
+    /// Broadcast the current confirmation queue to paired mobile devices.
+    func broadcastMobileConfirmationQueue() {
+        guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
+        MobileSyncService.shared.broadcastConfirmationQueue(mobilePendingConfirmationPayloads())
     }
 
     func broadcastMobileSessionRedirect(from previousSessionID: String, to sessionID: String) {

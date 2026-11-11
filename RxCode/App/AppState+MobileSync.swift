@@ -360,6 +360,20 @@ extension AppState {
         }
         mobileSyncObservers.append(planDecisionObserver)
 
+        let confirmationDecisionObserver = center.addObserver(
+            forName: .mobileSyncConfirmationDecisionReceived,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let payload = notification.userInfo?["payload"] as? ConfirmationDecisionPayload,
+                  let id = UUID(uuidString: payload.id)
+            else { return }
+            Task { @MainActor [weak self] in
+                self?.resolveAgentConfirmation(id: id, confirmed: payload.confirmed)
+            }
+        }
+        mobileSyncObservers.append(confirmationDecisionObserver)
+
         let skillCatalogObserver = center.addObserver(
             forName: .mobileSyncSkillCatalogRequested,
             object: nil,

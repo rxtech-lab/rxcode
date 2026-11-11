@@ -9,6 +9,7 @@ struct MobileTasksDashboardView: View {
     @Environment(MobileCloudState.self) private var cloud
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.isTaskSyncSuspended) private var isTaskSyncSuspended
     /// Opens a chat thread in the host.
     let onOpenChat: (String) -> Void
 
@@ -134,9 +135,11 @@ struct MobileTasksDashboardView: View {
                 .mobileSheetPresentation()
         }
         .onReceive(NotificationCenter.default.publisher(for: .flowcyDashboardChanged)) { _ in
+            guard !isTaskSyncSuspended else { return }
             Task { await load() }
         }
-        .task(id: "\(state.taskSyncReloadKey)|\(cloud.isSignedIn)") {
+        .task(id: "\(state.taskSyncReloadKey)|\(cloud.isSignedIn)|\(isTaskSyncSuspended)") {
+            guard !isTaskSyncSuspended else { return }
             state.restoreCloudTaskCacheIfNeeded()
             guard state.isTaskSyncReady else { return }
             await load()

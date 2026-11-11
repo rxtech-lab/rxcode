@@ -83,6 +83,7 @@ extension AppState {
             await withCheckedContinuation { continuation in
                 agentPrompts.continuations.byId[id] = continuation
                 agentPrompts.confirmations.append(confirmation)
+                broadcastMobileConfirmationQueue()
                 Task { @MainActor [weak self] in
                     guard let self,
                           self.agentPrompts.continuations.byId[id] != nil else { return }
@@ -136,6 +137,7 @@ extension AppState {
         guard let continuation = agentPrompts.continuations.byId.removeValue(forKey: id) else { return false }
         agentPrompts.confirmations.removeAll { $0.id == id }
         continuation.resume(returning: confirmed)
+        broadcastMobileConfirmationQueue()
         return true
     }
 

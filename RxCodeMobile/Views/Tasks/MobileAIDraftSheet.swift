@@ -50,26 +50,59 @@ struct MobileAIDraftSheet: View {
         NavigationStack {
             Group {
                 if let draft {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text(draft.title).font(.title2.bold())
+                    Form {
+                        Section {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("AI Draft", systemImage: "sparkles")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                Text(draft.title)
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        } footer: {
+                            Text("Review the suggestion. You can edit every detail after choosing Use Draft.")
+                        }
+
+                        Section("Description") {
                             MarkdownContentView(text: draft.details)
-                            LabeledContent("Type", value: board.effectiveTypes.first { $0.id == classificationPreview.typeId }?.name ?? "None")
-                            LabeledContent("Priority", value: classificationPreview.priority?.rawValue.capitalized ?? "None")
-                            LabeledContent("Version", value: classificationPreview.version ?? "None")
-                            LabeledContent("Size", value: classificationPreview.size?.rawValue.uppercased() ?? "None")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 8)
+                        }
+
+                        Section("Properties") {
+                            draftProperty("Type", systemImage: "square.grid.2x2",
+                                          value: board.effectiveTypes.first { $0.id == classificationPreview.typeId }?.name ?? "None")
+                            draftProperty("Priority", systemImage: "flag",
+                                          value: classificationPreview.priority?.rawValue.capitalized ?? "None")
+                            draftProperty("Version", systemImage: "tag", value: classificationPreview.version ?? "None")
+                            draftProperty("Size", systemImage: "ruler", value: classificationPreview.size?.rawValue.uppercased() ?? "None")
                             if let milestone = classificationPreview.milestone {
-                                LabeledContent("Milestone", value: milestone)
+                                draftProperty("Milestone", systemImage: "mappin", value: milestone)
                             }
                             if !classificationPreview.tags.isEmpty {
-                                LabeledContent("Tags", value: classificationPreview.tags.joined(separator: ", "))
+                                draftProperty("Tags", systemImage: "number", value: classificationPreview.tags.joined(separator: ", "))
                             }
                             if let deadline = classificationPreview.deadline {
-                                LabeledContent("Deadline", value: deadline.formatted())
+                                draftProperty("Deadline", systemImage: "calendar", value: deadline.formatted())
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+
+                        Section {
+                            Button {
+                                MobileHaptics.buttonTap()
+                                self.draft = nil
+                            } label: {
+                                Label("Revise Request", systemImage: "square.and.pencil")
+                            }
+                            .accessibilityIdentifier("ai-draft-revise")
+                        } footer: {
+                            Text("Return to your request to generate a new draft.")
+                        }
                     }
                 } else {
                     Form {
@@ -86,9 +119,7 @@ struct MobileAIDraftSheet: View {
                             }
                         }
                         Section {
-                            MobileTaskVoiceButton(text: $prompt)
-                            TextField("What needs to be done?", text: $prompt, axis: .vertical)
-                                .lineLimit(6...14)
+                            MobileTaskVoiceField(text: $prompt, placeholder: "What needs to be done?")
                                 .accessibilityIdentifier("ai-draft-prompt")
                         } footer: {
                             Text("AI fills the title, description, type, priority, version, and size. Review the draft before adding it to your board.")
@@ -100,7 +131,7 @@ struct MobileAIDraftSheet: View {
                 }
             }
             .disabled(generation != nil)
-            .navigationTitle(kind == .task ? "Create Task with AI" : "Create Story with AI")
+            .navigationTitle(draft != nil ? "Review Draft" : (kind == .task ? "Create Task with AI" : "Create Story with AI"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -113,6 +144,7 @@ struct MobileAIDraftSheet: View {
                             apply(draft)
                             dismiss()
                         }
+                        .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("ai-draft-apply")
                     } else {
                         Button("Generate") { generate() }
@@ -135,6 +167,21 @@ struct MobileAIDraftSheet: View {
             }
             .onChange(of: provider) { MobileHaptics.buttonTap() }
             .onDisappear { generation?.cancel(); generation = nil }
+        }
+    }
+
+    private func draftProperty(_ title: LocalizedStringKey, systemImage: String, value: String) -> some View {
+        LabeledContent {
+            Text(value)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        } label: {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

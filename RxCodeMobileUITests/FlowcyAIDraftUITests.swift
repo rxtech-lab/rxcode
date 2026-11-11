@@ -17,9 +17,8 @@ final class FlowcyAIDraftUITests: XCTestCase {
             let prefix = kind.lowercased()
             XCTAssertTrue(app.buttons["task-board-add"].waitForExistence(timeout: 10))
             app.buttons["task-board-add"].tap()
-            app.buttons["New " + kind].tap()
-            let ai = app.buttons[prefix + "-form-ai"]
-            XCTAssertTrue(ai.waitForExistence(timeout: 5))
+            let ai = app.buttons["task-board-new-" + prefix + "-ai"]
+            XCTAssertTrue(ai.waitForExistence(timeout: 5), app.debugDescription)
             ai.tap()
             let prompt = app.descendants(matching: .any)["ai-draft-prompt"].firstMatch
             XCTAssertTrue(prompt.waitForExistence(timeout: 5), app.debugDescription)
@@ -35,9 +34,10 @@ final class FlowcyAIDraftUITests: XCTestCase {
             let apply = app.buttons["ai-draft-apply"]
             XCTAssertTrue(apply.waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["Support offline work"].exists)
-            // LabeledContent exposes its label and value as one element.
-            XCTAssertTrue(app.staticTexts["Version, v2.0.0"].exists)
-            XCTAssertTrue(app.staticTexts["Priority, Urgent"].exists)
+            XCTAssertTrue(app.staticTexts["Version"].exists, app.debugDescription)
+            XCTAssertTrue(app.staticTexts["v2.0.0"].exists, app.debugDescription)
+            XCTAssertTrue(app.staticTexts["Priority"].exists, app.debugDescription)
+            XCTAssertTrue(app.staticTexts["Urgent"].exists, app.debugDescription)
             let attachment = XCTAttachment(screenshot: app.screenshot())
             attachment.name = kind + " AI draft review"
             attachment.lifetime = .keepAlways

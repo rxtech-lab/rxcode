@@ -4,15 +4,13 @@ import SwiftUI
 
 // MARK: - RxCodeToolbar
 
-/// Shared trailing toolbar group: New Chat, Open in Editor, Terminal,
-/// Views, Inspector toggle, What's New, Settings.
+/// Shared trailing toolbar group: Open in Editor, Terminal, Views, Inspector toggle.
 ///
 /// Wrapped in an isolated struct so toolbar reads do not trigger NSToolbar
 /// re-layout when `selectedProject` changes.
 struct RxCodeToolbarContent: ToolbarContent {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
     private var fileEditCount: Int {
@@ -32,13 +30,6 @@ struct RxCodeToolbarContent: ToolbarContent {
 
         ToolbarItemGroup(placement: .primaryAction) {
             ExternalEditorMenu()
-
-            Button {
-                appState.startNewChat(in: windowState)
-            } label: {
-                Image(systemName: "square.and.pencil")
-            }
-            .help("New Chat")
 
             Button {
                 if NSEvent.modifierFlags.contains(.option) {
@@ -84,14 +75,6 @@ struct RxCodeToolbarContent: ToolbarContent {
             .help("Toggle Inspector")
             .keyboardShortcut("4", modifiers: .command)
             .accessibilityIdentifier("toggle-inspector-button")
-
-            Button {
-                openSettings()
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .help("Settings")
-            .accessibilityIdentifier("settings-button")
         }
     }
 }

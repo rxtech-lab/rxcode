@@ -334,6 +334,13 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": answer]
             )
+        case .confirmationDecision(let decision):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "confirmation_decision") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncConfirmationDecisionReceived,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": decision]
+            )
         case .planDecision(let decision):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "plan_decision") else { return }
             NotificationCenter.default.post(

@@ -97,9 +97,10 @@ final class RxAuthService {
     /// cached value would just 401 again. Forcing a refresh is what actually
     /// recovers the session instead of surfacing a spurious "Not signed in".
     ///
-    /// Note: `OAuthManager.refreshTokenIfNeeded()` refreshes *unconditionally*
-    /// despite its name, so we gate it ourselves with the keychain `expires_at`
-    /// to avoid a token rotation + userinfo round trip on every autopilot call.
+    /// Note: `OAuthManager.refreshTokenIfNeeded()` skips the refresh while the
+    /// stored token looks valid, so a forced refresh passes `force: true`.
+    /// A `nil` result while `isAuthenticated` is still true means the refresh
+    /// failed transiently (offline, 5xx); a rejected session signs out instead.
     func accessToken(forceRefresh: Bool = false) async -> String? {
         // OAuthManager owns scope upgrades and records the scopes requested at
         // sign-in. Comparing JWT grants here would repeatedly discard a valid
@@ -149,7 +150,7 @@ final class RxAuthService {
         }
 
         do {
-            try await refreshSharedToken()
+            try await refreshSharedToken(force: forceRefresh)
         } catch {
             logger.warning("RxAuth refresh failed: \(error.localizedDescription, privacy: .public)")
             return nil
@@ -174,7 +175,7 @@ final class RxAuthService {
     /// await the same in-flight task instead of each kicking off a competing
     /// (refresh-token-rotating) refresh. All access is `@MainActor`-isolated,
     /// so the check-then-store below is atomic up to the first suspension.
-    private func refreshSharedToken() async throws {
+    private func refreshSharedToken(force: Bool) async throws {
         if let existing = refreshTask {
             try await existing.value
             return
@@ -182,7 +183,7 @@ final class RxAuthService {
         let clock = ContinuousClock()
         let start = clock.now
         let task = Task { @MainActor [manager] in
-            try await manager.refreshTokenIfNeeded()
+            try await manager.refreshTokenIfNeeded(force: force)
         }
         refreshTask = task
         defer { refreshTask = nil }

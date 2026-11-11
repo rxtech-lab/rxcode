@@ -8,8 +8,9 @@ struct PendingAttention: Equatable {
     var confirmations = 0
     var runningThreads = 0
     var unreadThreads = 0
+    var inProgressTasks = 0
 
-    var count: Int { permissions + setups + confirmations + runningThreads + unreadThreads }
+    var count: Int { permissions + setups + confirmations + runningThreads + unreadThreads + inProgressTasks }
     var label: String {
         var parts: [String] = []
         if permissions > 0 { parts.append(String(localized: "Permissions: \(permissions)")) }
@@ -17,6 +18,7 @@ struct PendingAttention: Equatable {
         if confirmations > 0 { parts.append(String(localized: "Confirmations: \(confirmations)")) }
         if runningThreads > 0 { parts.append(String(localized: "Running threads: \(runningThreads)")) }
         if unreadThreads > 0 { parts.append(String(localized: "Unread threads: \(unreadThreads)")) }
+        if inProgressTasks > 0 { parts.append(String(localized: "Tasks in progress: \(inProgressTasks)")) }
         return parts.joined(separator: ", ")
     }
 }
@@ -41,6 +43,12 @@ extension AppState {
             where candidate.selectedProject?.id == projectId {
             sessionIds.insert(resolveCurrentSessionId(candidate.currentSessionId ?? candidate.newSessionKey))
         }
+        let tasks = taskBoard(for: projectId).inProgressTasks
+        let taskSessionIds = Set(tasks.compactMap(\.sessionKey).map { resolveCurrentSessionId($0) })
+        let running = sessionIds.filter { sessionActivity[$0]?.isStreaming == true }
+        let unread = sessionIds.filter { sessionActivity[$0]?.hasUncheckedCompletion == true }
+        // A task and its chat represent the same activity, even after a session rename.
+        let taskCount = taskSessionIds.count + tasks.filter { $0.sessionKey == nil }.count
         return PendingAttention(
             permissions: Set(window.pendingPermissions.filter {
                 $0.sessionId.map { sessionIds.contains(resolveCurrentSessionId($0)) } ?? false
@@ -49,8 +57,9 @@ extension AppState {
             confirmations: agentPrompts.confirmations.filter {
                 $0.projectId == projectId || sessionIds.contains(resolveCurrentSessionId($0.sessionKey))
             }.count,
-            runningThreads: sessionIds.filter { sessionActivity[$0]?.isStreaming == true }.count,
-            unreadThreads: sessionIds.filter { sessionActivity[$0]?.hasUncheckedCompletion == true }.count
+            runningThreads: running.subtracting(taskSessionIds).count,
+            unreadThreads: unread.subtracting(taskSessionIds).subtracting(running).count,
+            inProgressTasks: taskCount
         )
     }
 

@@ -151,10 +151,12 @@ struct AILimitsPluginDetail: View {
                 Text("History").tag("history")
                 Text("Task costs").tag("costs")
                 Text("Model estimates").tag("models")
+                Text("Forecast").tag("forecast")
             }.pickerStyle(.segmented).padding()
             switch selection {
             case "costs": RateLimitTaskCostPopover(providers: AppState.rateLimitedProviders, range: .week)
             case "models": RateLimitModelEstimatePopover(providers: AppState.rateLimitedProviders, range: .week)
+            case "forecast": RateLimitForecastView()
             default: RateLimitHistoryPopover(providers: AppState.rateLimitedProviders, range: .week)
             }
         }

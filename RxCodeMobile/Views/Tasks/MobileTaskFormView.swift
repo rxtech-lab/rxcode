@@ -11,7 +11,6 @@ struct MobileTaskFormView: View {
     @State private var task: ProjectTask
     let isNew: Bool
 
-    @State private var showsAIDraft = false
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showsParentTasks = false
@@ -32,31 +31,11 @@ struct MobileTaskFormView: View {
 
     var body: some View {
         Form {
-            if isNew {
-                Section {
-                    Button("Create with AI", systemImage: "sparkles") {
-                        MobileHaptics.buttonTap()
-                        showsAIDraft = true
-                    }
-                    .accessibilityIdentifier("task-form-ai")
-                }
-                .sheet(isPresented: $showsAIDraft) {
-                    MobileAIDraftSheet(board: board, kind: .task, initialPrompt: [task.title, task.details].filter { !$0.isEmpty }.joined(separator: "\n\n"),
-                                       storyTitle: board.stories.first { $0.id == task.storyId }?.title,
-                                       candidates: TaskClassification.startsAfterCandidates(for: task, board: board).map(\.title)) { draft in
-                        task.title = draft.title
-                        task.details = draft.details
-                        draft.classification.apply(to: &task, board: board)
-                    }
-                }
-            }
 
             Section {
                 TextField("Title", text: $task.title)
                     .accessibilityIdentifier("task-form-title")
-                TextField("Description", text: $task.details, axis: .vertical)
-                    .lineLimit(4...12)
-                MobileTaskVoiceButton(text: $task.details)
+                MobileTaskVoiceField(text: $task.details, placeholder: "Description")
             }
 
             Section {
@@ -283,7 +262,6 @@ struct MobileStoryFormView: View {
     @State private var story: ProjectStory
     let isNew: Bool
 
-    @State private var showsAIDraft = false
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -300,22 +278,6 @@ struct MobileStoryFormView: View {
 
     var body: some View {
         Form {
-            if isNew {
-                Section {
-                    Button("Create with AI", systemImage: "sparkles") {
-                        MobileHaptics.buttonTap()
-                        showsAIDraft = true
-                    }
-                    .accessibilityIdentifier("story-form-ai")
-                }
-                .sheet(isPresented: $showsAIDraft) {
-                    MobileAIDraftSheet(board: board, kind: .story, initialPrompt: [story.title, story.details].filter { !$0.isEmpty }.joined(separator: "\n\n")) { draft in
-                        story.title = draft.title
-                        story.details = draft.details
-                        draft.classification.apply(to: &story, board: board)
-                    }
-                }
-            }
 
             Section {
                 TextField("Title", text: $story.title)
@@ -417,11 +379,9 @@ struct MobileQuickAddTaskView: View {
     var body: some View {
         Form {
             Section {
-                TextField("What needs to be done?", text: $text, axis: .vertical)
-                    .lineLimit(3...10)
+                MobileTaskVoiceField(text: $text, placeholder: "What needs to be done?")
                     .focused($isFocused)
                     .accessibilityIdentifier("task-quick-add-text")
-                MobileTaskVoiceButton(text: $text)
             } footer: {
                 Text("Your Mac titles and classifies the task in the background.")
             }

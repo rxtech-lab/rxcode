@@ -102,18 +102,7 @@ extension AppState {
             }
         }
         for integration in usageDashboard.integrations {
-            let snapshot: UsagePluginSnapshot
-            do {
-                snapshot = try await fetchUsageSnapshot(integration)
-            } catch {
-                var previous = usageDashboard.snapshots.first { $0.id == integration.id }
-                    ?? .init(id: integration.id, pluginID: integration.pluginID, title: integration.title,
-                             projectID: integration.projectID, scope: integration.account, period: "", metrics: [])
-                previous.title = integration.title
-                previous.projectID = integration.projectID
-                previous.error = (error as? ACPUsageError)?.localizedDescription ?? (error as? ACPUsageFetchError)?.localizedDescription ?? (error as? UsagePluginError)?.localizedDescription ?? "Unable to refresh usage. Check the connection and credentials."
-                snapshot = previous
-            }
+            let snapshot = await refreshedUsageSnapshot(integration)
             usagePlugins.refreshingIntegrationIDs.remove(integration.id)
             // A deleted or edited integration must not be resurrected by an in-flight fetch.
             guard usageDashboard.integrations.contains(integration) else { continue }
@@ -129,6 +118,21 @@ extension AppState {
         usageDashboard = dashboard
         publishUsageDashboard()
         return true
+    }
+
+    /// Shared by dashboard refresh and MCP reads; a failed fetch retains the last successful data.
+    func refreshedUsageSnapshot(_ integration: UsageIntegration) async -> UsagePluginSnapshot {
+        do {
+            return try await fetchUsageSnapshot(integration)
+        } catch {
+            var previous = usageDashboard.snapshots.first { $0.id == integration.id }
+                ?? .init(id: integration.id, pluginID: integration.pluginID, title: integration.title,
+                         projectID: integration.projectID, scope: integration.account, period: "", fetchedAt: .distantPast, metrics: [])
+            previous.title = integration.title
+            previous.projectID = integration.projectID
+            previous.error = (error as? ACPUsageError)?.localizedDescription ?? (error as? ACPUsageFetchError)?.localizedDescription ?? (error as? UsagePluginError)?.localizedDescription ?? "Unable to refresh usage. Check the connection and credentials."
+            return previous
+        }
     }
 
     private func fetchUsageSnapshot(_ integration: UsageIntegration) async throws -> UsagePluginSnapshot {

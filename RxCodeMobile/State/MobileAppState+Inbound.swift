@@ -249,6 +249,13 @@ extension MobileAppState {
             let grew = queue.questions.count > pendingQuestions.count
             pendingQuestions = queue.questions
             if grew { MobileHaptics.attentionNeeded() }
+        case .confirmationQueue(let queue):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "confirmation_queue") else { return }
+            let known = Set(pendingConfirmations.map(\.id))
+            pendingConfirmations = queue.confirmations
+            if queue.confirmations.contains(where: { !known.contains($0.id) }) {
+                MobileHaptics.attentionNeeded()
+            }
         case .notification:
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "notification") else { return }
             // Foreground notifications arriving over WS — iOS won't show a

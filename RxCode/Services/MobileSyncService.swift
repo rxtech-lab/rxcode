@@ -632,6 +632,14 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
+    /// Mirror the desktop's pending `ide__show_confirmation` prompts to every
+    /// paired device. Sent whenever a prompt is queued or settled.
+    func broadcastConfirmationQueue(_ confirmations: [PendingConfirmationPayload]) {
+        Task {
+            await broadcastToAllClients(.confirmationQueue(ConfirmationQueuePayload(confirmations: confirmations)))
+        }
+    }
+
     func broadcastRunTaskUpdate(_ task: MobileRunTaskSnapshot) {
         Task {
             await broadcastToAllClients(.runTaskUpdate(RunTaskUpdatePayload(task: task)))
@@ -928,6 +936,7 @@ extension Notification.Name {
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
     static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")
     static let mobileSyncPlanDecisionReceived = Notification.Name("mobileSync.planDecisionReceived")
+    static let mobileSyncConfirmationDecisionReceived = Notification.Name("mobileSync.confirmationDecisionReceived")
     static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
     static let mobileSyncFolderTreeRequested = Notification.Name("mobileSync.folderTreeRequested")
     static let mobileSyncCreateProjectRequested = Notification.Name("mobileSync.createProjectRequested")

@@ -1,5 +1,6 @@
 import Foundation
 import RxCodeCore
+import RxCodeSync
 import os
 
 /// Talks to Autopilot's project board API (`/api/v1/docs/repositories`) with
@@ -37,6 +38,25 @@ final class ProjectCloudService {
     private var projectsURL: URL { baseURL.appendingPathComponent("/api/v1/docs/repositories") }
 
     private func projectURL(_ id: String) -> URL { projectsURL.appendingPathComponent(id) }
+
+    func saveTaskActivity(projectId: String, taskId: String, envelope: EncryptedTaskActivity) async throws {
+        let _: EncryptedTaskActivity = try await request("PUT",
+            url: projectURL(projectId).appendingPathComponent("tasks/\(taskId)/activity"), body: envelope)
+    }
+
+    func taskActivity(projectId: String, recipient: String) async throws -> [CloudTaskActivityRecord] {
+        var records: [CloudTaskActivityRecord] = []
+        var cursor: String?
+        repeat {
+            var url = URLComponents(url: projectURL(projectId).appendingPathComponent("activity"), resolvingAgainstBaseURL: false)!
+            url.queryItems = [URLQueryItem(name: "recipient", value: recipient)]
+            if let cursor { url.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: CloudTaskActivityPage = try await request("GET", url: url.url!)
+            records.append(contentsOf: page.items)
+            cursor = page.nextCursor
+        } while cursor != nil
+        return records
+    }
 
     // MARK: - Projects
 

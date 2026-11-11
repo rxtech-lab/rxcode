@@ -1,0 +1,5 @@
+simulation: cloud-task-activity
+routing: path
+mocks:
+  - routeKey: cloud
+    path: ../mocks/cloud-task-activity/config.yaml

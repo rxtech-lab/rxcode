@@ -1,0 +1,13 @@
+# Encrypted cloud task history
+
+Cloud-linked tasks upload their run prompts, agent responses, follow-ups, connected-chat labels, review feedback, and rejection reasons as encrypted activity snapshots. Task titles, descriptions, classification, task IDs, sender/recipient public keys, and storage timestamps remain ordinary cloud metadata.
+
+The Mac encrypts before upload using the existing paired-device X25519 keys, HKDF-SHA256, and ChaCha20-Poly1305. Each recipient gets a separate authenticated box; the Mac also encrypts a copy to itself. Project/task identifiers are bound into key derivation and checked inside the decrypted content. Private keys remain in the device Keychain. Mobile accepts sender keys from its local paired-desktop list, never from the server alone. Untrusted senders are ignored; malformed trusted ciphertext fails without a plaintext fallback.
+
+The Mac publishes changed history during normal cloud board sync and after task/review completion. Pairing changes cause the history to be re-encrypted for the current recipients. Mobile loads snapshots with board refresh and the Runs tab, so previously uploaded history remains readable while the Mac is offline. New follow-ups still require the paired Mac to be reachable: they travel through the encrypted paired channel, and the Mac subsequently uploads the updated encrypted history. Offline follow-up execution is not queued in the cloud.
+
+Cloud storage uses `PUT /api/v1/docs/repositories/{project}/tasks/{task}/activity` and paginated `GET /api/v1/docs/repositories/{project}/activity?recipient={publicKey}`. The API stores versioned ciphertext envelopes, enforces project/card permissions, and limits each envelope to 3 MB. Attachments are represented by existing prompt references; this feature does not upload attachment files. Deleting a cloud task deletes its stored activity through the foreign-key cascade.
+
+Rollout requires the Flowcy migrations through `0010_encrypted_task_activity`, the backend endpoints, and updated Mac/mobile clients. The migration removes the earlier prepared plaintext review column. Existing history is republished encrypted from the Mac; server-side plaintext is not an alternative source. Losing a device's private key requires pairing again and republishing history. Removing a pairing stops new delivery to that key; it cannot erase information a device previously decrypted.
+
+Verification includes shared crypto tests (round trips, wrong recipient/sender/context, tampering, recipient changes), mobile card/history tests, backend ciphertext/permission tests, and a Postman HTTP simulation. The simulation uses synthetic data and no production credentials. Production rollout and real-device delivery are separate verification steps.

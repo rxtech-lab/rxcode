@@ -4,14 +4,13 @@ import Foundation
 /// Tools are gated by the *complement* of the backend's capability set:
 /// if a backend natively supports a feature, the corresponding polyfill
 /// tool is NOT registered for that session. Tools tagged `.alwaysIDEOnly`
-/// are exposed to every backend regardless of capabilities — they expose
-/// IDE-only state (running jobs, thread history, usage) that has no
-/// equivalent in any agent's native toolset.
+/// are exposed to every backend regardless of capabilities, including
+/// IDE state and prompts that must remain available in every agent mode.
 public struct IDETool: Sendable {
     public enum Visibility: Sendable {
         /// Exposed only when the backend lacks the matched capability.
         case polyfill(BackendCapability)
-        /// Exposed unconditionally — agent-native equivalents don't exist.
+        /// Exposed unconditionally, independent of native tools or agent mode.
         case alwaysIDEOnly
     }
 
@@ -38,7 +37,9 @@ public enum IDEToolRegistry {
         IDETool(
             name: "ide__ask_user",
             description: "Ask the user a question and wait for their selection. Use when you need clarification or a decision the user must make.",
-            visibility: .polyfill(.askUserQuestion),
+            // Native question tools can be restricted by agent mode. Keep the
+            // IDE sheet available even when the backend declares question support.
+            visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
                 "properties": .object([

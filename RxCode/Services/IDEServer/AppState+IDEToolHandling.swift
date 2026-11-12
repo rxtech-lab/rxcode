@@ -9,11 +9,11 @@ import RxCodeCore
 // stays focused on chat/session state.
 //
 // Per-session capability gating:
-//   • Polyfill tools (`ide__set_todos`, `ide__ask_user`) are filtered out
+//   • Polyfill tools (`ide__set_todos`) are filtered out
 //     for backends that natively support the feature — see
 //     `IDEToolRegistry.tools(for:)`.
-//   • IDE-only tools (`ide__get_running_jobs` etc.) always appear so any
-//     agent can introspect editor state.
+//   • IDE-only tools (`ide__get_running_jobs`, `ide__ask_user` etc.) always
+//     appear so any agent can introspect editor state and ask questions.
 //
 // `sessionKey` is the AppState session key the agent is bound to. The
 // listener allocates one port per session, so this is unambiguous.

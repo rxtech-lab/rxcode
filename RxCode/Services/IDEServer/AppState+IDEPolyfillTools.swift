@@ -3,8 +3,7 @@ import RxCodeCore
 
 // MARK: - IDE Polyfill Tools
 //
-// Handlers for polyfill tools (`ide__set_todos`, `ide__ask_user`) that are only
-// exposed to backends lacking the native feature. Dispatched from
+// Handlers for the todo polyfill and the always-available IDE question tool. Dispatched from
 // `ideHandleToolCall` in AppState+IDEToolHandling.swift.
 
 extension AppState {
@@ -28,7 +27,7 @@ extension AppState {
         return textResult("Recorded \(parsed.count) todo(s).")
     }
 
-    /// Polyfill for backends without a native AskUserQuestion: route the prompt
+    /// Available to every backend, regardless of agent mode: route the prompt
     /// through the same queue + `QuestionSheetView` and block until answered.
     func handleAskUser(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
         guard let question = arguments["question"]?.stringValue?

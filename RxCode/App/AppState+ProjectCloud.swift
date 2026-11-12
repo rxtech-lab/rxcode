@@ -136,7 +136,7 @@ extension AppState {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.syncAllCloudBoards() }
+            Task { @MainActor [weak self] in await self?.refreshCloudProjectsAndBoards() }
         }
     }
 
@@ -154,6 +154,9 @@ extension AppState {
         }
         do {
             cloudProjects = try await projectCloud.listProjects()
+            if applyCloudProjectRepositories() {
+                await saveProjectList()
+            }
             do {
                 try await projectCloud.registerDevice(id: cloudDeviceID, name: Host.current().localizedName ?? "Mac")
             } catch {
@@ -166,6 +169,28 @@ extension AppState {
         } catch {
             logger.error("Failed to list cloud projects: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Pull repository links added or changed in Flowcy after a project was
+    /// opened locally. Match by cloud ID, never by a potentially ambiguous name.
+    /// An absent cloud link leaves a locally detected Git remote intact.
+    @discardableResult
+    func applyCloudProjectRepositories() -> Bool {
+        let byID = Dictionary(cloudProjects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var changed = false
+        for index in projects.indices {
+            guard let cloudID = projects[index].cloudId,
+                  let repo = byID[cloudID]?.repositoryFullName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !repo.isEmpty, projects[index].gitHubRepo != repo else { continue }
+            projects[index].gitHubRepo = repo
+            changed = true
+            // Windows hold value copies of Project. Updating these also reruns
+            // the chat hooks whose task identity includes the repository link.
+            for window in registeredWindows() where window.selectedProject?.id == projects[index].id {
+                window.selectedProject?.gitHubRepo = repo
+            }
+        }
+        return changed
     }
 
     /// Drops the account's cloud project list on sign-out. Linked projects
@@ -318,6 +343,7 @@ extension AppState {
     func linkProject(_ projectId: UUID, toCloudProject cloudId: String) async {
         guard let index = projects.firstIndex(where: { $0.id == projectId }) else { return }
         projects[index].cloudId = cloudId
+        applyCloudProjectRepositories()
         await saveProjectList()
         await ensureTaskBoardLoaded(for: projectId)
         var board = taskBoard(for: projectId)

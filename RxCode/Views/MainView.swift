@@ -43,10 +43,10 @@ struct MainView: View {
     }
 
     /// Re-runs the new-chat hooks (e.g. the Autopilot `.env` banner) whenever the
-    /// open project or the active session changes — so the banner appears on
-    /// opening the chat screen, not only after the first message is sent.
+    /// open project, repository link, or active session changes, so the banner
+    /// appears when opening chat, not only after the first message is sent.
     private var newChatHookKey: String {
-        "\(windowState.selectedProject?.id.uuidString ?? "none")|\(windowState.currentSessionId ?? "new")"
+        "\(windowState.selectedProject?.id.uuidString ?? "none")|\(windowState.selectedProject?.gitHubRepo ?? "")|\(windowState.currentSessionId ?? "new")"
     }
 
     /// Re-evaluate the new-chat hooks (e.g. the Autopilot `.env` banner) after the

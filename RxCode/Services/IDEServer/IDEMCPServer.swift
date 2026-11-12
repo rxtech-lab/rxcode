@@ -41,9 +41,9 @@ nonisolated enum MCPServerTool: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Hosts a local MCP server that polyfills missing editor capabilities for
-/// agents whose native toolset lacks them (currently: ACP's `ask_user` /
-/// `todos`), and exposes always-IDE-only introspection (running jobs,
-/// thread history, usage) to every backend.
+/// agents whose native toolset lacks them (such as ACP's `todos`), and
+/// exposes IDE questions and introspection (running jobs, thread history,
+/// usage) to every backend.
 ///
 /// Agents speak to the server by running `nc 127.0.0.1 <port>` as their MCP
 /// stdio command. The actor owns one parent `NWListener` per allocated

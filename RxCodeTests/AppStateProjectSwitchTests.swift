@@ -210,6 +210,47 @@ final class AppStateProjectSwitchTests: XCTestCase {
         XCTAssertNil(window.draftQueues["session-a"])
     }
 
+    // MARK: - Cloud repository links
+
+    func testCloudRepositoryAddedLater_updatesProjectAndOpenWindows() throws {
+        var project = makeProject("Local")
+        project.cloudId = "cloud-1"
+        appState.projects = [project]
+        window.selectedProject = project
+        window.currentSessionId = "existing-chat"
+        appState.registerLiveWindow(window)
+        appState.cloudProjects = [CloudProject(id: "cloud-1", repositoryFullName: "owner/repo")]
+
+        XCTAssertTrue(appState.applyCloudProjectRepositories())
+        XCTAssertEqual(appState.projects[0].gitHubRepo, "owner/repo")
+        XCTAssertEqual(window.selectedProject?.gitHubRepo, "owner/repo")
+        XCTAssertEqual(window.currentSessionId, "existing-chat")
+        XCTAssertFalse(appState.applyCloudProjectRepositories())
+        let restored = try JSONDecoder().decode([Project].self, from: JSONEncoder().encode(appState.projects))
+        XCTAssertEqual(restored[0].gitHubRepo, "owner/repo")
+    }
+
+    func testCloudRepositorySync_matchesCloudIDAndPreservesLocalOnlyLinks() {
+        var linked = makeProject("Same name")
+        linked.cloudId = "linked"
+        linked.gitHubRepo = "owner/old"
+        var noRemoteLink = makeProject("Same name")
+        noRemoteLink.cloudId = "standalone"
+        noRemoteLink.gitHubRepo = "owner/local"
+        let localOnly = makeProject("Same name")
+        appState.projects = [linked, noRemoteLink, localOnly]
+        appState.cloudProjects = [
+            CloudProject(id: "unrelated", name: "Same name", repositoryFullName: "other/repo"),
+            CloudProject(id: "linked", repositoryFullName: "owner/new"),
+            CloudProject(id: "standalone", repositoryFullName: "  ")
+        ]
+
+        XCTAssertTrue(appState.applyCloudProjectRepositories())
+        XCTAssertEqual(appState.projects[0].gitHubRepo, "owner/new")
+        XCTAssertEqual(appState.projects[1].gitHubRepo, "owner/local")
+        XCTAssertNil(appState.projects[2].gitHubRepo)
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {

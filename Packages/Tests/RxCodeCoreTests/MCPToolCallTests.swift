@@ -4,6 +4,22 @@ import Testing
 @Suite("MCP tool calls")
 struct MCPToolCallTests {
 
+    @Test("IDE questions remain available for every provider and capability set")
+    func questionsAreAvailableOutsideNativeQuestionModes() throws {
+        let capabilitySets = AgentProvider.allCases.map(\.staticCapabilities)
+            + [CapabilitySet(), CapabilitySet(BackendCapability.allCases)]
+        for capabilities in capabilitySets {
+            let tool = try #require(IDEToolRegistry.tools(for: capabilities).first {
+                $0.name == "ide__ask_user"
+            })
+            #expect(tool.inputSchema["required"]?.arrayValue == [.string("question"), .string("options")])
+            // Todo polyfills should still respect native backend support.
+            #expect(IDEToolRegistry.tools(for: capabilities).contains {
+                $0.name == "ide__set_todos"
+            } == !capabilities.contains(.todos))
+        }
+    }
+
     @Test("Generic Codex MCP tool calls are categorized as MCP")
     func genericCodexMCPToolCallCategory() {
         #expect(ToolCategory(toolName: "mcpToolCall") == .mcp)

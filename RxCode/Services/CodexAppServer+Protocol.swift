@@ -106,6 +106,8 @@ extension CodexAppServer {
     flow walkthrough, a plan, a test or build summary — is clearer than prose, \
     then don't repeat its content in text. Keep it inline (the default); pass \
     `presentation: "dialog"` only when the user explicitly asks for a dialog.
+    - `ide__ask_user` — ask a question in the IDE sheet and wait for the user's \
+    answer. Available in every mode; use it when the native question tool is unavailable.
     - `ide__show_confirmation` — ask the user to confirm or cancel an action \
     in a native confirmation dialog and wait for the answer. Use it before \
     hard-to-undo steps such as deleting, overwriting, or pushing.

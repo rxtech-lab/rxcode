@@ -5,6 +5,72 @@ import RxCodeCore
 @MainActor
 final class AppStateTests: XCTestCase {
 
+    func testIDEQuestionsAreAdvertisedForEveryProvider() async {
+        for provider in AgentProvider.allCases {
+            let sessionKey = "question-tool-\(provider.rawValue)"
+            var state = SessionStreamState()
+            state.agentProvider = provider
+            appState.sessionStates[sessionKey] = state
+
+            // Exercise the handler used by the MCP server's tools/list response,
+            // rather than only checking the static registry.
+            let tools = await appState.ideAvailableTools(forSession: sessionKey)
+            XCTAssertEqual(tools.filter { $0.name == "ide__ask_user" }.count, 1,
+                           "IDE questions must remain available for \(provider.rawValue)")
+        }
+    }
+
+    func testIDEQuestionDispatchQueuesSheetAndReturnsUserAnswer() async throws {
+        let sessionKey = "ide-question-round-trip"
+        let question = "Which configuration should be used?"
+        let permission = appState.permission
+        let (token, stream) = await permission.subscribe()
+        let shown = expectation(description: "Question reaches the sheet's permission queue")
+        let answered = expectation(description: "IDE tool returns the user's answer")
+
+        let observer = Task {
+            for await request in stream {
+                XCTAssertEqual(request.toolName, "AskUserQuestion")
+                XCTAssertEqual(request.sessionId, sessionKey)
+                let parsed = try XCTUnwrap(AskUserQuestion(input: request.toolInput))
+                XCTAssertEqual(parsed.questions.first?.question, question)
+                XCTAssertEqual(parsed.questions.first?.options.map(\.label), ["Debug", "Release"])
+                shown.fulfill()
+                let response = AskUserQuestion.updatedInputJSON(
+                    originalInput: request.toolInput,
+                    questions: parsed.questions,
+                    answers: [0: .single("Debug")]
+                )
+                await permission.respondAskUserQuestion(toolUseId: request.id, updatedInput: response)
+                break
+            }
+        }
+        let call = Task {
+            defer { answered.fulfill() }
+            return try await appState.ideHandleToolCall(
+                name: "ide__ask_user",
+                arguments: .object([
+                    "question": .string(question),
+                    "options": .array([.string("Debug"), .string("Release")]),
+                ]),
+                sessionKey: sessionKey
+            )
+        }
+
+        await fulfillment(of: [shown, answered], timeout: 5)
+        await permission.cancelPending(sessionId: sessionKey)
+        observer.cancel()
+        await permission.unsubscribe(token: token)
+        _ = try await observer.value
+        let result = try await call.value
+        XCTAssertEqual(result, .object([
+            "content": .array([.object([
+                "type": .string("text"),
+                "text": .string("User answered: Debug"),
+            ])]),
+        ]))
+    }
+
     func testUnitTestsUseTemporaryAppSupport() {
         XCTAssertTrue(AppSupport.isUnitTesting)
         XCTAssertNotNil(ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"])

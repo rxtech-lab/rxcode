@@ -238,7 +238,7 @@ extension MobileAppState {
     /// True while the task's linked thread is mid-turn.
     func isTaskAgentRunning(_ task: ProjectTask) -> Bool {
         guard let sessionID = taskSessionID(task) else { return false }
-        return sessions.first { $0.id == sessionID }?.isStreaming ?? false
+        return sessionListIndex.streamingSessionIDs.contains(sessionID)
     }
 
     func isTaskClassifying(_ task: ProjectTask) -> Bool {

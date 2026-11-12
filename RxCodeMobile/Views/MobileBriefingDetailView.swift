@@ -186,14 +186,7 @@ struct MobileBriefingDetailView: View {
     }
 
     private var group: GroupedBriefing? {
-        groupBriefings(
-            briefings: state.branchBriefings.filter {
-                $0.projectId == groupKey.projectId && $0.branch == groupKey.branch
-            },
-            threads: state.threadSummaries.filter {
-                $0.projectId == groupKey.projectId && $0.branch == groupKey.branch
-            }
-        ).first
+        state.briefingGroups.first { $0.key == groupKey }
     }
 
     private var projectName: String {

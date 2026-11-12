@@ -91,7 +91,9 @@ final class MobileAppState: ObservableObject {
     @Published var relayURL: URL
     @Published var pairingStatus: PairingStatus = .idle
 
-    @Published var projects: [Project] = []
+    @Published var projects: [Project] = [] {
+        didSet { cachedBriefingGroups = nil }
+    }
     @Published var sessions: [SessionSummary] = [] {
         didSet {
             guard sessions != oldValue else { return }
@@ -101,7 +103,20 @@ final class MobileAppState: ObservableObject {
         }
     }
     private(set) var sessionListIndex = MobileSessionListIndex()
-    @Published var branchBriefings: [MobileBranchBriefing] = []
+    @Published var branchBriefings: [MobileBranchBriefing] = [] {
+        didSet { cachedBriefingGroups = nil }
+    }
+    private var cachedBriefingGroups: [GroupedBriefing]?
+
+    /// Shared by the grid, filter menu, iPad list and detail view. Unrelated
+    /// state publications must not rebuild and sort the entire thread history.
+    var briefingGroups: [GroupedBriefing] {
+        if let cachedBriefingGroups { return cachedBriefingGroups }
+        let groups = groupBriefings(briefings: branchBriefings, threads: threadSummaries)
+            .sortedByProjectOrder(projects)
+        cachedBriefingGroups = groups
+        return groups
+    }
     @Published var usageDashboard = UsageDashboard()
     @Published var briefingDocuments: [MobileBriefingDocument] = []
     @Published var briefingContentResult: BriefingContentResultPayload?
@@ -111,7 +126,9 @@ final class MobileAppState: ObservableObject {
     var briefingAssetPendingURL: URL?
     var briefingAssetWriteHandle: FileHandle?
     var briefingAssetBytesReceived: Int64 = 0
-    @Published var threadSummaries: [MobileThreadSummary] = []
+    @Published var threadSummaries: [MobileThreadSummary] = [] {
+        didSet { cachedBriefingGroups = nil }
+    }
     @Published var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
     @Published var desktopSettings: MobileSettingsSnapshot?
     /// Agent rate-limit usage mirrored from the paired desktop. `nil` until the

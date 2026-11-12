@@ -5,7 +5,9 @@ import RxCodeSync
 /// The task projects and boards last seen for one source (a paired Mac or a
 /// cloud account), so the Tasks tab can show them at launch before the
 /// first fetch replies.
-struct MobileTaskCache: Codable, Sendable {
+// Keep encoding and file I/O off the app's default MainActor, including when
+// Codable witnesses are invoked from the detached cache writer.
+nonisolated struct MobileTaskCache: Codable, Sendable {
     var projects: [Project]
     var boards: [MobileTaskBoardSnapshot]
 
@@ -30,7 +32,7 @@ struct MobileTaskCache: Codable, Sendable {
 
     func save(to url: URL) throws {
         let data = try JSONEncoder().encode(self)
-        try FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
     }
 

@@ -14,6 +14,7 @@ struct MobileSessionListIndex {
     }
 
     var projects: [UUID: ProjectRows] = [:]
+    var streamingSessionIDs: Set<String> = []
 
     init(sessions: [SessionSummary] = []) {
         for session in sessions {
@@ -22,6 +23,7 @@ struct MobileSessionListIndex {
                 projects[session.projectId, default: ProjectRows()].sessions.append(session)
             }
             if session.isStreaming {
+                streamingSessionIDs.insert(session.id)
                 projects[session.projectId, default: ProjectRows()].activeJobCount += 1
             }
             let previous = projects[session.projectId]?.lastActivity ?? session.updatedAt

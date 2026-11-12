@@ -177,8 +177,7 @@ struct MobileBriefingView: View {
     /// ordered to follow the sidebar project order (then most-recent first
     /// within a project) so cards line up with the project list.
     private var allGroups: [GroupedBriefing] {
-        groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
-            .sortedByProjectOrder(state.projects)
+        state.briefingGroups
     }
 
     private var documents: [MobileBriefingDocument] {
@@ -409,8 +408,7 @@ struct BriefingListView: View {
     }
 
     private var allGroups: [GroupedBriefing] {
-        groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
-            .sortedByProjectOrder(state.projects)
+        state.briefingGroups
     }
 
     private var documents: [MobileBriefingDocument] {
@@ -714,35 +712,35 @@ func groupBriefings(
     briefings: [MobileBranchBriefing],
     threads: [MobileThreadSummary]
 ) -> [GroupedBriefing] {
-    var buckets: [String: GroupedBriefing] = [:]
+    var latestBriefings: [BriefingGroupKey: MobileBranchBriefing] = [:]
+    var threadBuckets: [BriefingGroupKey: [MobileThreadSummary]] = [:]
 
-    // A branch can carry one briefing per day; show the most recent one.
-    for briefing in briefings.sorted(by: { $0.updatedAt < $1.updatedAt }) {
-        let key = "\(briefing.projectId.uuidString)::\(briefing.branch)"
-        buckets[key] = GroupedBriefing(
-            projectId: briefing.projectId,
-            branch: briefing.branch,
-            briefing: briefing,
-            threads: buckets[key]?.threads ?? [],
-            updatedAt: max(briefing.updatedAt, buckets[key]?.updatedAt ?? .distantPast)
-        )
+    // Select the latest daily briefing without sorting the full input.
+    for briefing in briefings {
+        let key = BriefingGroupKey(projectId: briefing.projectId, branch: briefing.branch)
+        if let previous = latestBriefings[key], previous.updatedAt > briefing.updatedAt { continue }
+        latestBriefings[key] = briefing
     }
 
+    // Mutate each bucket in place, then sort it once. Sorting on every append
+    // repeatedly copied the growing thread array during SwiftUI updates.
     for thread in threads {
-        let key = "\(thread.projectId.uuidString)::\(thread.branch)"
-        let existing = buckets[key]
-        var existingThreads = existing?.threads ?? []
-        existingThreads.append(thread)
-        buckets[key] = GroupedBriefing(
-            projectId: thread.projectId,
-            branch: thread.branch,
-            briefing: existing?.briefing,
-            threads: existingThreads.sorted { $0.updatedAt > $1.updatedAt },
-            updatedAt: max(thread.updatedAt, existing?.updatedAt ?? .distantPast)
-        )
+        let key = BriefingGroupKey(projectId: thread.projectId, branch: thread.branch)
+        threadBuckets[key, default: []].append(thread)
     }
 
-    return buckets.values.sorted { $0.updatedAt > $1.updatedAt }
+    let keys = Set(latestBriefings.keys).union(threadBuckets.keys)
+    return keys.map { key in
+        let briefing = latestBriefings[key]
+        let sortedThreads = (threadBuckets[key] ?? []).sorted { $0.updatedAt > $1.updatedAt }
+        return GroupedBriefing(
+            projectId: key.projectId,
+            branch: key.branch,
+            briefing: briefing,
+            threads: sortedThreads,
+            updatedAt: max(briefing?.updatedAt ?? .distantPast, sortedThreads.first?.updatedAt ?? .distantPast)
+        )
+    }.sorted { $0.updatedAt > $1.updatedAt }
 }
 
 extension Array where Element == GroupedBriefing {

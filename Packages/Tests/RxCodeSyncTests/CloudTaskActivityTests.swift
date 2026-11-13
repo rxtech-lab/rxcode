@@ -63,4 +63,52 @@ struct CloudTaskActivityTests {
         #expect(first == (try EncryptedTaskActivity.fingerprint(source, recipients: ["b", "a", "a"])))
         #expect(first != (try EncryptedTaskActivity.fingerprint(source, recipients: ["a"])))
     }
+
+    @Test func unreadableRecordsDoNotDiscardValidHistoryAndCanRecoverOnRefresh() throws {
+        let desktop = DeviceIdentity(privateKey: .init()), phone = DeviceIdentity(privateKey: .init())
+        let source = activity(desktop)
+        let sealed = try EncryptedTaskActivity.seal(source, identity: desktop, recipientKeys: [phone.publicKeyHex])
+        var boxes = sealed.recipients
+        let box = boxes[phone.publicKeyHex]!
+        var damaged = box.ciphertext
+        damaged[damaged.startIndex] ^= 1
+        boxes[phone.publicKeyHex] = .init(nonce: box.nonce, ciphertext: damaged)
+        let tampered = EncryptedTaskActivity(version: sealed.version, sender: sealed.sender, recipients: boxes)
+        let good = CloudTaskActivityRecord(taskId: "task", envelope: sealed)
+        let bad = CloudTaskActivityRecord(taskId: "task", envelope: tampered)
+        let wrongContext = CloudTaskActivityRecord(taskId: "other-task", envelope: sealed)
+
+        let result = CloudTaskActivityRecord.openTrusted([good, bad, wrongContext, good], identity: phone,
+            trustedSenders: [desktop.publicKeyHex], projectID: "project")
+        #expect(result.activities == [source, source])
+        #expect(result.failures.map(\.taskID) == ["task", "other-task"])
+        #expect(result.failures.allSatisfy { $0.sender == desktop.publicKeyHex })
+        #expect(result.failures.allSatisfy { $0.errorDomain == "CryptoKit.CryptoKitError" && $0.errorCode == 3 })
+
+        let failed = CloudTaskActivityRecord.openTrusted([bad], identity: phone,
+            trustedSenders: [desktop.publicKeyHex], projectID: "project")
+        #expect(failed.activities.isEmpty)
+        #expect(failed.failures.count == 1)
+        let recovered = CloudTaskActivityRecord.openTrusted([good], identity: phone,
+            trustedSenders: [desktop.publicKeyHex], projectID: "project")
+        #expect(recovered.activities == [source])
+        #expect(recovered.failures.isEmpty)
+    }
+
+    @Test func batchReadingPreservesPairingAndVersionChecks() throws {
+        let desktop = DeviceIdentity(privateKey: .init()), phone = DeviceIdentity(privateKey: .init())
+        let sealed = try EncryptedTaskActivity.seal(activity(desktop), identity: desktop, recipientKeys: [])
+        let record = CloudTaskActivityRecord(taskId: "task", envelope: sealed)
+        let untrusted = CloudTaskActivityRecord.openTrusted([record], identity: phone,
+            trustedSenders: [], projectID: "project")
+        #expect(untrusted.activities.isEmpty)
+        #expect(untrusted.failures.isEmpty)
+
+        let unsupported = EncryptedTaskActivity(version: 2, sender: sealed.sender, recipients: sealed.recipients)
+        let rejected = CloudTaskActivityRecord.openTrusted([
+            record, CloudTaskActivityRecord(taskId: "task", envelope: unsupported)
+        ], identity: phone, trustedSenders: [desktop.publicKeyHex], projectID: "project")
+        #expect(rejected.activities.isEmpty)
+        #expect(rejected.failures.count == 2)
+    }
 }

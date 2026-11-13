@@ -96,6 +96,33 @@ public struct EncryptedTaskActivity: Codable, Sendable, Equatable {
 public struct CloudTaskActivityRecord: Codable, Sendable {
     public let taskId: String
     public let envelope: EncryptedTaskActivity
+
+    public struct ReadFailure: Sendable {
+        public let taskID: String
+        public let sender: String
+        public let errorDomain: String
+        public let errorCode: Int
+    }
+
+    /// Unreadable history must not discard other tasks' authenticated history.
+    /// Diagnostics contain identifiers and error codes only, never decrypted content.
+    public static func openTrusted(
+        _ records: [Self], identity: DeviceIdentity, trustedSenders: Set<String>, projectID: String
+    ) -> (activities: [CloudTaskActivity], failures: [ReadFailure]) {
+        var activities: [CloudTaskActivity] = []
+        var failures: [ReadFailure] = []
+        for record in records where trustedSenders.contains(record.envelope.sender) {
+            do {
+                activities.append(try record.envelope.open(identity: identity, trustedSenders: trustedSenders,
+                    projectID: projectID, taskID: record.taskId))
+            } catch {
+                let diagnostic = error as NSError
+                failures.append(ReadFailure(taskID: record.taskId, sender: record.envelope.sender,
+                    errorDomain: diagnostic.domain, errorCode: diagnostic.code))
+            }
+        }
+        return (activities, failures)
+    }
 }
 
 public struct CloudTaskActivityPage: Codable, Sendable {

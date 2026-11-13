@@ -1,6 +1,7 @@
 import Foundation
 import RxCodeCore
 import RxCodeSync
+import os
 
 extension MobileAppState {
     func cloudTaskActivity(for task: ProjectTask) -> CloudTaskActivity? {
@@ -17,15 +18,17 @@ extension MobileAppState {
         guard cloud.accountID == accountID, identity.publicKeyHex == recipient, usesCloudTasks else { return }
         let trusted = Set(pairedDesktops.map(\.pubkeyHex))
         let deviceIdentity = identity
-        let decoded = try await Task.detached {
-            try records.filter { trusted.contains($0.envelope.sender) }.map { record in
-                try record.envelope.open(identity: deviceIdentity, trustedSenders: trusted,
-                    projectID: remoteID, taskID: record.taskId)
-            }
+        let decoded = await Task.detached {
+            CloudTaskActivityRecord.openTrusted(records, identity: deviceIdentity,
+                trustedSenders: trusted, projectID: remoteID)
         }.value
+        try Task.checkCancellation()
         guard cloud.accountID == accountID, identity.publicKeyHex == recipient, usesCloudTasks else { return }
+        for failure in decoded.failures {
+            logger.warning("[TaskActivity] unreadable record project=\(remoteID, privacy: .public) task=\(failure.taskID, privacy: .public) sender=\(failure.sender, privacy: .public) recipient=\(recipient, privacy: .public) error=\(failure.errorDomain, privacy: .public):\(failure.errorCode, privacy: .public)")
+        }
         var activities = cloudTaskActivityByProject[projectID] ?? [:]
-        for activity in decoded {
+        for activity in decoded.activities {
             if let existing = activities[activity.taskID], existing.updatedAt > activity.updatedAt { continue }
             activities[activity.taskID] = activity
         }

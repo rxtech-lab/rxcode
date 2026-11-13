@@ -47,10 +47,6 @@ struct ThisThreadFileRow: View {
     @State private var snapshotStat: (added: Int, removed: Int)?
 
     private var additions: Int {
-        // Prefer the snapshot-pair count when it actually found differences.
-        // When the snapshot collapsed to zero (e.g. legacy rows, or any race
-        // where original ended up equal to modified) fall back to hunk lines
-        // so a real edit still shows activity in the sidebar.
         if let stat = snapshotStat, stat.added > 0 || stat.removed > 0 {
             return stat.added
         }
@@ -69,8 +65,18 @@ struct ThisThreadFileRow: View {
     }
 
     private var parentDirectory: String {
-        let parent = (summary.path as NSString).deletingLastPathComponent
-        return parent
+        (summary.path as NSString).deletingLastPathComponent
+    }
+
+    private var iconName: String {
+        if summary.isDeleted { return "trash" }
+        if summary.containsWrite { return "doc.badge.plus" }
+        return "pencil"
+    }
+
+    private var iconColor: Color {
+        if summary.isDeleted { return ClaudeTheme.statusError }
+        return ClaudeTheme.statusWarning
     }
 
     var body: some View {
@@ -81,21 +87,33 @@ struct ThisThreadFileRow: View {
                 editHunks: summary.hunks,
                 showFullFileDiff: true,
                 originalContent: summary.originalContent,
-                modifiedContent: summary.modifiedContent
+                modifiedContent: summary.modifiedContent,
+                preferHunks: summary.hasExternalInterleaving
             )
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: summary.containsWrite ? "doc.badge.plus" : "pencil")
+                Image(systemName: iconName)
                     .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(ClaudeTheme.statusWarning)
+                    .foregroundStyle(iconColor)
                     .frame(width: 16)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(summary.name)
-                        .font(.system(size: ClaudeTheme.size(13), weight: .medium, design: .monospaced))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    HStack(spacing: 6) {
+                        Text(summary.name)
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium, design: .monospaced))
+                            .foregroundStyle(ClaudeTheme.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if summary.isAmbiguous {
+                            Text("Concurrent")
+                                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                                .foregroundStyle(ClaudeTheme.statusWarning)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(ClaudeTheme.statusWarning.opacity(0.14), in: Capsule())
+                                .help("Modified while another thread also ran a mutating command in this workspace.")
+                        }
+                    }
                     if !parentDirectory.isEmpty {
                         Text(parentDirectory)
                             .font(.system(size: ClaudeTheme.size(11)))
@@ -131,7 +149,7 @@ struct ThisThreadFileRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .task(id: summary.modifiedContent) {
+        .task(id: "\(summary.modifiedContent ?? "nil")-\(summary.hasExternalInterleaving)-\(summary.hunks.count)") {
             await computeSnapshotStat()
         }
     }
@@ -142,14 +160,21 @@ struct ThisThreadFileRow: View {
     }
 
     private func computeSnapshotStat() async {
-        guard summary.modifiedContent != nil else {
+        guard summary.modifiedContent != nil || summary.hasExternalInterleaving else {
             snapshotStat = nil
             return
         }
-        let original = summary.originalContent ?? ""
-        let modified = summary.modifiedContent ?? ""
+        let original = summary.originalContent
+        let modified = summary.modifiedContent
+        let hunks = summary.hunks
+        let preferHunks = summary.hasExternalInterleaving
         snapshotStat = await Task.detached(priority: .userInitiated) {
-            ChangeDiffView.snapshotStat(original: original, modified: modified)
+            DiffComputation.threadEditStat(
+                originalContent: original,
+                modifiedContent: modified,
+                hunks: hunks,
+                preferHunks: preferHunks
+            )
         }.value
     }
 }

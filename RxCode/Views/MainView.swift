@@ -481,7 +481,8 @@ struct MainView: View {
                 gitDiffMode: file.gitDiffMode,
                 showFullFileDiff: file.showFullFileDiff,
                 originalContent: file.originalContent,
-                modifiedContent: file.modifiedContent
+                modifiedContent: file.modifiedContent,
+                preferHunks: file.preferHunks
             )
             .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                    minHeight: 600, idealHeight: 1000, maxHeight: 1200)

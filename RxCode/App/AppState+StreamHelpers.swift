@@ -23,19 +23,34 @@ extension AppState {
         await backend(for: agentProvider).consumeStderr(for: streamId)
     }
 
+    static func formatModelId(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        let family: String
+        if lower.contains("opus") { family = "Opus" }
+        else if lower.contains("sonnet") { family = "Sonnet" }
+        else if lower.contains("haiku") { family = "Haiku" }
+        else { return raw }
+
+        let parts = lower.components(separatedBy: CharacterSet(charactersIn: "-"))
+        if let idx = parts.firstIndex(where: { $0 == family.lowercased() }),
+           idx + 1 < parts.count
+        {
+            let ver = parts[(idx + 1)...].prefix(2).filter { $0.allSatisfy(\.isNumber) }
+            if !ver.isEmpty { return "\(family) \(ver.joined(separator: "."))" }
+        }
+        return family
+    }
+
     // MARK: - Editing File Snapshot Capture
 
     /// Detects Edit/MultiEdit/Write tool_use events and reads the target
     /// file's current contents **synchronously** so the pre-edit snapshot is
     /// captured before the CLI starts executing the tool. The result is cached
     /// on `state.editingFileSnapshots` keyed by absolute path; only the FIRST
-    /// tool_use per (session, path) reads — later edits in the same thread
-    /// keep diffing against the original snapshot. A previous implementation
-    /// did this read on a detached task, which lost the race for large files
-    /// and produced an `originalContent` identical to `modifiedContent`,
-    /// collapsing the diff. Reading synchronously here is safe because we run
-    /// at content_block_stop / assistant tool_use arrival — the CLI has only
-    /// just finished emitting the tool_use and has not yet executed it.
+    /// tool_use per (session, path) updates `editingFileSnapshots` — later edits
+    /// in the same thread keep diffing against the original snapshot, while
+    /// `state.latestStepSnapshots` always records the immediate pre-step content
+    /// so external concurrent edits on the same file can be detected.
     ///
     /// Handles both the Claude/Anthropic shape (`file_path` in input) and the
     /// Codex `changes: [{ path, diff }]` shape. Tools that don't touch files
@@ -62,8 +77,12 @@ extension AppState {
             }
         }
 
-        for path in paths where state.editingFileSnapshots[path] == nil {
-            state.editingFileSnapshots[path] = try? String(contentsOfFile: path, encoding: .utf8)
+        for path in paths {
+            let content = try? String(contentsOfFile: path, encoding: .utf8)
+            if state.editingFileSnapshots[path] == nil {
+                state.editingFileSnapshots[path] = content
+            }
+            state.latestStepSnapshots[path] = content
         }
     }
 }

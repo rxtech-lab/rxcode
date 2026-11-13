@@ -94,15 +94,29 @@ extension AppState {
             throw CommitFilesError.unknownProject
         }
 
+        let editSummaries = threadStore.fetchFileEdits(sessionId: sessionId).map { $0.toSummary() }
         var seen = Set<String>()
-        let changedFiles = threadStore.fetchFileEdits(sessionId: sessionId).compactMap { edit in
-            seen.insert(edit.path).inserted ? edit.path : nil
+        var changedFiles: [String] = []
+        var deletedFiles: [String] = []
+        var interleavedFiles: [String] = []
+        for edit in editSummaries where seen.insert(edit.path).inserted {
+            changedFiles.append(edit.path)
+            if edit.isDeleted {
+                deletedFiles.append(edit.path)
+            }
+            if edit.hasExternalInterleaving || edit.isAmbiguous {
+                interleavedFiles.append(edit.path)
+            }
         }
 
         let result = try await sendCrossProject(
             projectId: nil,
             threadId: sessionId,
-            prompt: Self.threadCommitPrompt(changedFiles: changedFiles),
+            prompt: Self.threadCommitPrompt(
+                changedFiles: changedFiles,
+                deletedFiles: deletedFiles,
+                interleavedFiles: interleavedFiles
+            ),
             permissionMode: .auto,
             waitForResponse: false,
             timeoutSeconds: 600,
@@ -131,10 +145,22 @@ extension AppState {
         return result.threadId
     }
 
-    static func threadCommitPrompt(changedFiles: [String]) -> String {
+    static func threadCommitPrompt(
+        changedFiles: [String],
+        deletedFiles: [String] = [],
+        interleavedFiles: [String] = []
+    ) -> String {
+        let deletedSet = Set(deletedFiles)
+        let interleavedSet = Set(interleavedFiles)
         let fileList = changedFiles.isEmpty
             ? "(no recorded file edits — inspect this thread and the working tree, then commit only the files that belong to this thread)"
-            : changedFiles.map { "- \($0)" }.joined(separator: "\n")
+            : changedFiles.map { path in
+                var tags: [String] = []
+                if deletedSet.contains(path) { tags.append("deleted") }
+                if interleavedSet.contains(path) { tags.append("concurrent edits — stage only this thread's hunks") }
+                let suffix = tags.isEmpty ? "" : " (\(tags.joined(separator: ", ")))"
+                return "- \(path)\(suffix)"
+            }.joined(separator: "\n")
 
         return """
         Commit the files changed by this thread.
@@ -144,7 +170,7 @@ extension AppState {
 
         Steps:
         1. Inspect `git status` and the relevant diffs.
-        2. Stage only the files that belong to this thread. Do not stage unrelated project changes.
+        2. Stage only the changes that belong to this thread (including staging deletions for any deleted files, and avoiding unrelated hunks if another concurrent thread touched the same file). Do not stage unrelated project changes.
         3. Create a local commit with a clear Conventional Commit message.
         4. Report the commit hash and the files committed.
 

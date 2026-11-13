@@ -216,18 +216,24 @@ Disabled or missing clients do not make provider requests.
   `opencode-go` entry in `auth.json` under `XDG_DATA_HOME/opencode`. Reports
   rolling, weekly, and monthly percentages when supplied by the API. It does
   not report arbitrary OpenCode upstream accounts or prepaid Zen balances.
-- **Antigravity**: POST `{}` to
-  `https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary`,
-  using the existing `gemini` / `antigravity` macOS Keychain login. Reports
-  enabled quota buckets as percent used, with provider reset times. This is an
-  internal Google API and may deny quota access for some accounts. Unsupported
-  responses remain unavailable rather than being interpreted as zero usage.
+- **Antigravity**: Reads the existing `gemini` / `antigravity-acp` (or
+  `antigravity` CLI) macOS Keychain login and `~/.gemini/antigravity-acp`
+  token/settings fallback, exchanging `refresh_token` in memory when needed
+  without modifying Antigravity's stored credentials. Resolves CCPA onboarding
+  (`v1internal:loadCodeAssist`) and POSTs to
+  `v1internal:retrieveUserQuotaSummary` on `daily-cloudcode-pa.googleapis.com`
+  or `cloudcode-pa.googleapis.com` (or `v1beta/...:fetchQuotaStatus` for
+  `oauth-business` accounts) with the `aidev_client` User-Agent so both
+  **Gemini Models** and **Claude and GPT models** 5-hour and weekly quota
+  windows are returned as percent used with reset times. In the chat footer,
+  selecting an Antigravity model displays its matching quota group's `5h` and
+  `7d` bars and reset countdowns and opens the full quota breakdown in a sheet.
 
-RxCode reads credentials on each refresh; the clients retain responsibility for
-login and token refresh. Expired or denied credentials produce a visible error;
-previous snapshots keep their original timestamp and become stale. Credentials
-are never added to dashboard persistence, sync, widgets, or agent tool output.
-Snapshots use the existing normalized dashboard sync contract.
+RxCode caches refreshed access tokens only in memory on the Mac; the clients
+retain ownership of stored logins. Expired or denied credentials produce a
+visible error; previous snapshots keep their original timestamp and become
+stale. Credentials are never added to dashboard persistence, sync, widgets, or
+agent tool output. Snapshots use the existing normalized dashboard sync contract.
 
 Local HTTP verification is documented in
 `postman/simulations/acp-usage.context.md`. Live credentials, provider accuracy,

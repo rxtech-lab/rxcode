@@ -68,6 +68,11 @@ actor CodexAppServer {
         self.permissionServer = server
     }
 
+    func rootPid(for streamId: UUID) -> Int32? {
+        guard let proc = running[streamId]?.process, proc.isRunning else { return nil }
+        return proc.processIdentifier
+    }
+
     func setActiveTurn(streamId: UUID, threadId: String, turnId: String) {
         activeTurns[streamId] = ActiveTurn(threadId: threadId, turnId: turnId)
     }

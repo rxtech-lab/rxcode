@@ -257,10 +257,15 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     }
 
     /// Completed read/execution tools may have an empty result, but the chat UI
-    /// still needs the block so it can count them in the collapsed tool summary.
+    /// still needs the block so it can count them in the collapsed tool summary
+    /// or render detected shell file changes.
     public var keepsEmptyResult: Bool {
         let category = ToolCategory(toolName: name)
-        return isKeepAlways || category.isTransient || category == .mcp
+        return isKeepAlways
+            || category.isTransient
+            || category == .mcp
+            || isShellExecutionTool
+            || !detectedShellFileChanges.isEmpty
     }
 
     public init(
@@ -387,6 +392,15 @@ public struct FileEditSummary: Identifiable, Sendable {
     /// side always reflects this thread's most recent committed state,
     /// independent of any concurrent edits from other threads/agents.
     public let modifiedContent: String?
+    /// True when another thread or external tool modified the file between two
+    /// edits in this thread — diff rendering prefers anchored `hunks` so the
+    /// other thread's lines are rendered as context rather than attributed here.
+    public let hasExternalInterleaving: Bool
+    /// True when the most recent edit in this thread deleted the file on disk.
+    public let isDeleted: Bool
+    /// True when two concurrent mutating shell spans overlapped without a
+    /// decisive PID/token tie-breaker.
+    public let isAmbiguous: Bool
 
     public init(
         path: String,
@@ -394,7 +408,10 @@ public struct FileEditSummary: Identifiable, Sendable {
         hunks: [PreviewFile.EditHunk],
         containsWrite: Bool,
         originalContent: String? = nil,
-        modifiedContent: String? = nil
+        modifiedContent: String? = nil,
+        hasExternalInterleaving: Bool = false,
+        isDeleted: Bool = false,
+        isAmbiguous: Bool = false
     ) {
         self.path = path
         self.name = name
@@ -402,5 +419,8 @@ public struct FileEditSummary: Identifiable, Sendable {
         self.containsWrite = containsWrite
         self.originalContent = originalContent
         self.modifiedContent = modifiedContent
+        self.hasExternalInterleaving = hasExternalInterleaving
+        self.isDeleted = isDeleted
+        self.isAmbiguous = isAmbiguous
     }
 }

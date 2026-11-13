@@ -67,6 +67,10 @@ actor ClaudeCodeServer {
         self.cliStore = cliStore
     }
 
+    func rootPid(for streamId: UUID) -> Int32? {
+        streamPGIDs[streamId]
+    }
+
     // MARK: - Errors
 
     enum ClaudeError: LocalizedError {

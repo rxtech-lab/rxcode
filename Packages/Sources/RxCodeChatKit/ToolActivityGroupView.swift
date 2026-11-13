@@ -20,11 +20,15 @@ public struct ToolActivityGroupView: View {
     }
 
     public var body: some View {
+        let detectedChanges = ShellDetectedChangesView.aggregatedChanges(from: tools)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(views) { view in
                 JSONUIToolCard(toolCall: view, isStreaming: isStreaming)
             }
             if !tools.isEmpty { activity }
+            if !detectedChanges.isEmpty {
+                ShellDetectedChangesView(changes: detectedChanges)
+            }
         }
     }
 
@@ -220,7 +224,7 @@ enum ToolActivityPresentation {
         case "grep", "glob": return "magnifyingglass"
         case "write": return "square.and.pencil"
         case "edit", "multiedit", "multi_edit": return "pencil"
-        case "bash": return "terminal"
+        case "bash", "exec_command", "run_command": return "terminal"
         case "agent": return "cpu"
         default: break
         }
@@ -235,9 +239,19 @@ enum ToolActivityPresentation {
 
     /// One-line hint of what the call targeted, taken from its most descriptive argument.
     static func preview(for input: [String: JSONValue]) -> String? {
+        let filtered = input.filter { key, _ in
+            key != ToolCall.detectedFileChangesInputKey && key != ToolCall.acpKindInputKey
+        }
+        if let shellCmd = ToolCall(id: "", name: "", input: filtered).shellCommandString {
+            let trimmed = shellCmd.split(whereSeparator: \.isNewline).first.map(String.init)?
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            if !trimmed.isEmpty {
+                return trimmed.count > 80 ? String(trimmed.prefix(80)) + "…" : trimmed
+            }
+        }
         let preferred = ["command", "file_path", "path", "query", "pattern", "url", "title", "name", "description"]
-        let value = preferred.lazy.compactMap { input[$0]?.stringValue }.first
-            ?? input.keys.sorted().lazy.compactMap { input[$0]?.stringValue }.first
+        let value = preferred.lazy.compactMap { filtered[$0]?.stringValue }.first
+            ?? filtered.keys.sorted().lazy.compactMap { filtered[$0]?.stringValue }.first
         guard let text = value?.split(whereSeparator: \.isNewline).first.map(String.init)?
             .trimmingCharacters(in: .whitespaces), !text.isEmpty else { return nil }
         return text.count > 80 ? String(text.prefix(80)) + "…" : text
@@ -283,6 +297,7 @@ private struct ToolActivityStepRow: View {
     let isLast: Bool
 
     var body: some View {
+        let detected = tool.detectedShellFileChanges
         HStack(alignment: .top, spacing: 12) {
             ToolActivityBadge(status: status, systemImage: ToolActivityPresentation.systemImage(for: tool.name))
                 .padding(.top, 10)
@@ -310,6 +325,22 @@ private struct ToolActivityStepRow: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
                             .background(.fill.tertiary, in: Capsule())
+                    }
+                    if !detected.isEmpty {
+                        let added = detected.reduce(0) { $0 + $1.addedLines }
+                        let removed = detected.reduce(0) { $0 + $1.removedLines }
+                        HStack(spacing: 3) {
+                            Text("+\(added)")
+                                .foregroundStyle(ClaudeTheme.statusSuccess)
+                            if removed > 0 {
+                                Text("−\(removed)")
+                                    .foregroundStyle(ClaudeTheme.statusError)
+                            }
+                        }
+                        .font(.caption2.monospaced().weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(.fill.tertiary, in: Capsule())
                     }
                 }
                 if let preview = ToolActivityPresentation.preview(for: tool.input) {
@@ -353,7 +384,9 @@ struct ToolActivityDetailView: View {
     private var status: ToolActivityStatus { ToolActivityStatus(tool: tool, isStreaming: isStreaming) }
 
     var body: some View {
-        let pages = ToolActivityFormatting.pages(ToolActivityFormatting.jsonMarkdown(.object(tool.input)))
+        let displayInput = tool.displayInput
+        let detectedChanges = tool.detectedShellFileChanges
+        let pages = ToolActivityFormatting.pages(ToolActivityFormatting.jsonMarkdown(.object(displayInput)))
         let currentPage = min(pageIndex, pages.count - 1)
         NavigationStack {
             VStack(spacing: 0) {
@@ -377,19 +410,32 @@ struct ToolActivityDetailView: View {
                 }
                 .padding()
 
-                if tool.input.isEmpty {
+                if displayInput.isEmpty && detectedChanges.isEmpty {
                     ContentUnavailableView("No Parameters", systemImage: "curlybraces", description: Text("This tool was called without arguments."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Parameters")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                            MarkdownContentView(text: pages[currentPage].markdown)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 14) {
+                            if !detectedChanges.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Detected File Changes")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .textCase(.uppercase)
+                                    ShellDetectedChangesView(changes: detectedChanges)
+                                }
+                            }
+                            if !displayInput.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Parameters")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .textCase(.uppercase)
+                                    MarkdownContentView(text: pages[currentPage].markdown)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
                         }
                         .padding(.horizontal, 20)
                         .padding(.bottom, 20)
@@ -401,7 +447,7 @@ struct ToolActivityDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
-                if pages.count > 1 && !tool.input.isEmpty {
+                if pages.count > 1 && !displayInput.isEmpty {
                     Divider()
                     HStack {
                         Button { pageIndex = max(0, currentPage - 1) } label: {

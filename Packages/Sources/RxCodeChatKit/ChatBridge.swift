@@ -24,6 +24,8 @@ public final class ChatBridge {
     public var liveOutputTokens: Int = 0
     public var lastTurnContextUsedPercentage: Double?
     public var agentProvider: AgentProvider = .claudeCode
+    /// Raw model identifier for the active session/window (e.g. `<clientId>::<model>` for ACP).
+    public var selectedModelID: String = ""
     /// Whether the current session's agent can take input into a turn that is
     /// already running. Drives the "steer now" action on queued messages; when
     /// false the queue's only options are to wait for the turn to end or to
@@ -41,6 +43,8 @@ public final class ChatBridge {
     /// Usage-limit advice for the selected provider and model, e.g. "only ~2
     /// more tasks fit in the 5-hour limit"; nil when limits need no attention.
     public var rateLimitAdvice: RateLimitAdvice?
+    /// True when the selected ACP client supports provider account usage limits (e.g. Antigravity, OpenCode).
+    public var supportsACPUsage: Bool = false
     /// Usage from the integration linked to this window's selected ACP client.
     public var acpUsageSnapshot: UsagePluginSnapshot?
     public var sessionStats: ChatSessionStats = ChatSessionStats()
@@ -76,6 +80,7 @@ public final class ChatBridge {
     public var releaseLocalModelHandler: ((String) async -> Bool)?
     public var fetchLocalResourcesHandler: (() async -> (memory: UInt64?, gpu: UInt64?, context: Int?))?
     public var fetchRateLimitHandler: ((AgentProvider) async -> RateLimitUsage?)?
+    public var refreshACPUsageHandler: ((Bool) async -> Void)?
     public var setSessionProviderHandler: ((AgentProvider) -> Void)?
     public var togglePlanModeHandler: (() async -> Void)?
     public var enqueueMessageHandler: ((String, [Attachment]) -> Void)?
@@ -118,6 +123,10 @@ public final class ChatBridge {
 
     public func fetchRateLimit() async -> RateLimitUsage? {
         await fetchRateLimitHandler?(agentProvider)
+    }
+
+    public func refreshACPUsage(force: Bool = false) async {
+        await refreshACPUsageHandler?(force)
     }
 
     public func setSessionProvider(_ provider: AgentProvider) {

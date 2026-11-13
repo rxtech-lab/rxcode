@@ -157,10 +157,11 @@ extension AppState {
             state.pendingToolResults.removeAll(keepingCapacity: true)
             if let idx = lastAssistantIdx() {
                 for (toolUseId, content, isError) in results {
+                    let completedCall = state.messages[idx].toolCallIndex(id: toolUseId)
+                        .flatMap { state.messages[idx].blocks[$0].toolCall }
                     let editPersistInfos: [(path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)] = {
                         guard !isError,
-                              let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
-                              let call = state.messages[idx].blocks[blockIdx].toolCall,
+                              let call = completedCall,
                               ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased())
                         else { return [] }
                         let claudeHunks = call.fileEditHunks
@@ -178,8 +179,7 @@ extension AppState {
                     // and flip the plan card back to "pending" — re-showing the accept buttons
                     // on a card that was just decided.
                     let skipResultOverwrite: Bool = {
-                        guard let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
-                              let call = state.messages[idx].blocks[blockIdx].toolCall,
+                        guard let call = completedCall,
                               Self.isExitPlanModeCall(call),
                               let existing = call.result else { return false }
                         return Self.planDecisionResultPrefixes.contains { existing.hasPrefix($0) }
@@ -187,35 +187,8 @@ extension AppState {
                     if !skipResultOverwrite {
                         state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
                     }
-                    if !editPersistInfos.isEmpty {
-                        for info in editPersistInfos {
-                            // Pre-edit snapshot was already read synchronously
-                            // at tool_use time (see `captureEditingFileSnapshot`).
-                            // Re-read the file after tool_result for the post-
-                            // edit snapshot. Together they form the snapshot
-                            // pair the diff view and sidebar counts use.
-                            let snapshot = state.editingFileSnapshots[info.path] ?? nil
-                            let pathLocal = info.path
-                            let hunksLocal = info.hunks
-                            let isWriteLocal = info.isWrite
-                            let keyLocal = key
-                            Task { @MainActor [weak self] in
-                                let modified = await Task.detached(priority: .userInitiated) {
-                                    try? String(contentsOfFile: pathLocal, encoding: .utf8)
-                                }.value
-                                guard let self else { return }
-                                self.threadStore.appendFileEdit(
-                                    sessionId: keyLocal,
-                                    path: pathLocal,
-                                    hunks: hunksLocal,
-                                    containsWrite: isWriteLocal,
-                                    originalContent: snapshot,
-                                    modifiedContent: modified
-                                )
-                                self.threadFileEditsRevision &+= 1
-                            }
-                        }
-                    }
+                    persistStructuredFileEdits(editPersistInfos, state: state, sessionKey: key)
+                    handleCompletedShellToolCallIfNeeded(call: completedCall, sessionKey: key, state: state)
                 }
             }
         }
@@ -413,12 +386,14 @@ extension AppState {
             state.activeToolId = id
             state.activeToolInputBuffer = ""
         }
+        shellTrackerUpsertToolSpan(id: id, name: name, input: [:], sessionKey: sessionKey)
     }
 
     /// Attach a tool call's complete arguments and run the side effects that
     /// depend on them — the pre-edit file snapshot and TodoWrite extraction.
     func applyToolCallInput(id toolId: String, input: [String: JSONValue], for sessionKey: String) {
         var todos: [TodoItem]?
+        var appliedToolName: String?
         updateState(sessionKey) { state in
             if state.activeToolId == toolId {
                 state.activeToolId = nil
@@ -430,6 +405,7 @@ extension AppState {
 
             state.messages[msgIdx].blocks[blockIdx].toolCall?.input = input
             guard let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name else { return }
+            appliedToolName = toolName
 
             // Kick off the pre-edit file snapshot now that the tool input (and
             // therefore `file_path`) is finally known. ACP runtimes hit
@@ -441,6 +417,10 @@ extension AppState {
             if toolName.lowercased() == "todowrite" {
                 todos = TodoExtractor.parse(input: input)
             }
+        }
+
+        if let appliedToolName {
+            shellTrackerUpsertToolSpan(id: toolId, name: appliedToolName, input: input, sessionKey: sessionKey)
         }
 
         if let todos {
@@ -526,6 +506,8 @@ extension AppState {
             let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
             await backend(for: provider).cancel(streamId: streamToCancel)
         }
+
+        await awaitPendingShellDetections(for: key)
 
         // Save messages accumulated up to the point of cancellation to disk (prevent data loss).
         // The placeholder session (if any) is left in place so partial messages remain visible;

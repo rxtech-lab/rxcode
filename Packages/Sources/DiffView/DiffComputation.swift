@@ -73,17 +73,30 @@ public enum DiffComputation {
 
     /// Picks the best in-memory diff for a thread-edited file using only the
     /// snapshots and hunks the thread already recorded. Prefers the exact
-    /// snapshot-pair diff (`buildSnapshotDiffLines`). When that pair collapses
-    /// — e.g. the pre-edit snapshot was captured *after* the edit applied so
-    /// `originalContent == modifiedContent` — falls back to rendering the
-    /// recorded hunks via `buildEditDiffLines`, so real edits never silently
-    /// vanish into a "No changes" body when the sidebar is reporting non-zero
-    /// `+N/-N` from the same hunks.
+    /// snapshot-pair diff (`buildSnapshotDiffLines`) unless `preferHunks` is
+    /// true (set when another thread interleaved edits on the same file between
+    /// two turns of this thread, so `modifiedContent` also holds the other
+    /// thread's lines). When `preferHunks` is true, reverse-applying `hunks`
+    /// onto `modifiedContent` treats the other thread's lines as `.context`
+    /// rather than attributing them to this thread.
     public nonisolated static func buildThreadEditDiff(
         originalContent: String?,
         modifiedContent: String?,
-        hunks: [PreviewFile.EditHunk]
+        hunks: [PreviewFile.EditHunk],
+        preferHunks: Bool = false
     ) -> [DiffLine] {
+        if preferHunks, !hunks.isEmpty {
+            if let modifiedContent, !modifiedContent.isEmpty {
+                let fullLines = buildFullFileEditDiffLines(
+                    currentContent: modifiedContent,
+                    hunks: hunks
+                )
+                if fullLines.contains(where: { $0.kind == .added || $0.kind == .removed }) {
+                    return fullLines
+                }
+            }
+            return buildEditDiffLines(from: hunks)
+        }
         if let modifiedContent {
             let snapshotLines = buildSnapshotDiffLines(
                 original: originalContent ?? "",
@@ -98,6 +111,33 @@ public enum DiffComputation {
             }
         }
         return buildEditDiffLines(from: hunks)
+    }
+
+    /// Computes `(added, removed)` line counts matching `buildThreadEditDiff`
+    /// so sidebar badges and `ThreadDiffBanner` never include another thread's
+    /// interleaved edits when `preferHunks` is true.
+    public nonisolated static func threadEditStat(
+        originalContent: String?,
+        modifiedContent: String?,
+        hunks: [PreviewFile.EditHunk],
+        preferHunks: Bool = false
+    ) -> (added: Int, removed: Int) {
+        let lines = buildThreadEditDiff(
+            originalContent: originalContent,
+            modifiedContent: modifiedContent,
+            hunks: hunks,
+            preferHunks: preferHunks
+        )
+        var added = 0
+        var removed = 0
+        for line in lines {
+            switch line.kind {
+            case .added: added += 1
+            case .removed: removed += 1
+            default: break
+            }
+        }
+        return (added, removed)
     }
 
     // MARK: - Hunks reverse-applied to current → DiffLine

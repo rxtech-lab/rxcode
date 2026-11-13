@@ -176,7 +176,8 @@ public struct UsagePluginCard: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(metric.title)
                 .accessibilityValue(metric.formattedValue)
-            } else if let detail = metric.detail {
+            }
+            if let detail = metric.detail {
                 Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
             Divider()

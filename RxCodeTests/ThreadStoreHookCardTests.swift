@@ -115,3 +115,94 @@ final class ThreadStoreHookCardTests: XCTestCase {
         XCTAssertTrue(store.loadHookCards(sessionId: sid).isEmpty, "project delete must not leak hook cards")
     }
 }
+
+/// Coverage for concurrent same-file interleaving detection (`hasExternalInterleaving`),
+/// deletion/ambiguity flags on `ThreadFileEdit`, and `ToolDetectedChangeRecord` sidecar lifecycle.
+@MainActor
+final class ThreadStoreShellEditsTests: XCTestCase {
+
+    private static var retainedStores: [ThreadStore] = []
+    private func makeStore() -> ThreadStore {
+        let store = ThreadStore.inMemory()
+        Self.retainedStores.append(store)
+        return store
+    }
+
+    func testSameFileSequentialVsExternalInterleavingDetection() throws {
+        let store = makeStore()
+        let sid = "thread-A"
+        let path = "/repo/Shared.swift"
+
+        // Step 1: Thread A edits Shared.swift ("v0" -> "v1").
+        store.appendFileEdit(
+            sessionId: sid,
+            path: path,
+            hunks: [PreviewFile.EditHunk(oldString: "v0", newString: "v1")],
+            containsWrite: false,
+            originalContent: "v0\n",
+            modifiedContent: "v1\n",
+            stepBeforeContent: "v0\n"
+        )
+        var row = try XCTUnwrap(store.fetchFileEdits(sessionId: sid).first)
+        XCTAssertNil(row.hasExternalInterleaving)
+
+        // Step 2: Thread A edits again sequentially ("v1" -> "v2"); `stepBeforeContent` matches `modifiedContent`.
+        store.appendFileEdit(
+            sessionId: sid,
+            path: path,
+            hunks: [PreviewFile.EditHunk(oldString: "v1", newString: "v2")],
+            containsWrite: false,
+            originalContent: "v0\n",
+            modifiedContent: "v2\n",
+            stepBeforeContent: "v1\n"
+        )
+        row = try XCTUnwrap(store.fetchFileEdits(sessionId: sid).first)
+        XCTAssertNil(row.hasExternalInterleaving)
+
+        // Step 3: Thread B modified the file externally ("v2\nthreadB\n"), then Thread A edits ("v2" -> "v3").
+        store.appendFileEdit(
+            sessionId: sid,
+            path: path,
+            hunks: [PreviewFile.EditHunk(oldString: "v2", newString: "v3")],
+            containsWrite: false,
+            originalContent: "v0\n",
+            modifiedContent: "v3\nthreadB\n",
+            stepBeforeContent: "v2\nthreadB\n",
+            isDeleted: false,
+            isAmbiguous: true
+        )
+        row = try XCTUnwrap(store.fetchFileEdits(sessionId: sid).first)
+        XCTAssertEqual(row.hasExternalInterleaving, true)
+        XCTAssertEqual(row.isAmbiguous, true)
+        XCTAssertEqual(row.originalContent, "v0\n")
+        XCTAssertEqual(row.hunks.count, 3)
+    }
+
+    func testDetectedToolChangeSidecarRenameAndDeleteCleanup() throws {
+        let store = makeStore()
+        let draftId = "draft-123"
+        let realId = "real-456"
+        store.context.insert(ChatThread(id: realId, projectId: UUID()))
+        store.save()
+
+        let sample = [
+            DetectedShellFileChange(
+                path: "/repo/ScriptOut.swift",
+                kind: .created,
+                addedLines: 5,
+                removedLines: 0,
+                diff: "@@ -0,0 +1,5 @@\n+struct ScriptOut {}"
+            )
+        ]
+        store.upsertDetectedToolChanges(sessionId: draftId, toolCallId: "bash-1", changes: sample)
+        XCTAssertEqual(store.loadDetectedToolChanges(sessionId: draftId)["bash-1"], sample)
+
+        store.renameDetectedToolChanges(from: draftId, to: realId)
+        store.save()
+        XCTAssertTrue(store.loadDetectedToolChanges(sessionId: draftId).isEmpty)
+        XCTAssertEqual(store.loadDetectedToolChanges(sessionId: realId)["bash-1"], sample)
+
+        store.delete(id: realId)
+        XCTAssertTrue(store.loadDetectedToolChanges(sessionId: realId).isEmpty)
+    }
+}

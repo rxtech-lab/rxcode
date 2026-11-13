@@ -77,7 +77,7 @@ struct UsageIntegrationEditor: View {
         }
         .onChange(of: integration.pluginID) { _, _ in
             integration.account = ""
-            integration.resource = ""
+            integration.resource = compatibleACPClients.count == 1 ? compatibleACPClients[0].id : ""
             credential = ""
             gatewayCredential = ""
             billingCredential = ""
@@ -95,6 +95,9 @@ struct UsageIntegrationEditor: View {
             signedIn = UsageOAuthTokens.hasTokens(integration.id)
             cloudflareScope = .init(resource: integration.resource)
             cloudflareResource = cloudflareScope.name(in: integration.resource)
+            if acp && integration.resource.isEmpty && compatibleACPClients.count == 1 {
+                integration.resource = compatibleACPClients[0].id
+            }
             if vercel && (signedIn || !VercelUsageOAuth.isEnabled) { loadVercelAccounts() }
         }
         .task(id: integration.id) {
@@ -131,7 +134,7 @@ struct UsageIntegrationEditor: View {
                 }
                 Text(integration.pluginID == "acp-opencode"
                      ? "Reads OpenCode Go usage limits using this client's existing login or OPENCODE_API_KEY. Other providers and prepaid balances are not reported."
-                     : "Reads Antigravity quota windows using the agy login in macOS Keychain. Open Antigravity or agy to refresh an expired login.")
+                     : "Reads Antigravity quota windows using your existing Antigravity ACP or agy login in macOS Keychain or ~/.gemini/antigravity-acp.")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Label("Uses existing agent connections", systemImage: "person.crop.circle")
@@ -351,7 +354,7 @@ struct UsageIntegrationEditor: View {
                     dashboard.snapshots.removeAll { $0.id == integration.id }
                 } else {
                     dashboard.integrations.append(integration)
-                    dashboard.cards.append(.init(integrationID: integration.id))
+                    dashboard.cards.append(.init(integrationID: integration.id, style: acp ? "metrics" : "summary"))
                 }
                 guard await appState.updateUsageDashboard(dashboard) else { error = appState.usageDashboardError; return }
                 await appState.refreshUsagePlugins()

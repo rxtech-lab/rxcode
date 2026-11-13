@@ -664,6 +664,17 @@ extension AppState {
         bridge.fetchRateLimitHandler = { [weak self] provider in
             await self?.rateLimitUsage(for: provider)
         }
+        bridge.refreshACPUsageHandler = { [weak self, weak window] forceRefresh in
+            guard let self, let window else { return }
+            let selection = self.effectiveModelSelection(in: window)
+            guard selection.provider == .acp else { return }
+            let sessionClientID = self.streamState(in: window).acpClientId
+            await self.refreshACPUsage(
+                for: selection.model,
+                clientID: sessionClientID,
+                forceRefresh: forceRefresh
+            )
+        }
         bridge.setSessionProviderHandler = { [weak self, weak window] provider in
             guard let self, let window else { return }
             self.setSessionProvider(provider, in: window)
@@ -730,7 +741,14 @@ extension AppState {
                 let provider = selection.provider
                 let currentModel = selection.model
                 bridge.agentProvider = provider
-                let acpUsage = provider == .acp ? acpUsageSnapshot(for: currentModel) : nil
+                if bridge.selectedModelID != currentModel {
+                    bridge.selectedModelID = currentModel
+                }
+                let supportsACP = provider == .acp ? supportsACPUsage(for: currentModel, clientID: state.acpClientId) : false
+                if bridge.supportsACPUsage != supportsACP {
+                    bridge.supportsACPUsage = supportsACP
+                }
+                let acpUsage = provider == .acp ? acpUsageSnapshot(for: currentModel, clientID: state.acpClientId) : nil
                 if bridge.acpUsageSnapshot != acpUsage {
                     bridge.acpUsageSnapshot = acpUsage
                 }

@@ -6482,6 +6482,9 @@
     "Compressing ZIP…" : {
 
     },
+    "Concurrent" : {
+
+    },
     "Condition" : {
       "localizations" : {
         "ko" : {
@@ -15555,6 +15558,9 @@
     "Models…" : {
 
     },
+    "Modified while another thread also ran a mutating command in this workspace." : {
+
+    },
     "Monthly" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20244,7 +20250,7 @@
         }
       }
     },
-    "Reads Antigravity quota windows using the agy login in macOS Keychain. Open Antigravity or agy to refresh an expired login." : {
+    "Reads Antigravity quota windows using your existing Antigravity ACP or agy login in macOS Keychain or ~/.gemini/antigravity-acp." : {
 
     },
     "Reads OpenCode Go usage limits using this client's existing login or OPENCODE_API_KEY. Other providers and prepaid balances are not reported." : {

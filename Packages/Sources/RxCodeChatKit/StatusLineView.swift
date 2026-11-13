@@ -15,6 +15,7 @@ struct StatusLineView: View {
     @State private var showContextPopover = false
     @State private var showAdvicePopover = false
     @State private var showACPUsage = false
+    @State private var isRefreshingACPUsage = false
 
     private var totalResponseDuration: Double {
         chatBridge.messages
@@ -106,22 +107,31 @@ struct StatusLineView: View {
                     .accessibilityAddTraits(.updatesFrequently)
             }
         }
-        .task {
+        .task(id: "\(chatBridge.agentProvider.rawValue):\(chatBridge.selectedModelID)") {
+            if chatBridge.agentProvider == .acp {
+                await chatBridge.refreshACPUsage(force: false)
+                return
+            }
             await refreshRateLimit()
-            // Retry after 5 seconds if initial load fails
-            if rateLimit == nil {
+            if rateLimit == nil, !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
                 await refreshRateLimit()
             }
         }
         .onChange(of: chatBridge.isStreaming) { old, new in
             if old && !new {
-                Task { await refreshRateLimit() }
+                Task {
+                    if chatBridge.agentProvider == .acp {
+                        await chatBridge.refreshACPUsage(force: true)
+                    } else {
+                        await refreshRateLimit()
+                    }
+                }
             }
         }
         .onChange(of: chatBridge.agentProvider) {
             rateLimit = nil
-            Task { await refreshRateLimit() }
         }
         .onChange(of: chatBridge.acpUsageSnapshot?.id) {
             showACPUsage = false
@@ -134,14 +144,34 @@ struct StatusLineView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay {
+                    if isRefreshingACPUsage {
+                        ProgressView("Refreshing usage…")
+                            .padding()
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
                 .navigationTitle("ACP usage limits")
                 .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        Button {
+                            guard !isRefreshingACPUsage else { return }
+                            isRefreshingACPUsage = true
+                            Task {
+                                await chatBridge.refreshACPUsage(force: true)
+                                isRefreshingACPUsage = false
+                            }
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(isRefreshingACPUsage)
+                    }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { showACPUsage = false }
                     }
                 }
             }
-            .frame(minWidth: 480, minHeight: 400)
+            .frame(minWidth: 480, idealWidth: 520, minHeight: 420, idealHeight: 520, maxHeight: .infinity)
         }
     }
 
@@ -280,28 +310,113 @@ struct StatusLineView: View {
                 .accessibilityLabel("Release model from memory")
             }
         case .acp:
-            if let snapshot = chatBridge.acpUsageSnapshot {
+            acpUsageSegments()
+        }
+    }
+
+    @ViewBuilder
+    private func acpUsageSegments() -> some View {
+        if let snapshot = chatBridge.acpUsageSnapshot {
+            if let windows = snapshot.acpQuotaWindows() {
+                Button { showACPUsage = true } label: {
+                    HStack(spacing: 10) {
+                        if let fiveHour = windows.fiveHour {
+                            acpWindowItem(label: String(localized: "5h", bundle: .module), icon: "clock", metric: fiveHour)
+                        }
+                        if let weekly = windows.weekly {
+                            acpWindowItem(label: String(localized: "7d", bundle: .module), icon: "calendar", metric: weekly)
+                        }
+                        if snapshot.isStale() {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: ClaudeTheme.size(10)))
+                                .foregroundStyle(ClaudeTheme.statusWarning)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(acpUsageTooltip(snapshot: snapshot, groupTitle: windows.groupTitle))
+            } else {
                 Button { showACPUsage = true } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chart.bar")
-                        if let metric = snapshot.metrics.filter({ $0.unit == "%" && $0.value?.isFinite == true })
+                        if snapshot.pluginID == ACPUsageProvider.antigravity.pluginID {
+                            if snapshot.metrics.isEmpty {
+                                Text("Usage unavailable")
+                                    .foregroundStyle(ClaudeTheme.textTertiary)
+                            } else {
+                                Text("Usage limits")
+                                    .foregroundStyle(ClaudeTheme.textSecondary)
+                            }
+                        } else if let metric = snapshot.metrics.filter({ $0.unit == "%" && $0.value?.isFinite == true })
                             .max(by: { ($0.value ?? 0) < ($1.value ?? 0) }) {
                             Text(metric.title).lineLimit(1)
                             Text(metric.formattedValue)
                                 .foregroundStyle(colorForPercent(metric.value ?? 0))
                         } else {
                             Text("Usage unavailable")
+                                .foregroundStyle(ClaudeTheme.textTertiary)
                         }
                         if snapshot.isStale() {
                             Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: ClaudeTheme.size(10)))
                                 .foregroundStyle(ClaudeTheme.statusWarning)
                         }
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("\(snapshot.title): highest usage bucket. View all limits and reset details.\(snapshot.isStale() ? " Data is stale or the last refresh failed." : "")")
+                .help(snapshot.error ?? "\(snapshot.title): click to view all model limits and reset details.\(snapshot.isStale() ? " Data is stale or the last refresh failed." : "")")
+            }
+        } else if chatBridge.supportsACPUsage {
+            HStack(spacing: 10) {
+                acpPlaceholderItem(label: String(localized: "5h", bundle: .module), icon: "clock")
+                acpPlaceholderItem(label: String(localized: "7d", bundle: .module), icon: "calendar")
+            }
+            .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+    }
+
+    private func acpWindowItem(label: String, icon: String, metric: UsageMetric) -> some View {
+        let pct = metric.value ?? 0
+        let countdown = metric.resetsAt.map(shortCountdown(until:)) ?? ""
+        return HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: ClaudeTheme.size(10)))
+            Text(label)
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            miniBar(percent: pct)
+            Text(compactPercentText(pct))
+                .foregroundStyle(colorForPercent(pct))
+            if !countdown.isEmpty {
+                Text(countdown)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             }
         }
+    }
+
+    private func acpPlaceholderItem(label: String, icon: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: ClaudeTheme.size(10)))
+            Text(label)
+            Text("--")
+        }
+    }
+
+    private func acpUsageTooltip(snapshot: UsagePluginSnapshot, groupTitle: String?) -> String {
+        let header = groupTitle.map { "\(snapshot.title) (\($0))" } ?? snapshot.title
+        if let error = snapshot.error {
+            return "\(header): \(error)"
+        }
+        return "\(header): click to view all model limits and reset details.\(snapshot.isStale() ? " Data is stale." : "")"
+    }
+
+    private func compactPercentText(_ pct: Double) -> String {
+        if pct > 0 && pct < 1 {
+            return "\(pct.formatted(.number.precision(.fractionLength(1))))%"
+        }
+        return "\(Int(pct.rounded()))%"
     }
 
     // MARK: - Rate Limit Advice

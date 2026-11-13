@@ -111,16 +111,21 @@ struct ThreadDiffBanner: View {
         appState.showRightSidebar = true
     }
 
-    /// Mirrors `ThisThreadFileRow`: prefer the snapshot-pair count, falling
-    /// back to hunk line counts when the snapshot collapsed to zero.
+    /// Mirrors `ThisThreadFileRow`: computes thread-isolated `+/-` stats via
+    /// `DiffComputation.threadEditStat`, isolating hunks when external
+    /// interleaving occurred.
     private static func computeStat(_ summaries: [FileEditSummary]) async -> (added: Int, removed: Int) {
         await Task.detached(priority: .utility) {
             var added = 0
             var removed = 0
             for summary in summaries {
-                if let modified = summary.modifiedContent {
-                    let stat = ChangeDiffView.snapshotStat(
-                        original: summary.originalContent ?? "", modified: modified)
+                if summary.modifiedContent != nil || summary.hasExternalInterleaving {
+                    let stat = DiffComputation.threadEditStat(
+                        originalContent: summary.originalContent,
+                        modifiedContent: summary.modifiedContent,
+                        hunks: summary.hunks,
+                        preferHunks: summary.hasExternalInterleaving
+                    )
                     if stat.added > 0 || stat.removed > 0 {
                         added += stat.added
                         removed += stat.removed

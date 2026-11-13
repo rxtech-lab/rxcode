@@ -301,7 +301,7 @@ struct BriefingView: View {
 
     var body: some View {
         Group {
-            if hasAnyData {
+            if hasAnyData || hasUsageDashboard {
                 content
             } else {
                 emptyState(
@@ -373,6 +373,11 @@ struct BriefingView: View {
             || !visibleThreadSummaryItems().isEmpty
     }
 
+    private var hasUsageDashboard: Bool {
+        !appState.usageDashboard.visibleCards(projectIDs: selectedProjectIds).isEmpty
+            || !appState.usageDashboard.integrations.isEmpty
+    }
+
     private var projectPathsKey: String {
         appState.projects
             .map { "\($0.id.uuidString):\($0.path)" }
@@ -426,12 +431,15 @@ struct BriefingView: View {
     /// Header, empty state, and the day sections, as full-width rows
     /// of the AppKit timeline.
     private func timelineRows(entries: [BriefingEntry], sections: [BriefingDaySection]) -> [BriefingTimelineRow] {
+        let hasBriefings = hasAnyData
         var rows = [
             BriefingTimelineRow(id: "header", estimatedHeight: 300) {
                 AnyView(
                     VStack(alignment: .leading, spacing: 24) {
                         hero(entries: entries)
-                        filterBar
+                        if hasBriefings {
+                            filterBar
+                        }
                         UsageDashboardView(projectIds: selectedProjectIds)
                     }
                     .padding(.top, 24)
@@ -441,7 +449,21 @@ struct BriefingView: View {
         ]
         if sections.isEmpty {
             rows.append(BriefingTimelineRow(id: "empty", estimatedHeight: 260) {
-                AnyView(filteredEmptyState.briefingTimelineRowInsets())
+                AnyView(
+                    Group {
+                        if hasBriefings {
+                            filteredEmptyState
+                        } else {
+                            emptyState(
+                                icon: "text.page",
+                                title: "No Briefings Yet",
+                                message: "Briefings appear after a thread finishes on a project branch, or when an agent publishes one."
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .briefingTimelineRowInsets()
+                )
             })
         } else {
             rows += sections.flatMap(sectionRows)
@@ -614,7 +636,7 @@ struct BriefingView: View {
             }
             .padding(16)
         }
-        .frame(minWidth: 600, idealWidth: 760, minHeight: 420, idealHeight: 660)
+        .frame(minWidth: 600, idealWidth: 760, minHeight: 420, idealHeight: 660, maxHeight: .infinity)
         .background(ClaudeTheme.background)
     }
 

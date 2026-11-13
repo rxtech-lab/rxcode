@@ -6,7 +6,7 @@ import AppKit
 import UIKit
 #endif
 
-/// Terminal-styled sheet that surfaces the output of a completed `Bash` tool call.
+/// Terminal-styled sheet that surfaces the output of a completed shell tool call.
 /// Mirrors the look of the interactive terminal popup (dark background, monospaced
 /// text, success/error chip in the header) but is read-only — we only have the
 /// captured stdout/stderr to show.
@@ -16,11 +16,21 @@ struct BashTerminalSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var command: String {
-        toolCall.input["command"]?.stringValue ?? ""
+        toolCall.input["command"]?.stringValue ?? toolCall.shellCommandString ?? ""
     }
 
     private var description: String? {
         toolCall.input["description"]?.stringValue
+    }
+
+    private var headerTitle: String {
+        if let description, !description.isEmpty {
+            return description
+        }
+        if toolCall.name.lowercased() == "bash" {
+            return String(localized: "Bash", bundle: .module)
+        }
+        return toolCall.name
     }
 
     private var resultText: String {
@@ -44,7 +54,7 @@ struct BashTerminalSheet: View {
         HStack(spacing: 8) {
             Image(systemName: "terminal")
                 .foregroundStyle(ClaudeTheme.accent)
-            Text(description ?? String(localized: "Bash", bundle: .module))
+            Text(headerTitle)
                 .font(.system(size: ClaudeTheme.size(13), weight: .medium, design: .monospaced))
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
@@ -104,6 +114,16 @@ struct BashTerminalSheet: View {
                     Text("(no output)", bundle: .module)
                         .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
                         .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+
+                if !toolCall.detectedShellFileChanges.isEmpty {
+                    ClaudeThemeDivider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Detected File Changes")
+                            .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                        ShellDetectedChangesView(changes: toolCall.detectedShellFileChanges)
+                    }
                 }
             }
             .padding(16)

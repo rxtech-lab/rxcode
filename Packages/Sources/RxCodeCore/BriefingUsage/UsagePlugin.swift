@@ -8,8 +8,9 @@ public struct UsageMetric: Codable, Sendable, Equatable, Identifiable {
     public var value: Double?
     public var unit: String
     public var detail: String?
-    public init(_ id: String, _ title: String, value: Double?, unit: String, detail: String? = nil) {
-        self.id = id; self.title = title; self.value = value; self.unit = unit; self.detail = detail
+    public var resetsAt: Date?
+    public init(_ id: String, _ title: String, value: Double?, unit: String, detail: String? = nil, resetsAt: Date? = nil) {
+        self.id = id; self.title = title; self.value = value; self.unit = unit; self.detail = detail; self.resetsAt = resetsAt
     }
     public var formattedValue: String {
         guard let value, value.isFinite else { return "Unavailable" }

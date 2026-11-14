@@ -137,9 +137,31 @@ extension WorkspaceChangeTracker {
         return .text(content: text, mtime: mtime, size: size)
     }
 
-    func loadReferencedScripts(for command: String, cwd: String) -> [String] {
-        guard !command.isEmpty else { return [] }
-        let scriptPaths = ShellCommandClassifier.extractReferencedScriptPaths(from: command, cwd: cwd)
+    func loadReferencedScripts(
+        for command: String,
+        cwd: String,
+        extraScriptPath: String? = nil
+    ) -> [String] {
+        var scriptPaths: [String] = []
+        if let extraScriptPath, !extraScriptPath.isEmpty {
+            let resolvedExtra: String
+            if extraScriptPath.hasPrefix("/") {
+                resolvedExtra = (extraScriptPath as NSString).standardizingPath
+            } else if extraScriptPath.hasPrefix("~/") {
+                resolvedExtra = (extraScriptPath as NSString).expandingTildeInPath
+            } else {
+                resolvedExtra = ((cwd as NSString).appendingPathComponent(extraScriptPath) as NSString).standardizingPath
+            }
+            scriptPaths.append(resolvedExtra)
+        }
+        if !command.isEmpty {
+            for extracted in ShellCommandClassifier.extractReferencedScriptPaths(from: command, cwd: cwd)
+                where !scriptPaths.contains(extracted) {
+                scriptPaths.append(extracted)
+            }
+        }
+        guard !scriptPaths.isEmpty else { return [] }
+
         var contents: [String] = []
         for path in scriptPaths.prefix(4) {
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),

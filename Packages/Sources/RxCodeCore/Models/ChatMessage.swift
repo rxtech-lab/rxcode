@@ -161,10 +161,12 @@ public struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
         }
     }
 
-    public mutating func finalizeToolCalls() {
+    public mutating func finalizeToolCalls(dropIncomplete: Bool = true) {
         blocks.removeAll { block in
             guard let toolCall = block.toolCall else { return false }
-            if toolCall.result == nil { return !toolCall.isKeepAlways }
+            if toolCall.result == nil {
+                return dropIncomplete && !toolCall.isKeepAlways
+            }
             if toolCall.keepsEmptyResult { return false }
             return toolCall.result?.isEmpty == true && !toolCall.isError
         }

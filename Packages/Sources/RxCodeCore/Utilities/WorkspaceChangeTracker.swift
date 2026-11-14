@@ -152,6 +152,8 @@ public actor WorkspaceChangeTracker {
     var activeStreams: [UUID: StreamRegistration] = [:]
     /// Keyed by `spanKey(streamId:toolUseId:)`.
     var activeSpans: [String: ActiveShellSpan] = [:]
+    /// Guards against delayed `upsertShellSpan` tasks re-opening spans already ended by `endShellSpan`.
+    var completedSpanKeys: Set<String> = []
     /// Paths delivered by `FSEvents` since the last full ledger sync.
     var pendingEventPaths = Set<String>()
     /// Records which `spanId`s were active when an FSEvent arrived for `canonicalPath`.
@@ -188,30 +190,14 @@ public actor WorkspaceChangeTracker {
             await syncIdleWorkspaceToLedger()
         }
         let resolvedCwd = URL(fileURLWithPath: cwd).resolvingSymlinksInPath().standardizedFileURL.path
-        activeStreams[streamId] = StreamRegistration(
-            sessionKey: sessionKey,
-            cwd: resolvedCwd,
-            rootPid: rootPid
-        )
+        activeStreams[streamId] = StreamRegistration(sessionKey: sessionKey, cwd: resolvedCwd, rootPid: rootPid)
     }
 
     public func updateStreamRootPid(streamId: UUID, rootPid: Int32?) {
         guard rootPid != nil else { return }
         activeStreams[streamId]?.rootPid = rootPid
         for (key, var span) in activeSpans where span.streamId == streamId {
-            span = ActiveShellSpan(
-                spanId: span.spanId,
-                sessionKey: span.sessionKey,
-                streamId: span.streamId,
-                toolUseId: span.toolUseId,
-                command: span.command,
-                cwd: span.cwd,
-                disposition: span.disposition,
-                rootPid: rootPid,
-                startedAt: span.startedAt,
-                endedAt: span.endedAt,
-                candidateTokens: span.candidateTokens
-            )
+            span.rootPid = rootPid
             activeSpans[key] = span
         }
         updateProbeSamplerIfNeeded()
@@ -223,20 +209,9 @@ public actor WorkspaceChangeTracker {
             reg.sessionKey = newKey
             activeStreams[id] = reg
         }
-        for (key, span) in activeSpans where span.sessionKey == oldKey {
-            activeSpans[key] = ActiveShellSpan(
-                spanId: span.spanId,
-                sessionKey: newKey,
-                streamId: span.streamId,
-                toolUseId: span.toolUseId,
-                command: span.command,
-                cwd: span.cwd,
-                disposition: span.disposition,
-                rootPid: span.rootPid,
-                startedAt: span.startedAt,
-                endedAt: span.endedAt,
-                candidateTokens: span.candidateTokens
-            )
+        for (key, var span) in activeSpans where span.sessionKey == oldKey {
+            span.sessionKey = newKey
+            activeSpans[key] = span
         }
     }
 
@@ -245,6 +220,8 @@ public actor WorkspaceChangeTracker {
         for (key, span) in Array(activeSpans) where span.streamId == streamId {
             activeSpans.removeValue(forKey: key)
         }
+        let streamPrefix = "\(streamId.uuidString)|"
+        completedSpanKeys = completedSpanKeys.filter { !$0.hasPrefix(streamPrefix) }
         updateProbeSamplerIfNeeded()
         if activeStreams.isEmpty, activeSpans.isEmpty {
             stopFSEventsIfIdle()
@@ -281,22 +258,23 @@ public actor WorkspaceChangeTracker {
         toolUseId: String,
         command: String?,
         cwd: String? = nil,
-        rootPid: Int32? = nil
+        rootPid: Int32? = nil,
+        extraScriptPath: String? = nil
     ) async {
         await ensureInitialized()
         startFSEventsIfNeeded()
 
         let key = spanKey(streamId: streamId, toolUseId: toolUseId)
+        guard !completedSpanKeys.contains(key) else { return }
+
         let resolvedCwd = cwd.map {
             URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path
         } ?? activeStreams[streamId]?.cwd ?? canonicalRootPath
         let resolvedPid = rootPid ?? activeStreams[streamId]?.rootPid
         let cmdString = command ?? activeSpans[key]?.command ?? ""
 
-        let extraScripts = loadReferencedScripts(for: cmdString, cwd: resolvedCwd)
-        let disposition = cmdString.isEmpty
-            ? .mutatingOrUnknown
-            : ShellCommandClassifier.classify(cmdString)
+        let extraScripts = loadReferencedScripts(for: cmdString, cwd: resolvedCwd, extraScriptPath: extraScriptPath)
+        let disposition = cmdString.isEmpty ? .mutatingOrUnknown : ShellCommandClassifier.classify(cmdString)
         let tokens = ShellCommandClassifier.extractCandidatePathTokens(
             from: cmdString,
             extraScriptContents: extraScripts
@@ -324,6 +302,8 @@ public actor WorkspaceChangeTracker {
             if activeSpans.isEmpty {
                 await flushFSEvents()
             }
+            // Re-check after awaiting `flushFSEvents()` in case `endShellSpan` ran concurrently.
+            guard !completedSpanKeys.contains(key) else { return }
             activeSpans[key] = ActiveShellSpan(
                 sessionKey: sessionKey,
                 streamId: streamId,
@@ -350,11 +330,14 @@ public actor WorkspaceChangeTracker {
         toolUseId: String,
         fallbackCommand: String? = nil,
         cwd: String? = nil,
-        rootPid: Int32? = nil
+        rootPid: Int32? = nil,
+        extraScriptPath: String? = nil
     ) async -> [WorkspaceDetectedEdit] {
         await ensureInitialized()
 
         let key = spanKey(streamId: streamId, toolUseId: toolUseId)
+        completedSpanKeys.insert(key)
+
         let resolvedCwd = cwd.map {
             URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path
         } ?? activeStreams[streamId]?.cwd ?? canonicalRootPath
@@ -363,7 +346,11 @@ public actor WorkspaceChangeTracker {
         var completingSpan: ActiveShellSpan
         if var existing = activeSpans.removeValue(forKey: key) {
             if existing.command.isEmpty, let fallbackCommand, !fallbackCommand.isEmpty {
-                let scripts = loadReferencedScripts(for: fallbackCommand, cwd: resolvedCwd)
+                let scripts = loadReferencedScripts(
+                    for: fallbackCommand,
+                    cwd: resolvedCwd,
+                    extraScriptPath: extraScriptPath
+                )
                 existing = ActiveShellSpan(
                     spanId: existing.spanId,
                     sessionKey: sessionKey,
@@ -386,7 +373,7 @@ public actor WorkspaceChangeTracker {
             completingSpan = existing
         } else {
             let cmd = fallbackCommand ?? ""
-            let scripts = loadReferencedScripts(for: cmd, cwd: resolvedCwd)
+            let scripts = loadReferencedScripts(for: cmd, cwd: resolvedCwd, extraScriptPath: extraScriptPath)
             completingSpan = ActiveShellSpan(
                 sessionKey: sessionKey,
                 streamId: streamId,
@@ -589,9 +576,7 @@ public actor WorkspaceChangeTracker {
         if let entry = ledger[canonicalPath] {
             return entry.content
         }
-        guard let gitRoot = gitRepoRoot else {
-            return nil
-        }
+        guard let gitRoot = gitRepoRoot else { return nil }
         let prefix = gitRoot.hasSuffix("/") ? gitRoot : gitRoot + "/"
         guard canonicalPath.hasPrefix(prefix) else { return nil }
         let repoRelPath = String(canonicalPath.dropFirst(prefix.count))
@@ -711,16 +696,12 @@ public actor WorkspaceChangeTracker {
                 continue
             }
             let values = try? fileURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-            if values?.isDirectory == true {
-                continue
-            }
+            if values?.isDirectory == true { continue }
             guard values?.isRegularFile == true else { continue }
             let canonical = fileURL.resolvingSymlinksInPath().standardizedFileURL.path
             guard shouldTrackPathStructure(canonical) else { continue }
             results.append(canonical)
-            if results.count >= Self.maxNonGitSeedFiles {
-                break
-            }
+            if results.count >= Self.maxNonGitSeedFiles { break }
         }
         return results
     }

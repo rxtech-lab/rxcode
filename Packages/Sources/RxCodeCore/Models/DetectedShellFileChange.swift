@@ -93,6 +93,11 @@ public extension ToolCall {
     /// Synthetic input key set by `ACPService` when an ACP tool call has `kind == "execute"`.
     static let acpKindInputKey = "_acp_kind"
 
+    private static let localCodeReplNames: Set<String> = [
+        "js_repl", "node_repl", "python_repl",
+        "mcp__js_repl", "mcp__node_repl", "mcp__python_repl",
+    ]
+
     /// Tool input dictionary with internal RxCode metadata keys removed for UI display.
     var displayInput: [String: JSONValue] {
         input.filter { key, _ in
@@ -108,6 +113,12 @@ public extension ToolCall {
         if input[Self.acpKindInputKey]?.stringValue?.lowercased() == "execute" {
             return true
         }
+        let lowerName = name.lowercased()
+        if Self.localCodeReplNames.contains(lowerName)
+            || lowerName.hasPrefix("mcp__node_repl__")
+            || lowerName.hasPrefix("mcp__js_repl__") {
+            return true
+        }
         // Fallback for custom agent tool names carrying a `command` field that
         // aren't structured file-edit or MCP tools.
         if ToolCategory(toolName: name) == .unknown,
@@ -119,11 +130,11 @@ public extension ToolCall {
     }
 
     /// Best-effort shell command string extracted from tool input across
-    /// Claude (`command`), Codex (`command` string or argv array / `cmd`), and ACP.
+    /// Claude (`command`), Codex (`command` string, `commandActions`, argv array, or `cmd`), and ACP.
     var shellCommandString: String? {
         for key in ["command", "cmd", "script"] {
             if let str = input[key]?.stringValue, !str.isEmpty {
-                return str
+                return ShellCommandClassifier.unwrapShellCommand(str)
             }
             if let arr = input[key]?.arrayValue {
                 let parts = arr.compactMap(\.stringValue)
@@ -132,21 +143,66 @@ public extension ToolCall {
                     if parts.count >= 3,
                        parts[1].hasPrefix("-"),
                        parts[1].contains("c") {
-                        return parts.dropFirst(2).joined(separator: " ")
+                        return ShellCommandClassifier.unwrapShellCommand(
+                            parts.dropFirst(2).joined(separator: " ")
+                        )
                     }
-                    return parts.joined(separator: " ")
+                    return ShellCommandClassifier.unwrapShellCommand(parts.joined(separator: " "))
                 }
+            }
+        }
+        if let actions = input["commandActions"]?.arrayValue {
+            let cmds = actions.compactMap { $0.objectValue?["command"]?.stringValue }.filter { !$0.isEmpty }
+            if !cmds.isEmpty {
+                return ShellCommandClassifier.unwrapShellCommand(cmds.joined(separator: "\n"))
             }
         }
         if let args = input["arguments"]?.objectValue {
             if let str = args["command"]?.stringValue, !str.isEmpty {
-                return str
+                return ShellCommandClassifier.unwrapShellCommand(str)
             }
             if let str = args["cmd"]?.stringValue, !str.isEmpty {
-                return str
+                return ShellCommandClassifier.unwrapShellCommand(str)
+            }
+        }
+        let lowerName = name.lowercased()
+        if Self.localCodeReplNames.contains(lowerName)
+            || lowerName.hasPrefix("mcp__node_repl__")
+            || lowerName.hasPrefix("mcp__js_repl__") {
+            let replCode = input["code"]?.stringValue
+                ?? input["arguments"]?.objectValue?["code"]?.stringValue
+                ?? input["input"]?.stringValue
+            if let replCode, !replCode.isEmpty {
+                let runner = lowerName.contains("python") ? "python3 -c" : "node -e"
+                return "\(runner) \(replCode)"
             }
         }
         return nil
+    }
+
+    /// Optional per-command working directory override (e.g. Codex `commandExecution.cwd`).
+    var shellWorkingDirectory: String? {
+        for key in ["cwd", "workdir", "working_directory"] {
+            if let dir = input[key]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !dir.isEmpty {
+                return dir
+            }
+        }
+        if let args = input["arguments"]?.objectValue,
+           let dir = args["cwd"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !dir.isEmpty {
+            return dir
+        }
+        return nil
+    }
+
+    /// Optional explicit script file path attached by the agent runtime (e.g. Codex `scriptPath`).
+    var referencedScriptPath: String? {
+        guard let path = input["scriptPath"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty else {
+            return nil
+        }
+        return path
     }
 
     /// File changes detected by `WorkspaceChangeTracker` during this shell command.

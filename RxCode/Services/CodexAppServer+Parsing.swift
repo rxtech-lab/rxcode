@@ -12,11 +12,12 @@ extension CodexAppServer {
             let normalizedType = type.lowercased()
             if normalizedType.contains("command") { return "Bash" }
             if normalizedType.contains("file") || normalizedType.contains("patch") { return "Edit" }
-            if normalizedType.contains("message") { return "message" }
+            if normalizedType.contains("message") || normalizedType == "reasoning" { return "message" }
             return type
         }
         guard let name = Self.firstString(in: item, keys: ["name", "toolName"]) else { return nil }
-        return name.lowercased().contains("message") ? "message" : name
+        let lowerName = name.lowercased()
+        return (lowerName.contains("message") || lowerName == "reasoning") ? "message" : name
     }
 
     private func mcpToolName(from item: [String: JSONValue]) -> String? {
@@ -55,11 +56,24 @@ extension CodexAppServer {
         return "mcpToolCall"
     }
 
+    static func sanitizedToolInput(from item: [String: JSONValue]) -> [String: JSONValue] {
+        if let explicit = item["input"]?.objectValue ?? item["arguments"]?.objectValue {
+            return explicit
+        }
+        var copy = item
+        copy.removeValue(forKey: "aggregatedOutput")
+        copy.removeValue(forKey: "output")
+        copy.removeValue(forKey: "result")
+        return copy
+    }
+
     static func toolOutput(from item: [String: JSONValue]) -> String {
         if item["type"]?.stringValue == "imageGeneration" {
             return imageGenerationOutput(from: item)
         }
-        if let output = firstPresentValue(in: item, keys: ["output", "result", "summary", "message"]) {
+        if let output = firstPresentValue(in: item, keys: [
+            "output", "aggregatedOutput", "stdout", "result", "summary", "message"
+        ]) {
             return stringForToolOutput(output)
         }
         if let error = item["error"], toolValueIndicatesError(error) {

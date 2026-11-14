@@ -493,7 +493,7 @@ extension AppState {
                                             state.messages[$0].role == .assistant && state.messages[$0].isStreaming
                                         }) {
                                             state.messages[idx].isStreaming = false
-                                            state.messages[idx].finalizeToolCalls()
+                                            state.messages[idx].finalizeToolCalls(dropIncomplete: false)
                                             Self.stripNoOpText(at: idx, in: &state.messages)
                                         }
                                         state.messages.append(ChatMessage(role: .assistant, isStreaming: true))

@@ -151,45 +151,50 @@ extension AppState {
             state.messages.indices.reversed().first { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }
         }
 
-        // 1. Tool results — apply to the current streaming assistant message
+        // 1. Tool results — match each `toolUseId` against its owning assistant message
+        //    (not just `lastAssistantIdx()`, since parallel/interleaved tool calls in
+        //    Codex/ACP can span earlier assistant bubbles).
         if hasToolResults {
             let results = state.pendingToolResults
             state.pendingToolResults.removeAll(keepingCapacity: true)
-            if let idx = lastAssistantIdx() {
-                for (toolUseId, content, isError) in results {
-                    let completedCall = state.messages[idx].toolCallIndex(id: toolUseId)
-                        .flatMap { state.messages[idx].blocks[$0].toolCall }
-                    let editPersistInfos: [(path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)] = {
-                        guard !isError,
-                              let call = completedCall,
-                              ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased())
-                        else { return [] }
-                        let claudeHunks = call.fileEditHunks
-                        if !claudeHunks.isEmpty, let path = call.editedFilePath {
-                            return [(path, claudeHunks, call.name.lowercased() == "write")]
-                        }
-                        // Codex `fileChange` shape: one tool call may touch multiple files.
-                        let codexDiffs = call.fileChangeDiffs
-                        guard !codexDiffs.isEmpty else { return [] }
-                        return codexDiffs.map { ($0.path, [$0.hunk], false) }
-                    }()
-                    // Preserve the user-decision summary on ExitPlanMode. After the user
-                    // accepts/rejects the plan, the CLI emits its own follow-up tool_result
-                    // ("User has approved your plan…") which would overwrite "Accepted with …"
-                    // and flip the plan card back to "pending" — re-showing the accept buttons
-                    // on a card that was just decided.
-                    let skipResultOverwrite: Bool = {
-                        guard let call = completedCall,
-                              Self.isExitPlanModeCall(call),
-                              let existing = call.result else { return false }
-                        return Self.planDecisionResultPrefixes.contains { existing.hasPrefix($0) }
-                    }()
-                    if !skipResultOverwrite {
-                        state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
+            for (toolUseId, content, isError) in results {
+                let matchedIdx = state.messages.indices.reversed().first(where: {
+                    state.messages[$0].role == .assistant && state.messages[$0].toolCallIndex(id: toolUseId) != nil
+                }) ?? lastAssistantIdx()
+                guard let idx = matchedIdx else { continue }
+
+                let completedCall = state.messages[idx].toolCallIndex(id: toolUseId)
+                    .flatMap { state.messages[idx].blocks[$0].toolCall }
+                let editPersistInfos: [(path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)] = {
+                    guard !isError,
+                          let call = completedCall,
+                          ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased())
+                    else { return [] }
+                    let claudeHunks = call.fileEditHunks
+                    if !claudeHunks.isEmpty, let path = call.editedFilePath {
+                        return [(path, claudeHunks, call.name.lowercased() == "write")]
                     }
-                    persistStructuredFileEdits(editPersistInfos, state: state, sessionKey: key)
-                    handleCompletedShellToolCallIfNeeded(call: completedCall, sessionKey: key, state: state)
+                    // Codex `fileChange` shape: one tool call may touch multiple files.
+                    let codexDiffs = call.fileChangeDiffs
+                    guard !codexDiffs.isEmpty else { return [] }
+                    return codexDiffs.map { ($0.path, [$0.hunk], false) }
+                }()
+                // Preserve the user-decision summary on ExitPlanMode. After the user
+                // accepts/rejects the plan, the CLI emits its own follow-up tool_result
+                // ("User has approved your plan…") which would overwrite "Accepted with …"
+                // and flip the plan card back to "pending" — re-showing the accept buttons
+                // on a card that was just decided.
+                let skipResultOverwrite: Bool = {
+                    guard let call = completedCall,
+                          Self.isExitPlanModeCall(call),
+                          let existing = call.result else { return false }
+                    return Self.planDecisionResultPrefixes.contains { existing.hasPrefix($0) }
+                }()
+                if !skipResultOverwrite {
+                    state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
                 }
+                persistStructuredFileEdits(editPersistInfos, state: state, sessionKey: key)
+                handleCompletedShellToolCallIfNeeded(call: completedCall, sessionKey: key, state: state)
             }
         }
 
@@ -197,9 +202,10 @@ extension AppState {
         if let buffered = textGroup, !buffered.isEmpty {
             if let idx = lastStreamingAssistantIdx() {
                 if state.needsNewMessage {
-                    // New Claude turn after receiving tool result — start a new ChatMessage
+                    // New turn segment after receiving tool result — start a new ChatMessage
+                    // without dropping sibling parallel tool calls still awaiting results.
                     state.messages[idx].isStreaming = false
-                    state.messages[idx].finalizeToolCalls()
+                    state.messages[idx].finalizeToolCalls(dropIncomplete: false)
                     Self.stripNoOpText(at: idx, in: &state.messages)
                     state.needsNewMessage = false
                     state.messages.append(ChatMessage(role: .assistant, content: buffered, isStreaming: true))
@@ -365,11 +371,12 @@ extension AppState {
         flushPendingUpdates(for: sessionKey, forceText: true)
         updateState(sessionKey) { state in
             state.isThinking = false
-            // needsNewMessage: new Claude turn after tool result — create a new ChatMessage
+            // needsNewMessage: new turn segment after tool result — create a new ChatMessage
+            // without discarding any sibling parallel tool calls still awaiting results.
             if state.needsNewMessage {
                 if let idx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }) {
                     state.messages[idx].isStreaming = false
-                    state.messages[idx].finalizeToolCalls()
+                    state.messages[idx].finalizeToolCalls(dropIncomplete: false)
                     Self.stripNoOpText(at: idx, in: &state.messages)
                 }
                 state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
@@ -393,34 +400,41 @@ extension AppState {
     /// depend on them — the pre-edit file snapshot and TodoWrite extraction.
     func applyToolCallInput(id toolId: String, input: [String: JSONValue], for sessionKey: String) {
         var todos: [TodoItem]?
-        var appliedToolName: String?
+        var spanUpdate: (name: String, input: [String: JSONValue])?
         updateState(sessionKey) { state in
             if state.activeToolId == toolId {
                 state.activeToolId = nil
                 state.activeToolInputBuffer = ""
             }
             guard let msgIdx = state.messages.indices.reversed().first(where: {
-                state.messages[$0].role == .assistant && state.messages[$0].isStreaming
+                state.messages[$0].role == .assistant && state.messages[$0].toolCallIndex(id: toolId) != nil
             }), let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId) else { return }
 
-            state.messages[msgIdx].blocks[blockIdx].toolCall?.input = input
-            guard let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name else { return }
-            appliedToolName = toolName
+            var merged = state.messages[msgIdx].blocks[blockIdx].toolCall?.input ?? [:]
+            for (k, v) in input {
+                merged[k] = v
+            }
+            state.messages[msgIdx].blocks[blockIdx].toolCall?.input = merged
+            guard let toolCall = state.messages[msgIdx].blocks[blockIdx].toolCall else { return }
+            let toolName = toolCall.name
+            if toolCall.result == nil {
+                spanUpdate = (toolName, merged)
+            }
 
             // Kick off the pre-edit file snapshot now that the tool input (and
             // therefore `file_path`) is finally known. ACP runtimes hit
             // `captureEditingFileSnapshot` from their `.assistant` block; the
             // Claude streaming path never delivers `file_path` until the
             // arguments finish, so this is the earliest point it can run.
-            Self.captureEditingFileSnapshot(toolName: toolName, input: input, state: &state)
+            Self.captureEditingFileSnapshot(toolName: toolName, input: merged, state: &state)
 
             if toolName.lowercased() == "todowrite" {
-                todos = TodoExtractor.parse(input: input)
+                todos = TodoExtractor.parse(input: merged)
             }
         }
 
-        if let appliedToolName {
-            shellTrackerUpsertToolSpan(id: toolId, name: appliedToolName, input: input, sessionKey: sessionKey)
+        if let spanUpdate {
+            shellTrackerUpsertToolSpan(id: toolId, name: spanUpdate.name, input: spanUpdate.input, sessionKey: sessionKey)
         }
 
         if let todos {
@@ -478,16 +492,20 @@ extension AppState {
             state.lastStreamEventDate = nil
             state.liveBackgroundTaskIds.removeAll()
             state.unconsumedSteerCount = 0
-            if let idx = state.messages.indices.reversed().first(where: {
-                state.messages[$0].role == .assistant && state.messages[$0].isStreaming
-            }) {
+            for idx in state.messages.indices where state.messages[idx].role == .assistant {
+                let hasPendingTool = state.messages[idx].blocks.contains {
+                    guard let tc = $0.toolCall else { return false }
+                    return tc.result == nil && !tc.isKeepAlways
+                }
+                guard state.messages[idx].isStreaming || hasPendingTool else { continue }
                 // The user paused this turn — keep the partial assistant bubble
                 // visible. markStreamInterrupted() clears the message's streaming
                 // flag and retains in-progress tool calls (flagged as interrupted)
                 // instead of dropping them; the no-op strip below is told not to
                 // delete an emptied message.
+                let wasStreamingBubble = state.messages[idx].isStreaming
                 state.messages[idx].markStreamInterrupted()
-                if let start = state.streamingStartDate {
+                if wasStreamingBubble, let start = state.streamingStartDate {
                     state.messages[idx].duration = Date().timeIntervalSince(start)
                 }
                 Self.stripNoOpText(at: idx, in: &state.messages, removeIfEmpty: false)

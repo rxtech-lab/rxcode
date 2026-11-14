@@ -247,7 +247,7 @@ extension CodexAppServer {
     func emitToolStart(item: [String: JSONValue], continuation: AsyncStream<StreamEvent>.Continuation) {
         guard let name = toolName(from: item), name != "message" else { return }
         let id = Self.firstString(in: item, keys: ["id", "itemId", "callId"]) ?? UUID().uuidString
-        let input = item["input"]?.objectValue ?? item["arguments"]?.objectValue ?? item
+        let input = Self.sanitizedToolInput(from: item)
         continuation.yield(.unknown(Self.claudeToolStart(id: id, name: name)))
         continuation.yield(.unknown(Self.claudeInputDelta(input)))
         continuation.yield(.unknown(Self.claudeContentBlockStop()))
@@ -256,9 +256,17 @@ extension CodexAppServer {
     func emitToolCompletion(item: [String: JSONValue], continuation: AsyncStream<StreamEvent>.Continuation) {
         guard let name = toolName(from: item), name != "message" else { return }
         let id = Self.firstString(in: item, keys: ["id", "itemId", "callId"]) ?? UUID().uuidString
+        let input = Self.sanitizedToolInput(from: item)
+        if !input.isEmpty {
+            continuation.yield(.toolCallInput(id: id, input: input))
+        }
         let output = Self.toolOutput(from: item)
-        let isError = Self.toolValueIndicatesError(item["error"]) || item["isError"]?.boolValue == true
+        let statusLower = item["status"]?.stringValue?.lowercased()
+        let isError = Self.toolValueIndicatesError(item["error"])
+            || item["isError"]?.boolValue == true
             || Self.toolValueIndicatesError(item["failure"])
+            || statusLower == "failed"
+            || statusLower == "declined"
         continuation.yield(.user(UserMessage(toolUseId: id, content: output, isError: isError)))
     }
 

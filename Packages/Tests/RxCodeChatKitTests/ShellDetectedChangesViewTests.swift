@@ -41,8 +41,8 @@ struct ShellDetectedChangesViewTests {
     }
 
     #if os(macOS)
-    @Test("Collapsed desktop tool group shows detected shell changes without expanding ToolResultView")
-    func collapsedDesktopGroupShowsDetectedShellChanges() throws {
+    @Test("Collapsed desktop tool group folds detected shell changes with its tool calls")
+    func collapsedDesktopGroupHidesDetectedShellChanges() throws {
         var scriptTool = ToolCall(
             id: "exec-1",
             name: "exec_command",
@@ -70,17 +70,16 @@ struct ShellDetectedChangesViewTests {
         let inspected = try view.inspect()
         let labels = inspected.findAll(ViewType.Text.self).compactMap { try? $0.string() }
 
-        // Group remains collapsed (`ToolResultView` is not mounted), yet the detected file diff is shown immediately!
         #expect(inspected.findAll(ToolResultView.self).isEmpty)
-        #expect(inspected.findAll(ShellDetectedChangesView.self).count == 1)
-        #expect(labels.contains("App.swift"))
-        #expect(labels.contains("Concurrent"))
-        #expect(labels.contains("+1"))
-        #expect(labels.contains("−1"))
+        #expect(inspected.findAll(ShellDetectedChangesView.self).isEmpty)
+        #expect(!labels.contains("App.swift"))
+        #expect(!labels.contains("Concurrent"))
+        #expect(labels.contains("2 tool calls"))
+
     }
     #endif
 
-    @Test("ToolActivityGroupView surfaces detected shell changes and hides synthetic input keys in detail view")
+    @Test("ToolActivityGroupView folds detected changes and preserves them in detail views")
     func toolActivityGroupAndDetailViewHandleDetectedShellChanges() throws {
         var tool = ToolCall(
             id: "acp-exec-1",
@@ -102,14 +101,19 @@ struct ShellDetectedChangesViewTests {
         ])
 
         let groupView = ToolActivityGroupView(tools: [tool], isStreaming: false)
-        let groupLabels = try groupView.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
-        #expect(groupLabels.contains("OldFile.swift"))
-        #expect(groupLabels.contains("Deleted"))
-        #expect(groupLabels.contains("−4"))
+        let inspectedGroup = try groupView.inspect()
+        let groupLabels = inspectedGroup.findAll(ViewType.Text.self).compactMap { try? $0.string() }
+        #expect(inspectedGroup.findAll(ShellDetectedChangesView.self).isEmpty)
+        #expect(!groupLabels.contains("OldFile.swift"))
+        #expect(!groupLabels.contains("Deleted"))
+        #expect(!groupLabels.contains("−4"))
 
         let detailView = ToolActivityDetailView(tool: tool, isStreaming: false)
         let detailLabels = try detailView.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
         #expect(detailLabels.contains("Detected File Changes"))
+        #expect(detailLabels.contains("OldFile.swift"))
+        #expect(detailLabels.contains("Deleted"))
+        #expect(detailLabels.contains("−4"))
         #expect(!detailLabels.contains { $0.contains(ToolCall.detectedFileChangesInputKey) })
         #expect(!detailLabels.contains { $0.contains(ToolCall.acpKindInputKey) })
 

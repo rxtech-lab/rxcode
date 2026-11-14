@@ -18,7 +18,7 @@ public struct ShellDetectedChangesView: View {
     }
 
     /// Aggregates detected shell file changes across multiple `ToolCall`s in a
-    /// collapsed transient tool group while preserving first-seen file order.
+    /// tool group while preserving first-seen file order.
     public static func aggregatedChanges(from tools: [ToolCall]) -> [DetectedShellFileChange] {
         var order: [String] = []
         var byPath: [String: DetectedShellFileChange] = [:]

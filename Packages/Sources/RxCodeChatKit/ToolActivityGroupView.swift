@@ -20,15 +20,11 @@ public struct ToolActivityGroupView: View {
     }
 
     public var body: some View {
-        let detectedChanges = ShellDetectedChangesView.aggregatedChanges(from: tools)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(views) { view in
                 JSONUIToolCard(toolCall: view, isStreaming: isStreaming)
             }
             if !tools.isEmpty { activity }
-            if !detectedChanges.isEmpty {
-                ShellDetectedChangesView(changes: detectedChanges)
-            }
         }
     }
 

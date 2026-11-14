@@ -176,7 +176,8 @@ extension WorkspaceChangeTracker {
 
             let cfArray = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue()
             guard let rawPaths = cfArray as? [String], !rawPaths.isEmpty else { return }
-            Task { await tracker.ingestFSEventPaths(rawPaths) }
+            bridge.append(rawPaths)
+            Task { await tracker.drainFSEvents(from: bridge) }
         }
 
         let flags = UInt32(
@@ -206,19 +207,40 @@ extension WorkspaceChangeTracker {
     }
 
     func flushFSEvents() async {
-        guard let stream = fsEventStream else { return }
+        guard let stream = fsEventStream, let bridgePtr = fsEventBridgePtr else { return }
+        let bridge = Unmanaged<FSEventBridge>.fromOpaque(bridgePtr).takeUnretainedValue()
         let nonisolatedStream = UnsafeSendableFSEventStream(stream: stream)
+        fsEventFlushCount += 1
+        defer {
+            fsEventFlushCount -= 1
+            if activeStreams.isEmpty, activeSpans.isEmpty {
+                stopFSEventsIfIdle()
+            }
+        }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            fsQueue.async {
+            // Flush waits for callbacks on fsQueue, so it must run elsewhere.
+            DispatchQueue.global(qos: .userInitiated).async {
                 FSEventStreamFlushSync(nonisolatedStream.stream)
                 continuation.resume()
             }
+        }
+        // Callback tasks may still be waiting to enter this actor. Consume their
+        // buffered paths before the caller reads or resets the ledger.
+        drainFSEvents(from: bridge)
+    }
+
+    func drainFSEvents(from bridge: FSEventBridge) {
+        let paths = bridge.takePaths()
+        if !paths.isEmpty {
+            ingestFSEventPaths(paths)
         }
     }
 
     func stopFSEventsIfIdle() {
         probeSamplerTask?.cancel()
         probeSamplerTask = nil
+        // An awaiting flush still owns the active stream and callback context.
+        guard fsEventFlushCount == 0 else { return }
         guard let stream = fsEventStream else { return }
         FSEventStreamStop(stream)
         FSEventStreamInvalidate(stream)

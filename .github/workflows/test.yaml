@@ -28,6 +28,7 @@ jobs:
   test-packages:
     name: swift test (Packages)
     runs-on: [self-hosted, regular]
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code

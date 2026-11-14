@@ -224,6 +224,35 @@ struct WorkspaceChangeTrackerTests {
     // MARK: - Real Git Workspace Integration Tests
 
     #if os(macOS)
+    @Test("Flushing queued filesystem events completes and makes their paths visible", .timeLimit(.minutes(1)))
+    func flushDeliversPendingPaths() async throws {
+        let repoURL = try makeTemporaryGitRepo()
+        defer { try? FileManager.default.removeItem(at: repoURL) }
+        let canonicalRoot = repoURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let tracker = WorkspaceChangeTracker(preferredRootPath: repoURL.path, canonicalRootPath: canonicalRoot)
+        let streamId = UUID()
+        await tracker.streamDidStart(streamId: streamId, sessionKey: "flush", cwd: repoURL.path)
+        await tracker.upsertShellSpan(
+            streamId: streamId, sessionKey: "flush", toolUseId: "write",
+            command: "python3 write_files.py", cwd: repoURL.path
+        )
+
+        for round in 0..<10 {
+            let file = repoURL.appendingPathComponent("event-\(round).txt")
+            try "queued event \(round)\n".write(to: file, atomically: true, encoding: .utf8)
+            let path = file.resolvingSymlinksInPath().standardizedFileURL.path
+            // Kernel events can reach fseventsd after the first flush request.
+            for _ in 0..<100 {
+                await tracker.flushFSEvents()
+                if await tracker.pendingEventPaths.contains(path) { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            let paths = await tracker.pendingEventPaths
+            #expect(paths.contains(path))
+        }
+        await tracker.streamDidEnd(streamId: streamId)
+    }
+
     @Test("WorkspaceChangeTracker detects Python/shell create, modify, delete and ignores pre-existing dirty files")
     func trackerDetectsShellCreateModifyDeleteAndIgnoresPreExistingDirty() async throws {
         let repoURL = try makeTemporaryGitRepo()

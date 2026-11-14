@@ -98,8 +98,22 @@ public actor WorkspaceChangeTracker {
 
     final class FSEventBridge: @unchecked Sendable {
         weak var tracker: WorkspaceChangeTracker?
+        private let lock = NSLock()
+        private var paths: [String] = []
+
         init(tracker: WorkspaceChangeTracker) {
             self.tracker = tracker
+        }
+
+        func append(_ newPaths: [String]) {
+            lock.withLock { paths.append(contentsOf: newPaths) }
+        }
+
+        func takePaths() -> [String] {
+            lock.withLock {
+                defer { paths.removeAll(keepingCapacity: true) }
+                return paths
+            }
         }
     }
 
@@ -148,6 +162,7 @@ public actor WorkspaceChangeTracker {
 
     var fsEventStream: FSEventStreamRef?
     var fsEventBridgePtr: UnsafeMutableRawPointer?
+    var fsEventFlushCount = 0
 
     // MARK: - Init
 

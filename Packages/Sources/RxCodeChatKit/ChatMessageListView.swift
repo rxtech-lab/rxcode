@@ -107,7 +107,8 @@ struct ChatTransientToolSummaryView: View {
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let detectedChanges = ShellDetectedChangesView.aggregatedChanges(from: tools)
+        VStack(alignment: .leading, spacing: 10) {
             Button {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                     isExpanded.toggle()
@@ -137,6 +138,10 @@ struct ChatTransientToolSummaryView: View {
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .accessibilityIdentifier("tool-calls-toggle")
+
+            if !isExpanded && !detectedChanges.isEmpty {
+                ShellDetectedChangesView(changes: detectedChanges)
+            }
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {

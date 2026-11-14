@@ -167,21 +167,12 @@ final class ThreadStore {
 
     /// Remove every thread — and its full per-thread footprint (todo snapshots,
     /// file edits, queues, plan decisions, hook status, summaries, embedding
-    /// chunks) — whose project is no longer known. Mirrors
-    /// `deleteBriefingMetadata` but covers the data that drives history and
-    /// global search. Used at launch to purge orphans left behind by projects
-    /// that were deleted before the cascade in `deleteProject` existed (or any
-    /// leak), so they never resurface in the sidebar or as "Unknown project"
-    /// search results. Returns the number of thread rows removed.
+    /// chunks) — whose project is no longer known.
     func pruneOrphanThreads(excludingProjectIds knownProjectIds: Set<UUID>) -> Int {
         let threadRows = (try? context.fetch(FetchDescriptor<ChatThread>())) ?? []
         let orphans = threadRows.filter { !knownProjectIds.contains($0.projectId) }
         let orphanIds = orphans.map(\.id)
 
-        // Also sweep embedding chunks whose owning thread row is already gone —
-        // these are what feed the search source directly. Each chunk carries an
-        // embedding vector, so identifying the orphans reads the owning project
-        // id alone; only rows that are actually orphaned get materialized.
         let orphanChunks = fetchOrphanEmbeddingChunks(excludingProjectIds: knownProjectIds)
 
         guard !orphans.isEmpty || !orphanChunks.isEmpty else { return 0 }
@@ -190,6 +181,7 @@ final class ThreadStore {
         for id in orphanIds {
             deleteTodoSnapshotRow(sessionId: id)
             deleteFileEditRows(sessionId: id)
+            deleteDetectedToolChangeRows(sessionId: id)
             deleteQueueRows(sessionKey: id)
             deletePlanDecisionRows(sessionId: id)
             deleteHookStatusRow(sessionId: id)
@@ -202,7 +194,6 @@ final class ThreadStore {
 
         return orphans.count
     }
-
 
     // MARK: - Writes
 
@@ -306,9 +297,7 @@ final class ThreadStore {
         save()
     }
 
-    /// Removes every generated briefing for the branch (all days). Thread
-    /// summaries remain attached to their threads and can still be used to
-    /// generate a new one.
+    /// Removes every generated briefing for the branch (all days).
     @discardableResult
     func deleteBranchBriefing(projectId: UUID, branch: String) throws -> Bool {
         let rows = fetchBranchBriefings(projectId: projectId, branch: branch)
@@ -336,10 +325,7 @@ final class ThreadStore {
         save()
     }
 
-    /// Delete branch briefings whose `lastSeenAt` is older than `cutoff` — i.e.
-    /// branches that haven't been observed for the retention window and have
-    /// presumably been deleted both locally and remotely. Returns the deleted
-    /// record ids.
+    /// Delete branch briefings whose `lastSeenAt` is older than `cutoff`.
     @discardableResult
     func purgeStaleBranchBriefings(olderThan cutoff: Date) -> [String] {
         let descriptor = FetchDescriptor<BranchBriefingRecord>(
@@ -354,8 +340,7 @@ final class ThreadStore {
     }
 
     /// Persist the latest code-review verdict on the thread row so the sidebar
-    /// review dot survives a reload. `sessionId` may be the thread's local id or
-    /// its resolved CLI session id — match either. No-op if no row is found.
+    /// review dot survives a reload.
     func setReviewPassed(sessionId: String, passed: Bool) {
         let row = fetch(id: sessionId) ?? fetchByCliSessionId(sessionId)
         guard let row else { return }
@@ -364,8 +349,7 @@ final class ThreadStore {
         save()
     }
 
-    /// Rehydrate the in-memory `reviewPassedBySession` map at launch. Keyed by
-    /// both the thread's local id and its CLI session id so either lookup hits.
+    /// Rehydrate the in-memory `reviewPassedBySession` map at launch.
     func loadReviewVerdicts() -> [String: Bool] {
         let descriptor = FetchDescriptor<ChatThread>(
             predicate: #Predicate { $0.reviewPassed != nil }
@@ -396,13 +380,10 @@ final class ThreadStore {
     }
 
     /// Rename a thread row's id (used when AppState swaps placeholder → CLI sid in `allSessionSummaries`).
-    /// Preserves all metadata.
     func renameId(from oldId: String, to newId: String) {
         guard oldId != newId else { return }
         guard let row = fetch(id: oldId) else { return }
-        // If a row already exists at newId, drop oldId and prefer the newId row.
         if let existingAtNew = fetch(id: newId) {
-            // Keep the more useful title/metadata from oldId if newId is still default.
             if existingAtNew.title == ChatSession.defaultTitle, row.title != ChatSession.defaultTitle {
                 existingAtNew.title = row.title
             }
@@ -417,6 +398,7 @@ final class ThreadStore {
         }
         renameTodoSnapshot(from: oldId, to: newId)
         renameFileEdits(from: oldId, to: newId)
+        renameDetectedToolChanges(from: oldId, to: newId)
         renameQueueKey(from: oldId, to: newId)
         renamePlanDecisions(from: oldId, to: newId)
         renameHookStatus(from: oldId, to: newId)
@@ -425,8 +407,7 @@ final class ThreadStore {
         save()
     }
 
-    /// Mark a thread row as archived (or restore it). Returns the updated summary
-    /// on success so callers can keep `allSessionSummaries` in sync.
+    /// Mark a thread row as archived (or restore it).
     @discardableResult
     func setArchived(id: String, archived: Bool, at date: Date = .now) -> ChatSession.Summary? {
         guard let row = fetch(id: id) else { return nil }
@@ -436,9 +417,6 @@ final class ThreadStore {
         return row.toSummary()
     }
 
-    /// Return the ids of archived, non-pinned threads whose `archivedAt` is older
-    /// than `cutoff`. Caller is responsible for routing each id through the full
-    /// delete path (persistence + search service + SwiftData) — see `AppState`.
     func staleArchivedIds(olderThan cutoff: Date) -> [String] {
         let descriptor = FetchDescriptor<ChatThread>(
             predicate: #Predicate { row in
@@ -449,8 +427,6 @@ final class ThreadStore {
         return rows.map(\.id)
     }
 
-    /// Archive all non-pinned, non-archived threads whose `updatedAt` is older than
-    /// `cutoff`. Returns the ids that were archived.
     func archiveStale(olderThan cutoff: Date, now: Date = .now) -> [String] {
         let descriptor = FetchDescriptor<ChatThread>(
             predicate: #Predicate { row in
@@ -472,6 +448,7 @@ final class ThreadStore {
         context.delete(row)
         deleteTodoSnapshotRow(sessionId: id)
         deleteFileEditRows(sessionId: id)
+        deleteDetectedToolChangeRows(sessionId: id)
         deleteQueueRows(sessionKey: id)
         deletePlanDecisionRows(sessionId: id)
         deleteHookStatusRow(sessionId: id)
@@ -495,6 +472,7 @@ final class ThreadStore {
             for id in ids {
                 deleteTodoSnapshotRow(sessionId: id)
                 deleteFileEditRows(sessionId: id)
+                deleteDetectedToolChangeRows(sessionId: id)
                 deleteQueueRows(sessionKey: id)
                 deletePlanDecisionRows(sessionId: id)
                 deleteHookStatusRow(sessionId: id)
@@ -507,6 +485,8 @@ final class ThreadStore {
                 for row in allTodos { context.delete(row) }
                 let allEdits = (try? context.fetch(FetchDescriptor<ThreadFileEdit>())) ?? []
                 for row in allEdits { context.delete(row) }
+                let allDetected = (try? context.fetch(FetchDescriptor<ToolDetectedChangeRecord>())) ?? []
+                for row in allDetected { context.delete(row) }
                 let allQueues = (try? context.fetch(FetchDescriptor<QueuedMessageRecord>())) ?? []
                 for row in allQueues { context.delete(row) }
                 let allPlans = (try? context.fetch(FetchDescriptor<PlanDecisionRecord>())) ?? []
@@ -564,7 +544,6 @@ final class ThreadStore {
         return (try? context.fetch(descriptor))?.first
     }
 
-    /// Every day's briefing for a branch, newest first.
     private func fetchBranchBriefings(projectId: UUID, branch: String) -> [BranchBriefingRecord] {
         let descriptor = FetchDescriptor<BranchBriefingRecord>(
             predicate: #Predicate { $0.projectId == projectId && $0.branch == branch },
@@ -577,9 +556,6 @@ final class ThreadStore {
         Calendar.current.startOfDay(for: date)
     }
 
-    /// Fill in `createdAt` on thread summaries persisted before it was tracked,
-    /// using the chat's own creation time so each chat lands on the day it was
-    /// started. Summaries whose chat no longer exists fall back to `updatedAt`.
     func backfillThreadSummaryCreatedAt() {
         let descriptor = FetchDescriptor<ThreadSummaryRecord>(
             predicate: #Predicate { $0.createdAt == nil }
@@ -600,13 +576,6 @@ final class ThreadStore {
         return (try? context.fetch(descriptor))?.first
     }
 
-    /// Persisted todo progress for every session, keyed by session id, in a single
-    /// query. Backs the sidebar's per-row progress ring, which previously ran a
-    /// `fetchTodoSnapshot` per visible thread on every view-graph update.
-    ///
-    /// Only the counts are fetched, never `itemsData` — this reloads on every todo
-    /// revision bump, and materializing each row's encoded item list would churn
-    /// megabytes for numbers the sidebar already has.
     func loadTodoProgressBySession() -> [String: ChatTodoProgress] {
         var descriptor = FetchDescriptor<TodoSnapshot>()
         descriptor.propertiesToFetch = [\.sessionId, \.done, \.total, \.inProgress]
@@ -620,9 +589,6 @@ final class ThreadStore {
         }
     }
 
-    /// Persisted todo items for every session with at least one todo, keyed by
-    /// session id, in a single query. Backs the mobile snapshot, which otherwise
-    /// ran two `fetchTodoSnapshot` queries per session on the main actor.
     func loadTodoItemsBySession() -> [String: [TodoItem]] {
         let descriptor = FetchDescriptor<TodoSnapshot>(predicate: #Predicate { $0.total > 0 })
         let rows = (try? context.fetch(descriptor)) ?? []
@@ -644,7 +610,6 @@ final class ThreadStore {
         guard oldId != newId else { return }
         guard let row = fetchTodoSnapshot(sessionId: oldId) else { return }
         if let existing = fetchTodoSnapshot(sessionId: newId) {
-            // Prefer the row tied to the new sid; drop the placeholder row.
             context.delete(row)
             _ = existing
         } else {
@@ -721,8 +686,6 @@ final class ThreadStore {
 
     // MARK: - Hook Cards
 
-    /// All persisted hook cards for a session, oldest first, so a reload rebuilds
-    /// them in the order they were originally inserted.
     func loadHookCards(sessionId: String) -> [HookCardRecord] {
         let descriptor = FetchDescriptor<HookCardRecord>(
             predicate: #Predicate { $0.sessionId == sessionId },
@@ -739,9 +702,6 @@ final class ThreadStore {
         return (try? context.fetch(descriptor))?.first
     }
 
-    /// Insert (or update) a hook card row keyed by its tool-call id. Called at
-    /// insert time (in-progress) and again on completion so the card survives a
-    /// reload at any point in its lifecycle.
     func upsertHookCard(
         sessionId: String,
         toolId: String,
@@ -774,9 +734,6 @@ final class ThreadStore {
         save()
     }
 
-    /// Update a previously-inserted card's result/state on completion,
-    /// preserving its stored `toolName`/`input`. Returns `false` (no-op) if the
-    /// row isn't found, so callers can fall back to an insert.
     @discardableResult
     func completeHookCard(toolId: String, result: String, isError: Bool, isComplete: Bool = true) -> Bool {
         guard let row = fetchHookCard(toolId: toolId) else { return false }
@@ -788,9 +745,6 @@ final class ThreadStore {
         return true
     }
 
-    /// Finalize any hook card rows left "in progress" by a previous launch (the
-    /// app closed while a long-running hook like code review was still running).
-    /// Without this they would rebuild as a spinner that never resolves.
     func finalizeInterruptedHookCards() {
         let descriptor = FetchDescriptor<HookCardRecord>(
             predicate: #Predicate { $0.isComplete == false }
@@ -826,9 +780,6 @@ final class ThreadStore {
         return (try? context.fetch(descriptor))?.first
     }
 
-    /// Finalize any hook rows left "in progress" by a previous launch (the app
-    /// closed while a long-running hook like code review was still streaming).
-    /// Without this they would rebuild as a spinner that never resolves.
     func finalizeInterruptedHooks() {
         let descriptor = FetchDescriptor<HookStatusRecord>(
             predicate: #Predicate { $0.isComplete == false }
@@ -845,10 +796,6 @@ final class ThreadStore {
         save()
     }
 
-    /// Finalize completion-check threads left mid-check by a previous launch.
-    /// Their run died with the process, so no verdict is ever coming — without
-    /// this the sidebar rebuilds them as a "Verifying" chip that never resolves.
-    /// Returns the ids that were relabelled.
     @discardableResult
     func finalizeInterruptedCompletionChecks() -> [String] {
         let inProgress = TaskCompletionCheckLabel.inProgress
@@ -863,8 +810,6 @@ final class ThreadStore {
         return rows.map(\.id)
     }
 
-    /// Stamp linkage metadata (parent thread / label / skip-hooks) onto a thread
-    /// row. Used right after a linked `[Code Review]` thread's real id resolves.
     func setThreadLinkage(
         sessionId: String,
         parentThreadId: String?,
@@ -891,125 +836,6 @@ final class ThreadStore {
     private func deleteHookStatusRow(sessionId: String) {
         guard let row = fetchHookStatus(sessionId: sessionId) else { return }
         context.delete(row)
-    }
-
-    // MARK: - Thread File Edits
-
-    func fetchFileEdits(sessionId: String) -> [ThreadFileEdit] {
-        let descriptor = FetchDescriptor<ThreadFileEdit>(
-            predicate: #Predicate { $0.sessionId == sessionId },
-            sortBy: [SortDescriptor(\.firstEditedAt, order: .forward)]
-        )
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    /// Number of distinct files this session recorded edits to. There is one row
-    /// per `(sessionId, path)`, so a row count equals the distinct-file count —
-    /// a cheap query (no content loaded) used to gate the "Commit Files" action.
-    func fileEditCount(sessionId: String) -> Int {
-        let descriptor = FetchDescriptor<ThreadFileEdit>(
-            predicate: #Predicate { $0.sessionId == sessionId }
-        )
-        return (try? context.fetchCount(descriptor)) ?? 0
-    }
-
-    /// Every session id that recorded at least one file edit, in a single query.
-    /// The sidebar gates "Commit Files" per row from this set: asking with a
-    /// `fileEditCount` per row instead meant one SQLite query per visible thread
-    /// on every SwiftUI view-graph update.
-    ///
-    /// Only `sessionId` is fetched — a row also carries the file's original and
-    /// modified contents, which must not be materialized just to test existence.
-    func sessionIdsWithFileEdits() -> Set<String> {
-        var descriptor = FetchDescriptor<ThreadFileEdit>()
-        descriptor.propertiesToFetch = [\.sessionId]
-        let rows = (try? context.fetch(descriptor)) ?? []
-        return Set(rows.map(\.sessionId))
-    }
-
-    /// Edited-file count for every session, in a single query. Only `sessionId`
-    /// is fetched, for the same reason as `sessionIdsWithFileEdits()`.
-    func fileEditCountsBySession() -> [String: Int] {
-        var descriptor = FetchDescriptor<ThreadFileEdit>()
-        descriptor.propertiesToFetch = [\.sessionId]
-        let rows = (try? context.fetch(descriptor)) ?? []
-        return rows.reduce(into: [:]) { result, row in
-            result[row.sessionId, default: 0] += 1
-        }
-    }
-
-    private func fetchFileEdit(sessionId: String, path: String) -> ThreadFileEdit? {
-        var descriptor = FetchDescriptor<ThreadFileEdit>(
-            predicate: #Predicate { $0.sessionId == sessionId && $0.path == path }
-        )
-        descriptor.fetchLimit = 1
-        return (try? context.fetch(descriptor))?.first
-    }
-
-    /// Append edit hunks to the file's row for this session, creating the row if it
-    /// does not yet exist. Hunks are aggregated across turns; `containsWrite` becomes
-    /// sticky once any Write contributes.
-    ///
-    /// `originalContent` is the file's contents captured at the very first edit
-    /// to this path within this session. It's stored only on row creation —
-    /// subsequent calls preserve the original snapshot rather than overwriting
-    /// it, so the diff view always compares against the true thread-start state.
-    ///
-    /// `modifiedContent` is the file's contents re-read from disk immediately
-    /// after the tool_result. Unlike `originalContent` it is **always
-    /// overwritten** on subsequent edits so the "after" side reflects this
-    /// thread's most recent committed state.
-    func appendFileEdit(
-        sessionId: String,
-        path: String,
-        hunks: [PreviewFile.EditHunk],
-        containsWrite: Bool,
-        originalContent: String? = nil,
-        modifiedContent: String? = nil
-    ) {
-        guard !hunks.isEmpty else { return }
-        let name = (path as NSString).lastPathComponent
-        if let existing = fetchFileEdit(sessionId: sessionId, path: path) {
-            existing.append(hunks: hunks, containsWrite: containsWrite)
-            existing.name = name
-            if existing.originalContent == nil, let originalContent {
-                existing.originalContent = originalContent
-            }
-            existing.modifiedContent = modifiedContent
-        } else {
-            context.insert(ThreadFileEdit(
-                sessionId: sessionId,
-                path: path,
-                name: name,
-                hunks: hunks,
-                containsWrite: containsWrite,
-                originalContent: originalContent,
-                modifiedContent: modifiedContent
-            ))
-        }
-        save()
-    }
-
-    func renameFileEdits(from oldId: String, to newId: String) {
-        guard oldId != newId else { return }
-        let rows = fetchFileEdits(sessionId: oldId)
-        for row in rows {
-            if let existing = fetchFileEdit(sessionId: newId, path: row.path) {
-                existing.append(hunks: row.hunks, containsWrite: row.containsWrite)
-                context.delete(row)
-            } else {
-                row.sessionId = newId
-            }
-        }
-    }
-
-    func deleteFileEdits(sessionId: String) {
-        deleteFileEditRows(sessionId: sessionId)
-        save()
-    }
-
-    private func deleteFileEditRows(sessionId: String) {
-        for row in fetchFileEdits(sessionId: sessionId) { context.delete(row) }
     }
 
     func save() {

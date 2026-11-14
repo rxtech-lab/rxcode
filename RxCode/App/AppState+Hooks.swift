@@ -120,22 +120,21 @@ extension AppState {
         "Hook: \(name.isEmpty ? "Untitled" : name)"
     }
 
-    /// Rebuild every persisted hook card for a session and merge them back into a
-    /// freshly-loaded message list so the hooks stay visible after a reload — and
-    /// at the position where they originally ran. Cards already present in the
-    /// live list (matched by tool id) are skipped, so an active-stream reconcile
-    /// won't duplicate them.
+    /// Rebuild every persisted hook card and detected shell file-change sidecar
+    /// for a session and merge them back into a freshly-loaded message list so
+    /// both survive CLI-backed session reloads.
     ///
     /// The transcript renders in array order, so each card is inserted at its
     /// chronological spot by `createdAt` (loaded CLI messages carry real
     /// timestamps): a before-session-start card stays at the top, a between-turns
     /// card stays between turns, instead of every card jumping to the bottom.
     func messagesWithPersistedHookCard(_ messages: [ChatMessage], sessionId: String) -> [ChatMessage] {
+        let rehydrated = rehydrateDetectedToolChanges(in: messages, sessionId: sessionId)
         // Oldest first, so cards inserted in the same gap keep their relative order.
         let records = threadStore.loadHookCards(sessionId: sessionId)
-        guard !records.isEmpty else { return messages }
+        guard !records.isEmpty else { return rehydrated }
 
-        var result = messages
+        var result = rehydrated
         for record in records {
             let alreadyPresent = result.contains { message in
                 message.blocks.contains { $0.toolCall?.id == record.toolId }

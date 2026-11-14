@@ -107,15 +107,6 @@ extension ACPService {
     }
 
     // MARK: - Tool Call Normalization
-    //
-    // ACP `tool_call` notifications expose two views of a tool invocation:
-    // a machine-readable `kind` ("edit", "execute", "read", …) and a
-    // human-readable `title`. The agent's `rawInput` is opaque (each agent
-    // chooses its own schema), but the optional `content` array surfaces
-    // structured `diff` entries (`{path, oldText, newText}`) that we can
-    // translate into the Claude-shaped `Edit`/`Write`/`MultiEdit` input keys
-    // the rest of RxCode (sidebar persistence, diff renderer, plan card)
-    // already understands.
 
     struct NormalizedToolCall {
         let name: String
@@ -141,10 +132,6 @@ extension ACPService {
     }
 
     /// Translates an ACP tool_call payload into a Claude-shaped (name, input).
-    /// Edit-kind calls with diff content become `Edit`/`Write`/`MultiEdit` so
-    /// `ChatMessage.fileEditHunks` and `editedFilePath` can extract the path
-    /// and hunks for sidebar persistence. Other kinds fall back to the agent's
-    /// title + rawInput unchanged.
     static func normalizeToolCall(
         kind: String?,
         title: String,
@@ -197,6 +184,15 @@ extension ACPService {
                 input["file_path"] = .string(path)
             }
             return NormalizedToolCall(name: "Edit", input: input)
+        }
+
+        if normalizedKind == "execute" {
+            var input = rawInput
+            input[ToolCall.acpKindInputKey] = .string("execute")
+            if input["command"] == nil, !title.isEmpty {
+                input["command"] = .string(title)
+            }
+            return NormalizedToolCall(name: title.isEmpty ? "Bash" : title, input: input)
         }
 
         return NormalizedToolCall(name: title, input: rawInput)

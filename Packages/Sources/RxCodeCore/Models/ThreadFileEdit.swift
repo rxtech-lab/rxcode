@@ -2,9 +2,10 @@ import Foundation
 import SwiftData
 
 /// Persisted record of a single edited file within a chat thread. One row per
-/// (sessionId, path). Each row aggregates every Edit/MultiEdit/Write hunk applied
-/// to that path across all turns in the thread, so the "This thread" inspector
-/// can show file-level edits without re-reading the full message log.
+/// (sessionId, path). Each row aggregates every Edit/MultiEdit/Write or
+/// detected shell hunk applied to that path across all turns in the thread, so
+/// the "This thread" inspector can show file-level edits without re-reading the
+/// full message log.
 @Model
 public final class ThreadFileEdit {
     public var sessionId: String
@@ -15,15 +16,19 @@ public final class ThreadFileEdit {
     public var firstEditedAt: Date
     public var updatedAt: Date
     /// Full file content captured the first time this session's stream sees an
-    /// Edit/MultiEdit/Write tool_use for this path. Fixed forever once set —
-    /// the "before" side of the snapshot-pair diff. Optional for legacy rows
-    /// persisted before snapshot capture was added.
+    /// Edit/MultiEdit/Write or shell mutation for this path. Fixed forever once
+    /// set — the "before" side of the snapshot-pair diff. Optional for legacy rows.
     public var originalContent: String?
-    /// Full file content re-read from disk after each successful edit
-    /// tool_result for this path. Overwritten on every subsequent edit so the
-    /// "after" side always reflects this thread's most recent committed state.
+    /// Full file content captured after each successful edit in this thread.
     /// Optional for legacy rows; consumers fall back to disk read / hunks.
     public var modifiedContent: String?
+    /// True when another thread modified this same file between two edits in
+    /// this thread (optional for lightweight SwiftData migration).
+    public var hasExternalInterleaving: Bool?
+    /// True when the latest edit in this thread removed the file on disk.
+    public var isDeleted: Bool?
+    /// True when attribution overlapped ambiguously with another mutating thread.
+    public var isAmbiguous: Bool?
 
     public init(
         sessionId: String,
@@ -33,6 +38,9 @@ public final class ThreadFileEdit {
         containsWrite: Bool,
         originalContent: String? = nil,
         modifiedContent: String? = nil,
+        hasExternalInterleaving: Bool? = nil,
+        isDeleted: Bool? = nil,
+        isAmbiguous: Bool? = nil,
         firstEditedAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -43,6 +51,9 @@ public final class ThreadFileEdit {
         self.hunksData = Self.encode(hunks)
         self.originalContent = originalContent
         self.modifiedContent = modifiedContent
+        self.hasExternalInterleaving = hasExternalInterleaving
+        self.isDeleted = isDeleted
+        self.isAmbiguous = isAmbiguous
         self.firstEditedAt = firstEditedAt
         self.updatedAt = updatedAt
     }
@@ -69,7 +80,10 @@ public final class ThreadFileEdit {
             hunks: hunks,
             containsWrite: containsWrite,
             originalContent: originalContent,
-            modifiedContent: modifiedContent
+            modifiedContent: modifiedContent,
+            hasExternalInterleaving: hasExternalInterleaving ?? false,
+            isDeleted: isDeleted ?? false,
+            isAmbiguous: isAmbiguous ?? false
         )
     }
 

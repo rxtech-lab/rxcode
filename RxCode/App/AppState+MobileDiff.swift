@@ -39,16 +39,21 @@ extension AppState {
     nonisolated static func mobileFullFileDiff(
         path: String,
         hunks: [PreviewFile.EditHunk],
-        originalContent: String?
+        originalContent: String?,
+        isDeleted: Bool = false,
+        preferHunks: Bool = false
     ) async -> String? {
         await Task.detached(priority: .utility) { () -> String? in
-            guard let currentContent = try? String(contentsOfFile: path, encoding: .utf8) else {
-                return nil
+            if let currentContent = try? String(contentsOfFile: path, encoding: .utf8) {
+                if !preferHunks, let originalContent {
+                    return snapshotDiff(original: originalContent, current: currentContent)
+                }
+                return fullFileDiff(currentContent: currentContent, hunks: hunks)
             }
-            if let originalContent {
-                return snapshotDiff(original: originalContent, current: currentContent)
+            if isDeleted, let originalContent {
+                return snapshotDiff(original: originalContent, current: "")
             }
-            return fullFileDiff(currentContent: currentContent, hunks: hunks)
+            return nil
         }.value
     }
 

@@ -43,9 +43,10 @@ public enum ToolCategory: Sendable, Equatable {
         switch toolName.lowercased() {
         case "read", "glob", "grep", "list", "search":
             self = .readOnly
-        case "edit", "write", "multiedit", "multi_edit":
+        case "edit", "write", "multiedit", "multi_edit", "apply_patch":
             self = .fileModification
-        case "bash", "execute":
+        case "bash", "execute", "exec_command", "run_command", "run_shell_command",
+             "command_execution", "commandexecution", "shell", "terminal", "run_terminal_cmd":
             self = .execution
         default:
             let normalized = toolName.lowercased()

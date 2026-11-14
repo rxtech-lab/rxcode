@@ -15,6 +15,7 @@ extension ThreadStore {
             ChatThread.self,
             TodoSnapshot.self,
             ThreadFileEdit.self,
+            ToolDetectedChangeRecord.self,
             QueuedMessageRecord.self,
             PlanDecisionRecord.self,
             ThreadSummaryRecord.self,

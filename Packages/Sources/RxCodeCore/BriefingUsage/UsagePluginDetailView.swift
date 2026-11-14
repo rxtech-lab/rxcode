@@ -27,11 +27,22 @@ public struct UsagePluginDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ForEach(snapshot.metrics) { metric in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(metric.title).fontWeight(configuration.selectedMetricIDs.contains(metric.id) ? .semibold : .regular)
                             Spacer(minLength: 20)
                             Text(metric.formattedValue).monospacedDigit().fontWeight(.semibold)
+                        }
+                        if metric.unit == "%", let value = metric.value, value.isFinite {
+                            GeometryReader { proxy in
+                                Capsule().fill(.quaternary)
+                                    .overlay(alignment: .leading) {
+                                        Capsule().fill(Color.accentColor)
+                                            .frame(width: proxy.size.width * min(max(value, 0), 100) / 100)
+                                    }
+                            }
+                            .frame(height: 5)
+                            .accessibilityHidden(true)
                         }
                         if let detail = metric.detail {
                             Text(detail).font(.caption).foregroundStyle(.secondary)

@@ -103,6 +103,9 @@ extension AppState {
             }
         }
 
+        await shellTrackerBeginStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd, agentProvider: agentProvider)
+        defer { shellTrackerEndStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd) }
+
         startFlushTimer(for: sessionKey)
 
         // Reset the watchdog clock at the start so the first event window is
@@ -184,13 +187,16 @@ extension AppState {
                         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
                         if sessionKey != resultEvent.sessionId,
                            providerOwnsThreadId(agentProvider, threadId: sessionKey) {
-                            if let state = sessionStates.removeValue(forKey: sessionKey) {
+                            let prevKey = sessionKey
+                            if let state = sessionStates.removeValue(forKey: prevKey) {
                                 sessionStates[resultEvent.sessionId] = state
                             }
-                            applySessionIdRedirect(from: sessionKey, to: resultEvent.sessionId)
+                            applySessionIdRedirect(from: prevKey, to: resultEvent.sessionId)
+                            shellTrackerRenameSession(from: prevKey, to: resultEvent.sessionId, cwd: cwd)
                             sessionKey = resultEvent.sessionId
                         }
                         recordProviderSessionId(agentProvider, nativeId: resultEvent.sessionId, threadId: sessionKey)
+                        await awaitPendingShellDetections(for: sessionKey)
                         let msgs = stateForSession(sessionKey).messages
                         if !msgs.isEmpty {
                             await saveSession(sessionId: sessionKey, projectId: projectId, messages: msgs)
@@ -258,6 +264,7 @@ extension AppState {
                             }
                             renameDraftState(from: previousSessionKey, to: sid, in: window)
                             applySessionIdRedirect(from: previousSessionKey, to: sid)
+                            shellTrackerRenameSession(from: previousSessionKey, to: sid, cwd: cwd)
                             sessionKey = sid
                             startFlushTimer(for: sid)
 
@@ -434,6 +441,7 @@ extension AppState {
                         flushPendingUpdates(for: sessionKey, forceText: true)
                     }
 
+                    var assistantToolUses: [(String, String, [String: JSONValue])] = []
                     updateState(sessionKey) { state in
                         // Text fallback: only buffer text when no text_delta has been received in
                         // this turn. Normally content_block_delta(text_delta) is the primary path.
@@ -478,6 +486,7 @@ extension AppState {
                                     var merged = state.messages[existingMsgIdx].blocks[existingBlockIdx].toolCall?.input ?? [:]
                                     for (key, value) in input { merged[key] = value }
                                     state.messages[existingMsgIdx].blocks[existingBlockIdx].toolCall?.input = merged
+                                    assistantToolUses.append((id, name, merged))
                                 } else {
                                     if state.needsNewMessage {
                                         if let idx = state.messages.indices.reversed().first(where: {
@@ -497,11 +506,15 @@ extension AppState {
                                        state.messages[lastIndex].role == .assistant {
                                         state.messages[lastIndex].appendToolCall(ToolCall(id: id, name: name, input: input))
                                     }
+                                    assistantToolUses.append((id, name, input))
                                 }
                             case .thinking:
                                 state.isThinking = true
                             }
                         }
+                    }
+                    for (id, name, input) in assistantToolUses {
+                        shellTrackerUpsertToolSpan(id: id, name: name, input: input, sessionKey: sessionKey)
                     }
                     recordStreamPartialResponseIfNeeded(streamId: streamId, sessionId: sessionKey)
 
@@ -610,6 +623,7 @@ extension AppState {
                         }
                         renameDraftState(from: previousSessionKey, to: resultEvent.sessionId, in: window)
                         applySessionIdRedirect(from: previousSessionKey, to: resultEvent.sessionId)
+                        shellTrackerRenameSession(from: previousSessionKey, to: resultEvent.sessionId, cwd: cwd)
                         sessionKey = resultEvent.sessionId
                         if wasForeground {
                             window.currentSessionId = resultEvent.sessionId
@@ -681,6 +695,7 @@ extension AppState {
                         }
                         if markUnread { state.hasUncheckedCompletion = true }
                     }
+                    await awaitPendingShellDetections(for: sessionKey)
                     let finalAssistantText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
 
                     // Release cross-thread MCP callers as soon as the model turn
@@ -904,6 +919,7 @@ extension AppState {
                 finalizeStreamSession(for: sessionKey) { state in
                     if markUnread { state.hasUncheckedCompletion = true }
                 }
+                await awaitPendingShellDetections(for: sessionKey)
 
                 // If the last assistant message is invisible after cleanup (blocks=[] because
                 // all tool calls had empty/nil results), show an error bubble so the user
@@ -925,6 +941,7 @@ extension AppState {
                 if currentOwner == nil {
                     logger.warning("[Stream:UI] stream \(streamId) ended — no active owner for session, forcing cleanup")
                     finalizeStreamSession(for: sessionKey)
+                    await awaitPendingShellDetections(for: sessionKey)
                     let msgs = stateForSession(sessionKey).messages
                     if !msgs.isEmpty {
                         await saveSession(sessionId: sessionKey, projectId: projectId, messages: msgs)

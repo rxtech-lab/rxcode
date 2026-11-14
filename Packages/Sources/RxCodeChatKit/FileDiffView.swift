@@ -17,6 +17,9 @@ public struct FileDiffView: View {
     /// giving a thread-isolated diff that doesn't pick up external concurrent
     /// edits. Falls back to original-vs-disk when nil (legacy rows).
     public let modifiedContent: String?
+    /// True when another thread edited this file between two turns of the
+    /// current thread; instructs `buildThreadEditDiff` to isolate this thread's hunks.
+    public let preferHunks: Bool
     @Environment(WindowState.self) private var windowState
     @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
@@ -33,7 +36,8 @@ public struct FileDiffView: View {
         gitDiffMode: PreviewFile.GitDiffMode? = nil,
         showFullFileDiff: Bool = false,
         originalContent: String? = nil,
-        modifiedContent: String? = nil
+        modifiedContent: String? = nil,
+        preferHunks: Bool = false
     ) {
         self.filePath = filePath
         self.fileName = fileName
@@ -42,6 +46,7 @@ public struct FileDiffView: View {
         self.showFullFileDiff = showFullFileDiff
         self.originalContent = originalContent
         self.modifiedContent = modifiedContent
+        self.preferHunks = preferHunks
     }
 
     public var body: some View {
@@ -247,18 +252,19 @@ public struct FileDiffView: View {
         // captured from disk at the right moments (pre-first-edit and
         // post-each-edit). Diff them directly — no view-time disk read, no
         // contamination from external concurrent edits on the same file.
-        // When the pair collapses (original == modified, e.g. a capture-time
-        // race) the helper falls back to the recorded hunks so real edits
-        // never render as "No changes".
+        // When `preferHunks` is set (interleaved multi-thread edits), isolate
+        // this thread's hunks against `modifiedContent`.
         if showFullFileDiff, modifiedContent != nil {
             let original = originalContent
             let modified = modifiedContent
             let hunks = editHunks
+            let isolateHunks = preferHunks
             let lines = await Task.detached(priority: .userInitiated) {
                 DiffComputation.buildThreadEditDiff(
                     originalContent: original,
                     modifiedContent: modified,
-                    hunks: hunks
+                    hunks: hunks,
+                    preferHunks: isolateHunks
                 )
             }.value
             if !lines.isEmpty {

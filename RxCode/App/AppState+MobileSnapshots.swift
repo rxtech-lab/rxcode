@@ -653,7 +653,10 @@ extension AppState {
         else {
             return nil
         }
-        let cleaned = cleanLoadedMessages(full.messages)
+        let cleaned = rehydrateDetectedToolChanges(
+            in: cleanLoadedMessages(full.messages),
+            sessionId: resolvedID
+        )
         mobileFullMessageCache = (resolvedID, cleaned)
         return messagesWithPlanDecisions(cleaned, summaries: summaries)
     }
@@ -768,7 +771,9 @@ extension AppState {
                     let fullFileDiff = await Self.mobileFullFileDiff(
                         path: summary.path,
                         hunks: summary.hunks,
-                        originalContent: summary.originalContent
+                        originalContent: summary.originalContent,
+                        isDeleted: summary.isDeleted,
+                        preferHunks: summary.hasExternalInterleaving
                     )
                     return (index, SyncFileEdit(
                         path: summary.path,
@@ -778,8 +783,8 @@ extension AppState {
                             SyncEditHunk(oldString: $0.oldString, newString: $0.newString)
                         },
                         fullFileDiff: fullFileDiff,
-                        originalContent: summary.originalContent,
-                        modifiedContent: summary.modifiedContent
+                        originalContent: summary.hasExternalInterleaving ? nil : summary.originalContent,
+                        modifiedContent: summary.hasExternalInterleaving ? nil : summary.modifiedContent
                     ))
                 }
             }

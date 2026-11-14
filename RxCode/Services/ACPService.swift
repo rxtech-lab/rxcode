@@ -78,6 +78,13 @@ actor ACPService {
         self.permissionServer = server
     }
 
+    func rootPid(for streamId: UUID) -> Int32? {
+        guard let key = streamToKey[streamId],
+              let proc = sessions[key]?.process,
+              proc.isRunning else { return nil }
+        return proc.processIdentifier
+    }
+
     // MARK: - Pool Lifecycle
 
     /// Releases per-stream bookkeeping for a turn that ran to completion.

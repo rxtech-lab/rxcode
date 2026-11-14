@@ -89,6 +89,36 @@ extension AppState {
         }
     }
 
+    /// Refreshes the usage integration for the active ACP client (used by chat footer & turn completion).
+    func refreshACPUsage(for model: String?, clientID: String? = nil, forceRefresh: Bool = false) async {
+        guard !usageDashboard.integrations.isEmpty else { return }
+        reconcileACPUsageIntegrations()
+        guard let resolvedID = resolvedACPUsageClientID(for: model, clientID: clientID),
+              let client = acpClients.first(where: { $0.id == resolvedID && $0.enabled }),
+              let provider = ACPUsageProvider.provider(for: client),
+              let integration = usageDashboard.integrations.first(where: {
+                  $0.resource == resolvedID && $0.pluginID == provider.pluginID
+              }) else { return }
+
+        if !forceRefresh,
+           let existing = usageDashboard.snapshots.first(where: { $0.id == integration.id }),
+           existing.error == nil,
+           !existing.metrics.isEmpty,
+           Date.now.timeIntervalSince(existing.fetchedAt) < 120 {
+            return
+        }
+
+        guard !usagePlugins.refreshingIntegrationIDs.contains(integration.id) else { return }
+        usagePlugins.refreshingIntegrationIDs.insert(integration.id)
+        defer { usagePlugins.refreshingIntegrationIDs.remove(integration.id) }
+
+        let snapshot = await refreshedUsageSnapshot(integration)
+        guard usageDashboard.integrations.contains(integration) else { return }
+        usageDashboard.snapshots.removeAll { $0.id == integration.id }
+        usageDashboard.snapshots.append(snapshot)
+        await persistUsageDashboard()
+    }
+
     func refreshUsagePlugins() async {
         guard !usagePluginsRefreshing else { usagePluginsRefreshPending = true; return }
         usagePluginsRefreshing = true

@@ -466,6 +466,78 @@ final class ACPServiceSuggestionTests: XCTestCase {
         )
         XCTAssertEqual(response, "chosen-model: response")
     }
+
+    func testAntigravityCredentialParserSupportsACPAndKeyringCLIFormats() throws {
+        let acpRaw = Data(#"""
+        {
+          "refresh_token": "fixture-refresh-token",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "client_id": "123456-test.apps.googleusercontent.com",
+          "client_secret": "fixture-client-secret",
+          "project_id": "test-ccpa-project"
+        }
+        """#.utf8)
+        let acpParsed = try XCTUnwrap(ACPUsageService.parseAntigravityCredential(acpRaw))
+        XCTAssertNil(acpParsed.accessToken)
+        XCTAssertEqual(acpParsed.refreshToken, "fixture-refresh-token")
+        XCTAssertEqual(acpParsed.clientID, "123456-test.apps.googleusercontent.com")
+        XCTAssertEqual(acpParsed.clientSecret, "fixture-client-secret")
+        XCTAssertEqual(acpParsed.projectID, "test-ccpa-project")
+
+        let jwtPayload = Data(#"{"aud":"999999-cli.apps.googleusercontent.com"}"#.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "=", with: "")
+        let cliJSON = """
+        {
+          "token": {
+            "access_token": "fixture-access-token",
+            "refresh_token": "fixture-cli-refresh",
+            "expiry": "2030-10-21T02:23:15.159173+09:00"
+          },
+          "id_token": "eyJhbGciOiJSUzI1NiJ9.\(jwtPayload).sig"
+        }
+        """
+        let keyringPayload = Data(("go-keyring-base64:" + Data(cliJSON.utf8).base64EncodedString()).utf8)
+        let cliParsed = try XCTUnwrap(ACPUsageService.parseAntigravityCredential(keyringPayload))
+        XCTAssertEqual(cliParsed.accessToken, "fixture-access-token")
+        XCTAssertEqual(cliParsed.refreshToken, "fixture-cli-refresh")
+        XCTAssertEqual(cliParsed.clientID, "999999-cli.apps.googleusercontent.com")
+        XCTAssertNotNil(cliParsed.expiry)
+    }
+
+    @MainActor
+    func testAntigravityUsageReconciliationAndSnapshotLookup() {
+        let appState = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+        let spec = ACPClientSpec(
+            registryId: "antigravity-acp",
+            displayName: "Google Antigravity",
+            launch: .binary(path: "/nonexistent/agy_acp_server.par", args: [], env: [:])
+        )
+        appState.acpClients = [spec]
+        appState.reconcileACPUsageIntegrations()
+
+        XCTAssertTrue(appState.supportsACPUsage(for: "\(spec.id)::gemini-4-carbon"))
+        let integration = appState.usageDashboard.integrations.first {
+            $0.pluginID == "acp-antigravity" && $0.resource == spec.id
+        }
+        XCTAssertNotNil(integration)
+        if let integration {
+            let snapshot = UsagePluginSnapshot(
+                id: integration.id,
+                pluginID: integration.pluginID,
+                title: integration.title,
+                scope: "Antigravity",
+                period: "Current account limits",
+                metrics: [
+                    .init("0:gemini-5h", "Gemini Models · 5-hour", value: 12.5, unit: "%"),
+                    .init("0:gemini-weekly", "Gemini Models · Weekly", value: 4.0, unit: "%")
+                ]
+            )
+            appState.usageDashboard.snapshots = [snapshot]
+            XCTAssertEqual(appState.acpUsageSnapshot(for: "\(spec.id)::gemini-4-carbon"), snapshot)
+            XCTAssertEqual(appState.acpUsageSnapshot(for: "gemini-4-carbon", clientID: spec.id), snapshot)
+        }
+    }
 }
 
 // Actor-isolated fixture setup keeps production session mutation encapsulated.

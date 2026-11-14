@@ -174,16 +174,6 @@
         }
       }
     },
-    "%@: highest usage bucket. View all limits and reset details.%@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@: highest usage bucket. View all limits and reset details.%2$@"
-          }
-        }
-      }
-    },
     "%lld" : {
       "localizations" : {
         "ko" : {
@@ -354,6 +344,12 @@
           }
         }
       }
+    },
+    "+%lld" : {
+
+    },
+    "−%lld" : {
+
     },
     "⚠︎ %@" : {
       "extractionState" : "stale",
@@ -1499,6 +1495,9 @@
         }
       }
     },
+    "Concurrent" : {
+
+    },
     "Configure Claude in Chrome" : {
       "localizations" : {
         "en" : {
@@ -2245,6 +2244,9 @@
           }
         }
       }
+    },
+    "Detected File Changes" : {
+
     },
     "Diagnose installation/configuration" : {
       "localizations" : {
@@ -4842,6 +4844,12 @@
     "Refined from this image" : {
 
     },
+    "Refresh" : {
+
+    },
+    "Refreshing usage…" : {
+
+    },
     "Regenerate" : {
 
     },
@@ -5973,6 +5981,9 @@
         }
       }
     },
+    "Show more (%lld more lines)" : {
+
+    },
     "Show View JSON" : {
 
     },
@@ -6798,6 +6809,9 @@
 
     },
     "Usage limit tip" : {
+
+    },
+    "Usage limits" : {
 
     },
     "Usage unavailable" : {

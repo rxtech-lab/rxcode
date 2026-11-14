@@ -125,6 +125,9 @@ struct SessionStreamState {
     /// from kicking off duplicate generations on the same session.
     var titleGenerationTriggered: Bool = false
 
+    /// Effective workspace directory (`cwd`) of the currently running stream.
+    var activeStreamCwd: String?
+
     /// File-content snapshots captured the first time this session's stream
     /// sees an Edit/MultiEdit/Write tool_use for a given path. Read
     /// synchronously at capture time (content_block_stop / assistant tool_use
@@ -135,6 +138,10 @@ struct SessionStreamState {
     /// can still be `nil` when the read failed (e.g. file does not exist for
     /// a new-file Write).
     var editingFileSnapshots: [String: String?] = [:]
+
+    /// Immediate pre-step file content captured on every structured edit so
+    /// concurrent edits on the same file by another thread can be detected.
+    var latestStepSnapshots: [String: String?] = [:]
 }
 
 @Observable
@@ -911,24 +918,6 @@ final class AppState {
         return modelDisplayLabel(model, provider: provider)
     }
 
-    static func formatModelId(_ raw: String) -> String {
-        let lower = raw.lowercased()
-        let family: String
-        if lower.contains("opus") { family = "Opus" }
-        else if lower.contains("sonnet") { family = "Sonnet" }
-        else if lower.contains("haiku") { family = "Haiku" }
-        else { return raw }
-
-        let parts = lower.components(separatedBy: CharacterSet(charactersIn: "-"))
-        if let idx = parts.firstIndex(where: { $0 == family.lowercased() }),
-           idx + 1 < parts.count
-        {
-            let ver = parts[(idx + 1)...].prefix(2).filter { $0.allSatisfy(\.isNumber) }
-            if !ver.isEmpty { return "\(family) \(ver.joined(separator: "."))" }
-        }
-        return family
-    }
-
     // MARK: - Permissions
 
     var permissionMode: PermissionMode = .default {
@@ -1470,5 +1459,11 @@ final class AppState {
     /// from the wire default (`nil`).
     @ObservationIgnored
     var mobileSnapshotSeq: UInt64 = 0
+
+    /// In-flight background file-edit detection tasks keyed by session id so
+    /// turn completion (`CodeReviewHook`, `saveSession`) awaits all pending
+    /// shell/structured edit captures without blocking command execution.
+    @ObservationIgnored
+    var pendingShellDetectionTasks: [String: [UUID: Task<Void, Never>]] = [:]
 
 }

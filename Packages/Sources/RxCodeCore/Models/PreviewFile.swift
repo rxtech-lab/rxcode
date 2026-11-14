@@ -37,6 +37,11 @@ public struct PreviewFile: Identifiable, Sendable {
     /// the current on-disk content — giving an exact, thread-isolated diff
     /// even when other agents concurrently modify the file.
     public let modifiedContent: String?
+    /// When true, another thread edited this file between two turns of the
+    /// current thread, so `FileDiffView` reverse-applies `editHunks` onto
+    /// `modifiedContent` instead of diffing `originalContent -> modifiedContent`
+    /// verbatim (which would also highlight the other thread's lines).
+    public let preferHunks: Bool
 
     public init(
         path: String,
@@ -45,7 +50,8 @@ public struct PreviewFile: Identifiable, Sendable {
         gitDiffMode: GitDiffMode? = nil,
         showFullFileDiff: Bool = false,
         originalContent: String? = nil,
-        modifiedContent: String? = nil
+        modifiedContent: String? = nil,
+        preferHunks: Bool = false
     ) {
         self.path = path
         self.name = name
@@ -54,5 +60,6 @@ public struct PreviewFile: Identifiable, Sendable {
         self.showFullFileDiff = showFullFileDiff
         self.originalContent = originalContent
         self.modifiedContent = modifiedContent
+        self.preferHunks = preferHunks
     }
 }

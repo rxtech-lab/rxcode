@@ -12,7 +12,9 @@ http.createServer((req, res) => {
   }
   if (req.method === 'POST' && req.url === '/v1internal:retrieveUserQuotaSummary') {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    if (JSON.stringify(body) !== '{}' || req.headers['user-agent'] !== 'antigravity/acp') return reply(400, { error: 'Invalid request' });
+    const ua = String(req.headers['user-agent'] || '');
+    const validBody = body && typeof body === 'object' && !Array.isArray(body);
+    if (!validBody || !ua.startsWith('antigravity/acp')) return reply(400, { error: 'Invalid request' });
     return reply(200, { groups: [{ displayName: 'Gemini', buckets: [
       { bucketId: 'gemini-5h', remainingFraction: 0.75, resetTime: '2026-10-29T00:00:00Z' },
       { bucketId: 'gemini-weekly', remainingFraction: 0.25 }

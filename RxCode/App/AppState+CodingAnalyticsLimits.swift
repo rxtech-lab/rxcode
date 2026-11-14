@@ -2,9 +2,24 @@ import Foundation
 import RxCodeCore
 
 extension AppState {
+    func resolvedACPUsageClientID(for model: String?, clientID: String? = nil) -> String? {
+        if let clientID, !clientID.isEmpty { return clientID }
+        if let selected = acpSelectionParts(for: model)?.clientId, !selected.isEmpty { return selected }
+        if !selectedACPClientId.isEmpty { return selectedACPClientId }
+        return acpClients.first(where: \.enabled)?.id
+    }
+
+    func supportsACPUsage(for model: String?, clientID: String? = nil) -> Bool {
+        guard let resolvedID = resolvedACPUsageClientID(for: model, clientID: clientID),
+              let client = acpClients.first(where: { $0.id == resolvedID && $0.enabled }) else {
+            return false
+        }
+        return ACPUsageProvider.provider(for: client) != nil
+    }
+
     func acpUsageSnapshot(for model: String?, clientID: String? = nil) -> UsagePluginSnapshot? {
-        let resolvedClientID = clientID ?? acpSelectionParts(for: model)?.clientId ?? selectedACPClientId
-        guard let client = acpClients.first(where: { $0.id == resolvedClientID }),
+        guard let resolvedClientID = resolvedACPUsageClientID(for: model, clientID: clientID),
+              let client = acpClients.first(where: { $0.id == resolvedClientID }),
               let provider = ACPUsageProvider.provider(for: client),
               let integration = usageDashboard.integrations.first(where: {
                   $0.resource == resolvedClientID && $0.pluginID == provider.pluginID
@@ -28,9 +43,9 @@ extension AppState {
                          rateLimits: limits, reason: limits == nil ? "No cached provider usage limits." : nil, capturedAt: now)
         }
         let selection = acpSelectionParts(for: model)
-        let resolvedClientID = clientID ?? selection?.clientId ?? selectedACPClientId
+        let resolvedClientID = resolvedACPUsageClientID(for: model, clientID: clientID ?? selection?.clientId)
         let selectedModel = selection?.model ?? model
-        let client = acpClients.first { $0.id == resolvedClientID }
+        let client = resolvedClientID.flatMap { id in acpClients.first { $0.id == id } }
         let usageProvider = client.flatMap { ACPUsageProvider.provider(for: $0) }
         let snapshot = acpUsageSnapshot(for: model, clientID: resolvedClientID)
         let hasValues = snapshot?.metrics.contains { $0.value != nil } == true

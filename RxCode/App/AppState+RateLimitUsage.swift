@@ -83,7 +83,9 @@ extension AppState {
             await refreshRateLimitUsage(forceRefresh: forceRefresh)
         case .codex:
             await refreshCodexRateLimitUsage(forceRefresh: forceRefresh)
-        case .acp, .localAgent:
+        case .acp:
+            await refreshACPUsage(for: selectedModel, clientID: selectedACPClientId, forceRefresh: forceRefresh)
+        case .localAgent:
             break
         }
     }

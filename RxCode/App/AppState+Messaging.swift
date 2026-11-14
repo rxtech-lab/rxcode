@@ -556,15 +556,24 @@ extension AppState {
 
             extraMutations?(&state)
 
-            if let idx = state.messages.indices.reversed().first(where: {
+            let lastStreamingIdx = state.messages.indices.reversed().first {
                 state.messages[$0].role == .assistant && state.messages[$0].isStreaming
-            }) {
-                state.messages[idx].isStreaming = false
-                state.messages[idx].isResponseComplete = true
-                state.messages[idx].finalizeToolCalls()
-                if let start = state.streamingStartDate {
-                    state.messages[idx].duration = Date().timeIntervalSince(start)
+            }
+            for idx in state.messages.indices.reversed() where state.messages[idx].role == .assistant {
+                let wasStreaming = idx == lastStreamingIdx || state.messages[idx].isStreaming
+                let hasIncompleteTool = state.messages[idx].blocks.contains {
+                    guard let tc = $0.toolCall else { return false }
+                    return tc.result == nil && !tc.isKeepAlways
                 }
+                guard wasStreaming || hasIncompleteTool else { continue }
+                state.messages[idx].isStreaming = false
+                if idx == lastStreamingIdx {
+                    state.messages[idx].isResponseComplete = true
+                    if let start = state.streamingStartDate {
+                        state.messages[idx].duration = Date().timeIntervalSince(start)
+                    }
+                }
+                state.messages[idx].finalizeToolCalls()
                 Self.stripNoOpText(at: idx, in: &state.messages)
             }
             state.streamingStartDate = nil

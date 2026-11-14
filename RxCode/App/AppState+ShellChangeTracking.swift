@@ -98,21 +98,24 @@ extension AppState {
         let resolvedKey = resolveCurrentSessionId(sessionKey)
         guard let state = sessionStates[resolvedKey],
               let streamId = state.activeStreamId,
-              let cwd = state.activeStreamCwd,
-              !cwd.isEmpty else { return }
+              let rootCwd = state.activeStreamCwd,
+              !rootCwd.isEmpty else { return }
         let command = probe.shellCommandString
+        let effectiveCwd = probe.shellWorkingDirectory ?? rootCwd
+        let scriptPath = probe.referencedScriptPath
         let provider = state.agentProvider ?? selectedAgentProvider
 
         Task { [weak self] in
-            guard let tracker = await WorkspaceChangeTrackerRegistry.shared.tracker(for: cwd) else { return }
+            guard let tracker = await WorkspaceChangeTrackerRegistry.shared.tracker(for: rootCwd) else { return }
             let pid = await self?.streamRootPid(provider: provider, streamId: streamId)
             await tracker.upsertShellSpan(
                 streamId: streamId,
                 sessionKey: resolvedKey,
                 toolUseId: id,
                 command: command,
-                cwd: cwd,
-                rootPid: pid
+                cwd: effectiveCwd,
+                rootPid: pid,
+                extraScriptPath: scriptPath
             )
         }
         #endif
@@ -177,11 +180,13 @@ extension AppState {
         guard let call,
               call.isShellExecutionTool,
               let streamId = state.activeStreamId,
-              let cwd = state.activeStreamCwd,
-              !cwd.isEmpty else { return }
+              let rootCwd = state.activeStreamCwd,
+              !rootCwd.isEmpty else { return }
 
         let toolUseId = call.id
         let fallbackCommand = call.shellCommandString
+        let effectiveCwd = call.shellWorkingDirectory ?? rootCwd
+        let scriptPath = call.referencedScriptPath
         let provider = state.agentProvider ?? selectedAgentProvider
         let initialKey = sessionKey
         let taskId = UUID()
@@ -189,7 +194,7 @@ extension AppState {
         let task = Task { @MainActor [weak self] in
             defer { self?.removePendingShellDetectionTask(id: taskId, initialSessionKey: initialKey) }
             guard let self,
-                  let tracker = await WorkspaceChangeTrackerRegistry.shared.tracker(for: cwd) else { return }
+                  let tracker = await WorkspaceChangeTrackerRegistry.shared.tracker(for: rootCwd) else { return }
             let pid = await self.streamRootPid(provider: provider, streamId: streamId)
             let currentKey = self.resolveCurrentSessionId(initialKey)
             let detected = await tracker.endShellSpan(
@@ -197,8 +202,9 @@ extension AppState {
                 sessionKey: currentKey,
                 toolUseId: toolUseId,
                 fallbackCommand: fallbackCommand,
-                cwd: cwd,
-                rootPid: pid
+                cwd: effectiveCwd,
+                rootPid: pid,
+                extraScriptPath: scriptPath
             )
 
             let visibleEdits = detected.filter { !PlanLogic.isPlanFilePath($0.path) }
@@ -261,7 +267,7 @@ extension AppState {
     }
 
     /// Rehydrates persisted `DetectedShellFileChange` metadata onto `ToolCall`s
-    /// when loading CLI-backed (`.jsonl`) sessions from disk.
+    /// when loading sessions from disk.
     func rehydrateDetectedToolChanges(
         in messages: [ChatMessage],
         sessionId: String

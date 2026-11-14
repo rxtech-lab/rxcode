@@ -18,6 +18,17 @@ actor MockAgentBackend: AgentBackend {
         /// stream that's "stuck mid-turn" (the cross-project freeze case).
         let delay: TimeInterval
         let event: StreamEvent
+        let sideEffect: (@Sendable () async throws -> Void)?
+
+        init(
+            delay: TimeInterval,
+            event: StreamEvent,
+            sideEffect: (@Sendable () async throws -> Void)? = nil
+        ) {
+            self.delay = delay
+            self.event = event
+            self.sideEffect = sideEffect
+        }
 
         static func systemInit(sessionId: String, delay: TimeInterval = 0.01) -> Step {
             Step(delay: delay, event: .system(SystemEvent(
@@ -117,6 +128,7 @@ actor MockAgentBackend: AgentBackend {
                     if step.delay > 0 {
                         try? await Task.sleep(nanoseconds: UInt64(step.delay * 1_000_000_000))
                     }
+                    try? await step.sideEffect?()
                     continuation.yield(step.event)
                 }
                 continuation.finish()

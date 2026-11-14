@@ -20,17 +20,23 @@ struct ChatMessageToolResultTests {
         #expect(message.toolCalls.first?.result == "")
     }
 
-    @Test("Unresolved Bash is removed on final cleanup")
-    func unresolvedBashIsRemoved() {
+    @Test("Unresolved Bash is retained across mid-turn message splits and removed on final cleanup")
+    func unresolvedBashSurvivesMidTurnSplitThenRemovedAtStreamEnd() {
         var message = ChatMessage(role: .assistant)
         message.appendToolCall(ToolCall(
-            id: "bash-1",
+            id: "exec-1",
             name: "Bash",
-            input: ["command": .string("sleep 1")]
+            input: ["command": .string("/bin/zsh -lc 'python3 patch.py'")]
         ))
 
-        message.finalizeToolCalls()
+        // Mid-turn split (`needsNewMessage` while parallel `exec-1` is still running)
+        // must keep `exec-1` so its delayed `tool_result` can match and run shell diff detection.
+        message.finalizeToolCalls(dropIncomplete: false)
+        #expect(message.toolCalls.count == 1)
+        #expect(message.toolCalls.first?.result == nil)
 
+        // End-of-stream cleanup removes any remaining unresolved non-keepAlways tool calls.
+        message.finalizeToolCalls()
         #expect(message.toolCalls.isEmpty)
     }
 

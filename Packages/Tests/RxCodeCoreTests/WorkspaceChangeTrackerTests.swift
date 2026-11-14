@@ -57,6 +57,35 @@ struct WorkspaceChangeTrackerTests {
         #expect(ShellCommandClassifier.classify("rm -f Sources/Obsolete.swift") == .mutatingOrUnknown)
     }
 
+    @Test("ShellCommandClassifier unwraps Codex login-shell wrappers and preserves POSIX escaping")
+    func shellCommandClassifierUnwrapsCodexShellWrappers() {
+        let readOnlyWrapped = "/bin/zsh -lc 'git diff --check && git status --short'"
+        #expect(ShellCommandClassifier.unwrapShellCommand(readOnlyWrapped) == "git diff --check && git status --short")
+        #expect(ShellCommandClassifier.classify(readOnlyWrapped) == .readOnly)
+
+        let catWrapped = "/bin/zsh -lc \"sed -n '1,40p' \\\"Sources/MapStudio.ts\\\"\""
+        #expect(ShellCommandClassifier.unwrapShellCommand(catWrapped) == "sed -n '1,40p' \"Sources/MapStudio.ts\"")
+        #expect(ShellCommandClassifier.classify(catWrapped) == .readOnly)
+
+        let buildWrapped = "/bin/zsh -lc 'npm test'"
+        #expect(ShellCommandClassifier.classify(buildWrapped) == .buildOrTest)
+
+        let heredocWrapped = """
+        /bin/zsh -lc "python3 - <<'PY'
+        from pathlib import Path
+        Path('src/maps/yamanote.ts').write_text('export const lines = []\\n')
+        PY"
+        """
+        #expect(ShellCommandClassifier.classify(heredocWrapped) == .mutatingOrUnknown)
+        let tokens = ShellCommandClassifier.extractCandidatePathTokens(from: heredocWrapped)
+        #expect(tokens.contains("src/maps/yamanote.ts"))
+        #expect(tokens.contains("yamanote.ts"))
+
+        let wrappedScriptCall = "/bin/zsh -lc \"python3 tests/tools/import-yamanote.py --out src/maps/yamanote.json\""
+        let refs = ShellCommandClassifier.extractReferencedScriptPaths(from: wrappedScriptCall, cwd: "/repo")
+        #expect(refs.contains("/repo/tests/tools/import-yamanote.py"))
+    }
+
     @Test("ShellCommandClassifier extracts file tokens from inline commands and referenced scripts")
     func shellCommandClassifierExtractsCandidateTokens() {
         let cmd = "python3 /tmp/refactor_job.py --dry-run=false"
@@ -221,6 +250,56 @@ struct WorkspaceChangeTrackerTests {
         #expect(retainedTools.first?.result == "")
     }
 
+    @Test("ToolCall extracts Codex commandExecution metadata, commandActions fallback, and local REPL code")
+    func toolCallExtractsCodexMetadataAndLocalRepl() {
+        let codexExec = ToolCall(
+            id: "exec-42",
+            name: "Bash",
+            input: [
+                "command": .string("/bin/zsh -lc \"python3 scripts/gen_maps.py\""),
+                "cwd": .string("/repo/packages/web"),
+                "scriptPath": .string("scripts/gen_maps.py"),
+            ]
+        )
+        #expect(codexExec.isShellExecutionTool)
+        #expect(codexExec.shellCommandString == "python3 scripts/gen_maps.py")
+        #expect(codexExec.shellWorkingDirectory == "/repo/packages/web")
+        #expect(codexExec.referencedScriptPath == "scripts/gen_maps.py")
+
+        let actionsFallback = ToolCall(
+            id: "exec-43",
+            name: "Bash",
+            input: [
+                "commandActions": .array([
+                    .object(["type": .string("unknown"), "command": .string("node tools/sync.mjs")])
+                ])
+            ]
+        )
+        #expect(actionsFallback.shellCommandString == "node tools/sync.mjs")
+
+        let nodeRepl = ToolCall(
+            id: "repl-1",
+            name: "mcp__node_repl",
+            input: [
+                "arguments": .object([
+                    "code": .string("fs.writeFileSync('src/index.ts', 'export {}\\n')"),
+                    "cwd": .string("/repo"),
+                ])
+            ]
+        )
+        #expect(nodeRepl.isShellExecutionTool)
+        #expect(nodeRepl.shellCommandString == "node -e fs.writeFileSync('src/index.ts', 'export {}\\n')")
+        #expect(nodeRepl.shellWorkingDirectory == "/repo")
+        #expect(ShellCommandClassifier.classify(nodeRepl.shellCommandString ?? "") == .mutatingOrUnknown)
+
+        let cuaRepl = ToolCall(
+            id: "cua-1",
+            name: "mcp__codex_apps__cua_repl",
+            input: ["code": .string("click(10, 20)")]
+        )
+        #expect(!cuaRepl.isShellExecutionTool)
+    }
+
     // MARK: - Real Git Workspace Integration Tests
 
     #if os(macOS)
@@ -349,6 +428,80 @@ struct WorkspaceChangeTrackerTests {
         #expect(secondEdits.first?.path.hasSuffix("Legacy.swift") == true)
         #expect(secondEdits.first?.afterContent == nil)
         _ = createdPath
+
+        await tracker.streamDidEnd(streamId: streamId)
+    }
+
+    @Test("Delayed upsertShellSpan after endShellSpan does not create zombie span that steals later Codex script edits")
+    func delayedUpsertAfterEndDoesNotCreateZombieSpan() async throws {
+        let repoURL = try makeTemporaryGitRepo()
+        defer { try? FileManager.default.removeItem(at: repoURL) }
+
+        try FileManager.default.createDirectory(
+            at: repoURL.appendingPathComponent("src/maps"),
+            withIntermediateDirectories: true
+        )
+        let mapPath = repoURL.appendingPathComponent("src/maps/studio.ts").path
+        try "export const stations = 1\n".write(toFile: mapPath, atomically: true, encoding: .utf8)
+        try runShell("git add . && git commit -m 'init maps'", cwd: repoURL.path)
+
+        let canonicalRoot = repoURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let tracker = WorkspaceChangeTracker(preferredRootPath: repoURL.path, canonicalRootPath: canonicalRoot)
+        let streamId = UUID()
+        await tracker.streamDidStart(streamId: streamId, sessionKey: "codex-session", cwd: repoURL.path)
+
+        // Simulate fast `exec-1` where `endShellSpan` finishes BEFORE the async `upsertShellSpan` Task lands,
+        // and where `exec-1` mentioned `studio.ts` in its command tokens.
+        let fastCmd = "python3 -c \"print('inspect src/maps/studio.ts')\""
+        _ = await tracker.endShellSpan(
+            streamId: streamId,
+            sessionKey: "codex-session",
+            toolUseId: "exec-1",
+            fallbackCommand: fastCmd,
+            cwd: repoURL.path
+        )
+        // Late `upsertShellSpan` for already-completed `exec-1` MUST be ignored!
+        await tracker.upsertShellSpan(
+            streamId: streamId,
+            sessionKey: "codex-session",
+            toolUseId: "exec-1",
+            command: fastCmd,
+            cwd: repoURL.path
+        )
+
+        // Now `exec-2` runs an opaque script (without `studio.ts` in the CLI string, only inside a helper script)
+        // that updates `src/maps/studio.ts`. Without `completedSpanKeys`, zombie `exec-1` would outscore `exec-2`
+        // on token match and swallow the edit!
+        let scriptFile = repoURL.appendingPathComponent("scripts_update.py")
+        try """
+        from pathlib import Path
+        Path('src/maps/studio.ts').write_text('export const stations = 29\\n')
+        """.write(to: scriptFile, atomically: true, encoding: .utf8)
+        try runShell("git add scripts_update.py && git commit -m 'add helper'", cwd: repoURL.path)
+
+        let exec2Cmd = ShellCommandClassifier.unwrapShellCommand("/bin/zsh -lc \"python3 scripts_update.py\"")
+        await tracker.upsertShellSpan(
+            streamId: streamId,
+            sessionKey: "codex-session",
+            toolUseId: "exec-2",
+            command: exec2Cmd,
+            cwd: repoURL.path,
+            extraScriptPath: "scripts_update.py"
+        )
+        try runShell("python3 scripts_update.py", cwd: repoURL.path)
+        let edits = await tracker.endShellSpan(
+            streamId: streamId,
+            sessionKey: "codex-session",
+            toolUseId: "exec-2",
+            fallbackCommand: exec2Cmd,
+            cwd: repoURL.path,
+            extraScriptPath: "scripts_update.py"
+        )
+
+        #expect(edits.count == 1)
+        #expect(edits.first?.path.hasSuffix("src/maps/studio.ts") == true)
+        #expect(edits.first?.kind == .modified)
+        #expect(edits.first?.chatChange.diff.contains("+export const stations = 29") == true)
 
         await tracker.streamDidEnd(streamId: streamId)
     }

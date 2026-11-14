@@ -98,6 +98,7 @@ def post_batch(endpoint, repo_id, token, batch):
     data = json.dumps({"documents": batch}).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
+    req.add_header("User-Agent", "RxCode-Docs-Uploader/1.0")
     req.add_header("Authorization", "Bearer " + token)
     with urllib.request.urlopen(req) as resp:
         status = resp.getcode()

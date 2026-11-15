@@ -13,11 +13,7 @@ final class FlowcyAPI {
     private let isSessionActive: @MainActor () -> Bool
 
     nonisolated static var defaultBaseURL: URL {
-        #if DEBUG
-        URL(string: "http://localhost:3000")!
-        #else
         URL(string: "https://www.flowcy.dev")!
-        #endif
     }
 
     init(session: URLSession = .shared, baseURL: URL = FlowcyAPI.defaultBaseURL,

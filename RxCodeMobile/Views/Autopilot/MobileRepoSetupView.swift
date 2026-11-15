@@ -100,6 +100,7 @@ struct MobileRepoSetupView: View {
         do {
             templates = try await state.repoSetupTemplates()
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -264,6 +265,7 @@ struct MobileRepoSetupEditor: View {
                 useFallback = true
             }
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             loadError = error.localizedDescription
         }
     }

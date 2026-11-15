@@ -45,8 +45,7 @@ public actor DirectTransport: Transport {
         self.identity = identity
         self.expectedPeerHex = expectedPeer.rawRepresentation.hexString
         self.queue = DispatchQueue(label: "com.idealapp.RxCodeSync.direct.out")
-        let params = NWParameters.tcp
-        self.connection = NWConnection(to: endpoint, using: params)
+        self.connection = NWConnection(to: endpoint, using: Self.makeParameters())
     }
 
     /// Adopt an inbound connection accepted by a `BonjourAdvertiser`'s listener.
@@ -60,6 +59,18 @@ public actor DirectTransport: Transport {
         self.expectedPeerHex = nil
         self.queue = DispatchQueue(label: "com.idealapp.RxCodeSync.direct.in")
         self.connection = connection
+    }
+
+    /// TCP with keepalive, so a link whose peer was suspended or vanished
+    /// without a FIN is detected within ~25s instead of lingering half-open.
+    static func makeParameters() -> NWParameters {
+        let tcp = NWProtocolTCP.Options()
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 10
+        tcp.keepaliveInterval = 5
+        tcp.keepaliveCount = 3
+        tcp.noDelay = true
+        return NWParameters(tls: nil, tcp: tcp)
     }
 
     // MARK: - Transport

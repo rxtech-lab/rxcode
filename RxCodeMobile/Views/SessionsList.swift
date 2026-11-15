@@ -39,7 +39,6 @@ struct SessionsList: View {
     @State private var isCreatingPR = false
     @State private var isCreatingReview = false
     @State private var isCommittingProject = false
-    @Namespace private var glassNamespace
 
     // Autopilot actions (1:1 with the desktop project menu), moved here from the
     // project list card so they live in the project detail toolbar.
@@ -82,7 +81,7 @@ struct SessionsList: View {
     @State private var expandedReviewParentIds: Set<String> = []
 
     var body: some View {
-        glassThreadList
+        threadList
             .navigationTitle("Threads")
             .toolbar {
                 toolbarContent
@@ -403,9 +402,9 @@ struct SessionsList: View {
         }
     }
 
-    // MARK: - Glass Thread List
+    // MARK: - Thread List
 
-    private var glassThreadList: some View {
+    private var threadList: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 if usesDesktopSearch {
@@ -426,6 +425,7 @@ struct SessionsList: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
+        .background(MobileCard.pageBackground)
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.3), value: filtered.map(\.id))
         .animation(.easeInOut(duration: 0.2), value: expandedReviewParentIds)
@@ -443,14 +443,11 @@ struct SessionsList: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 40)
         } else if !desktopSearchHits.isEmpty {
-            GlassEffectContainer(spacing: 12) {
-                ForEach(desktopSearchHits) { hit in
-                    SearchThreadHitCard(
-                        hit: hit,
-                        project: projectsByID[hit.projectID],
-                        namespace: glassNamespace
-                    )
-                }
+            ForEach(desktopSearchHits) { hit in
+                SearchThreadHitCard(
+                    hit: hit,
+                    project: projectsByID[hit.projectID]
+                )
             }
         }
     }
@@ -518,7 +515,7 @@ struct SessionsList: View {
                 Label("New Thread", systemImage: "plus")
                     .font(.subheadline.weight(.medium))
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.borderedProminent)
             .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -564,7 +561,7 @@ struct SessionsList: View {
         reviewChildren: [SessionSummary] = [],
         isReviewExpanded: Bool = false
     ) -> some View {
-        GlassThreadCard(
+        MobileThreadCard(
             session: session,
             isSelected: usesSelection && selected == session.id,
             onSelect: {
@@ -582,7 +579,6 @@ struct SessionsList: View {
             isReviewStreaming: reviewChildren.contains { $0.isStreaming },
             onToggleReviews: reviewChildren.isEmpty ? nil : { toggleReviews(for: session.id) }
         )
-        .glassEffectID(session.id, in: glassNamespace)
         .onAppear {
             if indentLevel == 0, session.id == visible.last?.id { loadMore() }
         }

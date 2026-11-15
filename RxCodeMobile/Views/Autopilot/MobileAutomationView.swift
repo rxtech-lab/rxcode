@@ -115,6 +115,7 @@ struct MobileAutomationView: View {
             }
             savedDraft = draft
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             loadError = error.localizedDescription
         }
     }

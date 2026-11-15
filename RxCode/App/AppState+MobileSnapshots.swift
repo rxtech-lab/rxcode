@@ -358,6 +358,22 @@ extension AppState {
         )
     }
 
+    /// Detection may finish after streaming stops, so a streaming-status refresh
+    /// alone can leave mobile's change overview and recorded-file count stale.
+    func broadcastMobileFileEditsChanged(sessionID: String) {
+        if mobileFullMessageCache?.sessionID == sessionID {
+            mobileFullMessageCache = nil
+        }
+        MobileSyncService.shared.broadcastSessionUpdate(
+            sessionID: sessionID,
+            kind: .statusChanged,
+            message: nil,
+            isStreaming: sessionStates[sessionID]?.isStreaming,
+            summary: mobileSessionSummary(for: sessionID),
+            fileEditsChanged: true
+        )
+    }
+
     /// Wire representation of every `AskUserQuestion` call currently awaiting an
     /// answer, used to mirror the desktop's question queue to mobile.
     func mobilePendingQuestionPayloads() -> [PendingQuestionPayload] {
@@ -637,7 +653,7 @@ extension AppState {
     func fullMobileMessages(for resolvedID: String) async -> [ChatMessage]? {
         if let state = sessionStates[resolvedID] {
             return messagesWithPlanDecisions(
-                cleanLoadedMessages(state.messages),
+                rehydrateDetectedToolChanges(in: cleanLoadedMessages(state.messages), sessionId: resolvedID),
                 summaries: state.planDecisionSummaries
             )
         }
@@ -645,7 +661,10 @@ extension AppState {
         // persisted decisions from the thread store.
         let summaries = threadStore.loadPlanDecisions(sessionId: resolvedID)
         if let cache = mobileFullMessageCache, cache.sessionID == resolvedID {
-            return messagesWithPlanDecisions(cache.messages, summaries: summaries)
+            return messagesWithPlanDecisions(
+                rehydrateDetectedToolChanges(in: cache.messages, sessionId: resolvedID),
+                summaries: summaries
+            )
         }
         guard let summary = allSessionSummaries.first(where: { $0.id == resolvedID }),
               let project = projects.first(where: { $0.id == summary.projectId }),
@@ -759,6 +778,8 @@ extension AppState {
         _ request: ThreadChangesRequestPayload,
         fromHex hex: String
     ) async {
+        // A tool result can reach mobile before its asynchronous file scan ends.
+        await awaitPendingShellDetections(for: request.sessionID)
         let resolvedID = resolveCurrentSessionId(request.sessionID)
 
         // This Turn: every file edited in the thread session (SwiftData history).

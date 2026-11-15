@@ -19,10 +19,18 @@ public actor RelayClient: Transport {
     /// too small for sync payloads; 10 MiB is a comfortable safety margin now
     /// that thread history is paged rather than sent in a single frame.
     private static let maxWebSocketMessageSize = 10 * 1024 * 1024
+    /// How long the opening handshake ping may take before the socket is
+    /// treated as failed and retried.
+    static let handshakeTimeoutSeconds: UInt64 = 15
+    /// How long a keepalive ping may wait for its pong. Without a deadline a
+    /// half-open socket (e.g. one still bound to a Wi-Fi interface the device
+    /// just left) never reports failure, and the client sits in `.connecting`
+    /// or a falsely `.connected` state forever.
+    static let pongTimeoutSeconds: UInt64 = 10
 
     private let identity: DeviceIdentity
     private let relayURL: URL
-    private let session: URLSession
+    private var session: URLSession
     private let logger = Logger(subsystem: "com.idealapp.RxCodeSync", category: "RelayClient")
 
     private var task: URLSessionWebSocketTask?
@@ -32,14 +40,23 @@ public actor RelayClient: Transport {
     private var pingTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
     private var shouldReconnect = true
+    /// Pings sent but not yet answered or timed out.
+    private var outstandingPings: Set<UUID> = []
 
     public init(identity: DeviceIdentity, relayURL: URL) {
         self.identity = identity
         self.relayURL = relayURL
+        self.session = Self.makeSession()
+    }
+
+    /// Fail fast instead of waiting for connectivity: the reconnect backoff and
+    /// network-path monitoring already retry, and a task waiting for
+    /// connectivity reports nothing, which left the UI stuck on "connecting".
+    private static func makeSession() -> URLSession {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest = 30
-        cfg.waitsForConnectivity = true
-        self.session = URLSession(configuration: cfg)
+        cfg.waitsForConnectivity = false
+        return URLSession(configuration: cfg)
     }
 
     /// Subscribe to a multiplexed event stream. Each subscriber gets its own
@@ -76,6 +93,10 @@ public actor RelayClient: Transport {
         shouldReconnect = true
         logger.info("[Relay] reconnect requested relay=\(self.relayURL.absoluteString, privacy: .public) localKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
         closeSocketLocally()
+        // Start from a fresh session so no pooled connection bound to the old
+        // network path (Wi-Fi before a switch to cellular) is reused.
+        session.invalidateAndCancel()
+        session = Self.makeSession()
         reconnectAttempt = 0
         openSocket()
     }
@@ -159,7 +180,7 @@ public actor RelayClient: Transport {
         // in .connecting and let the first successful ping flip us to
         // .connected, so the UI reflects the real handshake outcome.
         startReceiveLoop()
-        sendPing(on: newTask)
+        sendPing(on: newTask, timeoutSeconds: Self.handshakeTimeoutSeconds)
         startPingLoop()
     }
 
@@ -197,14 +218,31 @@ public actor RelayClient: Transport {
         sendPing(on: task)
     }
 
-    private func sendPing(on socket: URLSessionWebSocketTask) {
+    private func sendPing(on socket: URLSessionWebSocketTask, timeoutSeconds: UInt64 = pongTimeoutSeconds) {
+        let pingID = UUID()
+        outstandingPings.insert(pingID)
         socket.sendPing { [weak self] error in
-            if let error {
-                Task { await self?.handleSocketFailure(of: socket, error: error) }
-            } else {
-                Task { await self?.markConnected(socket) }
-            }
+            Task { await self?.pingCompleted(pingID, on: socket, error: error) }
         }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
+            await self?.pingTimedOut(pingID, on: socket, after: timeoutSeconds)
+        }
+    }
+
+    private func pingCompleted(_ pingID: UUID, on socket: URLSessionWebSocketTask, error: Error?) {
+        guard outstandingPings.remove(pingID) != nil else { return }
+        if let error {
+            handleSocketFailure(of: socket, error: error)
+        } else {
+            markConnected(socket)
+        }
+    }
+
+    private func pingTimedOut(_ pingID: UUID, on socket: URLSessionWebSocketTask, after seconds: UInt64) {
+        guard outstandingPings.remove(pingID) != nil, socket === task else { return }
+        logger.warning("[Relay] no pong within \(seconds, privacy: .public)s relay=\(self.relayURL.absoluteString, privacy: .public) state=\(String(describing: self.state), privacy: .public) — treating socket as dead")
+        handleSocketFailure(of: socket, error: RelayError.pingTimeout)
     }
 
     private func startReceiveLoop() {
@@ -273,6 +311,7 @@ public actor RelayClient: Transport {
     private func closeSocketLocally() {
         pingTask?.cancel(); pingTask = nil
         receiveTask?.cancel(); receiveTask = nil
+        outstandingPings.removeAll()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
     }
@@ -281,4 +320,5 @@ public actor RelayClient: Transport {
 public enum RelayError: Error, Sendable {
     case notConnected
     case invalidURL
+    case pingTimeout
 }

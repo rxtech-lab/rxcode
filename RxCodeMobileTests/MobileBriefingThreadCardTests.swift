@@ -35,7 +35,6 @@ final class MobileBriefingThreadCardTests: XCTestCase {
 }
 
 private struct MobileBriefingThreadCardPreview: View {
-    @Namespace private var namespace
     let isStreaming: Bool
 
     var body: some View {
@@ -48,8 +47,7 @@ private struct MobileBriefingThreadCardPreview: View {
                 summary: "Summary",
                 updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
             ),
-            isStreaming: isStreaming,
-            namespace: namespace
+            isStreaming: isStreaming
         )
     }
 }

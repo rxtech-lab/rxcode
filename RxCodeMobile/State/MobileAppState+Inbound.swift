@@ -47,13 +47,15 @@ extension MobileAppState {
         case .inbound(let inbound):
             handleInbound(inbound)
         case .pathChanged(let peerHex, let path, let rttMillis):
-            let previousPath = activePathByDesktop[peerHex]
-            logger.info("[Direct] active path for desktopKey=\(String(peerHex.prefix(12)), privacy: .public) is now \(String(describing: path), privacy: .public) previous=\(previousPath.map { String(describing: $0) } ?? "<nil>", privacy: .public)")
+            // No entry means the relay (see `activeConnectionRoute`), so a relay
+            // report after `resetConnectionPaths()` is not a path switch.
+            let previousPath = activePathByDesktop[peerHex] ?? .relay
+            logger.info("[Direct] active path for desktopKey=\(String(peerHex.prefix(12)), privacy: .public) is now \(String(describing: path), privacy: .public) previous=\(String(describing: previousPath), privacy: .public)")
             if previousPath != path { activePathByDesktop[peerHex] = path }
             if directRTTByDesktop[peerHex] != rttMillis { directRTTByDesktop[peerHex] = rttMillis }
             // Re-sync only on a real path switch: data in flight on the old
             // path may have been lost.
-            if peerHex == pairedDesktopPubkey, previousPath != path {
+            if peerHex == pairedDesktopPubkey, previousPath != path, !relaySuspendedForBackground {
                 Task { await self.requestSnapshot(reason: "connection_path_changed") }
             }
         }
@@ -206,6 +208,10 @@ extension MobileAppState {
                 desktopTaskUnavailable = false
             }
             if !hasReceivedInitialSnapshot { hasReceivedInitialSnapshot = true }
+            if isResumingFromBackground, !relaySuspendedForBackground {
+                logger.info("[MobileSync] fresh snapshot after foreground resume; workspace is live again")
+                isResumingFromBackground = false
+            }
             if !cachedDesktopTaskProjects.isEmpty { cachedDesktopTaskProjects = [] }
             let applyMillis = Int(Date().timeIntervalSince(applyStart) * 1000)
             logger.info("PERFORMANCE: [MobileSync] applied snapshot seq=\(snap.seq ?? 0, privacy: .public) in \(applyMillis, privacy: .public)ms changed=[\(changedFields.joined(separator: ","), privacy: .public)]")
@@ -606,6 +612,13 @@ extension MobileAppState {
         // A session that is no longer streaming cannot still be thinking.
         if update.isStreaming == false {
             setSessionThinking(sessionID: update.sessionID, isThinking: false)
+        }
+
+        if update.fileEditsChanged == true,
+           activeSessionID == update.sessionID || threadChanges?.sessionID == update.sessionID {
+            Task { [weak self] in
+                await self?.requestThreadChanges(sessionID: update.sessionID)
+            }
         }
 
         switch update.kind {

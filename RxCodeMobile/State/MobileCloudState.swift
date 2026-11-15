@@ -129,7 +129,11 @@ final class MobileCloudState {
     }
 
     static func isCancellation(_ error: Error) -> Bool {
-        Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
+        if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled { return true }
+        // Bridged or relayed failures can lose their URLError type but keep the
+        // Foundation code; a cancelled load is never something to show the user.
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
 
     func taskActivity(projectID: String, recipient: String) async throws -> [CloudTaskActivityRecord] {

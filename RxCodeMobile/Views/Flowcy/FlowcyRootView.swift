@@ -215,14 +215,14 @@ struct FlowcyRemoteToolbar: ToolbarContent {
 }
 
 private enum FlowcySetting: String, CaseIterable, Identifiable {
-    case integrations = "Integrations", automation = "Automation", billing = "Billing", account = "Account"
+    case integrations = "Integrations", automation = "Automation", usage = "Usage", account = "Account"
     var id: Self { self }
 
     var symbol: String {
         switch self {
         case .integrations: "point.3.connected.trianglepath.dotted"
         case .automation: "bolt"
-        case .billing: "creditcard"
+        case .usage: "chart.bar.xaxis"
         case .account: "person.crop.circle"
         }
     }
@@ -230,7 +230,7 @@ private enum FlowcySetting: String, CaseIterable, Identifiable {
     @ViewBuilder var destination: some View {
         switch self {
         case .integrations: FlowcyIntegrationsView()
-        case .billing: FlowcyBillingView()
+        case .usage: FlowcyUsageView()
         case .automation: MobileAutomationView()
         case .account: FlowcyAccountView()
         }

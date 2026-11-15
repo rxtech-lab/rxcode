@@ -94,6 +94,7 @@ struct MobileReleaseView: View {
         do {
             repos = try await state.listReleaseRepos().items
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -317,6 +318,7 @@ struct MobileReleaseRepoDetailView: View {
         do {
             workflows = try await state.listReleaseWorkflows(repoId: repo.id)
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
         // Older servers don't expose history to the app; hide the section then.

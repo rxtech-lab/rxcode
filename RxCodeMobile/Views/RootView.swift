@@ -49,6 +49,10 @@ struct RemoteWorkspaceView: View {
     /// Shown only after the connection has been down for a moment, so a brief
     /// socket hiccup doesn't flash the reconnect overlay.
     @State private var showReconnectOverlay = false
+    /// The foreground-resume reconnect has taken too long; the reconnecting
+    /// page switches to its retry state.
+    @State private var resumeTimedOut = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -132,6 +136,10 @@ struct RemoteWorkspaceView: View {
         hasShownWorkspace || isInitialSyncComplete
     }
 
+    private var isResumingWorkspace: Bool {
+        hasShownWorkspace && state.isResumingFromBackground
+    }
+
     private var isInitialSyncComplete: Bool {
         state.isDesktopTaskSyncReady && minimumLoadingTimeElapsed && !connectionTimedOut
     }
@@ -160,6 +168,37 @@ struct RemoteWorkspaceView: View {
                     .animation(.spring(duration: 0.3), value: showReconnectOverlay)
             }
 
+            // Coming back from the background: the mirror may be stale even if
+            // the socket reports connected, so block the workspace (kept
+            // mounted underneath) until a fresh snapshot lands.
+            if isResumingWorkspace {
+                SyncLoadingView(
+                    isTimedOut: resumeTimedOut && !isRetryingConnection,
+                    pairedDesktops: state.pairedDesktops,
+                    activeDesktopID: state.activePairedDesktop?.id,
+                    onRetry: {
+                        MobileHaptics.buttonTap()
+                        resumeTimedOut = false
+                        Task { await retryConnection() }
+                    },
+                    onSelectDesktop: { desktop in
+                        MobileHaptics.buttonTap()
+                        resumeTimedOut = false
+                        Task {
+                            await state.switchPairedDesktop(desktop)
+                            await retryConnection()
+                        }
+                    }
+                )
+                .background(Color(UIColor.systemBackground).ignoresSafeArea())
+                .overlay(alignment: .topTrailing) {
+                    connectionScreenCloseButton
+                }
+                .accessibilityIdentifier("resume-reconnect-page")
+                .transition(.opacity)
+                .zIndex(2)
+            }
+
             // Loading splash - shown until first snapshot AND minimum 2 seconds
             if !shouldShowContent {
                 SyncLoadingView(
@@ -182,28 +221,33 @@ struct RemoteWorkspaceView: View {
                     }
                 )
                 .overlay(alignment: .topTrailing) {
-                    if let closeRemoteWorkspace {
-                        Button {
-                            MobileHaptics.buttonTap()
-                            closeRemoteWorkspace()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 28, height: 28)
-                        }
-                        .accessibilityLabel("Close")
-                        .buttonStyle(.glass)
-                        .controlSize(.regular)
-                        .buttonBorderShape(.circle)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .padding()
-                    }
+                    connectionScreenCloseButton
                 }
                 .transition(.splashTransition)
                 .zIndex(1)
             }
         }
         .animation(.easeInOut(duration: 0.5), value: shouldShowContent)
+        .animation(.easeInOut(duration: 0.3), value: isResumingWorkspace)
+        .onChange(of: isResumingWorkspace) { wasResuming, resuming in
+            if wasResuming, !resuming, scenePhase == .active {
+                MobileHaptics.connected()
+            }
+        }
+        .task(id: isResumingWorkspace && scenePhase == .active) {
+            // Time the resume only while in the foreground: the clock keeps
+            // running during suspension and would otherwise fire immediately.
+            resumeTimedOut = false
+            guard isResumingWorkspace, scenePhase == .active else { return }
+            do {
+                try await Task.sleep(for: .seconds(15))
+            } catch {
+                return
+            }
+            logger.warning("Foreground resume timed out connection=\(String(describing: state.connectionState), privacy: .public) unavailable=\(state.desktopTaskUnavailable, privacy: .public)")
+            MobileHaptics.connectionError()
+            resumeTimedOut = true
+        }
         .task {
             await initialLoad()
         }
@@ -219,8 +263,9 @@ struct RemoteWorkspaceView: View {
                 hasShownWorkspace = true
             }
         }
-        .task(id: hasShownWorkspace && !state.isDesktopTaskSyncReady) {
-            guard hasShownWorkspace, !state.isDesktopTaskSyncReady else {
+        .task(id: hasShownWorkspace && !state.isDesktopTaskSyncReady && !state.isResumingFromBackground) {
+            // The full reconnecting page covers foreground resumes.
+            guard hasShownWorkspace, !state.isDesktopTaskSyncReady, !state.isResumingFromBackground else {
                 if showReconnectOverlay {
                     logger.info("Reconnect overlay hidden")
                 }
@@ -258,6 +303,29 @@ struct RemoteWorkspaceView: View {
                     await initialLoad()
                 }
             }
+        }
+    }
+
+    /// Leaves the remote workspace from the connecting / reconnecting pages
+    /// so the user can return to Tasks instead of waiting on the Mac.
+    @ViewBuilder
+    private var connectionScreenCloseButton: some View {
+        if let closeRemoteWorkspace {
+            Button {
+                MobileHaptics.buttonTap()
+                closeRemoteWorkspace()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 28, height: 28)
+            }
+            .accessibilityLabel("Close")
+            .accessibilityIdentifier("close-connection-screen")
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .buttonBorderShape(.circle)
+            .frame(minWidth: 44, minHeight: 44)
+            .padding()
         }
     }
 

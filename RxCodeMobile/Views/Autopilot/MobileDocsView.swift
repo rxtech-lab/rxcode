@@ -91,6 +91,7 @@ struct MobileDocsView: View {
         do {
             repos = try await state.listDocsRepos(search: search).items
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -226,6 +227,7 @@ struct MobileDocsRepoDetailView: View {
         do {
             documents = try await state.listDocuments(repoId: repo.id).items
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -296,6 +298,7 @@ struct MobileDocumentView: View {
             let detail = try await state.getDocument(repoId: repoId, docId: docId)
             content = detail.currentVersion?.content ?? "(no content)"
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }

@@ -418,13 +418,11 @@ struct NewThreadConfigStrip: View {
                 Spacer()
             }
 
-            GlassEffectContainer(spacing: 12) {
-                LazyVGrid(columns: columns, spacing: 12) {
-                    branchMenu
-                    modelMenu
-                    permissionMenu
-                    planToggleChip
-                }
+            LazyVGrid(columns: columns, spacing: 12) {
+                branchMenu
+                modelMenu
+                permissionMenu
+                planToggleChip
             }
         }
         .sheet(isPresented: $showingCreateBranch) {
@@ -670,10 +668,14 @@ struct NewThreadConfigStrip: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
-        .glassEffect(
-            active ? .regular.tint(ClaudeTheme.accent).interactive() : .regular.interactive(),
-            in: .rect(cornerRadius: 12)
-        )
+        .background {
+            if active {
+                MobileCard.shape.fill(ClaudeTheme.accent)
+            } else {
+                MobileCardSurface()
+            }
+        }
+        .contentShape(MobileCard.shape)
     }
 }
 

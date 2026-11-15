@@ -5,7 +5,6 @@ import RxCodeSync
 
 struct MobileBriefingDetailView: View {
     @EnvironmentObject private var state: MobileAppState
-    @Namespace private var glassNamespace
     let groupKey: BriefingGroupKey
     var onOpenSession: (String) -> Void = { _ in }
 
@@ -36,6 +35,7 @@ struct MobileBriefingDetailView: View {
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .scrollContentBackground(.hidden)
+        .background(MobileCard.pageBackground)
         .accessibilityIdentifier("briefing-detail-screen")
         .navigationTitle(projectName)
         .navigationBarTitleDisplayMode(.inline)
@@ -186,7 +186,13 @@ struct MobileBriefingDetailView: View {
     }
 
     private var group: GroupedBriefing? {
-        state.briefingGroups.first { $0.key == groupKey }
+        if groupKey.day == nil {
+            // A branch-wide key: show the branch's most recent day.
+            return state.briefingGroups
+                .filter { $0.projectId == groupKey.projectId && $0.branch == groupKey.branch }
+                .max { $0.updatedAt < $1.updatedAt }
+        }
+        return state.briefingGroups.first { $0.key == groupKey }
     }
 
     private var projectName: String {
@@ -285,7 +291,7 @@ struct MobileBriefingDetailView: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(.ultraThinMaterial, in: Capsule())
+                            .mobileCardChipBackground()
                         }
                         .buttonStyle(.plain)
                         .disabled(isInitializingGit)
@@ -301,11 +307,20 @@ struct MobileBriefingDetailView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .mobileCardChipBackground()
                     }
 
                     if let ciStatus {
                         MobileCIStatusChip(status: ciStatus, linksFailingRun: true)
+                    }
+
+                    if let day = groupKey.day {
+                        Label(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()), systemImage: "calendar")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .mobileCardChipBackground()
                     }
 
                     if let createdAt = group?.briefing?.createdAt {
@@ -325,7 +340,7 @@ struct MobileBriefingDetailView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .mobileCardSurface()
     }
 
     // MARK: - Summary Card
@@ -372,7 +387,7 @@ struct MobileBriefingDetailView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .mobileCardSurface()
     }
 
     // MARK: - Threads Section
@@ -398,7 +413,7 @@ struct MobileBriefingDetailView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .mobileCardChipBackground()
                 }
             }
             .padding(.leading, 4)
@@ -406,19 +421,16 @@ struct MobileBriefingDetailView: View {
             if threads.isEmpty {
                 emptyThreadsCard
             } else {
-                GlassEffectContainer(spacing: 12) {
-                    VStack(spacing: 12) {
-                        ForEach(threads) { thread in
-                            NavigationLink(value: thread.sessionId) {
-                                MobileBriefingThreadCard(
-                                    thread: thread,
-                                    isStreaming: isThreadStreaming(thread.sessionId),
-                                    namespace: glassNamespace
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("briefing-thread-row-\(thread.sessionId)")
+                VStack(spacing: 10) {
+                    ForEach(threads) { thread in
+                        NavigationLink(value: thread.sessionId) {
+                            MobileBriefingThreadCard(
+                                thread: thread,
+                                isStreaming: isThreadStreaming(thread.sessionId)
+                            )
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("briefing-thread-row-\(thread.sessionId)")
                     }
                 }
             }
@@ -444,7 +456,7 @@ struct MobileBriefingDetailView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .mobileCardSurface()
     }
 
     private func isThreadStreaming(_ sessionId: String) -> Bool {
@@ -470,20 +482,15 @@ struct MobileBriefingDetailView: View {
 struct MobileBriefingThreadCard: View {
     let thread: MobileThreadSummary
     let isStreaming: Bool
-    let namespace: Namespace.ID
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             // Thread icon
-            ZStack {
-                Circle()
-                    .fill(Color.secondary.opacity(0.1))
-                    .frame(width: 36, height: 36)
-                
-                Image(systemName: "text.bubble")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
+            MobileCardIconTile(
+                systemImage: isStreaming ? "sparkles" : "text.bubble",
+                tint: isStreaming ? ClaudeTheme.accent : .secondary,
+                size: 36
+            )
             
             VStack(alignment: .leading, spacing: 6) {
                 Text(thread.title.isEmpty ? "Untitled" : thread.title)
@@ -520,9 +527,7 @@ struct MobileBriefingThreadCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
-        .glassEffectID(thread.id, in: namespace)
-        .contentShape(.rect(cornerRadius: 16))
+        .mobileCardSurface(rail: isStreaming ? ClaudeTheme.accent : nil)
         .accessibilityLabel(accessibilityLabel)
     }
 

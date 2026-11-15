@@ -452,6 +452,7 @@ private struct MobileDirectoryBrowser: View {
             listing = try await state.watchedRepoDirectories(id: repoID, sha: level.sha)
         } catch is CancellationError {
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             self.error = error.localizedDescription
             MobileHaptics.connectionError()
         }

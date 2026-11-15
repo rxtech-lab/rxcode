@@ -103,7 +103,7 @@ struct FlowcyCIRunsView: View {
             page = nextPage
             hasMore = response.hasMore
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !MobileCloudState.isCancellation(error) else { return }
             self.error = error.localizedDescription
             MobileHaptics.connectionError()
         }
@@ -171,7 +171,7 @@ private struct FlowcyCIRunDetailView: View {
             try Task.checkCancellation()
             jobs = response.jobs
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !MobileCloudState.isCancellation(error) else { return }
             self.error = error.localizedDescription
             MobileHaptics.connectionError()
         }
@@ -228,7 +228,7 @@ private struct FlowcyCIJobLogView: View {
             try Task.checkCancellation()
             logs = response.logs
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !MobileCloudState.isCancellation(error) else { return }
             self.error = error.localizedDescription
             MobileHaptics.connectionError()
         }

@@ -158,6 +158,7 @@ struct MobileAutopilotView: View {
         do {
             account = try await state.loadAutopilotAccount()
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             loadError = error.localizedDescription
         }
     }

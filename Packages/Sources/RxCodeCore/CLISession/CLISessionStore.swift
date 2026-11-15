@@ -356,7 +356,14 @@ public actor CLISessionStore {
         projectId: UUID
     ) async -> ChatSession? {
         let url = await jsonlURL(sid: sid, cwd: cwd)
-        logger.info("[LoadFullSession] sid=\(sid, privacy: .public) cwd=\(cwd, privacy: .public) url=\(url.path, privacy: .public) exists=\(FileManager.default.fileExists(atPath: url.path))")
+        // A summary can outlive its jsonl (CLI cleanup, deleted project dir).
+        // That's an expected state, not a read failure — bail quietly instead
+        // of logging an error for every background caller that probes it.
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            logger.debug("[LoadFullSession] missing jsonl sid=\(sid, privacy: .public) url=\(url.path, privacy: .public)")
+            return nil
+        }
+        logger.debug("[LoadFullSession] sid=\(sid, privacy: .public) cwd=\(cwd, privacy: .public) url=\(url.path, privacy: .public)")
 
         var lines: [CLISessionLine] = []
         var firstTimestamp: Date?
@@ -376,7 +383,7 @@ public actor CLISessionStore {
             logger.error("[LoadFullSession] read error sid=\(sid, privacy: .public) url=\(url.path, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             return nil
         }
-        logger.info("[LoadFullSession] read sid=\(sid, privacy: .public) bytes=\(data.count)")
+        logger.debug("[LoadFullSession] read sid=\(sid, privacy: .public) bytes=\(data.count)")
         // Tolerate an in-flight final write (jsonl is append-only) — the trailing
         // partial line fails JSON decode and is silently skipped, satisfying S1.
         let content = String(data: data, encoding: .utf8) ?? ""
@@ -407,7 +414,7 @@ public actor CLISessionStore {
         }
 
         let messages = CLILineToBlocksMapper.map(lines: lines)
-        logger.info("[LoadFullSession] parsed sid=\(sid, privacy: .public) lines=\(lines.count) messages=\(messages.count)")
+        logger.debug("[LoadFullSession] parsed sid=\(sid, privacy: .public) lines=\(lines.count) messages=\(messages.count)")
         let mtimeDate = mtime(of: url) ?? Date()
         let meta = await metaStore.load(sessionId: sid)
 

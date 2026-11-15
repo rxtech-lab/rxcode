@@ -92,7 +92,7 @@ final class MobileAppState: ObservableObject {
     @Published var pairingStatus: PairingStatus = .idle
 
     @Published var projects: [Project] = [] {
-        didSet { cachedBriefingGroups = nil }
+        didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
     }
     @Published var sessions: [SessionSummary] = [] {
         didSet {
@@ -104,9 +104,37 @@ final class MobileAppState: ObservableObject {
     }
     private(set) var sessionListIndex = MobileSessionListIndex()
     @Published var branchBriefings: [MobileBranchBriefing] = [] {
-        didSet { cachedBriefingGroups = nil }
+        didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
     }
     private var cachedBriefingGroups: [GroupedBriefing]?
+    private var cachedBriefingTimeline: (filters: MobileBriefingFilters, calendar: Calendar, start: Date, end: Date, sections: [MobileBriefingDaySection])?
+
+    /// Transport and chat updates publish frequently. Sort the timeline only
+    /// when its inputs change or an entry crosses a date-filter boundary.
+    func briefingSections(filters: MobileBriefingFilters, now: Date = .now, calendar: Calendar = .current) -> [MobileBriefingDaySection] {
+        if let cached = cachedBriefingTimeline, cached.filters == filters,
+           cached.calendar == calendar, now >= cached.start, now < cached.end {
+            return cached.sections
+        }
+        let entries = filters.entries(groups: briefingGroups, documents: briefingDocuments,
+                                      currentBranches: projectBranches, projects: projects, now: now, calendar: calendar)
+        let sections = MobileBriefingFilters.daySections(entries, calendar: calendar)
+        var end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
+        let days: Int? = switch filters.timeRange {
+        case .week: 7
+        case .month: 30
+        default: nil
+        }
+        if let days {
+            for entry in entries {
+                if let expiry = calendar.date(byAdding: .day, value: days, to: entry.createdAt) {
+                    end = min(end, expiry)
+                }
+            }
+        }
+        cachedBriefingTimeline = (filters, calendar, now, end, sections)
+        return sections
+    }
 
     /// Shared by the grid, filter menu, iPad list and detail view. Unrelated
     /// state publications must not rebuild and sort the entire thread history.
@@ -118,7 +146,9 @@ final class MobileAppState: ObservableObject {
         return groups
     }
     @Published var usageDashboard = UsageDashboard()
-    @Published var briefingDocuments: [MobileBriefingDocument] = []
+    @Published var briefingDocuments: [MobileBriefingDocument] = [] {
+        didSet { cachedBriefingTimeline = nil }
+    }
     @Published var briefingContentResult: BriefingContentResultPayload?
     @Published var isLoadingBriefingContent = false
     var pendingBriefingContentID: UUID?
@@ -127,7 +157,7 @@ final class MobileAppState: ObservableObject {
     var briefingAssetWriteHandle: FileHandle?
     var briefingAssetBytesReceived: Int64 = 0
     @Published var threadSummaries: [MobileThreadSummary] = [] {
-        didSet { cachedBriefingGroups = nil }
+        didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
     }
     @Published var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
     @Published var desktopSettings: MobileSettingsSnapshot?
@@ -143,7 +173,9 @@ final class MobileAppState: ObservableObject {
     /// from the paired Mac instead of from the iPad.
     @Published var desktopWebProxy: MobileWebProxyInfo?
     /// Current git branch per project, mirrored from the desktop's snapshot.
-    @Published var projectBranches: [UUID: String] = [:]
+    @Published var projectBranches: [UUID: String] = [:] {
+        didSet { cachedBriefingTimeline = nil }
+    }
     /// Local branch list per project, mirrored from the desktop's snapshot.
     @Published var availableBranchesByProject: [UUID: [String]] = [:]
     /// Per-project working-tree dirty flag, mirrored from the desktop's snapshot.
@@ -225,6 +257,13 @@ final class MobileAppState: ObservableObject {
     /// so that deliberate disconnect isn't mistaken for the Mac being
     /// unreachable (which would flash the connection error on resume).
     var relaySuspendedForBackground = false
+    /// Set when the app goes to the background and cleared only by the first
+    /// snapshot that arrives after returning to the foreground. While set, the
+    /// mirrored workspace is treated as stale: the relay socket can look
+    /// connected on resume while the session, subscription or direct link
+    /// behind it is dead, so the UI shows the reconnecting page instead of
+    /// letting the user act on outdated state.
+    @Published var isResumingFromBackground = false
     @Published var usesCloudTasks = false
     @Published var cloudTaskProjects: [Project] = []
     @Published var cloudTaskActivityByProject: [UUID: [String: CloudTaskActivity]] = [:]
@@ -441,6 +480,7 @@ final class MobileAppState: ObservableObject {
         eventTask?.cancel()
         eventTask = nil
         let oldClient = client
+        resetConnectionPaths()
         client = SyncClient(identity: identity, relayURL: relayURL, directPathsEnabled: enabled)
         await oldClient.stop()
         if wasStarted { await startClient() }
@@ -489,6 +529,9 @@ final class MobileAppState: ObservableObject {
         case .background:
             logger.info("[Lifecycle] entering background — disconnecting relay")
             relaySuspendedForBackground = true
+            if isPaired, !isResumingFromBackground { isResumingFromBackground = true }
+            // `stop()` tears direct links down without reporting a path change.
+            resetConnectionPaths()
             enqueueLifecycle(label: "background/stop") { [client] in await client.stop() }
         case .active:
             guard relaySuspendedForBackground else {
@@ -498,6 +541,11 @@ final class MobileAppState: ObservableObject {
             logger.info("[Lifecycle] entering foreground — reconnecting relay")
             relaySuspendedForBackground = false
             enqueueLifecycle(label: "foreground/start") { [client] in await client.start() }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.lifecycleTask?.value
+                await self.resyncAfterReconnect(reason: "foreground_resume")
+            }
         case .inactive:
             break
         @unknown default:
@@ -522,11 +570,37 @@ final class MobileAppState: ObservableObject {
 
     /// Serialize manual recovery with background/foreground transitions.
     func reconnectToDesktop() async {
+        resetConnectionPaths()
         enqueueLifecycle(label: "manual/reconnect") { [client] in
             await client.stop()
             await client.start()
         }
         await lifecycleTask?.value
+        await resyncAfterReconnect(reason: "manual_reconnect")
+    }
+
+    /// Pull fresh state after the relay was rebuilt. Re-subscribes the open
+    /// thread (the Mac may have restarted and lost the subscription, which
+    /// would leave the chat without live updates) and requests a snapshot,
+    /// which is what clears `isResumingFromBackground`.
+    func resyncAfterReconnect(reason: String) async {
+        guard isPaired else {
+            if isResumingFromBackground { isResumingFromBackground = false }
+            return
+        }
+        // The Mac's snapshot counter may have restarted while we were away;
+        // accept whatever it sends next instead of dropping it as stale.
+        lastAppliedSnapshotSeq = nil
+        trailingSnapshotRequestTask?.cancel()
+        trailingSnapshotRequestTask = nil
+        lastSnapshotRequestAt = nil
+        logger.info("[MobileSync] resync after reconnect reason=\(reason, privacy: .public) activeSession=\(self.activeSessionID ?? "<nil>", privacy: .public)")
+        if let sessionID = activeSessionID, !MobileDraftSessionID.isDraft(sessionID) {
+            // `subscribe_session` also makes the Mac send a snapshot.
+            await subscribe(to: sessionID)
+        } else {
+            await requestSnapshot(reason: reason)
+        }
     }
 
     func startClient() async {

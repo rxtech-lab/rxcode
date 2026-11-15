@@ -19,7 +19,6 @@ struct FlowcyProjectsView: View {
     @State private var releaseByRepository: [String: ReleaseRepoStatus] = [:]
     @State private var summaryLoading = false
     @State private var refreshID = UUID()
-    @State private var projectCardHeight: CGFloat = 130
     @AppStorage("mobile.flowcy.projectOrder") private var savedProjectOrders = Data()
 
     private var orderScope: String { cloud.accountID ?? "signed-in" }
@@ -68,37 +67,25 @@ struct FlowcyProjectsView: View {
                 ContentUnavailableView(search.isEmpty ? "No Projects" : "No Matching Projects",
                                        systemImage: "folder",
                                        description: Text(search.isEmpty ? "Create a project to get started." : "Try another search."))
-            } else if sizeClass == .regular {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), alignment: .top)], spacing: 16) {
-                        ForEach(projects) { project in
-                            projectButton(project)
-                                .padding(20)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .onGeometryChange(for: CGFloat.self) { geometry in
-                                    geometry.size.height
-                                } action: { height in
-                                    // Keep every card tall enough for the largest content seen in this grid.
-                                    projectCardHeight = max(projectCardHeight, height)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: projectCardHeight, alignment: .topLeading)
-                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-                                .mobileReorderItem()
-                        }
-                        .mobileReorderable()
-                    }
-                    .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
-                    .padding()
-                }
-                .background(Color(.systemGroupedBackground))
-                .refreshable { await reload() }
             } else {
-                List {
-                    ForEach(projects) { project in projectButton(project).mobileReorderItem() }
-                        .mobileReorderable()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        if search.isEmpty { summaryStrip }
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 14) {
+                            ForEach(projects) { project in
+                                projectButton(project)
+                                    .frame(minHeight: sizeClass == .regular ? 190 : 0)
+                                    .mobileReorderItem()
+                            }
+                            .mobileReorderable()
+                        }
+                        .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
                 }
-                    .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
-                    .refreshable { await reload() }
+                .background(MobileCard.pageBackground)
+                .refreshable { await reload() }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -135,27 +122,15 @@ struct FlowcyProjectsView: View {
             MobileHaptics.buttonTap()
             selected = project
         } label: {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(project.title, systemImage: "folder").font(.headline).lineLimit(2)
-                        Text(project.repositoryFullName ?? "Standalone project")
-                            .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                }
-                FlowcyProjectCardSummary(
-                    project: project,
-                    ci: ciByRepository[project.repositoryFullName?.lowercased() ?? ""],
-                    release: releaseByRepository[project.repositoryFullName?.lowercased() ?? ""],
-                    loading: summaryLoading,
-                    refreshID: refreshID
-                )
-            }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                .padding(.vertical, 8)
+            FlowcyProjectCard(
+                project: project,
+                ci: ciByRepository[project.repositoryFullName?.lowercased() ?? ""],
+                release: releaseByRepository[project.repositoryFullName?.lowercased() ?? ""],
+                loading: summaryLoading,
+                refreshID: refreshID
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MobileCardButtonStyle(rail: rail(for: project)))
         .accessibilityIdentifier("flowcy-project-\(project.id)")
         .accessibilityHint("Opens the project. Long press and drag to reorder.")
         .mobileLegacyDrag("flowcy-project:\(project.id)")
@@ -170,6 +145,54 @@ struct FlowcyProjectsView: View {
             saveOrder(order)
             return true
         }
+    }
+
+    private var gridColumns: [GridItem] {
+        sizeClass == .regular
+            ? [GridItem(.adaptive(minimum: 280), spacing: 14, alignment: .top)]
+            : [GridItem(.flexible(), alignment: .top)]
+    }
+
+    /// A failing default branch is the one state worth flagging from the grid.
+    private func rail(for project: CloudProject) -> Color? {
+        ciByRepository[project.repositoryFullName?.lowercased() ?? ""]?.overallState == .failure ? .red : nil
+    }
+
+    private var summaryStrip: some View {
+        let statuses = cloud.projects.compactMap { ciByRepository[$0.repositoryFullName?.lowercased() ?? ""] }
+        let failing = statuses.filter { $0.overallState == .failure }.count
+        let passing = statuses.filter { $0.overallState == .success }.count
+        let linked = cloud.projects.filter { $0.repositoryFullName != nil }.count
+        return HStack(spacing: 10) {
+            summaryTile(value: cloud.projects.count, label: "Projects", systemImage: "square.grid.2x2", tint: ClaudeTheme.accent)
+            summaryTile(value: linked, label: "Repositories", systemImage: "chevron.left.forwardslash.chevron.right", tint: .indigo)
+            if failing > 0 {
+                summaryTile(value: failing, label: "Failing CI", systemImage: "xmark.octagon", tint: .red)
+            } else {
+                summaryTile(value: passing, label: "Passing CI", systemImage: "checkmark.seal", tint: .green)
+            }
+        }
+    }
+
+    private func summaryTile(value: Int, label: LocalizedStringKey, systemImage: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(tint)
+            Text(value, format: .number)
+                .font(.title2.weight(.bold))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .mobileCardSurface()
+        .accessibilityElement(children: .combine)
     }
 
     private func reorderProjects(_ sources: [String], before target: String?) {
@@ -289,6 +312,19 @@ enum FlowcyProjectSection: String, CaseIterable, Identifiable {
         case .updates: "arrow.triangle.2.circlepath"
         case .releases: "shippingbox"
         case .secrets: "key"
+        }
+    }
+    var tint: Color {
+        switch self {
+        case .overview, .tasks: .blue
+        case .docs: .teal
+        case .issues: .green
+        case .pullRequests: .purple
+        case .sessions: .pink
+        case .actions: .orange
+        case .updates: .cyan
+        case .releases: .indigo
+        case .secrets: .brown
         }
     }
 }
@@ -552,6 +588,6 @@ private struct FlowcyProjectRepositoryView: View {
                 watched = overview.repository
             default: break
             }
-        } catch { self.error = error.localizedDescription }
+        } catch { guard !MobileCloudState.isCancellation(error) else { return }; self.error = error.localizedDescription }
     }
 }

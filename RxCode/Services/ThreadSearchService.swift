@@ -68,6 +68,10 @@ actor ThreadSearchService {
     /// Backfill version sentinel. Bump when chunking or embedding model changes.
     private let backfillVersion = 2
     private let backfillKey = "com.idealapp.RxCode.searchIndex.backfillVersion"
+    /// Session ids the backfill could not load (jsonl deleted, unreadable).
+    /// Remembered so an interrupted backfill that re-runs on the next launch
+    /// doesn't re-probe the same dead sessions every time.
+    private let backfillUnloadableKey = "com.idealapp.RxCode.searchIndex.backfillUnloadable"
     private var workspaceDefaults = WorkspaceDefaults(workspaceID: AppWorkspace.personalID)
 
     init() {}
@@ -130,6 +134,7 @@ actor ThreadSearchService {
     func clearCachedIndex() {
         index.removeAll()
         workspaceDefaults.set(nil as String?, for: backfillKey)
+        workspaceDefaults.set([String](), for: backfillUnloadableKey)
     }
 
     // MARK: - Indexing
@@ -205,6 +210,7 @@ actor ThreadSearchService {
         index.removeAll()
         await MainActor.run { store.deleteAllEmbeddingChunks() }
         workspaceDefaults.set(nil as String?, for: backfillKey)
+        workspaceDefaults.set([String](), for: backfillUnloadableKey)
 
         let summaries = await MainActor.run { loadAll() }
         let total = summaries.count
@@ -216,7 +222,7 @@ actor ThreadSearchService {
                 await indexThread(full)
             } else {
                 loadFailed += 1
-                logger.info("Reindex: failed to load full session \(summary.id, privacy: .public)")
+                logger.debug("Reindex: failed to load full session \(summary.id, privacy: .public)")
             }
             done += 1
             progress?(done, total)
@@ -325,18 +331,32 @@ actor ThreadSearchService {
         }
 
         let summaries = await loadAll()
-        logger.info("Backfill starting: \(summaries.count) thread summaries to evaluate")
+        // Indexed threads persist their chunks immediately, so a backfill that
+        // was killed mid-run resumes where it left off: already-indexed threads
+        // are skipped via `index`, and known-unloadable ones via this set.
+        var unloadable = Set(workspaceDefaults.stringArray(for: backfillUnloadableKey))
+        let liveIds = Set(summaries.map(\.id))
+        unloadable.formIntersection(liveIds)
+        logger.info("Backfill starting: \(summaries.count) thread summaries to evaluate (\(unloadable.count) known unloadable)")
         var done = 0
         var alreadyIndexed = 0
+        var skippedUnloadable = 0
         var loadFailed = 0
         for summary in summaries {
             if !index[summary.id, default: []].isEmpty {
                 alreadyIndexed += 1
                 continue
             }
+            if unloadable.contains(summary.id) {
+                skippedUnloadable += 1
+                continue
+            }
             guard let full = await loadFull(summary) else {
                 loadFailed += 1
-                logger.info("Backfill: failed to load full session \(summary.id, privacy: .public)")
+                unloadable.insert(summary.id)
+                // Persist as we go so an interrupted run still remembers.
+                workspaceDefaults.set(Array(unloadable), for: backfillUnloadableKey)
+                logger.debug("Backfill: failed to load full session \(summary.id, privacy: .public)")
                 continue
             }
             await indexThread(full)
@@ -344,8 +364,9 @@ actor ThreadSearchService {
             // Yield occasionally so we don't starve the cooperative pool.
             if done % 8 == 0 { await Task.yield() }
         }
+        workspaceDefaults.set(Array(unloadable), for: backfillUnloadableKey)
         workspaceDefaults.set(backfillVersion, for: backfillKey)
-        logger.info("Search backfill complete: indexed=\(done), alreadyIndexed=\(alreadyIndexed), loadFailed=\(loadFailed), total=\(summaries.count)")
+        logger.info("Search backfill complete: indexed=\(done), alreadyIndexed=\(alreadyIndexed), skippedUnloadable=\(skippedUnloadable), loadFailed=\(loadFailed), total=\(summaries.count)")
     }
 
     // MARK: - Chunking

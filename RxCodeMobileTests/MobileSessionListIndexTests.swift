@@ -8,6 +8,22 @@ import RxCodeSync
 final class MobileSessionListIndexTests: XCTestCase {
     private let projectID = UUID()
 
+    func testLateFileEditsRefreshActiveThreadWithoutStreamingTransition() async {
+        let state = MobileAppState()
+        state.isPaired = true
+        state.activeSessionID = "chat"
+        let refresh = expectation(description: "Late file edits request a fresh change overview")
+        let observation = state.$isLoadingThreadChanges.dropFirst().sink { loading in
+            if loading { refresh.fulfill() }
+        }
+        defer { observation.cancel() }
+
+        // No message count or streaming flag changes, including another edit
+        // to an already-recorded file after the turn finished.
+        state.applySessionUpdate(.init(sessionID: "chat", kind: .statusChanged, fileEditsChanged: true))
+        await fulfillment(of: [refresh], timeout: 2)
+    }
+
     func testRepeatedThinkingFlagsDoNotInvalidateChat() {
         let state = MobileAppState()
         var publications = 0

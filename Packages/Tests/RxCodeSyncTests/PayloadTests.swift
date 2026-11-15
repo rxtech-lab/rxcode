@@ -5,6 +5,33 @@ import RxCodeCore
 
 @Suite("Mobile sync payloads")
 struct PayloadTests {
+    @Test("file edit notifications preserve detected script diffs and decode older updates")
+    func detectedFileEditsSync() throws {
+        var tool = ToolCall(id: "script", name: "exec_command", input: ["cmd": .string("python3 patch.py")], result: "")
+        let changes = [DetectedShellFileChange(
+            path: "/repo/item.swift", kind: .deleted, addedLines: 0, removedLines: 1,
+            diff: "@@ -1 +0,0 @@\n-let item = 1", isAmbiguous: true
+        )]
+        tool.setDetectedShellFileChanges(changes)
+        let payload = Payload.sessionUpdate(SessionUpdatePayload(
+            sessionID: "session", kind: .messageUpdated,
+            message: ChatMessage(role: .assistant, blocks: [.toolCall(tool)]),
+            fileEditsChanged: true
+        ))
+        let decoded = try JSONDecoder().decode(Payload.self, from: JSONEncoder().encode(payload))
+        guard case .sessionUpdate(let update) = decoded else {
+            Issue.record("Expected session update")
+            return
+        }
+        #expect(update.fileEditsChanged == true)
+        #expect(update.message?.blocks.first?.toolCall?.detectedShellFileChanges == changes)
+
+        let legacy = try JSONDecoder().decode(SessionUpdatePayload.self, from: Data(
+            #"{"sessionID":"session","kind":"statusChanged"}"#.utf8
+        ))
+        #expect(legacy.fileEditsChanged == nil)
+    }
+
     @Test("paired account identity supports older hosts and preserves assignment defaults")
     func accountAssigneeIdentity() throws {
         let legacy = try JSONDecoder().decode(AutopilotAccountStatus.self, from: Data(#"{"isSignedIn":true,"name":"Member"}"#.utf8))

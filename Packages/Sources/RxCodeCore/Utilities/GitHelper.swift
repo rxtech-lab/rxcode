@@ -31,16 +31,63 @@ public enum GitHelper {
         return env
     }
 
-    public static func run(_ args: [String], at path: String) async -> String? {
+    /// Captured result of a finished git subprocess.
+    struct ProcessOutput: Sendable {
+        let status: Int32
+        let stdout: Data
+        let stderr: Data
+
+        var combinedTrimmed: String {
+            let combined = (String(data: stdout, encoding: .utf8) ?? "") +
+                (String(data: stderr, encoding: .utf8) ?? "")
+            return combined.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private final class DataBox: @unchecked Sendable {
+        var data = Data()
+    }
+
+    /// Runs `/usr/bin/git` off the caller's executor and drains stdout/stderr
+    /// *concurrently* with the process (and feeds `input` on its own thread).
+    ///
+    /// Waiting for exit before reading is a deadlock: once git writes more than
+    /// the 64 KB pipe buffer (a large `git status --untracked-files=all`,
+    /// `git diff`, or `check-ignore` over many paths) it blocks on write and
+    /// never exits, so the await never returns — which wedged every caller
+    /// queued behind it (e.g. the workspace change tracker actor, and with it
+    /// every new agent stream in that workspace).
+    static func execute(_ args: [String], at path: String, input: Data? = nil) async -> ProcessOutput? {
+        let environment = gitEnvironment()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<ProcessOutput?, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: executeBlocking(args, at: path, environment: environment, input: input))
+            }
+        }
+    }
+
+    private static func executeBlocking(
+        _ args: [String],
+        at path: String,
+        environment: [String: String],
+        input: Data?
+    ) -> ProcessOutput? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = args
         process.currentDirectoryURL = URL(fileURLWithPath: path)
-        process.environment = gitEnvironment()
+        process.environment = environment
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        let inPipe = input == nil ? nil : Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+        if let inPipe {
+            process.standardInput = inPipe
+        } else {
+            process.standardInput = FileHandle.nullDevice
+        }
 
         do {
             try process.run()
@@ -48,15 +95,35 @@ public enum GitHelper {
             return nil
         }
 
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            process.terminationHandler = { _ in
-                continuation.resume()
+        let group = DispatchGroup()
+        let out = DataBox()
+        let err = DataBox()
+        let readQueue = DispatchQueue.global(qos: .userInitiated)
+        group.enter()
+        readQueue.async {
+            out.data = outPipe.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        group.enter()
+        readQueue.async {
+            err.data = errPipe.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        if let inPipe, let input {
+            readQueue.async {
+                try? inPipe.fileHandleForWriting.write(contentsOf: input)
+                try? inPipe.fileHandleForWriting.close()
             }
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard process.terminationStatus == 0 else { return nil }
-        return String(data: data, encoding: .utf8)
+        group.wait()
+        process.waitUntilExit()
+        return ProcessOutput(status: process.terminationStatus, stdout: out.data, stderr: err.data)
+    }
+
+    public static func run(_ args: [String], at path: String) async -> String? {
+        guard let output = await execute(args, at: path), output.status == 0 else { return nil }
+        return String(data: output.stdout, encoding: .utf8)
     }
 
     public static func currentBranch(at path: String) async -> String? {
@@ -76,30 +143,7 @@ public enum GitHelper {
     /// Checks out an existing branch at `path`. Returns the combined git output
     /// on failure, or nil on success.
     public static func checkout(branch: String, at path: String) async -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["checkout", branch]
-        process.currentDirectoryURL = URL(fileURLWithPath: path)
-        process.environment = gitEnvironment()
-
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
-
-        do { try process.run() } catch { return "\(error)" }
-
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            process.terminationHandler = { _ in continuation.resume() }
-        }
-
-        if process.terminationStatus == 0 { return nil }
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        let combined = (String(data: outData, encoding: .utf8) ?? "") +
-                       (String(data: errData, encoding: .utf8) ?? "")
-        let trimmed = combined.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "git checkout exited \(process.terminationStatus)" : trimmed
+        await runWithError(["checkout", branch], at: path)
     }
 
     /// Creates a new branch and checks it out (`git checkout -b <branch> [fromRef]`)
@@ -147,30 +191,12 @@ public enum GitHelper {
     /// Runs a git command and returns nil on success or combined stdout+stderr
     /// trimmed on non-zero exit.
     private static func runWithError(_ args: [String], at path: String) async -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = args
-        process.currentDirectoryURL = URL(fileURLWithPath: path)
-        process.environment = gitEnvironment()
-
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
-
-        do { try process.run() } catch { return "\(error)" }
-
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            process.terminationHandler = { _ in continuation.resume() }
+        guard let output = await execute(args, at: path) else {
+            return "Failed to launch git \(args.first ?? "")"
         }
-
-        if process.terminationStatus == 0 { return nil }
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        let combined = (String(data: outData, encoding: .utf8) ?? "") +
-                       (String(data: errData, encoding: .utf8) ?? "")
-        let trimmed = combined.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "git \(args.first ?? "") exited \(process.terminationStatus)" : trimmed
+        if output.status == 0 { return nil }
+        let trimmed = output.combinedTrimmed
+        return trimmed.isEmpty ? "git \(args.first ?? "") exited \(output.status)" : trimmed
     }
 
     /// Snapshot of the current branch's relationship to its upstream remote.

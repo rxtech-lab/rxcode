@@ -42,9 +42,16 @@ type Conn struct {
 	ws     *websocket.Conn
 	send   chan []byte
 	hub    *Hub
+	// registeredAt orders connections for the same pubkey across replicas.
+	registeredAt time.Time
 }
 
 // Hub maintains the set of live connections and routes envelopes.
+//
+// Every mutation of `conns` and every send on (or close of) a `Conn.send`
+// channel happens on the hub goroutine (`Run`). Other goroutines — the Redis
+// backplane subscriber and publisher — post work through channels instead, so
+// a connection can never be closed while another goroutine is sending to it.
 type Hub struct {
 	mu    sync.RWMutex
 	conns map[string]*Conn
@@ -52,10 +59,27 @@ type Hub struct {
 	register   chan *Conn
 	unregister chan *Conn
 	route      chan *Envelope
+	// remote carries envelopes received from other replicas via the backplane.
+	remote chan *Envelope
+	// evict carries pubkeys that just registered on another replica; any local
+	// connection for them is stale and must be dropped.
+	evict chan evictRequest
+	// failed carries delivery_failed notices computed off the hub loop.
+	failed chan deliveryFailure
 
 	// backplane fans envelopes to other replicas over Redis. nil means the
 	// relay runs single-node and routes purely from the in-memory map.
 	backplane *Backplane
+}
+
+type evictRequest struct {
+	pubkey       string
+	registeredAt time.Time
+}
+
+type deliveryFailure struct {
+	from string
+	to   string
 }
 
 func NewHub() *Hub {
@@ -64,6 +88,9 @@ func NewHub() *Hub {
 		register:   make(chan *Conn, 64),
 		unregister: make(chan *Conn, 64),
 		route:      make(chan *Envelope, 256),
+		remote:     make(chan *Envelope, 256),
+		evict:      make(chan evictRequest, 64),
+		failed:     make(chan deliveryFailure, 64),
 	}
 }
 
@@ -79,6 +106,12 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 			if h.backplane != nil {
 				h.backplane.MarkPresent(c.pubkey)
+				// A client that reconnects (network switch, app resume) can
+				// land on a different replica than its previous socket. The
+				// old replica keeps that half-open socket until pongWait
+				// expires and would swallow every envelope sent by peers on
+				// that replica. Tell the others to drop it now.
+				h.backplane.AnnounceRegistered(c.pubkey, c.registeredAt)
 			}
 			log.Printf("registered %s", short(c.pubkey))
 		case c := <-h.unregister:
@@ -99,6 +132,12 @@ func (h *Hub) Run() {
 			log.Printf("unregistered %s", short(c.pubkey))
 		case env := <-h.route:
 			h.deliver(env)
+		case env := <-h.remote:
+			h.deliverLocal(env)
+		case req := <-h.evict:
+			h.evictLocal(req)
+		case f := <-h.failed:
+			h.notifyDeliveryFailed(f.from, f.to)
 		}
 	}
 }
@@ -112,8 +151,9 @@ func (h *Hub) deliver(env *Envelope) {
 	// Not connected to this pod.
 	if h.backplane != nil {
 		// Another replica may hold the connection. The backplane round-trips
-		// to Redis, so run it off the hub loop to keep local routing fast.
-		go h.routeViaBackplane(env)
+		// to Redis, so hand it to the backplane's single ordered publisher to
+		// keep local routing fast without reordering a peer's envelopes.
+		h.backplane.Enqueue(env)
 		return
 	}
 	// Single-node: a missing local connection means the peer is offline.
@@ -123,7 +163,7 @@ func (h *Hub) deliver(env *Envelope) {
 // deliverLocal delivers an envelope to a recipient connected to this pod and
 // reports whether such a connection existed. It never touches the backplane,
 // so it is safe to call on envelopes arriving from the backplane without
-// risking a re-publish loop.
+// risking a re-publish loop. Must run on the hub goroutine.
 func (h *Hub) deliverLocal(env *Envelope) bool {
 	raw, err := json.Marshal(env)
 	if err != nil {
@@ -145,15 +185,29 @@ func (h *Hub) deliverLocal(env *Envelope) bool {
 	return true
 }
 
-// routeViaBackplane fans an envelope to the other replicas and, when the peer
-// is offline cluster-wide, notifies the sender. Runs on its own goroutine.
-func (h *Hub) routeViaBackplane(env *Envelope) {
-	h.backplane.Publish(env)
-	if !h.backplane.ConnectedAnywhere(env.To) {
-		h.notifyDeliveryFailed(env.From, env.To)
+// evictLocal drops this pod's connection for a pubkey that registered on
+// another replica. Closing `send` makes writePump send a close frame and shut
+// the socket; the later unregister is a no-op because the entry is gone, so
+// the presence key now owned by the other replica is left intact. Must run on
+// the hub goroutine.
+func (h *Hub) evictLocal(req evictRequest) {
+	pubkey := req.pubkey
+	h.mu.Lock()
+	existing, ok := h.conns[pubkey]
+	// A socket registered here after the other replica's registration is the
+	// client's newest connection; keep it.
+	ok = ok && existing.registeredAt.Before(req.registeredAt)
+	if ok {
+		delete(h.conns, pubkey)
+		close(existing.send)
+	}
+	h.mu.Unlock()
+	if ok {
+		log.Printf("evicted %s — reconnected on another replica", short(pubkey))
 	}
 }
 
+// notifyDeliveryFailed must run on the hub goroutine.
 func (h *Hub) notifyDeliveryFailed(from, to string) {
 	h.mu.RLock()
 	src, ok := h.conns[from]
@@ -197,6 +251,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		ws:     ws,
 		send:   make(chan []byte, 32),
 		hub:    h,
+
+		registeredAt: time.Now(),
 	}
 	h.register <- c
 	go c.writePump()

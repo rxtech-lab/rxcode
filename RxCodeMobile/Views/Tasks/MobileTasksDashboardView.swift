@@ -140,7 +140,7 @@ struct MobileTasksDashboardView: View {
         }
         .task(id: "\(state.taskSyncReloadKey)|\(cloud.isSignedIn)|\(isTaskSyncSuspended)") {
             guard !isTaskSyncSuspended else { return }
-            state.restoreCloudTaskCacheIfNeeded()
+            await state.restoreCloudTaskCacheIfNeeded()
             guard state.isTaskSyncReady else { return }
             await load()
         }

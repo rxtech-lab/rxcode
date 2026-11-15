@@ -10,7 +10,6 @@ struct BriefingListCard: View {
     let activeJobCount: Int
     let ciStatus: ProjectCIStatus?
     let isSelected: Bool
-    let namespace: Namespace.ID
 
     private var threadCount: Int { group.threads.count }
 
@@ -108,38 +107,8 @@ struct BriefingListCard: View {
 
 struct BriefingListCardButtonStyle: ButtonStyle {
     let isSelected: Bool
-    @Environment(\.colorScheme) private var colorScheme
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(backgroundColor(isPressed: configuration.isPressed))
-            }
-            .glassEffect(
-                glassConfig(isPressed: configuration.isPressed),
-                in: .rect(cornerRadius: 14)
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
-    }
-
-    private func backgroundColor(isPressed: Bool) -> Color {
-        if isSelected {
-            return ClaudeTheme.accent.opacity(0.15)
-        } else if isPressed {
-            return Color.primary.opacity(0.05)
-        } else {
-            return .clear
-        }
-    }
-
-    private func glassConfig(isPressed: Bool) -> Glass {
-        if isSelected {
-            return .regular.tint(ClaudeTheme.accent.opacity(0.3)).interactive()
-        } else {
-            return .regular.interactive()
-        }
+        MobileCardButtonStyle(isSelected: isSelected).makeBody(configuration: configuration)
     }
 }
-

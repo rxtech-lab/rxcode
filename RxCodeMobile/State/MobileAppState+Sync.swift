@@ -565,6 +565,7 @@ extension MobileAppState {
     func clearDesktopMirror() {
         logger.info("[MobileSync] clearing desktop mirror desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
         hasReceivedInitialSnapshot = false
+        isResumingFromBackground = false
         // The next desktop's first snapshot request must not wait out the
         // coalescing window of the previous desktop's requests.
         trailingSnapshotRequestTask?.cancel()

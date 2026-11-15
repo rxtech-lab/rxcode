@@ -201,7 +201,7 @@ extension ACPService {
         _ = try await sendRequest(
             key: key,
             method: "initialize",
-            params: Self.initializeParams
+            params: Self.initializeParams(for: spec)
         )
         logger.info("[ACP] probe ← initialize ok \(spec.displayName, privacy: .public)")
 
@@ -393,7 +393,7 @@ extension ACPService {
         let initResult = try await sendRequest(
             key: bootstrapKey,
             method: "initialize",
-            params: Self.initializeParams
+            params: Self.initializeParams(for: spec)
         )
         heartbeat.cancel()
         logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")

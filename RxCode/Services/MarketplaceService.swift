@@ -502,40 +502,31 @@ actor MarketplaceService {
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             guard !records.isEmpty else { return nil }
 
-            if provider == .localAgent {
-                let directory = configURL.deletingLastPathComponent().appending(path: "local-skill-context")
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                var lines = ["# Installed skills\nWhen a skill matches the task, read its file for full instructions before using it."]
-                for record in records {
-                    let filename = SHA256.hash(data: Data(record.id.utf8)).map { String(format: "%02x", $0) }.joined()
-                    let url = directory.appending(path: filename + ".md")
-                    let detail = record.instructions ?? record.summary ?? record.name
-                    try detail.write(to: url, atomically: true, encoding: .utf8)
-                    let summary = record.summary ?? parseSkillMetadata(detail).description ?? record.name
-                    lines.append("- \(record.name): \(summary.prefix(300))\n  Read: \(url.path)")
-                }
-                return lines.joined(separator: "\n")
-            }
-
-            var lines = ["# Installed RxCode skills\nUse the following installed skills when they match the user's request."]
-            var remainingBudget = 18_000
-            for record in records {
-                let detail = (record.instructions ?? record.summary)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let clipped = String(detail.prefix(max(0, min(remainingBudget, 6_000))))
-                if detail.isEmpty {
-                    lines.append("## \(record.name)\nSource: \(record.marketplace)")
-                } else {
-                    lines.append("## \(record.name)\nSource: \(record.marketplace)\n\n\(clipped)")
-                    remainingBudget -= clipped.count
-                    if remainingBudget <= 0 { break }
-                }
-            }
-            return lines.joined(separator: "\n\n")
+            // Keep discovery small; agents load full instructions only when needed.
+            // The temporary directory is also within Antigravity's native read scope.
+            let directory = FileManager.default.temporaryDirectory.appending(path: "RxCode-skills")
+            return try skillPromptContext(records: records, directory: directory)
         } catch {
             logger.warning("Failed to build skill prompt context: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    func skillPromptContext(records: [MarketplacePluginRecord], directory: URL) throws -> String {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var lines = ["# Installed RxCode skills\nRead a matching skill's file before using it."]
+        for record in records {
+            let filename = SHA256.hash(data: Data(record.id.utf8)).map { String(format: "%02x", $0) }.joined()
+            let url = directory.appending(path: filename + ".md")
+            let detail = record.instructions ?? record.summary ?? record.name
+            if (try? String(contentsOf: url, encoding: .utf8)) != detail {
+                try detail.write(to: url, atomically: true, encoding: .utf8)
+            }
+            let description = record.summary ?? parseSkillMetadata(detail).description ?? record.name
+            let summary = description.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            lines.append("- \(record.name): \(summary.prefix(200))\n  Read: \(url.path)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func skillInstructions(for plugin: MarketplacePlugin) async -> String? {

@@ -87,9 +87,7 @@ extension AppState {
         return """
         # Relevant user memory
 
-        The notes below are durable user/project memories saved locally in RxCode. Use them as background context for this turn. They may be incomplete or stale; the current user message still has priority.
-
-        Related memories for this turn:
+        Saved preferences and facts; possibly stale. The user request takes priority.
         \(relatedLines)
         """
     }

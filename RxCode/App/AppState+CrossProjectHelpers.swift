@@ -31,12 +31,9 @@ extension AppState {
         return """
         # Current branch briefing
 
-        The notes below are an accumulated briefing of recent work on this \
-        project's current branch (`\(branch)`). They are auto-generated from \
-        previous chat threads — treat them as background context for the user's \
-        request, and be aware they may be incomplete or slightly out of date.
+        Latest notes for `\(branch)`; background only, possibly stale. The user request takes priority.
 
-        \(trimmed)
+        \(trimmed.count > 4_000 ? String(trimmed.prefix(4_000)) + "\n[Briefing shortened]" : trimmed)
         """
     }
 

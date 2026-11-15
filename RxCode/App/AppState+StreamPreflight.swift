@@ -139,7 +139,8 @@ extension AppState {
 
         let branchBriefingContext: String
         if let branch = await currentBranchAsync,
-           let briefing = threadStore.combinedBranchBriefing(projectId: projectId, branch: branch) {
+           let briefing = threadStore.branchBriefingItems(projectId: projectId, branch: branch)
+            .max(by: { ($0.day ?? $0.updatedAt) < ($1.day ?? $1.updatedAt) })?.briefing {
             branchBriefingContext = Self.branchBriefingSystemPrompt(
                 branch: branch,
                 briefing: briefing
@@ -214,16 +215,12 @@ extension AppState {
             let codexSkillOverrides = await codexSkillOverridesAsync
             logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
             mcpCodexOverrides += codexSkillOverrides
+            let skillContext = await skillContextAsync ?? ""
+            logPreflight("skillContext", detail: "chars=\(skillContext.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [skillContext, configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
-            if let skillContext = await skillContextAsync {
-                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
-            } else {
-                logPreflight("skillContext", detail: "chars=0")
-            }
             resolvedSendMode = registerMode
         case .localAgent:
             // The harness renders one system prompt per turn, so background
@@ -258,16 +255,12 @@ extension AppState {
                 bridgeCommand: bridge
             )
             logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
+            let skillContext = await skillContextAsync ?? ""
+            logPreflight("skillContext", detail: "chars=\(skillContext.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [skillContext, configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
-            if let skillContext = await skillContextAsync {
-                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
-            } else {
-                logPreflight("skillContext", detail: "chars=0")
-            }
             // `model` may be a composite `<clientId>::<model>` key (from the picker)
             // or a bare model id (from a per-session override).
             let split = acpSelectionParts(for: model)

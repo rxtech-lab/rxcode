@@ -6,6 +6,26 @@ import RxCodeCore
 @testable import RxCode
 
 final class ACPServiceSuggestionTests: XCTestCase {
+    func testAntigravityUsesNativeReadsAndPreservesOtherCapabilities() {
+        let antigravity = ACPClientSpec(registryId: "antigravity-acp", displayName: "Google Antigravity",
+                                       launch: .binary(path: "/mock/agy_acp_server.par", args: [], env: [:]))
+        let params = ACPService.initializeParams(for: antigravity)
+        guard case .object(let capabilities) = params["clientCapabilities"],
+              case .object(let fileSystem) = capabilities["fs"],
+              case .object(let metadata) = capabilities["_meta"] else {
+            return XCTFail("Missing ACP client capabilities")
+        }
+        XCTAssertEqual(fileSystem["readTextFile"], .bool(false))
+        XCTAssertEqual(fileSystem["writeTextFile"], .bool(true))
+        XCTAssertEqual(capabilities["terminal"], .bool(false))
+        XCTAssertEqual(metadata["terminal-auth"], .bool(true))
+        for registryID in ["opencode", "cursor", "gemini"] {
+            let other = ACPClientSpec(registryId: registryID, displayName: registryID,
+                                      launch: .binary(path: "/mock/agent", args: [], env: [:]))
+            XCTAssertEqual(ACPService.initializeParams(for: other), ACPService.initializeParams)
+        }
+    }
+
     func testFailedBootstrapCanBeRetriedOnSameThread() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("rxcode-acp-retry-\(UUID().uuidString)")

@@ -1,4 +1,5 @@
 import XCTest
+import RxCodeCore
 @testable import RxCode
 
 @MainActor
@@ -10,9 +11,33 @@ final class BranchBriefingPromptContextTests: XCTestCase {
         )
 
         XCTAssertTrue(prompt.contains("# Current branch briefing"))
-        XCTAssertTrue(prompt.contains("project's current branch (`feature/search`)"))
+        XCTAssertTrue(prompt.contains("Latest notes for `feature/search`"))
         XCTAssertTrue(prompt.contains("- Added natural-language thread search."))
-        XCTAssertTrue(prompt.contains("may be incomplete or slightly out of date"))
+        XCTAssertTrue(prompt.contains("possibly stale"))
+    }
+
+    func testLongBriefingHasBoundedPromptSize() {
+        let prompt = AppState.branchBriefingSystemPrompt(branch: "main", briefing: String(repeating: "x", count: 20_000))
+        XCTAssertLessThan(prompt.count, 4_200)
+        XCTAssertTrue(prompt.contains("[Briefing shortened]"))
+    }
+
+    func testSkillCatalogueKeepsFullInstructionsOutOfPromptButReadableOnDemand() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "skill-prompt-test-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let service = MarketplaceService(baseURL: directory)
+        let instructions = "---\nname: example\ndescription: Use for release tasks.\n---\n" + String(repeating: "Full instructions.\n", count: 1_000)
+        let record = MarketplacePluginRecord(name: "example", marketplace: "test", marketplaceSource: nil,
+                                             instructions: instructions)
+        let prompt = try await service.skillPromptContext(records: [record], directory: directory)
+        XCTAssertTrue(prompt.contains("example: Use for release tasks."))
+        XCTAssertFalse(prompt.contains("Full instructions."))
+        XCTAssertLessThan(prompt.count, 500)
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        XCTAssertEqual(files.count, 1)
+        XCTAssertEqual(try String(contentsOf: XCTUnwrap(files.first), encoding: .utf8), instructions)
+        let repeated = try await service.skillPromptContext(records: [record], directory: directory)
+        XCTAssertEqual(repeated, prompt)
     }
 
     func testBranchBriefingSystemPromptIgnoresBlankBriefings() {

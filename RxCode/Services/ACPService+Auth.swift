@@ -21,6 +21,21 @@ extension ACPService {
         ])
     ]
 
+    static func initializeParams(for spec: ACPClientSpec) -> [String: JSONValue] {
+        var params = initializeParams
+        // Antigravity 1.5.0 executes client_view_file successfully but can omit
+        // its terminal tool update. Its native view_file reports completion.
+        // Omit the optional callback capability so it uses that native tool.
+        if spec.registryId == "antigravity-acp",
+           var capabilities = params["clientCapabilities"]?.objectValue,
+           var fileSystem = capabilities["fs"]?.objectValue {
+            fileSystem["readTextFile"] = .bool(false)
+            capabilities["fs"] = .object(fileSystem)
+            params["clientCapabilities"] = .object(capabilities)
+        }
+        return params
+    }
+
     /// Cursor loads existing credentials through ACP, so browser login must
     /// use its CLI. OpenCode also needs explicit account and API-key choices.
     func authMethods(spec: ACPClientSpec, cwd: String) async throws -> [ACPAuthMethod] {
@@ -33,7 +48,7 @@ extension ACPService {
         }
         if let methods = Self.openCodeAuthMethods(for: spec) { return methods }
         return try await withEphemeralAgent(spec: spec, cwd: cwd, label: "auth-methods", timeout: .seconds(90)) { key in
-            let initResult = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams)
+            let initResult = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams(for: spec))
             return ACPAuthMethod.parse(initializeResult: initResult)
         }
     }
@@ -123,14 +138,14 @@ extension ACPService {
 
     func supportsLogout(spec: ACPClientSpec, cwd: String) async throws -> Bool {
         try await withEphemeralAgent(spec: spec, cwd: cwd, label: "logout-capability", timeout: .seconds(90)) { key in
-            let result = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams)
+            let result = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams(for: spec))
             return ACPAuthMethod.supportsLogout(initializeResult: result)
         }
     }
 
     func signOut(spec: ACPClientSpec, cwd: String) async throws {
         try await withEphemeralAgent(spec: spec, cwd: cwd, label: "logout", timeout: .seconds(90)) { key in
-            let result = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams)
+            let result = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams(for: spec))
             guard ACPAuthMethod.supportsLogout(initializeResult: result) else {
                 throw ACPError.protocolMismatch("This client does not support logout.")
             }
@@ -142,7 +157,7 @@ extension ACPService {
     /// browser, so the timeout leaves room for the user to finish signing in.
     func authenticate(spec: ACPClientSpec, methodId: String, cwd: String) async throws {
         try await withEphemeralAgent(spec: spec, cwd: cwd, label: "authenticate", timeout: .seconds(300)) { key in
-            _ = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams)
+            _ = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams(for: spec))
             self.logger.info("[ACP] → authenticate methodId=\(methodId, privacy: .public) client=\(spec.displayName, privacy: .public)")
             _ = try await self.sendRequest(key: key, method: "authenticate", params: ["methodId": .string(methodId)])
         }

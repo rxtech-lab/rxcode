@@ -6,22 +6,53 @@ import TipKit
 
 struct MobileDocumentBriefingCard: View {
     let document: MobileBriefingDocument
+    var projectName: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Document", systemImage: "doc.text")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(document.title)
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(document.createdAt, style: .date)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.indigo.opacity(0.15))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: document.format == "html" ? "doc.richtext" : "doc.text")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.indigo)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(document.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(projectName ?? String(localized: "Document"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 8) {
+                if projectName != nil {
+                    Label("Document", systemImage: "doc.text")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .mobileCardChipBackground()
+                }
+                Spacer(minLength: 0)
+                Text(document.updatedAt.formatted(.relative(presentation: .named)))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .mobileCardSurface()
     }
 }
 
@@ -66,6 +97,7 @@ struct MobileDocumentBriefingDetailView: View {
             }
             .padding(20)
         }
+        .background(MobileCard.pageBackground)
         .navigationTitle(document.title)
         .accessibilityIdentifier("briefing-document-detail")
         .navigationBarTitleDisplayMode(.inline)

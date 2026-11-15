@@ -29,6 +29,7 @@ struct MobileTaskRunsView: View {
 
     var body: some View {
         content
+            .background(MobileCard.pageBackground)
             .toolbar { toolbarContent }
             .overlay(alignment: .bottom) { floatingStatus }
             .task(id: reloadKey) { await reload() }
@@ -90,7 +91,7 @@ struct MobileTaskRunsView: View {
                 TaskPromptView(content: TaskPromptContent.parse(turn.prompt))
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(.tertiarySystemFill), in: MobileCard.shape)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -99,7 +100,7 @@ struct MobileTaskRunsView: View {
                     MarkdownContentView(text: turn.response)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                        .mobileCardSurface()
                 } else if isLast, isAgentRunning {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)

@@ -594,6 +594,7 @@ struct ProjectReleaseCreateSheet: View {
             selectedWorkflowId = preferred?.id
             seedDefaults(for: preferred)
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             loadError = error.localizedDescription
         }
     }

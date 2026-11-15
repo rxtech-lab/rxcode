@@ -16,6 +16,13 @@ struct MobilePairedComputersView: View {
                     Image(systemName: "desktopcomputer")
                     VStack(alignment: .leading) {
                         Text(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)
+                        if desktop.id == state.activePairedDesktop?.id {
+                            let route = state.activeConnectionRoute
+                            Label(route.title, systemImage: route.systemImage)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(MobileConnectionPathBadge.tint(for: route))
+                                .accessibilityIdentifier("paired-computer-connection-route")
+                        }
                         if let relay = desktop.relayDisplayName {
                             Text(relay).font(.caption).foregroundStyle(.secondary)
                         }

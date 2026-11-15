@@ -212,7 +212,6 @@ struct MobileSearchResultsView: View {
     /// enclosing `GlobalSearchModifier`.
     let scope: MobileSearchScope
     @State private var presentedDoc: DocReference?
-    @Namespace private var glassNamespace
 
     /// Identifies a docs hit to open, driving `.sheet(item:)`. `repo` is the
     /// `owner/repo` the desktop's docs service resolves the document under.
@@ -281,14 +280,11 @@ struct MobileSearchResultsView: View {
     private var threadsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader("Threads", systemImage: "bubble.left.and.bubble.right", count: threadHits.count)
-            GlassEffectContainer(spacing: 10) {
-                ForEach(threadHits) { hit in
-                    SearchThreadHitCard(
-                        hit: hit,
-                        project: projectsByID[hit.projectID],
-                        namespace: glassNamespace
-                    )
-                }
+            ForEach(threadHits) { hit in
+                SearchThreadHitCard(
+                    hit: hit,
+                    project: projectsByID[hit.projectID]
+                )
             }
         }
     }
@@ -296,16 +292,13 @@ struct MobileSearchResultsView: View {
     private var docsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader("Docs", systemImage: "doc.text", count: docHits.count)
-            GlassEffectContainer(spacing: 10) {
-                ForEach(docHits) { hit in
-                    SearchDocHitCard(
-                        hit: hit,
-                        isEnabled: hit.repositoryFullName != nil,
-                        namespace: glassNamespace
-                    ) {
-                        guard let repo = hit.repositoryFullName else { return }
-                        presentedDoc = DocReference(repo: repo, docId: hit.docId)
-                    }
+            ForEach(docHits) { hit in
+                SearchDocHitCard(
+                    hit: hit,
+                    isEnabled: hit.repositoryFullName != nil
+                ) {
+                    guard let repo = hit.repositoryFullName else { return }
+                    presentedDoc = DocReference(repo: repo, docId: hit.docId)
                 }
             }
         }
@@ -335,7 +328,6 @@ struct MobileSearchResultsView: View {
 struct SearchDocHitCard: View {
     let hit: DocsSearchHit
     var isEnabled: Bool = true
-    let namespace: Namespace.ID
     let onOpen: () -> Void
 
     private var title: String {
@@ -349,10 +341,8 @@ struct SearchDocHitCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: 12) {
-                Image(systemName: "doc.text.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                MobileCardIconTile(systemImage: "doc.text.fill", tint: .blue, size: 32)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -386,36 +376,8 @@ struct SearchDocHitCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(GlassDocCardButtonStyle(isEnabled: isEnabled))
-        .glassEffectID("search-doc-\(hit.id)", in: namespace)
+        .buttonStyle(MobileCardButtonStyle(isEnabled: isEnabled))
         .disabled(!isEnabled)
         .accessibilityIdentifier("search-doc-\(hit.id)")
-    }
-}
-// MARK: - Glass Doc Card Button Style
-
-private struct GlassDocCardButtonStyle: ButtonStyle {
-    let isEnabled: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(backgroundColor(isPressed: configuration.isPressed))
-            }
-            .glassEffect(
-                Glass.regular.interactive(),
-                in: .rect(cornerRadius: 16)
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
-            .opacity(isEnabled ? 1 : 0.6)
-    }
-
-    private func backgroundColor(isPressed: Bool) -> Color {
-        if isPressed {
-            return Color.primary.opacity(0.05)
-        }
-        return .clear
     }
 }

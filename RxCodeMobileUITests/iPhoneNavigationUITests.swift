@@ -12,6 +12,8 @@ final class iPhoneNavigationUITests: XCTestCase {
 
         r.tap(r.briefingTab, "Briefing tab")
         r.assertExists(r.anyBriefingCard, "project briefing card")
+        r.assertExists(r.app.descendants(matching: .any)["briefing-day-header"].firstMatch, "timeline day header")
+        attachScreenshot(r.app, name: "Briefing timeline")
         r.tap(r.anyBriefingDocumentCard, "published document briefing card")
         r.assertExists(r.briefingDocumentDetail, "published document detail")
     }

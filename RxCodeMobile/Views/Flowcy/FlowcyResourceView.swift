@@ -114,7 +114,7 @@ struct FlowcyResourceView: View {
         } catch is CancellationError { }
         catch let error as URLError where error.code == .cancelled { }
         catch {
-            guard !Task.isCancelled else { return }
+            guard !MobileCloudState.isCancellation(error) else { return }
             self.error = error.localizedDescription
         }
     }

@@ -332,6 +332,14 @@ final class MobileSyncService: ObservableObject {
         }
 
         relayConnectionStates.removeValue(forKey: server.id)
+        // The event task was cancelled before the client stopped, so its final
+        // "back to relay" path reports never arrive. Clear the badges here.
+        let serverURL = Self.normalize(server.url)
+        for idx in pairedDevices.indices
+        where Self.normalize(pairedDevices[idx].relayURL ?? "") == serverURL && pairedDevices[idx].activePath != .relay {
+            pairedDevices[idx].activePath = .relay
+            pairedDevices[idx].directRTTMillis = nil
+        }
     }
 
     /// Normalize a URL string for comparison.
@@ -600,7 +608,8 @@ final class MobileSyncService: ObservableObject {
         isStreaming: Bool?,
         isThinking: Bool? = nil,
         summary: RxCodeSync.SessionSummary? = nil,
-        previousSessionID: String? = nil
+        previousSessionID: String? = nil,
+        fileEditsChanged: Bool? = nil
     ) {
         Task {
             let payload = SessionUpdatePayload(
@@ -610,7 +619,8 @@ final class MobileSyncService: ObservableObject {
                 isStreaming: isStreaming,
                 isThinking: isThinking,
                 summary: summary,
-                previousSessionID: previousSessionID
+                previousSessionID: previousSessionID,
+                fileEditsChanged: fileEditsChanged
             )
             await broadcastToAllClients(.sessionUpdate(payload))
         }

@@ -163,7 +163,6 @@ struct OnboardingView: View {
                         endPoint: .bottomTrailing
                     ))
                     .frame(width: 112, height: 112)
-                    .glassEffect(.regular.interactive(), in: .circle)
 
                 Image(systemName: "laptopcomputer.and.iphone")
                     .font(.system(size: 46, weight: .bold))
@@ -191,7 +190,7 @@ struct OnboardingView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .mobileCardSurface()
     }
 
     private func stepRow(number: Int, text: LocalizedStringKey) -> some View {
@@ -200,7 +199,7 @@ struct OnboardingView: View {
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 26, height: 26)
-                .glassEffect(.regular, in: .circle)
+                .background(Color.accentColor.opacity(0.14), in: Circle())
             Text(text)
                 .font(.callout)
                 .foregroundStyle(.primary)
@@ -233,10 +232,7 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .glassEffect(
-                .regular.interactive(),
-                in: .rect(cornerRadius: 16)
-            )
+            .mobileCardSurface()
         }
     }
 
@@ -250,7 +246,7 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
         }
-        .buttonStyle(.glassProminent)
+        .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .tint(.accentColor)
         .popoverTip(MobileTips.PairingTip(), arrowEdge: .top)
@@ -275,7 +271,7 @@ struct OnboardingView: View {
             .buttonStyle(.plain)
         }
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .mobileCardSurface(rail: .red)
     }
 
     private var combinedError: String? {
@@ -310,13 +306,13 @@ struct OnboardingView: View {
                         .frame(maxWidth: 180)
                         .padding(.vertical, 4)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
                 .controlSize(.regular)
                 .padding(.top, 4)
             }
             .padding(28)
             .frame(maxWidth: 320)
-            .glassEffect(.regular, in: .rect(cornerRadius: 22))
+            .mobileCardSurface()
             .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
         }
     }

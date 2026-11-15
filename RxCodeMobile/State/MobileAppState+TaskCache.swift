@@ -69,11 +69,17 @@ extension MobileAppState {
     /// Shows the signed-in account's cached cloud boards before the first
     /// cloud fetch. Restoring the boards' sync links keeps task IDs stable
     /// once the fetch replaces them.
-    func restoreCloudTaskCacheIfNeeded() {
+    func restoreCloudTaskCacheIfNeeded() async {
         guard usesCloudTasks, cloudTaskProjects.isEmpty, cloudTaskBoards.isEmpty,
-              let accountID = taskCloud?.accountID,
-              let cache = MobileTaskCache.load(from: MobileTaskCache.cloudURL(accountID))
+              let accountID = taskCloud?.accountID
         else { return }
+        let cache = await Task.detached(priority: .utility) {
+            MobileTaskCache.load(from: MobileTaskCache.cloudURL(accountID))
+        }.value
+        // A fetch, account change or cancellation can win while disk decoding
+        // runs. Cached data must never replace the newer source.
+        guard !Task.isCancelled, usesCloudTasks, taskCloud?.accountID == accountID,
+              cloudTaskProjects.isEmpty, cloudTaskBoards.isEmpty, let cache else { return }
         cloudTaskProjects = cache.projects
         cloudTaskBoards = Dictionary(cache.boards.map { ($0.projectID, $0) }, uniquingKeysWith: { _, last in last })
     }

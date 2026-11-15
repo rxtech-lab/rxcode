@@ -149,6 +149,9 @@ public struct SessionUpdatePayload: Codable, Sendable {
     public let isThinking: Bool?
     public let summary: SessionSummary?
     public let previousSessionID: String?
+    /// Persisted file edits changed, including asynchronous script detection.
+    /// Optional so older desktops and mobile clients remain compatible.
+    public let fileEditsChanged: Bool?
 
     public init(
         sessionID: String,
@@ -157,7 +160,8 @@ public struct SessionUpdatePayload: Codable, Sendable {
         isStreaming: Bool? = nil,
         isThinking: Bool? = nil,
         summary: SessionSummary? = nil,
-        previousSessionID: String? = nil
+        previousSessionID: String? = nil,
+        fileEditsChanged: Bool? = nil
     ) {
         self.sessionID = sessionID
         self.kind = kind
@@ -166,6 +170,7 @@ public struct SessionUpdatePayload: Codable, Sendable {
         self.isThinking = isThinking
         self.summary = summary
         self.previousSessionID = previousSessionID
+        self.fileEditsChanged = fileEditsChanged
     }
 }
 

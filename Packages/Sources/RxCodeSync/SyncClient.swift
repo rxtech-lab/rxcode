@@ -57,9 +57,12 @@ public actor SyncClient: PeerManagerHost {
         // OS suspend is torn down and reopened. At initial startup `task` is nil,
         // so this behaves exactly like a plain connect.
         startPathMonitorIfNeeded()
+        // Subscribe the hub to relay events *before* reconnecting, so the
+        // `.connected` that triggers candidate offers (and the app's snapshot
+        // request) can't be emitted before anyone is listening.
+        if directPathsEnabled { await startHubIfNeeded() }
         await relay.reconnect()
         guard directPathsEnabled else { return }
-        startHubIfNeeded()
         // `stop()` cancelled every per-peer event pump and dropped the managers;
         // rebuild them from the persisted peer set so direct-path links — and the
         // inbound data (snapshots, history) they carry — come back after a
@@ -82,8 +85,23 @@ public actor SyncClient: PeerManagerHost {
         // their direct sockets die when the OS suspends us; tearing them down and
         // rebuilding on `start()` avoids reusing a manager stuck with a dead
         // `active` transport (which blocks redial and silently swallows data).
-        for manager in managers.values { await manager.teardown() }
+        // Report every direct link going away. Teardown itself is silent, so
+        // without this the app would keep showing LAN/Direct while the next
+        // start runs over the relay.
+        let directPeers = await withTaskGroup(of: String?.self) { group in
+            for manager in managers.values {
+                group.addTask { await manager.currentPath == .relay ? nil : manager.peerHex }
+            }
+            var hexes: [String] = []
+            for await hex in group { if let hex { hexes.append(hex) } }
+            return hexes
+        }
+        let stopping = Array(managers.values)
         managers.removeAll()
+        for manager in stopping { await manager.teardown() }
+        for hex in directPeers {
+            emitUp(.pathChanged(peerHex: hex, path: .relay, rttMillis: nil))
+        }
         hubStarted = false
     }
 
@@ -114,7 +132,7 @@ public actor SyncClient: PeerManagerHost {
         managers[pubkeyHex] = manager
         track { [weak self] in
             let stream = await manager.events()
-            for await event in stream { await self?.emitUp(event) }
+            for await event in stream { await self?.forward(event, from: manager) }
         }
         // A peer added while the relay is already connected (e.g. right after
         // pairing, or on a foreground rebuild) would otherwise miss the
@@ -126,13 +144,24 @@ public actor SyncClient: PeerManagerHost {
         }
     }
 
+    /// Forward a manager event only while that manager is still the live one
+    /// for its peer. A manager torn down by `stop()` / `removePeer` can still
+    /// have an event in flight; letting it through would leave the app showing
+    /// a direct path that no longer exists.
+    private func forward(_ event: TransportEvent, from manager: PeerConnectionManager) {
+        guard managers[manager.peerHex] === manager else { return }
+        emitUp(event)
+    }
+
     private var relayIsConnected: Bool {
         get async { await relay.state == .connected }
     }
 
-    public func removePeer(_ pubkeyHex: String) {
+    public func removePeer(_ pubkeyHex: String) async {
         peers.removeValue(forKey: pubkeyHex)
-        managers.removeValue(forKey: pubkeyHex)
+        if let manager = managers.removeValue(forKey: pubkeyHex) {
+            await manager.teardown()
+        }
     }
 
     public func peer(forHex hex: String) -> Curve25519.KeyAgreement.PublicKey? { peers[hex] }
@@ -185,16 +214,17 @@ public actor SyncClient: PeerManagerHost {
 
     // MARK: - Hub plumbing
 
-    private func startHubIfNeeded() {
+    private func startHubIfNeeded() async {
         guard !hubStarted else { return }
         hubStarted = true
 
         // 1. Relay pump: intercept ICE signaling, forward everything else up, and
-        //    trigger candidate offers when the relay (re)connects.
+        //    trigger candidate offers when the relay (re)connects. The stream is
+        //    created here (not inside the task) so the subscription is in place
+        //    before `start()` reconnects the relay.
+        let relayEvents = await relay.events()
         track { [weak self] in
-            guard let self else { return }
-            let stream = await self.relay.events()
-            for await event in stream { await self.handleRelayEvent(event) }
+            for await event in relayEvents { await self?.handleRelayEvent(event) }
         }
 
         // 2. Bonjour advertise + accept inbound direct links.
@@ -249,6 +279,11 @@ public actor SyncClient: PeerManagerHost {
         case .inbound(let inbound) where Self.isICESignaling(inbound.payload):
             await managers[inbound.fromHex]?.handleRelayICE(inbound.payload)
             return
+        case .inbound(let inbound):
+            // Drop a stale direct link before the app handles this payload, so
+            // its reply (e.g. a snapshot) goes back over the relay the peer is
+            // actually listening on.
+            await managers[inbound.fromHex]?.peerUsedRelay()
         case .stateChanged(.connected):
             for manager in managers.values {
                 Task { await manager.offerLocalCandidates() }
@@ -290,6 +325,11 @@ public actor SyncClient: PeerManagerHost {
         for manager in managers.values {
             await manager.networkChanged()
         }
+        // `networkChanged()` dropped every known target, including Bonjour
+        // endpoints. `NWBrowser` only reports *changes*, so a Mac it already saw
+        // (or saw a moment before this callback, then had its probe cancelled
+        // above) would never be re-dialed. Restart browsing for a fresh result set.
+        await browser?.restart()
         guard pathMonitor === monitor else { return }
         // A socket may remain assigned after Wi-Fi disappears. Reopen it even
         // in relay-only mode, so recovery does not wait for a TCP timeout.

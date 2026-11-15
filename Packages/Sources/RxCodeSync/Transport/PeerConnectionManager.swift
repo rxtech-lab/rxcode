@@ -38,6 +38,14 @@ public actor PeerConnectionManager {
     private var activePath: ConnectionPathKind = .relay
     private var active: DirectTransport?
     private var lastRTTMillis: Int?
+    /// When the current `active` link was promoted. Relay traffic from the peer
+    /// shortly after promotion is expected (the two sides promote a beat apart,
+    /// and relay frames may already be in flight), so it doesn't count as proof
+    /// that the link went stale.
+    private var promotedAt: Date?
+    /// How long after promotion relay traffic from the peer is tolerated before
+    /// it is treated as evidence that our direct link is dead.
+    static let staleLinkGracePeriod: TimeInterval = 5
 
     /// In-flight candidate probes, keyed by transport identity.
     private var probing: [ObjectIdentifier: ProbeInfo] = [:]
@@ -47,6 +55,11 @@ public actor PeerConnectionManager {
     private var knownTargets: [String: DialTarget] = [:]
     private var backoffSeconds = 1
     private var retryTask: Task<Void, Never>?
+    /// The peer offer session we last answered with our own candidates. An
+    /// offer is answered once per peer session, so the dialer always learns the
+    /// other side's addresses (even when it reconnected after the other side's
+    /// last offer, or Bonjour is blocked) without the two sides ping-ponging.
+    private var lastAnsweredOfferSessionID: UUID?
 
     private var continuations: [UUID: AsyncStream<TransportEvent>.Continuation] = [:]
 
@@ -108,6 +121,27 @@ public actor PeerConnectionManager {
         }
     }
 
+    /// The peer sent us a non-signaling payload over the relay.
+    ///
+    /// A peer routes over the relay only when it has no direct link to us, so if
+    /// we still hold an `active` direct link it is stale: typically the iPhone
+    /// was suspended in the background, its socket died without a FIN reaching
+    /// us, and it rebuilt its connection state on foreground. Sends on a
+    /// half-open TCP link still "succeed" into the kernel buffer, so without this
+    /// every reply — including the snapshot the phone just asked for — would be
+    /// silently lost and the phone would keep showing stale state.
+    public func peerUsedRelay(now: Date = Date()) {
+        guard hasStaleActiveLink(now: now) else { return }
+        logger.warning("[PeerConn] peer=\(String(self.peerHex.prefix(12)), privacy: .public) is using the relay while our direct link is active — dropping stale link")
+        demote()
+    }
+
+    private func hasStaleActiveLink(now: Date) -> Bool {
+        guard active != nil else { return false }
+        guard let promotedAt else { return true }
+        return now.timeIntervalSince(promotedAt) >= Self.staleLinkGracePeriod
+    }
+
     /// Route a payload over the active path, falling back to relay on failure.
     public func send(_ payload: Payload) async throws {
         if activePath != .relay, let active {
@@ -159,8 +193,16 @@ public actor PeerConnectionManager {
     /// macOS-only), so whoever *receives* it dials it — this makes a desktop's
     /// reachable `wanMapped` endpoint usable regardless of key order, without
     /// risking a double connection.
-    public func handleRelayICE(_ payload: Payload) async {
-        guard case .iceCandidates(let offer) = payload, active == nil else { return }
+    public func handleRelayICE(_ payload: Payload, now: Date = Date()) async {
+        guard case .iceCandidates(let offer) = payload else { return }
+        // A peer offers candidates only while it has no direct link to us (see
+        // `offerCandidates`). If we still hold one, it is stale — drop it so the
+        // fresh candidates can be dialed instead of ignored forever.
+        if hasStaleActiveLink(now: now) {
+            logger.warning("[PeerConn] peer=\(String(self.peerHex.prefix(12)), privacy: .public) re-offered candidates while our direct link is active — dropping stale link")
+            demote()
+        }
+        guard active == nil else { return }
         for candidate in offer.candidates {
             let isWAN = candidate.kind == .wanMapped
             guard isWAN || isDialer else { continue }
@@ -171,6 +213,14 @@ public actor PeerConnectionManager {
             knownTargets[key] = DialTarget(endpoint: endpoint, priority: priority, pathKind: pathKind)
         }
         dialAllKnownTargets()
+        // Answer with our own candidates. Without this, a dialer that changed
+        // networks (e.g. the phone joining Wi-Fi) would have no target until the
+        // other side happened to re-offer — it would sit on the relay even though
+        // a LAN path exists.
+        if offer.sessionID != lastAnsweredOfferSessionID {
+            lastAnsweredOfferSessionID = offer.sessionID
+            await offerCandidates()
+        }
     }
 
     /// Register a freshly-created outbound probe (called by the hub from `dial`).
@@ -180,7 +230,15 @@ public actor PeerConnectionManager {
     }
 
     /// Reserve this manager for an adopted inbound link (controlled side).
-    public func beginAdoptIfIdle(_ transport: DirectTransport) -> Bool {
+    public func beginAdoptIfIdle(_ transport: DirectTransport, now: Date = Date()) -> Bool {
+        // The dialer only opens a link when it has no active one, so a new
+        // inbound link from this peer means our current link is dead on their
+        // side. Replace it — unless it was just promoted, in which case this is a
+        // losing parallel probe from the same round.
+        if hasStaleActiveLink(now: now) {
+            logger.warning("[PeerConn] peer=\(String(self.peerHex.prefix(12)), privacy: .public) opened a new direct link — replacing stale active link")
+            demote()
+        }
         guard active == nil else { return false }
         probing[ObjectIdentifier(transport)] = ProbeInfo(transport: transport, pathKind: .directLAN, initiatedByUs: false, probeSentAt: nil)
         return true
@@ -202,9 +260,12 @@ public actor PeerConnectionManager {
     // MARK: - Private
 
     private func offerCandidates() async {
-        guard let host else { return }
+        // Never offer while a direct link is up: the peer treats an offer as
+        // proof that we lost our link and drops theirs (see `handleRelayICE`).
+        guard active == nil, let host else { return }
         let candidates = await host.localDirectCandidates()
-        guard !candidates.isEmpty else { return }
+        // A probe may have been promoted while we gathered candidates.
+        guard active == nil, !candidates.isEmpty else { return }
         let payload = Payload.iceCandidates(ICECandidatesPayload(sessionID: probeSessionID, candidates: candidates))
         try? await relay.send(payload, to: peerKey)
     }
@@ -281,6 +342,7 @@ public actor PeerConnectionManager {
         active = transport
         activePath = pathKind
         lastRTTMillis = rttMillis
+        promotedAt = Date()
         backoffSeconds = 1
         retryTask?.cancel(); retryTask = nil
         // Cancel every losing probe.
@@ -304,6 +366,7 @@ public actor PeerConnectionManager {
         active = nil
         activePath = .relay
         lastRTTMillis = nil
+        promotedAt = nil
         // Only report a real transition. `networkChanged()` demotes even while
         // already on the relay; emitting then made the app re-request a full
         // snapshot on every network-path callback.

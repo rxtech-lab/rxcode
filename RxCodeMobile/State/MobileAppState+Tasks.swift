@@ -179,7 +179,7 @@ extension MobileAppState {
     }
 
     var isDesktopTaskSyncReady: Bool {
-        guard isPaired, hasReceivedInitialSnapshot, !desktopTaskUnavailable else { return false }
+        guard isPaired, hasReceivedInitialSnapshot, !desktopTaskUnavailable, !isResumingFromBackground else { return false }
         if case .connected = connectionState { return true }
         return false
     }

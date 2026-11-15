@@ -17,6 +17,15 @@ const (
 	// is fanned out here so whichever pod holds that connection delivers it.
 	redisRouteChannel = "relay:route"
 
+	// redisEvictChannel announces that a pubkey just registered on a replica.
+	// Every other replica drops its own (necessarily stale) socket for that
+	// pubkey, so a client that reconnected through the load balancer onto a
+	// different pod stops being shadowed by its half-open old socket.
+	redisEvictChannel = "relay:evict"
+
+	// publishQueueSize bounds envelopes waiting for the ordered publisher.
+	publishQueueSize = 1024
+
 	// redisPresencePrefix namespaces the per-pubkey presence keys that let any
 	// pod answer "is this peer connected anywhere in the cluster?" — needed to
 	// keep the delivery_failed notice accurate once routing spans pods.
@@ -47,6 +56,21 @@ type Backplane struct {
 	hub        *Hub
 	ctx        context.Context
 	instanceID string
+	// outbound feeds the single publisher goroutine. One goroutine (instead
+	// of one per envelope) keeps a sender's envelopes in order: streaming
+	// session updates arrive as many small envelopes and must not be
+	// reordered on their way to another replica.
+	outbound chan *Envelope
+}
+
+// evictNotice is the payload published on redisEvictChannel.
+type evictNotice struct {
+	Pubkey   string `json:"pubkey"`
+	Instance string `json:"instance"`
+	// At is when the announcing replica registered the connection (Unix
+	// nanoseconds). A replica only evicts sockets registered before it, so a
+	// late notice cannot kill a client that already reconnected back here.
+	At int64 `json:"at"`
 }
 
 // NewBackplane connects to Redis from a redis:// or rediss:// URL. A failed
@@ -67,24 +91,62 @@ func NewBackplane(ctx context.Context, redisURL string, hub *Hub) (*Backplane, e
 		hub:        hub,
 		ctx:        ctx,
 		instanceID: randomInstanceID(),
+		outbound:   make(chan *Envelope, publishQueueSize),
 	}, nil
 }
 
-// Run subscribes to the route channel and hands every envelope to the local
-// hub. An envelope for a peer connected to another replica finds no local
-// connection and is dropped without re-publishing, so there is no fan-out loop
-// — the pod that received it from a client is the only one that publishes.
+// Run subscribes to the route and evict channels and hands their messages to
+// the hub loop. An envelope for a peer connected to another replica finds no
+// local connection and is dropped without re-publishing, so there is no
+// fan-out loop — the pod that received it from a client is the only one that
+// publishes. Run also starts the ordered publisher.
 func (b *Backplane) Run() {
-	sub := b.rdb.Subscribe(b.ctx, redisRouteChannel)
+	go b.publishLoop()
+	sub := b.rdb.Subscribe(b.ctx, redisRouteChannel, redisEvictChannel)
 	defer func() { _ = sub.Close() }()
-	log.Printf("backplane: subscribed to %s (instance %s)", redisRouteChannel, b.instanceID)
+	log.Printf("backplane: subscribed to %s, %s (instance %s)", redisRouteChannel, redisEvictChannel, b.instanceID)
 	for msg := range sub.Channel() {
-		var env Envelope
-		if err := json.Unmarshal([]byte(msg.Payload), &env); err != nil {
-			log.Printf("backplane: malformed envelope: %v", err)
-			continue
+		switch msg.Channel {
+		case redisEvictChannel:
+			var notice evictNotice
+			if err := json.Unmarshal([]byte(msg.Payload), &notice); err != nil {
+				log.Printf("backplane: malformed evict notice: %v", err)
+				continue
+			}
+			if notice.Instance == b.instanceID || !isValidPubkeyHex(notice.Pubkey) {
+				continue
+			}
+			b.hub.evict <- evictRequest{pubkey: notice.Pubkey, registeredAt: time.Unix(0, notice.At)}
+		default:
+			var env Envelope
+			if err := json.Unmarshal([]byte(msg.Payload), &env); err != nil {
+				log.Printf("backplane: malformed envelope: %v", err)
+				continue
+			}
+			b.hub.remote <- &env
 		}
-		b.hub.deliverLocal(&env)
+	}
+}
+
+// Enqueue hands an envelope whose recipient is not on this pod to the ordered
+// publisher. Called from the hub loop; never blocks it.
+func (b *Backplane) Enqueue(env *Envelope) {
+	select {
+	case b.outbound <- env:
+	default:
+		log.Printf("backplane: publish queue full — dropping envelope to %s", short(env.To))
+		b.hub.notifyDeliveryFailed(env.From, env.To)
+	}
+}
+
+// publishLoop publishes queued envelopes one at a time, preserving order, and
+// reports delivery failures back to the hub loop.
+func (b *Backplane) publishLoop() {
+	for env := range b.outbound {
+		b.Publish(env)
+		if !b.ConnectedAnywhere(env.To) {
+			b.hub.failed <- deliveryFailure{from: env.From, to: env.To}
+		}
 	}
 }
 
@@ -97,6 +159,21 @@ func (b *Backplane) Publish(env *Envelope) {
 	if err := b.rdb.Publish(b.ctx, redisRouteChannel, raw).Err(); err != nil {
 		log.Printf("backplane: publish to %s: %v", short(env.To), err)
 	}
+}
+
+// AnnounceRegistered tells the other replicas that `pubkey` is now connected
+// here, so they evict any stale socket they still hold for it. Runs off the
+// hub loop because it round-trips to Redis.
+func (b *Backplane) AnnounceRegistered(pubkey string, registeredAt time.Time) {
+	raw, err := json.Marshal(evictNotice{Pubkey: pubkey, Instance: b.instanceID, At: registeredAt.UnixNano()})
+	if err != nil {
+		return
+	}
+	go func() {
+		if err := b.rdb.Publish(b.ctx, redisEvictChannel, raw).Err(); err != nil {
+			log.Printf("backplane: evict announce %s: %v", short(pubkey), err)
+		}
+	}()
 }
 
 // MarkPresent records (or refreshes) a pubkey as connected to this pod. Called

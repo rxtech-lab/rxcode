@@ -52,26 +52,37 @@ struct FlowcyProjectOverview: View {
                     }.frame(maxWidth: .infinity, minHeight: 240)
                 }
                 Text("Explore Project").font(.title3.bold())
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 155))], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                     ForEach(sections.filter { $0 != .overview }) { section in
                         Button {
                             MobileHaptics.buttonTap()
                             navigate(section)
                         } label: {
-                            VStack(alignment: .leading, spacing: 16) {
-                                Image(systemName: section.icon).font(.title2).foregroundStyle(.tint)
-                                Text(section.rawValue).font(.headline).foregroundStyle(.primary)
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(alignment: .top) {
+                                    MobileCardIconTile(systemImage: section.icon, tint: section.tint, size: 36)
+                                    Spacer(minLength: 4)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Text(section.rawValue)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 90, alignment: .leading)
-                            .padding(16)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
-                        }.buttonStyle(.plain)
+                            .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+                            .padding(14)
+                        }
+                        .buttonStyle(MobileCardButtonStyle())
+                        .accessibilityIdentifier("flowcy-overview-\(section.id)")
                     }
                 }
             }.padding(20).frame(maxWidth: 1000)
                 .frame(maxWidth: .infinity)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(MobileCard.pageBackground)
         .navigationTitle(project.title)
         .accessibilityIdentifier("flowcy-project-overview")
         .toolbar {
@@ -101,24 +112,58 @@ struct FlowcyProjectOverview: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(project.repositoryFullName ?? "Standalone project", systemImage: "folder")
-                .font(.subheadline).foregroundStyle(.secondary)
+        let tint = FlowcyProjectCard.tint(for: project.id)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(LinearGradient(colors: [tint, tint.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 52, height: 52)
+                    .overlay {
+                        Text(FlowcyProjectCard.monogram(project.title))
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(project.title).font(.title3.weight(.semibold)).lineLimit(2)
+                    Label(project.repositoryFullName ?? String(localized: "Standalone project"),
+                          systemImage: project.repositoryFullName == nil ? "folder" : "chevron.left.forwardslash.chevron.right")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
             if let description = project.description, !description.isEmpty {
                 MarkdownContentView(text: description)
             }
-        }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .mobileCardSurface()
     }
 
     private func progress(_ board: TaskBoard) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Task Progress").font(.title3.bold())
-                Spacer()
-                Text("\(completed) of \(tasks.count) complete").font(.subheadline).foregroundStyle(.secondary)
+            HStack(spacing: 16) {
+                let fraction = tasks.isEmpty ? 0 : Double(completed) / Double(tasks.count)
+                ZStack {
+                    Circle().stroke(Color.primary.opacity(0.08), lineWidth: 7)
+                    Circle()
+                        .trim(from: 0, to: fraction)
+                        .stroke(Color.green, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.snappy, value: fraction)
+                    Text(fraction, format: .percent.precision(.fractionLength(0)))
+                        .font(.caption.weight(.bold))
+                        .monospacedDigit()
+                }
+                .frame(width: 56, height: 56)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Task Progress").font(.headline)
+                    Text("\(completed) of \(tasks.count) complete").font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
             }
-            ProgressView(value: Double(completed), total: Double(max(tasks.count, 1)))
-                .tint(.green)
+            .accessibilityElement(children: .combine)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))], alignment: .leading, spacing: 16) {
                 ForEach(board.effectiveColumns) { column in
                     VStack(alignment: .leading, spacing: 6) {
@@ -131,8 +176,9 @@ struct FlowcyProjectOverview: View {
             if tasks.isEmpty {
                 Text("Create your first task using the + button.").font(.subheadline).foregroundStyle(.secondary)
             }
-        }.padding(20)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        }
+        .padding(16)
+        .mobileCardSurface()
     }
 
     @ViewBuilder private func taskSection(_ title: String, items: [ProjectTask]) -> some View {
@@ -153,8 +199,9 @@ struct FlowcyProjectOverview: View {
                             }
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                        }.padding(16)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .padding(14)
+                        .mobileCardSurface(rail: task.attentionReason != nil ? .orange : nil)
                     }
                 }
             }
@@ -169,6 +216,6 @@ struct FlowcyProjectOverview: View {
             if local == nil { try await state.refreshCloudTaskProjects() }
             guard let local else { throw FlowcyError.message("This project is no longer available.") }
             try await state.loadTaskBoard(projectID: local.id)
-        } catch { self.error = error.localizedDescription }
+        } catch { guard !MobileCloudState.isCancellation(error) else { return }; self.error = error.localizedDescription }
     }
 }

@@ -90,6 +90,7 @@ struct MobileCIUpdatesView: View {
         do {
             repos = try await state.listWatchedRepos().repositories
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -191,7 +192,7 @@ final class MobileCIRepoModel: ObservableObject {
                 return
             }
             apply(overview)
-        } catch { loadError = error.localizedDescription }
+        } catch { guard !MobileCloudState.isCancellation(error) else { return }; loadError = error.localizedDescription }
     }
 
     func reloadAutomation(_ state: MobileAppState) async {

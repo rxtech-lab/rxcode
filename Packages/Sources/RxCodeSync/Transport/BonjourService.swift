@@ -58,7 +58,7 @@ public actor BonjourAdvertiser {
     public func start() {
         guard listener == nil else { return }
         do {
-            let listener = try NWListener(using: .tcp)
+            let listener = try NWListener(using: DirectTransport.makeParameters())
             var txt = NWTXTRecord()
             txt["pk"] = localPubkeyHex
             txt["v"] = "1"
@@ -155,6 +155,15 @@ public actor BonjourBrowser {
     public func stop() {
         browser?.cancel()
         browser = nil
+    }
+
+    /// Start a new browse so every currently visible peer is reported again.
+    /// Used after a network change: a running `NWBrowser` reports only changes,
+    /// so peers it already knew about would never be emitted again.
+    public func restart() {
+        guard browser != nil else { return }
+        stop()
+        start()
     }
 
     private func handleResults(_ results: Set<NWBrowser.Result>) {

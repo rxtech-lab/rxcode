@@ -137,7 +137,7 @@ struct SyncLoadingView: View {
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.borderedProminent)
             .tint(ClaudeTheme.accent)
             .controlSize(.large)
             .accessibilityIdentifier("sync-retry")
@@ -166,11 +166,7 @@ struct SyncLoadingView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(.white.opacity(0.18))
-                }
+                .mobileCardSurface()
             }
             .frame(maxWidth: 360)
             .padding(.top, 4)
@@ -224,7 +220,7 @@ struct SyncLoadingView: View {
             ZStack {
                 // Glass background with blur
                 Circle()
-                    .fill(.ultraThinMaterial)
+                    .fill(MobileCard.surface)
                     .frame(width: 110, height: 110)
 
                 // Warning ring
@@ -257,7 +253,6 @@ struct SyncLoadingView: View {
                     )
             }
             .shadow(color: Color.orange.opacity(0.15), radius: 20, x: 0, y: 8)
-            .glassEffect(.regular.tint(Color.orange.opacity(0.05)), in: .circle)
         }
         .frame(width: 200, height: 200)
     }
@@ -367,7 +362,7 @@ struct SyncLoadingView: View {
             ZStack {
                 // Glass background with blur
                 Circle()
-                    .fill(.ultraThinMaterial)
+                    .fill(MobileCard.surface)
                     .frame(width: 110, height: 110)
 
                 // Inner gradient ring
@@ -406,7 +401,6 @@ struct SyncLoadingView: View {
                     .scaleEffect(0.95 + (pulseScale - 1) * 0.3)
             }
             .shadow(color: ClaudeTheme.accent.opacity(0.2), radius: 20, x: 0, y: 8)
-            .glassEffect(.regular.tint(ClaudeTheme.accent.opacity(0.08)), in: .circle)
         }
         .frame(width: 240, height: 240)
     }

@@ -103,7 +103,7 @@ extension AppState {
             }
         }
 
-        await shellTrackerBeginStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd, agentProvider: agentProvider)
+        shellTrackerBeginStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd, agentProvider: agentProvider)
         defer { shellTrackerEndStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd) }
 
         startFlushTimer(for: sessionKey)

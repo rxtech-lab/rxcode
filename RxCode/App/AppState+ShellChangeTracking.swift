@@ -26,25 +26,36 @@ extension AppState {
     }
 
     /// Registers a newly started stream with the workspace's `WorkspaceChangeTracker`.
+    ///
+    /// Registration is fire-and-forget: `streamDidStart` can seed its baseline
+    /// ledger with git, and the caller (`processStream`) must not wait on that
+    /// before consuming agent events. Otherwise a slow or wedged git call leaves
+    /// the thread spinning forever with no messages, no pending→real session
+    /// promotion, and no inactivity watchdog. Shell spans opened before the
+    /// registration lands already fall back to the workspace root / span PID.
     func shellTrackerBeginStream(
         streamId: UUID,
         sessionKey: String,
         cwd: String,
         agentProvider: AgentProvider
-    ) async {
+    ) {
         sessionStates[sessionKey, default: SessionStreamState()].activeStreamCwd = cwd
         #if os(macOS)
-        guard !cwd.isEmpty,
-              let tracker = await WorkspaceChangeTrackerRegistry.shared.tracker(for: cwd) else { return }
-        let initialPid = await streamRootPid(provider: agentProvider, streamId: streamId)
-        await tracker.streamDidStart(
-            streamId: streamId,
-            sessionKey: sessionKey,
-            cwd: cwd,
-            rootPid: initialPid
-        )
-        if initialPid == nil, agentProvider != .localAgent {
-            Task { [weak self] in
+        guard !cwd.isEmpty else { return }
+        shellTrackerBeginTasks[streamId] = Task { [weak self] in
+            guard let tracker = await WorkspaceChangeTrackerRegistry.shared.tracker(for: cwd) else { return }
+            let initialPid = await self?.streamRootPid(provider: agentProvider, streamId: streamId)
+            // The session may have been promoted (pending → real) while this
+            // registration was queued; register under the live key so a rename
+            // that already ran on the tracker isn't undone.
+            let liveKey = self?.resolveCurrentSessionId(sessionKey) ?? sessionKey
+            await tracker.streamDidStart(
+                streamId: streamId,
+                sessionKey: liveKey,
+                cwd: cwd,
+                rootPid: initialPid
+            )
+            if initialPid == nil, agentProvider != .localAgent {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 guard let self,
                       let spawnedPid = await self.streamRootPid(provider: agentProvider, streamId: streamId)
@@ -77,7 +88,9 @@ extension AppState {
     func shellTrackerEndStream(streamId: UUID, sessionKey: String, cwd: String) {
         #if os(macOS)
         guard !cwd.isEmpty else { return }
+        let beginTask = shellTrackerBeginTasks.removeValue(forKey: streamId)
         Task { @MainActor [weak self] in
+            await beginTask?.value
             await self?.awaitPendingShellDetections(for: sessionKey)
             guard let tracker = await WorkspaceChangeTrackerRegistry.shared.tracker(for: cwd) else { return }
             await tracker.streamDidEnd(streamId: streamId)
@@ -163,6 +176,7 @@ extension AppState {
                     stepBeforeContent: stepSnapshot
                 )
                 self.threadFileEditsRevision &+= 1
+                self.broadcastMobileFileEditsChanged(sessionID: resolvedKey)
             }
             registerPendingShellDetectionTask(task, id: taskId, sessionKey: sessionKey)
         }
@@ -248,6 +262,7 @@ extension AppState {
                 }
             }
             self.threadFileEditsRevision &+= 1
+            self.broadcastMobileFileEditsChanged(sessionID: resolvedKey)
         }
         registerPendingShellDetectionTask(task, id: taskId, sessionKey: sessionKey)
         #endif

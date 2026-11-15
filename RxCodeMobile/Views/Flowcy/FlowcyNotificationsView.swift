@@ -124,7 +124,7 @@ struct FlowcyPushDestinationView: View {
                 route = .story(projectID: project.id, storyID: local)
             } else { route = .board(project.id) }
         } catch is CancellationError { }
-        catch { self.error = error.localizedDescription }
+        catch { guard !MobileCloudState.isCancellation(error) else { return }; self.error = error.localizedDescription }
     }
 }
 

@@ -168,7 +168,7 @@ struct MobileTaskBoardView: View {
         .modifier(MobileTaskDestinations(isEnabled: isModal, onOpenChat: openChat))
         .task(id: "\(state.taskSyncReloadKey)|\(scenePhase)|\(isTaskSyncSuspended)") {
             guard !isTaskSyncSuspended else { return }
-            state.restoreCloudTaskCacheIfNeeded()
+            await state.restoreCloudTaskCacheIfNeeded()
             guard state.isTaskSyncReady, scenePhase == .active else { return }
             await load()
             while state.usesCloudTasks && !Task.isCancelled && errorMessage == nil {

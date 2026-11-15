@@ -66,34 +66,16 @@ extension WorkspaceChangeTracker {
     }
 
     private func runGitCheckIgnore(paths: [String], gitRoot: String) async -> Set<String> {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["check-ignore", "-z", "--stdin"]
-        process.currentDirectoryURL = URL(fileURLWithPath: gitRoot)
-
-        let inPipe = Pipe()
-        let outPipe = Pipe()
-        process.standardInput = inPipe
-        process.standardOutput = outPipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-        } catch {
+        // Writing stdin synchronously on the actor and reading stdout only after
+        // exit deadlocked once git's output filled the pipe: git blocked on
+        // write, the actor blocked on the stdin write, and every later tracker
+        // call (including `streamDidStart`) hung forever. `GitHelper.execute`
+        // feeds stdin and drains stdout/stderr concurrently, off the actor.
+        let payload = Data((paths.joined(separator: "\0") + "\0").utf8)
+        guard let output = await GitHelper.execute(["check-ignore", "-z", "--stdin"], at: gitRoot, input: payload) else {
             return []
         }
-
-        let payload = paths.joined(separator: "\0") + "\0"
-        if let data = payload.data(using: .utf8) {
-            try? inPipe.fileHandleForWriting.write(contentsOf: data)
-        }
-        try? inPipe.fileHandleForWriting.close()
-
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            process.terminationHandler = { _ in continuation.resume() }
-        }
-
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let outData = output.stdout
         guard let outString = String(data: outData, encoding: .utf8), !outString.isEmpty else {
             return []
         }

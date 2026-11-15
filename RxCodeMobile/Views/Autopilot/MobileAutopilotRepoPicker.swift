@@ -120,6 +120,7 @@ struct MobileAutopilotRepoPicker: View {
             nextCursor = page.pagination.nextCursor
             hasMore = page.pagination.hasMore
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
             repos = []
             hasMore = false
@@ -136,6 +137,7 @@ struct MobileAutopilotRepoPicker: View {
             nextCursor = page.pagination.nextCursor
             hasMore = page.pagination.hasMore
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }

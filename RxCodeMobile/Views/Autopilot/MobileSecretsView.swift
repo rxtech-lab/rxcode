@@ -96,6 +96,7 @@ struct MobileSecretsView: View {
             enrolled = try await state.secretsEnrollmentStatus()
             if enrolled == true { await reloadRepos() }
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -104,6 +105,7 @@ struct MobileSecretsView: View {
         do {
             repos = try await state.listAutopilotRepos(search: search).items
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -198,6 +200,7 @@ struct MobileSecretsRepoView: View {
         do {
             environments = try await state.listSecretEnvironments(repo: repoFullName)
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -338,6 +341,7 @@ struct MobileSecretsEnvironmentView: View {
         do {
             files = try await state.listSecretFiles(repo: repoFullName, envId: environment.id)
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -356,6 +360,7 @@ struct MobileSecretsEnvironmentView: View {
             let files = try await state.secretEnvironmentPlaintext(repo: repoFullName, envId: environment.id)
             plaintextByName = Dictionary(files.map { ($0.filename, $0.content) }, uniquingKeysWith: { _, last in last })
         } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }

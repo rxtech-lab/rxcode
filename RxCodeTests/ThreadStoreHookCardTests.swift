@@ -121,6 +121,36 @@ final class ThreadStoreHookCardTests: XCTestCase {
 @MainActor
 final class ThreadStoreShellEditsTests: XCTestCase {
 
+    func testMobileHistoryRehydratesLateScriptChangesFromLiveAndCachedMessages() async throws {
+        let app = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+        app.threadStore = makeStore()
+        let sessionID = "mobile-script-changes"
+        let message = ChatMessage(role: .assistant, blocks: [.toolCall(ToolCall(
+            id: "script", name: "Bash", input: ["command": .string("python3 patch.py")], result: ""
+        ))])
+        let changes = [DetectedShellFileChange(
+            path: "/repo/generated.swift", kind: .created, addedLines: 1, removedLines: 0,
+            diff: "@@ -0,0 +1 @@\n+let generated = true"
+        )]
+        app.threadStore.upsertDetectedToolChanges(sessionId: sessionID, toolCallId: "script", changes: changes)
+
+        var state = SessionStreamState()
+        state.messages = [message]
+        app.sessionStates[sessionID] = state
+        let liveMessages = await app.fullMobileMessages(for: sessionID)
+        let live = try XCTUnwrap(liveMessages)
+        XCTAssertEqual(live.first?.blocks.first?.toolCall?.detectedShellFileChanges, changes)
+
+        app.sessionStates.removeValue(forKey: sessionID)
+        app.mobileFullMessageCache = (sessionID, [message])
+        let cachedMessages = await app.fullMobileMessages(for: sessionID)
+        let cached = try XCTUnwrap(cachedMessages)
+        XCTAssertEqual(cached.first?.blocks.first?.toolCall?.detectedShellFileChanges, changes)
+
+        app.broadcastMobileFileEditsChanged(sessionID: sessionID)
+        XCTAssertNil(app.mobileFullMessageCache)
+    }
+
     private static var retainedStores: [ThreadStore] = []
     private func makeStore() -> ThreadStore {
         let store = ThreadStore.inMemory()

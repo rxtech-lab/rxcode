@@ -1458,12 +1458,23 @@ final class AppState {
     /// non-zero value distinguishes "stamped by a sequencing-aware desktop"
     /// from the wire default (`nil`).
     @ObservationIgnored
-    var mobileSnapshotSeq: UInt64 = 0
+    /// Seeded from wall-clock milliseconds so snapshot sequence numbers keep
+    /// increasing across app relaunches. Phones drop snapshots whose `seq` is
+    /// not above the last one they applied, so restarting from 0 made every
+    /// snapshot after a Mac relaunch look stale and froze the mobile mirror.
+    var mobileSnapshotSeq = UInt64(Date().timeIntervalSince1970 * 1000)
 
     /// In-flight background file-edit detection tasks keyed by session id so
     /// turn completion (`CodeReviewHook`, `saveSession`) awaits all pending
     /// shell/structured edit captures without blocking command execution.
     @ObservationIgnored
     var pendingShellDetectionTasks: [String: [UUID: Task<Void, Never>]] = [:]
+
+    /// In-flight `WorkspaceChangeTracker.streamDidStart` registrations, keyed by
+    /// stream id. Registration runs off the stream's critical path (it can run
+    /// git); `shellTrackerEndStream` awaits it so the tracker never keeps a
+    /// registration for a stream that has already ended.
+    @ObservationIgnored
+    var shellTrackerBeginTasks: [UUID: Task<Void, Never>] = [:]
 
 }

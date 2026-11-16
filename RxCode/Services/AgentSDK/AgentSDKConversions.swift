@@ -18,7 +18,7 @@ typealias AppJSON = RxCodeCore.JSONValue
 // MARK: - JSON
 
 extension AppJSON {
-    init(_ value: SDKJSON) {
+    nonisolated init(_ value: SDKJSON) {
         switch value {
         case .string(let string): self = .string(string)
         case .number(let number): self = .number(number)
@@ -31,7 +31,7 @@ extension AppJSON {
 }
 
 extension SDKJSON {
-    init(_ value: AppJSON) {
+    nonisolated init(_ value: AppJSON) {
         switch value {
         case .string(let string): self = .string(string)
         case .number(let number): self = .number(number)
@@ -46,7 +46,7 @@ extension SDKJSON {
 // MARK: - Todos
 
 extension RxCodeCore.TodoItem {
-    init(_ item: RxAgentCore.TodoItem) {
+    nonisolated init(_ item: RxAgentCore.TodoItem) {
         self.init(
             id: item.id,
             content: item.content,
@@ -59,7 +59,7 @@ extension RxCodeCore.TodoItem {
 // MARK: - Permission mode
 
 extension RxAgentCore.PermissionMode {
-    init(_ mode: RxCodeCore.PermissionMode) {
+    nonisolated init(_ mode: RxCodeCore.PermissionMode) {
         // Both enums are string-backed off the same CLI vocabulary, so the raw
         // value is the contract. A mode the SDK doesn't know is treated as
         // `.default`, which asks — the safe direction to fail in.
@@ -68,7 +68,7 @@ extension RxAgentCore.PermissionMode {
 }
 
 extension RxCodeCore.PermissionMode {
-    init(_ mode: RxAgentCore.PermissionMode) {
+    nonisolated init(_ mode: RxAgentCore.PermissionMode) {
         self = RxCodeCore.PermissionMode(rawValue: mode.rawValue) ?? .default
     }
 }
@@ -82,7 +82,7 @@ extension RxCodeCore.PermissionRequest {
     /// identifies a conversation by its own `AgentThreadID` and holds the
     /// approval continuation itself, where RxCode keys both by its session key
     /// — so the caller supplies them.
-    init(_ request: RxAgentCore.PermissionRequest, sessionId: String?, runToken: String) {
+    nonisolated init(_ request: RxAgentCore.PermissionRequest, sessionId: String?, runToken: String) {
         self.init(
             id: request.id,
             toolName: request.toolName,
@@ -99,7 +99,7 @@ extension RxAgentCore.PermissionDecision {
     /// `.allowWithInput`, because `AskUserQuestion` answers are injected
     /// through `AppState.respondToAskUserQuestion` rather than by rewriting the
     /// tool's input — so every case maps and nothing is lost.
-    init(_ decision: RxCodeCore.PermissionDecision) {
+    nonisolated init(_ decision: RxCodeCore.PermissionDecision) {
         switch decision {
         case .allow: self = .allow
         case .deny: self = .deny
@@ -120,7 +120,7 @@ extension RxAgentCore.MCPServerSpec {
     /// a stdio entry with no command, or an HTTP entry with an unparseable URL.
     /// Those are already unusable; passing them on would only move the failure
     /// into the agent.
-    init?(_ record: MCPServerRecord) {
+    nonisolated init?(_ record: MCPServerRecord) {
         let transport: Transport
         switch record.transport {
         case .stdio:
@@ -137,14 +137,14 @@ extension RxAgentCore.MCPServerSpec {
     }
 
     /// The in-app IDE MCP server, reached through its loopback stdio bridge.
-    static func ideBridge(_ bridge: MCPBridgeCommand) -> RxAgentCore.MCPServerSpec {
+    nonisolated static func ideBridge(_ bridge: MCPBridgeCommand) -> RxAgentCore.MCPServerSpec {
         .stdio(name: "rxcode-ide", command: bridge.command, args: bridge.args)
     }
 }
 
 extension BackendSendRequest {
     /// Every MCP server this turn should expose, in the SDK's vocabulary.
-    var sdkMCPServers: [RxAgentCore.MCPServerSpec] {
+    nonisolated var sdkMCPServers: [RxAgentCore.MCPServerSpec] {
         var specs: [RxAgentCore.MCPServerSpec] = []
         if let ideBridgeCommand {
             specs.append(.ideBridge(ideBridgeCommand))
@@ -159,7 +159,7 @@ extension BackendSendRequest {
 extension RxCodeCore.ReasoningLevel {
     /// The SDK already carries display names and one-line descriptions for each
     /// level, so this is a rename rather than a lookup.
-    init(_ option: RxAgentCore.AgentReasoningOption) {
+    nonisolated init(_ option: RxAgentCore.AgentReasoningOption) {
         self.init(
             id: option.id,
             displayName: option.displayName,

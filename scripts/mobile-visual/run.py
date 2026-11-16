@@ -37,6 +37,13 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+def screenshot_clock():
+    # A time-only override leaves the iPad's date changing every day. Match the
+    # approved Saturday, January 1 date and preserve 9:41 in the runner's timezone.
+    # simctl requires fractional seconds when parsing a date override.
+    return datetime(2022, 1, 1, 9, 41).astimezone().isoformat(timespec="milliseconds")
+
+
 
 def validate_environment(profile, actual, approved):
     if any(actual[key] != approved[key] for key in ("runtime", "deviceType")):
@@ -155,8 +162,7 @@ def execute(options, profiles, output):
         run("xcrun", "simctl", "bootstatus", device_id, "-b")
         test_error = None
         try:
-            # A literal clock avoids converting an ISO timestamp in the runner's timezone.
-            run("xcrun", "simctl", "status_bar", device_id, "override", "--time", "9:41",
+            run("xcrun", "simctl", "status_bar", device_id, "override", "--time", screenshot_clock(),
                 "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
                 "--cellularMode", "active", "--cellularBars", "4",
                 "--batteryState", "charged", "--batteryLevel", "100")

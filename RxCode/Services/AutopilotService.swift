@@ -184,7 +184,7 @@ final class AutopilotService {
                                  URLQueryItem(name: "repo", value: String(parts[1]))]
             + parameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         guard let url = components.url else { throw ServiceError.invalidResponse }
-        return try await get(url: url)
+        return try await get(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
     }
 
     // MARK: - Internal
@@ -192,9 +192,9 @@ final class AutopilotService {
     /// Sentinel for endpoints that return no decodable body (e.g. 204).
     private struct Ignored: Decodable {}
 
-    private func get<T: Decodable>(url: URL) async throws -> T {
+    private func get<T: Decodable>(url: URL, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> T {
         try await performWithRetry { token in
-            var request = URLRequest(url: url)
+            var request = URLRequest(url: url, cachePolicy: cachePolicy)
             request.httpMethod = "GET"
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

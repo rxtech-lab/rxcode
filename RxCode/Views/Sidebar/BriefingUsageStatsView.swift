@@ -271,7 +271,7 @@ struct BriefingUsageStatsView: View {
         count == 1 ? String(localized: "1 turn") : String(localized: "\(count) turns")
     }
 
-    static func formatDuration(_ seconds: Double) -> String {
+    nonisolated static func formatDuration(_ seconds: Double) -> String {
         let formatter = DateComponentsFormatter()
         formatter.unitsStyle = .abbreviated
         formatter.maximumUnitCount = 2

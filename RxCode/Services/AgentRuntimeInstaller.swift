@@ -169,7 +169,7 @@ actor AgentRuntimeInstaller {
             }
         }
         // Cancelling ends npm, which closes its output and ends the wait.
-        nonisolated(unsafe) let running = process
+        let running = process
         let data = await withTaskCancellationHandler {
             let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
             for await _ in completion { break }

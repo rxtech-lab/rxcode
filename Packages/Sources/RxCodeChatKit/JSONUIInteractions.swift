@@ -8,7 +8,7 @@ extension EnvironmentValues {
 
 /// Actions only change this view's local state. Hosts may explicitly handle submitted values.
 @MainActor @Observable
-final class JSONUIInteraction {
+public final class JSONUIInteraction {
     let spec: JSONUISpec
     var values: [String: JSONValue]
     var presented: String?
@@ -16,7 +16,7 @@ final class JSONUIInteraction {
     var feedback = 0
     let onSubmit: (([String: JSONValue]) -> Void)?
 
-    init(spec: JSONUISpec, onSubmit: (([String: JSONValue]) -> Void)? = nil) {
+    public init(spec: JSONUISpec, onSubmit: (([String: JSONValue]) -> Void)? = nil) {
         self.spec = spec
         values = spec.initialValues
         self.onSubmit = onSubmit
@@ -65,12 +65,12 @@ final class JSONUIInteraction {
 struct JSONUIInteractiveHost<Content: View>: View {
     let spec: JSONUISpec
     let content: (String) -> Content
-    @State private var interaction: JSONUIInteraction
+    @State private(set) var interaction: JSONUIInteraction
 
-    init(spec: JSONUISpec, onSubmit: (([String: JSONValue]) -> Void)?, @ViewBuilder content: @escaping (String) -> Content) {
+    init(spec: JSONUISpec, onSubmit: (([String: JSONValue]) -> Void)?, interaction: JSONUIInteraction? = nil, @ViewBuilder content: @escaping (String) -> Content) {
         self.spec = spec
         self.content = content
-        _interaction = State(initialValue: JSONUIInteraction(spec: spec, onSubmit: onSubmit))
+        _interaction = State(initialValue: interaction ?? JSONUIInteraction(spec: spec, onSubmit: onSubmit))
     }
 
     private var element: JSONUIElement? { interaction.presented.flatMap { spec.elements[$0] } }

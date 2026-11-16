@@ -9,6 +9,42 @@ import RxCodeCore
 enum LocalAgentBackendFactory {
     static let clientID: AgentClientID = "rx-local-agent"
 
+    /// A bounded, tool-free request for background notification text. Uses the same
+    /// managed inference and idle-release lifecycle as local conversations.
+    @MainActor
+    static func generateTextCompletion(prompt: String, modelID: String?, store: LocalModelStore) async throws -> String {
+        guard let modelID, let model = store.installed.first(where: { $0.id == modelID }), model.studioKind == .chat else {
+            throw ResolveFailure(message: "The selected local text model is no longer installed.")
+        }
+        guard let runtime = store.runtime(for: model.format) else { throw ResolveError.noRuntime(model.format) }
+        let context = min(store.effectiveContextSize, model.contextLength ?? store.effectiveContextSize)
+        let inference: any HarnessModel
+        if model.format == .mlx {
+            guard LlamaRuntimeInstaller.isAppleSilicon else { throw MLXRuntimeInstaller.InstallError.unsupportedMac }
+            inference = NativeMLXHarnessModel(manager: store.manager, model: model,
+                modelsRoot: store.modelsRoot, contextWindow: context)
+        } else {
+            let server = try await store.manager.ensureServer(
+                for: model, modelsRoot: store.modelsRoot, runtime: URL(filePath: runtime.path),
+                contextSize: context, requiresIdle: true
+            )
+            inference = LocalLlamaHarnessModel(
+                base: OpenAICompatibleHarnessModel(baseURL: server.baseURL, contextWindow: server.contextSize),
+                manager: store.manager
+            )
+        }
+        let request = HarnessModelRequest(
+            model: model.id, system: "Follow the requested output format exactly. Never call tools.",
+            messages: [.user(prompt)], mode: .generation, maxOutputTokens: 512, temperature: 0.2
+        )
+        var text = ""
+        for try await chunk in inference.send(request) {
+            try Task.checkCancellation()
+            if case .textDelta(let delta) = chunk { text += delta }
+        }
+        return text
+    }
+
     enum ResolveError: LocalizedError {
         case noModel
         case noRuntime(LocalModelWeightFormat)
@@ -124,7 +160,7 @@ enum LocalAgentBackendFactory {
                 let manager = store.manager
                 return DecisionTool.Job(model: model, prepare: { status in
                     try await store.prepareDecision(model: model, status: status)
-                }, nativeScores: model.format == .mlx ? { state, request, status in
+                }, nativeScores: model.format == .mlx ? { @Sendable state, request, status in
                     let readout = await store.decisionReadout(for: model, status: status)
                     await manager.stop()
                     status("Loading MLX decision model…")
@@ -147,20 +183,24 @@ enum LocalAgentBackendFactory {
         return "RxCode can't run this \(model.studioKind.rawValue) model yet. " + (reasons.first ?? "")
     }
 
-    static func makeBackend(
-        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { _ in nil }
-    ) -> any AgentBackend {
+    static func makeHarnessClient(
+        store: LocalModelStore,
+        additionalTools: [any HarnessTool] = [],
+        taskModel: @escaping TaskModelProvider = { _ in nil }
+    ) -> HarnessAgentClient {
         let sessions = RxCodeHarnessSessionStore(
             directory: store.appSupport.appending(path: "harness-sessions")
         )
         let manager = store.manager
+        let studioTools: [any HarnessTool] = [
+            videoTool(store: store, manager: manager, taskModel: taskModel),
+            imageTool(store: store, manager: manager, taskModel: taskModel),
+            audioTool(store: store, manager: manager, taskModel: taskModel),
+            decisionTool(store: store),
+        ]
         let agent = HarnessAgent(configuration: configuration(
-            store: sessions, extraTools: [
-                videoTool(store: store, manager: manager, taskModel: taskModel),
-                imageTool(store: store, manager: manager, taskModel: taskModel),
-                audioTool(store: store, manager: manager, taskModel: taskModel),
-                decisionTool(store: store),
-            ]
+            store: sessions,
+            extraTools: studioTools + additionalTools
         ))
 
         let resolve: HarnessAgentClient.ModelResolver = { requested in
@@ -198,7 +238,7 @@ enum LocalAgentBackendFactory {
             )
         }
 
-        let client = HarnessAgentClient(
+        return HarnessAgentClient(
             id: clientID,
             displayName: "RxCode Agent",
             agent: agent,
@@ -217,7 +257,12 @@ enum LocalAgentBackendFactory {
                 }
             }
         )
+    }
 
+    static func makeBackend(
+        permissionServer: PermissionServer, store: LocalModelStore, taskModel: @escaping TaskModelProvider = { _ in nil }
+    ) -> any AgentBackend {
+        let client = makeHarnessClient(store: store, taskModel: taskModel)
         return SDKAgentBackend(
             provider: .localAgent,
             capabilities: RxCodeCore.AgentProvider.localAgent.staticCapabilities,

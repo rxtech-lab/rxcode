@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import os
 
 /// Reads CLI-owned session jsonl files under `~/.claude/projects/{enc(cwd)}/`.
@@ -44,19 +45,22 @@ public actor CLISessionStore {
     /// CLI emits ISO8601 timestamps with fractional seconds (e.g. `2026-04-28T04:55:53.779Z`).
     /// Foundation's `.iso8601` strategy doesn't accept fractional seconds, so we
     /// install a custom strategy that tries with-then-without.
-    private static let dateStrategy: JSONDecoder.DateDecodingStrategy = {
+    private static let dateFormatters: Mutex<(fractional: ISO8601DateFormatter, plain: ISO8601DateFormatter)> = {
         let withFractional = ISO8601DateFormatter()
         withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let plain = ISO8601DateFormatter()
         plain.formatOptions = [.withInternetDateTime]
-        return .custom { decoder in
-            let c = try decoder.singleValueContainer()
-            let s = try c.decode(String.self)
-            if let d = withFractional.date(from: s) { return d }
-            if let d = plain.date(from: s) { return d }
-            throw DecodingError.dataCorruptedError(in: c, debugDescription: "Invalid ISO8601 date: \(s)")
-        }
+        return Mutex((withFractional, plain))
     }()
+
+    private static let dateStrategy: JSONDecoder.DateDecodingStrategy = .custom { decoder in
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        if let date = dateFormatters.withLock({ $0.fractional.date(from: value) ?? $0.plain.date(from: value) }) {
+            return date
+        }
+        throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid ISO8601 date: \(value)")
+    }
 
     public init(metaStore: SessionMetaStore) {
         self.metaStore = metaStore

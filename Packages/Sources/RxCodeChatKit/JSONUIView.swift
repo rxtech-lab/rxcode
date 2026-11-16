@@ -7,6 +7,7 @@ import RxCodeCore
 public struct JSONUIRenderer: View {
     let spec: JSONUISpec
 
+    private var interaction: JSONUIInteraction?
     private let onSubmit: (([String: JSONValue]) -> Void)?
 
     public init(spec: JSONUISpec, onSubmit: (([String: JSONValue]) -> Void)? = nil) {
@@ -14,8 +15,15 @@ public struct JSONUIRenderer: View {
         self.onSubmit = onSubmit
     }
 
+    /// Retain this state in the host to preserve form values across presentation changes.
+    public init(spec: JSONUISpec, interaction: JSONUIInteraction) {
+        self.spec = spec
+        self.interaction = interaction
+        self.onSubmit = nil
+    }
+
     public var body: some View {
-        JSONUIInteractiveHost(spec: spec, onSubmit: onSubmit) { id in
+        JSONUIInteractiveHost(spec: spec, onSubmit: onSubmit, interaction: interaction) { id in
             AnyView(JSONUINode(id: id, spec: spec, depth: 0))
         }
         .id(spec)

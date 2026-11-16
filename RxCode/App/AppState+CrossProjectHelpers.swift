@@ -22,19 +22,41 @@ extension AppState {
         }
     }
 
-    /// Wrap a branch briefing into a system-prompt section the agent can use as
-    /// background context. The briefing is auto-generated from earlier threads,
-    /// so it is framed as advisory rather than authoritative.
-    static func branchBriefingSystemPrompt(branch: String, briefing: String) -> String {
-        let trimmed = briefing.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-        return """
-        # Current branch briefing
+    /// Preview up to two briefings per day so a busy day cannot crowd out the others.
+    func projectBriefingSystemPrompt(
+        projectId: UUID, canFetchDetails: Bool, now: Date = .now, calendar: Calendar = .current
+    ) -> String {
+        guard projectId != Project.globalChatID else { return "" }
+        let today = calendar.startOfDay(for: now)
+        guard let start = calendar.date(byAdding: .day, value: -2, to: today),
+              let end = calendar.date(byAdding: .day, value: 1, to: today) else { return "" }
 
-        Latest notes for `\(branch)`; background only, possibly stale. The user request takes priority.
+        let items = threadStore.recentProjectBriefingItems(projectId: projectId, startingAt: start, before: end)
+        var entries: [String] = []
+        var entriesByDay: [String: Int] = [:]
+        for item in items {
+            guard let day = item.day else { continue }
+            let date = BranchBriefingRecord.dayKey(day, calendar: calendar)
+            guard entriesByDay[date, default: 0] < 2 else { continue }
+            let briefing = item.briefing.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.hasPrefix("### ") }
+                .map { $0.hasPrefix("- ") ? String($0.dropFirst(2)) : $0 }
+                .joined(separator: " ")
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            guard !briefing.isEmpty else { continue }
+            let detail = "\(item.branch): \(briefing)"
+            let preview = detail.count > 175 ? String(detail.prefix(174)) + "…" : detail
+            entries.append("- \(date) \(preview)")
+            entriesByDay[date, default: 0] += 1
+        }
+        guard !entries.isEmpty else { return "" }
 
-        \(trimmed.count > 4_000 ? String(trimmed.prefix(4_000)) + "\n[Briefing shortened]" : trimmed)
-        """
+        var lines = ["# Recent project briefings", "Background only. The current request takes priority."]
+        if canFetchDetails {
+            lines.append("Use ide__project_briefings and ide__project_briefing_get for full or older briefings.")
+        }
+        return (lines + entries).joined(separator: "\n")
     }
 
     static func promptWithBackgroundContext(_ contexts: [String], prompt: String) -> String {

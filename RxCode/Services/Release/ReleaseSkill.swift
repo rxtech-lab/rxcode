@@ -1,4 +1,5 @@
-enum ReleaseSkill {
+nonisolated enum ReleaseSkill {
+    static let name = "create-release"
     static let systemPrompt: String = #"""
     # Skill: Set up release publishing
 

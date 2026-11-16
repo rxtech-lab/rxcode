@@ -28,3 +28,13 @@ public enum IDEToolError: Error, Sendable {
     case notSupported(String)
     case handlerFailed(String)
 }
+
+extension IDEToolError: LocalizedError {
+    /// Surface the handler's message instead of "IDEToolError error 3" when shown in UI alerts.
+    public var errorDescription: String? {
+        switch self {
+        case .unknownTool(let name): "Unknown tool: \(name)"
+        case .invalidArguments(let message), .notSupported(let message), .handlerFailed(let message): message
+        }
+    }
+}

@@ -30,7 +30,7 @@ final class MCPOAuthCallbackServer {
         let host = fixedPort == nil ? "127.0.0.1" : "localhost"
         self.listener = listener
         listener.stateUpdateHandler = { [weak self] state in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, !self.finished else { return }
                 switch state {
                 case .ready:
@@ -45,7 +45,7 @@ final class MCPOAuthCallbackServer {
             }
         }
         listener.newConnectionHandler = { [weak self] connection in
-            Task { @MainActor in self?.accept(connection) }
+            Task { @MainActor [weak self] in self?.accept(connection) }
         }
         timeout = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(300)) } catch { return }
@@ -117,7 +117,7 @@ final class MCPOAuthCallbackServer {
 
     private func receive(_ connection: NWConnection, id: UUID, buffer: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, complete, error in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, !self.finished else { connection.cancel(); return }
                 var buffer = buffer
                 if let data { buffer.append(data) }
@@ -237,7 +237,7 @@ final class MCPOAuthCallbackServer {
         let status = accepted == nil ? "400 Bad Request" : "200 OK"
         let response = "HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n\(body)"
         connection.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 connection.cancel()
                 guard let self else { return }
                 self.connections.removeValue(forKey: id)

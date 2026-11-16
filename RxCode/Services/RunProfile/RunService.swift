@@ -77,7 +77,7 @@ final class RunTask: Identifiable {
     var terminalOutputTail: String = ""
 
     private let delegate: RunTaskTerminalDelegate
-    nonisolated(unsafe) private var outputCaptureTask: Task<Void, Never>?
+    @ObservationIgnored private var outputCaptureTask: Task<Void, Never>?
     private let onOutputChanged: @MainActor (UUID) -> Void
 
     init(
@@ -159,7 +159,7 @@ final class RunTask: Identifiable {
         terminalOutputTail = String(text.suffix(20_000))
     }
 
-    deinit {
+    isolated deinit {
         outputCaptureTask?.cancel()
         try? FileManager.default.removeItem(at: outputLogURL)
     }

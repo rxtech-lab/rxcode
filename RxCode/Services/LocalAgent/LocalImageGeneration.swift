@@ -14,7 +14,7 @@ extension LocalMediaRecipe {
 
     /// `sd-cli --mode img_gen` arguments. A refine passes the source image
     /// as `--init-img`, at the source's own size.
-    func imageArguments(
+    nonisolated func imageArguments(
         model: URL, directory: URL, prompt: String, output: URL, settings: ImageGenerationSettings,
         seed: Int, refine: (path: String, width: Int, height: Int)?
     ) -> [String] {

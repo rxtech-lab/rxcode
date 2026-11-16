@@ -151,6 +151,7 @@ private struct MenuBarLabelContent: View {
 
 struct MenuBarContentView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.openWindow) private var openWindow
     @State private var isRefreshing = false
     @State private var showCreateWorkspaceSheet = false
     @State private var showManageWorkspaceSheet = false
@@ -227,6 +228,10 @@ struct MenuBarContentView: View {
             }.frame(maxHeight: appState.usageDashboard.cards.contains(where: \.showInMenuBar) ? 260 : 0)
 
             chatActivitySection
+
+            Divider()
+
+            desktopPetQuickRow
 
             if !ciStatusRows.isEmpty {
                 Divider()
@@ -310,6 +315,62 @@ struct MenuBarContentView: View {
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(ClaudeTheme.textSecondary)
+            }
+        }
+    }
+
+    private var desktopPetQuickRow: some View {
+        let pet = PetController.shared
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: pet.isVoiceActive ? "waveform.circle.fill" : "pawprint.fill")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(pet.isVoiceActive ? .cyan : ClaudeTheme.accent)
+                Text("Desktop Pet")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { pet.configuration.isEnabled },
+                    set: { pet.setPetEnabled($0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    pet.openWindowAction = { id in openWindow(id: id) }
+                    pet.toggleVoice()
+                } label: {
+                    Label(
+                        pet.isVoiceActive ? "Stop Voice" : "Voice Mode",
+                        systemImage: pet.isVoiceActive ? "stop.fill" : "mic.fill"
+                    )
+                    .font(.system(size: ClaudeTheme.size(11)))
+                }
+                .controlSize(.small)
+
+                Button {
+                    pet.openWindowAction = { id in openWindow(id: id) }
+                    Task { await pet.triggerDailyReport(speakAloud: true, openSheet: true) }
+                } label: {
+                    Label("Daily Report", systemImage: "doc.text")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                }
+                .controlSize(.small)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    pet.openWindowAction = { id in openWindow(id: id) }
+                    pet.openCompanionWindow()
+                } label: {
+                    Image(systemName: "arrow.up.forward.app")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                }
+                .buttonStyle(.borderless)
+                .help("Open Pet Companion")
             }
         }
     }

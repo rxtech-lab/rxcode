@@ -78,13 +78,17 @@ struct TerminalWindowValue: Codable, Hashable {
 
 @main
 struct RxCodeApp: App {
-    @State private var workspaceManager = WorkspaceManager()
+    @State private var workspaceManager: WorkspaceManager
     @FocusedValue(\.startNewChat) private var startNewChat
     @FocusedValue(\.showCacheStorage) private var showCacheStorage
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
     private let updateService = UpdateService.shared
 
     init() {
+        if !AppSupport.isTestProcess {
+            AppSupport.migrateSigningPreferencesIfNeeded()
+        }
+        _workspaceManager = State(initialValue: WorkspaceManager())
         #if DEBUG
         if AppSupport.isScreenshotCapture {
             UserDefaults.standard.set(true, forKey: "onboardingCompleted")
@@ -114,6 +118,7 @@ struct RxCodeApp: App {
             .focusable(false)
             .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
             .modifier(DownloadWindowPresenter())
+            .modifier(PetWindowPresenter(workspaceManager: workspaceManager))
         } defaultValue: {
             WorkspaceWindowValue(workspaceID: workspaceManager.frontmostWorkspaceID)
         }
@@ -150,6 +155,7 @@ struct RxCodeApp: App {
             }
             AutomationCommands()
             LocalAgentCommands()
+            PetCommands(controller: .shared)
             DocumentationCommands(appState: appState)
         }
 
@@ -216,6 +222,7 @@ struct RxCodeApp: App {
                 .environment(workspaceManager)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .modifier(PetWindowPresenter(workspaceManager: workspaceManager))
         }
 
         // Standalone Automation windows, opened from the "Automation" menu.
@@ -261,6 +268,9 @@ struct RxCodeApp: App {
         }
         .commandsRemoved()
         .defaultSize(width: 680, height: 580)
+
+        // Desktop Pet voice companion window.
+        PetCompanionScene(appState: appState, workspaceManager: workspaceManager)
 
         // Download and install progress for agents, ACP clients and local models.
         Window("Downloads", id: DownloadsWindow.id) {

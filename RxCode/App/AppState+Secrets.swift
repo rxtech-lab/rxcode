@@ -27,7 +27,7 @@ extension AppState {
     /// passkey-derived KEK, and publishes it. Prompts for the passkey.
     func enrollSecrets() async throws {
         let kek = try await secretsKeyVault.kek()
-        let result = try await SecretsFlows.enroll(kek: kek)
+        let result = try SecretsFlows.enroll(kek: kek)
         try await secrets.putUserKey(result.body)
         secretsEnrolled = true
     }

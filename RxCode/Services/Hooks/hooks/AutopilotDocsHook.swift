@@ -6,8 +6,8 @@ import SwiftUI
 
 /// Surfaces a "set up docs" banner on the new-chat screen when the project's
 /// GitHub repo has no documentation indexed in the docs service, and — when the
-/// user accepts — injects the docs-publishing skill into that chat's system
-/// prompt so the agent wires up CI doc uploads. Mirrors `AutopilotHook`.
+/// user accepts — asks the setup chat to load the docs-publishing skill.
+/// Mirrors `AutopilotHook`.
 @MainActor
 final class AutopilotDocsHook: Hook {
     let hookID = "builtin.docs"
@@ -86,8 +86,7 @@ final class AutopilotDocsHook: Hook {
     }
 
     /// When the user accepted the banner, a docs-setup chat was started for this
-    /// project. Inject the docs-publishing skill into the system prompt for that
-    /// one chat so the agent knows how to set everything up.
+    /// project. Ask that chat to load the docs-publishing skill.
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome {
         guard let skill = controller.consumePendingDocsSetupSkill(projectId: payload.project.id) else {
             return .ignored
@@ -95,7 +94,7 @@ final class AutopilotDocsHook: Hook {
         // Remember this session so `afterSessionEnd` knows to re-check the docs
         // status once the agent is done and drop the banner if docs are now indexed.
         controller.markSetupSession(kind: HookSetupKind.docs, sessionKey: payload.sessionKey)
-        logger.debug("[Hook] injecting docs-publishing skill into session for project \(payload.project.id.uuidString, privacy: .public)")
+        logger.debug("[Hook] prompting session to load docs-publishing skill for project \(payload.project.id.uuidString, privacy: .public)")
         return .output(skill)
     }
 

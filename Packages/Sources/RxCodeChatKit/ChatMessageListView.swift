@@ -6,13 +6,20 @@ import RxCodeCore
 /// message rows and the dynamic tail spacer can be measured in a common space.
 public nonisolated let chatContentCoordinateSpace = "rxcode.chat.content"
 
+private enum ChatTrackedMessageGeometryKey: EnvironmentKey {
+    static var defaultValue: (CGFloat) -> Void { { _ in } }
+}
+
 extension EnvironmentValues {
     /// The message whose on-screen geometry the container wants reported back —
     /// the latest user message, used to size the dynamic tail spacer.
     @Entry public var chatTrackedMessageID: UUID?
     /// Callback invoked with the tracked message's `minY` in
     /// `chatContentCoordinateSpace` whenever it changes.
-    @Entry public var chatTrackedMessageGeometry: (CGFloat) -> Void = { _ in }
+    public var chatTrackedMessageGeometry: (CGFloat) -> Void {
+        get { self[ChatTrackedMessageGeometryKey.self] }
+        set { self[ChatTrackedMessageGeometryKey.self] = newValue }
+    }
 }
 
 public struct ChatMessageListView: View {

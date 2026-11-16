@@ -487,8 +487,9 @@ extension TaskFormSheet {
         defer { isGeneratingDraft = false }
         var candidate = story
         candidate.details = source
+        let classificationCandidate = candidate
         async let outline = appState.suggestStoryDraft(source: String(source.prefix(30_000)), projectId: projectId)
-        async let classification = appState.suggestClassification(for: candidate)
+        async let classification = appState.suggestClassification(for: classificationCandidate)
         let (draft, suggestion) = await (outline, classification)
         guard isStory, draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines) == source,
               story.projectId == projectId else { return }
@@ -533,10 +534,11 @@ extension TaskFormSheet {
         var candidate = task
         candidate.details = source
         candidate.title = ""
+        let classificationCandidate = candidate
         // Independent prompts: run them together rather than paying for two
         // round trips in a row.
         async let suggestedTitle = appState.suggestTitle(details: source, storyTitle: nil, projectId: projectId)
-        async let classification = appState.suggestClassification(for: candidate)
+        async let classification = appState.suggestClassification(for: classificationCandidate)
         let (title, suggestion) = await (suggestedTitle, classification)
 
         guard !isStory, draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).prefix(30_000) == source,

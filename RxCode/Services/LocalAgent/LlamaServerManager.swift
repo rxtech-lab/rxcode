@@ -146,8 +146,12 @@ actor LlamaServerManager {
         for model: LocalModelInfo,
         modelsRoot: URL,
         runtime: URL,
-        contextSize requestedContext: Int
+        contextSize requestedContext: Int,
+        requiresIdle: Bool = false
     ) async throws -> (baseURL: URL, contextSize: Int) {
+        if requiresIdle, activeRequests > 0 || loading != nil || nativeOperation != nil {
+            throw HarnessModelError.unavailable("The local model is busy. Try again when the current request finishes.")
+        }
         guard model.format == .gguf else { throw HarnessModelError.unavailable("MLX uses native inference.") }
         guard nativeOperation == nil else { throw HarnessModelError.unavailable("The local model is busy. Try again when the current request finishes.") }
         lastActivity = Date()
@@ -288,7 +292,7 @@ actor LlamaServerManager {
                     // Keep those one-off prompts out of the streaming chat cache.
                     promptCache: request.mode == .streaming ? nativePromptCache : NativeMLXPromptCache(),
                     continuation: continuation,
-                    onCacheRead: { [weak self] tokens in await self?.recordCacheRead(tokens) })
+                    onCacheRead: { [weak manager = self] tokens in await manager?.recordCacheRead(tokens) })
             } catch {
                 if request.mode == .streaming {
                     nativePromptCache = NativeMLXPromptCache()
@@ -661,7 +665,7 @@ extension GGUFHeader {
     /// The `general.*` string and number entries in the first bytes of a GGUF
     /// file, e.g. from a range request. Stops quietly where the bytes run out,
     /// since big arrays (the tokenizer) usually follow the `general` block.
-    static func generalMetadata(in data: Data) -> [String: String] {
+    nonisolated static func generalMetadata(in data: Data) -> [String: String] {
         var cursor = Cursor(data: data)
         guard cursor.bytes(4) == Data("GGUF".utf8),
               cursor.integer(UInt32.self) != nil, cursor.integer(UInt64.self) != nil,
@@ -696,7 +700,7 @@ extension GGUFHeader {
         return metadata
     }
 
-    private struct Cursor {
+    private nonisolated struct Cursor {
         let data: Data
         var offset = 0
 

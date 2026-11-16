@@ -5,7 +5,8 @@ import XCTest
 /// `[MenuItem]` survives a JSON round trip so mobile can render the identical
 /// items. These tests pin that contract plus the deep-link helper.
 final class MenuItemTests: XCTestCase {
-    func testMenuTreeRoundTripsThroughJSON() throws {
+    @MainActor
+    func testMenuTreeRoundTripsThroughJSON() async throws {
         let projectId = UUID()
         let items: [MenuItem] = [
             MenuItem(

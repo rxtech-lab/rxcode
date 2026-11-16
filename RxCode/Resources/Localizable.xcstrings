@@ -131,6 +131,22 @@
         }
       }
     },
+    "· Voice: %@" : {
+
+    },
+    "“%@”" : {
+
+    },
+    "“%@” (%@) will be removed from disk." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "“%1$@” (%2$@) will be removed from disk."
+          }
+        }
+      }
+    },
     "“%@” (%@) will be removed from this Mac." : {
       "localizations" : {
         "en" : {
@@ -299,6 +315,16 @@
         }
       }
     },
+    "%@ · %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%@ · %@ · %lld rule%@" : {
       "localizations" : {
         "en" : {
@@ -371,6 +397,9 @@
         }
       }
     },
+    "%@ · No download required" : {
+
+    },
     "%@ · share of %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -416,6 +445,9 @@
           }
         }
       }
+    },
+    "%@ (Not Listed)" : {
+
     },
     "%@ (not verified)" : {
       "localizations" : {
@@ -474,6 +506,9 @@
           }
         }
       }
+    },
+    "%@ Companion" : {
+
     },
     "%@ context" : {
 
@@ -566,6 +601,9 @@
         }
       }
     },
+    "%@ Model" : {
+
+    },
     "%@ models you upload to Hugging Face, including private ones, appear here." : {
 
     },
@@ -597,7 +635,13 @@
         }
       }
     },
+    "%@ Original notification text will be used until it is available." : {
+
+    },
     "%@ parameters" : {
+
+    },
+    "%@ proactively reacts when coding sessions finish, request permissions or answers, or when CI fails." : {
 
     },
     "%@ Studio Setup" : {
@@ -663,6 +707,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 将从文档索引中移除。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "%@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
           }
         }
       }
@@ -1207,6 +1261,9 @@
     "%lld parts" : {
 
     },
+    "%lld percent" : {
+
+    },
     "%lld projects" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1216,6 +1273,9 @@
           }
         }
       }
+    },
+    "%lld pt" : {
+
     },
     "%lld repos" : {
       "localizations" : {
@@ -1256,6 +1316,9 @@
           }
         }
       }
+    },
+    "%lld voices from README" : {
+
     },
     "%lld workflows · %lld actions · %lld outdated" : {
       "localizations" : {
@@ -1890,6 +1953,15 @@
     "Access token (leave blank to keep existing token)" : {
 
     },
+    "Accessibility Access" : {
+
+    },
+    "Accessibility Access Required" : {
+
+    },
+    "Accessory" : {
+
+    },
     "Account" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2012,6 +2084,9 @@
       }
     },
     "Active time" : {
+
+    },
+    "Active Voice Engine" : {
 
     },
     "Add" : {
@@ -3024,6 +3099,12 @@
         }
       }
     },
+    "Agent Media Tools" : {
+
+    },
+    "Agent Model" : {
+
+    },
     "Agent Prompts" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3394,6 +3475,12 @@
         }
       }
     },
+    "Allow Personal Voice…" : {
+
+    },
+    "Allow this copy of RxCode in Privacy & Security → Accessibility to focus windows and perform requested clicks or scrolling. Then retry the action." : {
+
+    },
     "Allow this tool for the session" : {
       "localizations" : {
         "en" : {
@@ -3526,6 +3613,21 @@
         }
       }
     },
+    "Analyze README" : {
+
+    },
+    "Analyze the README to find the speaker names this model supports." : {
+
+    },
+    "Analyzed" : {
+
+    },
+    "Analyzed By" : {
+
+    },
+    "Animation frame" : {
+
+    },
     "another device" : {
 
     },
@@ -3600,6 +3702,9 @@
         }
       }
     },
+    "App Requesting Access" : {
+
+    },
     "Appearance" : {
 
     },
@@ -3628,6 +3733,12 @@
           }
         }
       }
+    },
+    "Apple Music" : {
+
+    },
+    "Apple Voice" : {
+
     },
     "Applied automatically to newly created repositories." : {
       "localizations" : {
@@ -3847,6 +3958,9 @@
     "Ask the setup agent again, for example after choosing another agent or when generation keeps failing. Downloaded files stay on disk." : {
 
     },
+    "Ask the voice agent to play, pause, resume, or stop a song or artist." : {
+
+    },
     "Assign an agent to a task and move it into a chat column to start work." : {
       "localizations" : {
         "ko" : {
@@ -3958,6 +4072,9 @@
           }
         }
       }
+    },
+    "Audio Devices" : {
+
     },
     "Authenticate on GitHub" : {
       "extractionState" : "stale",
@@ -4235,6 +4352,9 @@
     "Automatic (%@ tokens)" : {
 
     },
+    "Automatic (%@)" : {
+
+    },
     "Automatic code review" : {
       "localizations" : {
         "ko" : {
@@ -4285,6 +4405,9 @@
           }
         }
       }
+    },
+    "Available to Claude, Codex, ACP clients, and local chat agents through IDE media tools. Codex and downloaded image models can refine attached images. Flowcy currently generates images from text." : {
+
     },
     "Average daily limit use" : {
 
@@ -4818,6 +4941,9 @@
         }
       }
     },
+    "Browse Voice Models" : {
+
+    },
     "Browse…" : {
       "localizations" : {
         "ko" : {
@@ -4904,6 +5030,9 @@
           }
         }
       }
+    },
+    "Built-in Kokoro voices. Analyze the README to load every voice this model lists." : {
+
     },
     "by %@" : {
 
@@ -5272,10 +5401,16 @@
         }
       }
     },
+    "Choose a look, or ask your pet to create one in chat." : {
+
+    },
     "Choose a model from the list to see its files and download one." : {
 
     },
     "Choose a model to fill in empty properties" : {
+
+    },
+    "Choose a Premium, Enhanced, Personal, or Siri voice. Siri voices are used through the Spoken Content System Voice." : {
 
     },
     "Choose a project from the workspace most recently used in RxCode." : {
@@ -5313,6 +5448,12 @@
     "Choose an integration" : {
 
     },
+    "Choose Apple voice" : {
+
+    },
+    "Choose Apple Voice" : {
+
+    },
     "Choose Claude Code, Codex, or an ACP registry client." : {
 
     },
@@ -5339,6 +5480,9 @@
         }
       }
     },
+    "Choose General Agent…" : {
+
+    },
     "Choose how this client should authenticate." : {
       "localizations" : {
         "zh-Hans" : {
@@ -5348,6 +5492,9 @@
           }
         }
       }
+    },
+    "Choose New Random Seed" : {
+
     },
     "Choose one" : {
       "localizations" : {
@@ -5787,6 +5934,9 @@
         }
       }
     },
+    "Click a model to read its README and choose a download. After download, the setup agent reads the README to build the model's voice settings." : {
+
+    },
     "Click a task to edit it before the story is created." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5809,6 +5959,12 @@
       }
     },
     "Click again to clear" : {
+
+    },
+    "Click the pet to pat it, drag it anywhere on screen, or double-click it to start or stop live voice mode." : {
+
+    },
+    "Click to pat %@" : {
 
     },
     "Click to select · Command-right-click to add or remove · Right-click for Show Diff" : {
@@ -5918,6 +6074,15 @@
         }
       }
     },
+    "Close image" : {
+
+    },
+    "Close interactive view" : {
+
+    },
+    "Close music player" : {
+
+    },
     "Close PR" : {
       "localizations" : {
         "ko" : {
@@ -5933,6 +6098,9 @@
           }
         }
       }
+    },
+    "Close status card" : {
+
     },
     "Close Terminal" : {
       "localizations" : {
@@ -5950,7 +6118,13 @@
         }
       }
     },
+    "Close UI card" : {
+
+    },
     "Close. The view stays in this thread's Views list in the inspector." : {
+
+    },
+    "Closed" : {
 
     },
     "Cloud" : {
@@ -6179,6 +6353,27 @@
           }
         }
       }
+    },
+    "Codex" : {
+
+    },
+    "Codex Image Generation" : {
+
+    },
+    "Codex Realtime" : {
+
+    },
+    "Codex Realtime connects through RxAgentSDK and exposes RxCode IDE tools so you can manage tasks, send threads, and open interactive views by voice." : {
+
+    },
+    "Codex Realtime over WebRTC always uses the system default microphone and speaker. The devices chosen here apply to the Local Pipeline, the WebSocket transport, and pet announcements." : {
+
+    },
+    "Codex Realtime Voice" : {
+
+    },
+    "Codex Realtime voices are generated by the Codex session, so there's no offline preview. The new voice applies the next time voice mode starts. Notifications spoken outside a live session use the Apple or neural voice." : {
+
     },
     "Coding Analytics" : {
 
@@ -6533,6 +6728,15 @@
         }
       }
     },
+    "Configure Codex Realtime voice" : {
+
+    },
+    "Configure Codex Realtime Voice" : {
+
+    },
+    "Configure general agent, voice, music, and desktop pet" : {
+
+    },
     "Configure Model Context Protocol servers used by Claude Code and Codex." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6575,6 +6779,9 @@
           }
         }
       }
+    },
+    "Configure Pet & Voice…" : {
+
     },
     "Configure what Flowcy does automatically on your repositories." : {
       "localizations" : {
@@ -6990,6 +7197,15 @@
         }
       }
     },
+    "Controls replies and notification announcements in both voice modes. Automatic follows the conversation. Speech recognition and TTS voice are configured separately." : {
+
+    },
+    "Conversation Agent" : {
+
+    },
+    "Conversation Language" : {
+
+    },
     "Copied" : {
       "localizations" : {
         "en" : {
@@ -7188,6 +7404,9 @@
       }
     },
     "Could not update integration" : {
+
+    },
+    "Couldn't Build Voice Settings" : {
 
     },
     "Couldn't Create Pull Request" : {
@@ -7406,6 +7625,9 @@
     "Create Now (%@)" : {
 
     },
+    "Create Pet Look" : {
+
+    },
     "Create PR" : {
       "localizations" : {
         "ko" : {
@@ -7604,6 +7826,9 @@
       }
     },
     "Create with Model" : {
+
+    },
+    "Create with Prompt…" : {
 
     },
     "Create Workspace" : {
@@ -7995,6 +8220,9 @@
         }
       }
     },
+    "Customize Look…" : {
+
+    },
     "Cut and publish semantic releases — all from one app." : {
       "localizations" : {
         "ko" : {
@@ -8036,6 +8264,15 @@
           }
         }
       }
+    },
+    "Daily Report" : {
+
+    },
+    "Daily Workspace Report" : {
+
+    },
+    "Daily Workspace Report…" : {
+
     },
     "Database name (optional)" : {
 
@@ -8288,6 +8525,9 @@
         }
       }
     },
+    "Default Project Scope" : {
+
+    },
     "Default task agent" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8407,6 +8647,9 @@
           }
         }
       }
+    },
+    "Delete “%@”" : {
+
     },
     "Delete \"%@\"?" : {
       "localizations" : {
@@ -8631,6 +8874,9 @@
           }
         }
       }
+    },
+    "Delete Local Voice Model?" : {
+
     },
     "Delete memory" : {
       "localizations" : {
@@ -8863,6 +9109,9 @@
         }
       }
     },
+    "Delete voice model from disk" : {
+
+    },
     "Delete Workspace" : {
       "localizations" : {
         "ko" : {
@@ -9053,6 +9302,15 @@
         }
       }
     },
+    "Desktop action: %@" : {
+
+    },
+    "Desktop Pet" : {
+
+    },
+    "Desktop Pet & Voice Companion" : {
+
+    },
     "Destination" : {
       "localizations" : {
         "ko" : {
@@ -9130,6 +9388,9 @@
     "Developer" : {
 
     },
+    "Device" : {
+
+    },
     "Device name" : {
       "localizations" : {
         "ko" : {
@@ -9145,6 +9406,9 @@
           }
         }
       }
+    },
+    "Device output volume" : {
+
     },
     "Direct · LAN%@" : {
       "localizations" : {
@@ -9244,6 +9508,9 @@
         }
       }
     },
+    "Disconnected Device" : {
+
+    },
     "Dismiss" : {
       "localizations" : {
         "ko" : {
@@ -9259,6 +9526,9 @@
           }
         }
       }
+    },
+    "Dismiss bubble" : {
+
     },
     "Dismiss sync notification" : {
 
@@ -9294,6 +9564,9 @@
           }
         }
       }
+    },
+    "Displays RxBuddy on your desktop with Codex Realtime and local speech + custom agent voice modes, proactive alerts, and daily workspace reports." : {
+
     },
     "Do nothing" : {
       "localizations" : {
@@ -9509,6 +9782,9 @@
     "Download Action Failed" : {
 
     },
+    "Download Anyway" : {
+
+    },
     "Download APK" : {
       "localizations" : {
         "ko" : {
@@ -9541,6 +9817,9 @@
         }
       }
     },
+    "Download Large Voice Model?" : {
+
+    },
     "Download links unavailable. Visit rxlab.app to install the mobile app." : {
       "localizations" : {
         "ko" : {
@@ -9556,6 +9835,9 @@
           }
         }
       }
+    },
+    "Download more voices in Read & Speak settings, or turn off the language filter." : {
+
     },
     "Download Secret" : {
       "localizations" : {
@@ -9585,6 +9867,9 @@
       }
     },
     "Downloaded" : {
+
+    },
+    "Downloaded Models" : {
 
     },
     "Downloading · %@" : {
@@ -9816,6 +10101,9 @@
         }
       }
     },
+    "Duplicate…" : {
+
+    },
     "e.g. Priority board" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9984,6 +10272,9 @@
           }
         }
       }
+    },
+    "Edit Pet Look" : {
+
     },
     "Edit Relay Server" : {
       "localizations" : {
@@ -10373,6 +10664,9 @@
         }
       }
     },
+    "Enable RxCode in System Settings → Privacy & Security → Microphone, then try Start Voice again. If access is already enabled, quit and reopen RxCode." : {
+
+    },
     "Enabled" : {
       "localizations" : {
         "ko" : {
@@ -10421,6 +10715,9 @@
         }
       }
     },
+    "End Voice Mode" : {
+
+    },
     "Endpoint" : {
       "localizations" : {
         "ko" : {
@@ -10441,6 +10738,12 @@
 
     },
     "Engines" : {
+
+    },
+    "Enlarge" : {
+
+    },
+    "Enlarge image" : {
 
     },
     "Enroll with Passkey" : {
@@ -10507,6 +10810,9 @@
           }
         }
       }
+    },
+    "Enter a whole number from 0 to 2147483647." : {
+
     },
     "Enter the repositories whose workflow queue times you want to monitor." : {
 
@@ -10914,6 +11220,9 @@
     "Export Data" : {
 
     },
+    "Export to Desktop" : {
+
+    },
     "Export…" : {
 
     },
@@ -11272,7 +11581,6 @@
 
     },
     "Filter" : {
-      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11421,6 +11729,9 @@
     "Finishing sync (step 5 of 5)" : {
 
     },
+    "First / Active Workspace Project" : {
+
+    },
     "First day of the month at 9:00" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11529,6 +11840,9 @@
           }
         }
       }
+    },
+    "Flowcy Catalog" : {
+
     },
     "Flowcy Cloud Chat" : {
 
@@ -11811,6 +12125,16 @@
     "Found and saved" : {
 
     },
+    "Frame %lld · Sheet %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Frame %1$lld · Sheet %2$lld"
+          }
+        }
+      }
+    },
     "Frequency" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11881,6 +12205,12 @@
         }
       }
     },
+    "General Agent" : {
+
+    },
+    "General Agent Default" : {
+
+    },
     "General AI Tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11923,6 +12253,9 @@
         }
       }
     },
+    "Generate a workspace daily report summarizing completed tasks, active threads, briefings, scheduled runs, and CI health from the past 24 hours." : {
+
+    },
     "Generate condition with AI" : {
       "localizations" : {
         "ko" : {
@@ -11938,6 +12271,12 @@
           }
         }
       }
+    },
+    "Generate Daily Report" : {
+
+    },
+    "Generate Daily Report Now" : {
+
     },
     "Generate Draft" : {
       "localizations" : {
@@ -11964,6 +12303,9 @@
           }
         }
       }
+    },
+    "Generates notification summaries and translations independently of the General Agent. Defaults to Apple Intelligence. Supports Claude Code, Codex, ACP clients, and installed local text models (MLX / GGUF). During calls, the voice assistant announces updates. If generation fails, the original text is preserved." : {
+
     },
     "Generating…" : {
       "localizations" : {
@@ -12022,6 +12364,9 @@
           }
         }
       }
+    },
+    "GGUF (llama.cpp)" : {
+
     },
     "GGUF models run on llama.cpp; MLX models run on Apple's MLX." : {
 
@@ -12263,6 +12608,15 @@
         }
       }
     },
+    "Grant Accessibility Access…" : {
+
+    },
+    "Grant Microphone Access…" : {
+
+    },
+    "Grant Screen Recording Access…" : {
+
+    },
     "Headers" : {
       "localizations" : {
         "ko" : {
@@ -12348,6 +12702,9 @@
           }
         }
       }
+    },
+    "Hide Desktop Pet" : {
+
     },
     "Hide details" : {
       "extractionState" : "stale",
@@ -12807,7 +13164,13 @@
         }
       }
     },
+    "Hue" : {
+
+    },
     "Hugging Face task" : {
+
+    },
+    "Hugging Face Text-to-Speech Models" : {
 
     },
     "I found the existing onboarding view and will keep the CLI check as setup." : {
@@ -12841,6 +13204,9 @@
           }
         }
       }
+    },
+    "If active, the pet returns to RxBuddy. Your conversation continues." : {
+
     },
     "Images" : {
       "localizations" : {
@@ -12879,6 +13245,9 @@
           }
         }
       }
+    },
+    "Import Pack…" : {
+
     },
     "Import Repository" : {
       "localizations" : {
@@ -13263,6 +13632,9 @@
     "Install Managed Copy" : {
 
     },
+    "Install neural MLX or GGUF text-to-speech models (such as Kokoro-82M) for natural local speech, or use the built-in macOS voice immediately." : {
+
+    },
     "Install one CLI, then check again." : {
       "localizations" : {
         "ko" : {
@@ -13417,6 +13789,9 @@
     "Installed ACP client" : {
 
     },
+    "Installed Neural Voice Models" : {
+
+    },
     "Installed skills are managed by RxCode, sourced from OpenAI Agent Skills and compatible catalogs, and enabled for Claude Code, Codex, and ACP agents where supported." : {
       "localizations" : {
         "ko" : {
@@ -13509,6 +13884,12 @@
           }
         }
       }
+    },
+    "Interrupt" : {
+
+    },
+    "Interrupt Speech" : {
+
     },
     "Interrupted" : {
 
@@ -13797,6 +14178,9 @@
           }
         }
       }
+    },
+    "Last Native Request" : {
+
     },
     "Last run %@" : {
       "localizations" : {
@@ -14164,6 +14548,9 @@
         }
       }
     },
+    "Listening…" : {
+
+    },
     "Live channel only" : {
       "localizations" : {
         "ko" : {
@@ -14244,6 +14631,9 @@
 
     },
     "Loaded" : {
+
+    },
+    "Loading" : {
 
     },
     "Loading accounts…" : {
@@ -14499,6 +14889,12 @@
         }
       }
     },
+    "Local Speech Recognition" : {
+
+    },
+    "Local Voice Model (TTS)" : {
+
+    },
     "Location" : {
       "localizations" : {
         "ko" : {
@@ -14549,6 +14945,15 @@
           }
         }
       }
+    },
+    "macOS doesn't list Siri voices for apps. To use a Siri voice, select it as the System Voice in System Settings → Accessibility → Read & Speak, then choose Spoken Content System Voice here. Speech speed may not apply to every Siri voice." : {
+
+    },
+    "macOS System Voice" : {
+
+    },
+    "macOS System Voice (Zero-Download)" : {
+
     },
     "main" : {
       "localizations" : {
@@ -14962,6 +15367,9 @@
         }
       }
     },
+    "Manage Voices…" : {
+
+    },
     "Manage Workspaces" : {
       "localizations" : {
         "ko" : {
@@ -15022,6 +15430,9 @@
           }
         }
       }
+    },
+    "Managed by Codex" : {
+
     },
     "Manual" : {
 
@@ -15211,6 +15622,9 @@
         }
       }
     },
+    "Media" : {
+
+    },
     "median %@ tokens" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15332,6 +15746,9 @@
         }
       }
     },
+    "Message %@…" : {
+
+    },
     "Messages" : {
       "localizations" : {
         "en" : {
@@ -15373,6 +15790,15 @@
     "Metrics" : {
 
     },
+    "Microphone" : {
+
+    },
+    "Microphone Access" : {
+
+    },
+    "Microphone access is restricted by this Mac's policy. Contact your administrator." : {
+
+    },
     "Milestone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15402,6 +15828,9 @@
           }
         }
       }
+    },
+    "MLX (Apple Silicon)" : {
+
     },
     "MLX %@" : {
 
@@ -15479,6 +15908,9 @@
         }
       }
     },
+    "Model Default" : {
+
+    },
     "Model estimates" : {
 
     },
@@ -15516,6 +15948,9 @@
           }
         }
       }
+    },
+    "Model Voice" : {
+
     },
     "Model: %@ · %@" : {
       "localizations" : {
@@ -15555,6 +15990,9 @@
         }
       }
     },
+    "Models are grouped by their image, video, and audio labels. Flowcy uses your signed-in account and account allowance." : {
+
+    },
     "Models…" : {
 
     },
@@ -15586,6 +16024,9 @@
           }
         }
       }
+    },
+    "More Apple Music options" : {
+
     },
     "Most" : {
       "localizations" : {
@@ -15622,6 +16063,9 @@
           }
         }
       }
+    },
+    "Mouth" : {
+
     },
     "Move tasks to" : {
       "localizations" : {
@@ -15688,6 +16132,12 @@
           }
         }
       }
+    },
+    "Mute Pet" : {
+
+    },
+    "Mute Pet (including notifications)" : {
+
     },
     "My Relay Server" : {
       "localizations" : {
@@ -15779,6 +16229,9 @@
           }
         }
       }
+    },
+    "Neural Voice" : {
+
     },
     "Neutral" : {
 
@@ -15956,6 +16409,9 @@
           }
         }
       }
+    },
+    "New Look…" : {
+
     },
     "New Menu Item" : {
       "localizations" : {
@@ -16360,6 +16816,9 @@
         }
       }
     },
+    "No %@" : {
+
+    },
     "No %@ Models" : {
 
     },
@@ -16573,6 +17032,9 @@
           }
         }
       }
+    },
+    "No Daily Report Yet" : {
+
     },
     "No data in this window." : {
       "localizations" : {
@@ -16802,6 +17264,9 @@
     "No Local Models" : {
 
     },
+    "No local transcription model is installed yet. Apple on-device speech recognition will be used automatically until you install an audio transcription model in Local Models." : {
+
+    },
     "No Log" : {
 
     },
@@ -16869,6 +17334,9 @@
     "No matching tools" : {
 
     },
+    "No Matching Voices" : {
+
+    },
     "No measured tasks in this window yet." : {
       "localizations" : {
         "zh-Hans" : {
@@ -16931,6 +17399,9 @@
     "No models downloaded" : {
 
     },
+    "No neural local TTS models installed yet." : {
+
+    },
     "No notifications yet." : {
       "localizations" : {
         "zh-Hans" : {
@@ -16959,6 +17430,9 @@
           }
         }
       }
+    },
+    "No Personal Voice found. Create one in System Settings → Accessibility → Personal Voice." : {
+
     },
     "No preview data yet" : {
 
@@ -17684,6 +18158,9 @@
     "No Views" : {
 
     },
+    "No Voice Models Found" : {
+
+    },
     "No workflows scanned yet. Add a release workflow (e.g. .github/workflows/create-release.yaml) to the repo, then re-add the repository to rescan." : {
       "localizations" : {
         "ko" : {
@@ -17890,6 +18367,9 @@
         }
       }
     },
+    "Nothing playing" : {
+
+    },
     "Nothing written (files already exist)." : {
       "localizations" : {
         "ko" : {
@@ -17915,6 +18395,12 @@
           }
         }
       }
+    },
+    "Notification Model" : {
+
+    },
+    "Notification Text" : {
+
     },
     "Notification when a run finishes" : {
       "localizations" : {
@@ -18140,6 +18626,9 @@
         }
       }
     },
+    "Only %@ Voices" : {
+
+    },
     "Only send when a condition is met" : {
       "localizations" : {
         "ko" : {
@@ -18214,6 +18703,9 @@
         }
       }
     },
+    "Open Accessibility Settings…" : {
+
+    },
     "Open Briefing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18243,6 +18735,9 @@
           }
         }
       }
+    },
+    "Open Companion" : {
+
     },
     "Open in Default App" : {
 
@@ -18312,6 +18807,12 @@
         }
       }
     },
+    "Open Microphone Settings…" : {
+
+    },
+    "Open Music" : {
+
+    },
     "Open on GitHub" : {
       "localizations" : {
         "ko" : {
@@ -18346,6 +18847,9 @@
           }
         }
       }
+    },
+    "Open Pet Companion" : {
+
     },
     "Open PR" : {
       "localizations" : {
@@ -18457,6 +18961,9 @@
         }
       }
     },
+    "Open Read & Speak Settings…" : {
+
+    },
     "Open Repository" : {
       "localizations" : {
         "ko" : {
@@ -18505,6 +19012,12 @@
         }
       }
     },
+    "Open Screen Recording Settings…" : {
+
+    },
+    "Open Settings" : {
+
+    },
     "Open Source" : {
       "localizations" : {
         "en" : {
@@ -18526,6 +19039,9 @@
           }
         }
       }
+    },
+    "Open System Settings" : {
+
     },
     "Open tasks that run on a cron schedule" : {
       "extractionState" : "stale",
@@ -18662,6 +19178,9 @@
         }
       }
     },
+    "Optional Realtime Model Override (default managed by Codex)" : {
+
+    },
     "Optional. Paste or import a GitHub ruleset JSON exported from your repository's branch-rules settings." : {
       "localizations" : {
         "ko" : {
@@ -18745,6 +19264,9 @@
           }
         }
       }
+    },
+    "Other README Settings" : {
+
     },
     "Output" : {
       "localizations" : {
@@ -19145,6 +19667,9 @@
         }
       }
     },
+    "Permission" : {
+
+    },
     "Permission Mode" : {
       "localizations" : {
         "en" : {
@@ -19229,6 +19754,36 @@
       }
     },
     "Permissions: %lld" : {
+
+    },
+    "Personal Voice" : {
+
+    },
+    "Personal Voice access is off. Turn it on in System Settings → Privacy & Security → Personal Voice." : {
+
+    },
+    "Personal Voice isn't supported on this Mac." : {
+
+    },
+    "Pet" : {
+
+    },
+    "Pet & Voice Settings" : {
+
+    },
+    "Pet & Voice Settings…" : {
+
+    },
+    "Pet Companion" : {
+
+    },
+    "Pet Notice" : {
+
+    },
+    "Pet Player" : {
+
+    },
+    "Pet Size" : {
 
     },
     "Pick a common schedule" : {
@@ -19416,6 +19971,12 @@
         }
       }
     },
+    "Play" : {
+
+    },
+    "Play quiet activity cues while pet tools run. Cues pause during speech and while the call is muted." : {
+
+    },
     "Point at the chart to read every provider's usage at that time." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -19436,6 +19997,9 @@
           }
         }
       }
+    },
+    "Pose" : {
+
     },
     "PR #%lld" : {
       "localizations" : {
@@ -19594,6 +20158,12 @@
         }
       }
     },
+    "Preview Poses…" : {
+
+    },
+    "Preview Voice" : {
+
+    },
     "Previously assigned Mac" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19614,6 +20184,9 @@
         }
       }
     },
+    "Privacy Settings…" : {
+
+    },
     "Private" : {
       "localizations" : {
         "ko" : {
@@ -19631,6 +20204,9 @@
       }
     },
     "Private and gated models will no longer be available to browse or download. Models already downloaded stay on this Mac." : {
+
+    },
+    "Proactive Talk & Daily Report" : {
 
     },
     "Project" : {
@@ -20150,6 +20726,9 @@
         }
       }
     },
+    "Qwen3 Base generates speech without a preset speaker." : {
+
+    },
     "ran with %lld other tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20250,6 +20829,15 @@
         }
       }
     },
+    "Read Aloud" : {
+
+    },
+    "Reading README…" : {
+
+    },
+    "README not analyzed" : {
+
+    },
     "Reads Antigravity quota windows using your existing Antigravity ACP or agy login in macOS Keychain or ~/.gemini/antigravity-acp." : {
 
     },
@@ -20281,6 +20869,12 @@
           }
         }
       }
+    },
+    "Realtime Model Override" : {
+
+    },
+    "Realtime Voice" : {
+
     },
     "Reason" : {
       "localizations" : {
@@ -20323,6 +20917,15 @@
           }
         }
       }
+    },
+    "Recheck Accessibility Access" : {
+
+    },
+    "Recheck Connection" : {
+
+    },
+    "Recommended for RxBuddy" : {
+
     },
     "Reconnecting in %llds" : {
       "localizations" : {
@@ -20432,6 +21035,12 @@
         }
       }
     },
+    "Refresh Models" : {
+
+    },
+    "Refresh Permission Status" : {
+
+    },
     "Refresh registry" : {
       "localizations" : {
         "ko" : {
@@ -20482,6 +21091,9 @@
           }
         }
       }
+    },
+    "Regenerate from README" : {
+
     },
     "Register repositories for semantic-release publishing. Pick which workflow cuts releases, install the RELEASE_TOKEN secret, and trigger releases from RxCode." : {
       "localizations" : {
@@ -20783,6 +21395,9 @@
         }
       }
     },
+    "Remove %@ and its bubble" : {
+
+    },
     "Remove %@?" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20980,6 +21595,9 @@
       }
     },
     "Remove this integration and all its cards?" : {
+
+    },
+    "Remove this look?" : {
 
     },
     "Remove this release repository?" : {
@@ -21202,6 +21820,9 @@
         }
       }
     },
+    "Replay" : {
+
+    },
     "Repo Setup" : {
       "localizations" : {
         "ko" : {
@@ -21233,6 +21854,9 @@
           }
         }
       }
+    },
+    "Report Time" : {
+
     },
     "Repositories" : {
 
@@ -21272,6 +21896,9 @@
         }
       }
     },
+    "Required for requested window focus, clicks, scrolling and typing. Enable this copy of RxCode in System Settings. If authorization does not update, fully quit and reopen the same app. Screen Recording is a separate permission." : {
+
+    },
     "Requires accepting the model's terms on Hugging Face" : {
 
     },
@@ -21306,6 +21933,12 @@
           }
         }
       }
+    },
+    "Reset Desktop Position" : {
+
+    },
+    "Reset Search" : {
+
     },
     "Reset Terminal" : {
       "localizations" : {
@@ -21546,6 +22179,9 @@
         }
       }
     },
+    "Review" : {
+
+    },
     "Review Command" : {
       "localizations" : {
         "ko" : {
@@ -21593,6 +22229,9 @@
           }
         }
       }
+    },
+    "Review Pending Confirmation" : {
+
     },
     "Review the CLI setup check" : {
       "localizations" : {
@@ -21652,6 +22291,9 @@
           }
         }
       }
+    },
+    "Revise with Prompt…" : {
+
     },
     "Rotate token & reinstall" : {
       "localizations" : {
@@ -22183,6 +22825,9 @@
         }
       }
     },
+    "Saturation" : {
+
+    },
     "Save" : {
       "localizations" : {
         "ko" : {
@@ -22198,6 +22843,9 @@
           }
         }
       }
+    },
+    "Save & Use" : {
+
     },
     "Save Server" : {
       "localizations" : {
@@ -22467,6 +23115,9 @@
         }
       }
     },
+    "Scheduled Daily Workspace Report" : {
+
+    },
     "Scheduled task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22550,6 +23201,9 @@
           }
         }
       }
+    },
+    "Screen Recording Access" : {
+
     },
     "Script" : {
       "localizations" : {
@@ -22707,6 +23361,9 @@
           }
         }
       }
+    },
+    "Search Hugging Face text-to-speech models (e.g. Kokoro)…" : {
+
     },
     "Search Index" : {
       "localizations" : {
@@ -22941,7 +23598,13 @@
     "Search tools" : {
 
     },
+    "Search Voices" : {
+
+    },
     "Search your %@ models" : {
+
+    },
+    "Searching Hugging Face text-to-speech catalog…" : {
 
     },
     "Secrets" : {
@@ -23330,6 +23993,9 @@
         }
       }
     },
+    "Send message" : {
+
+    },
     "Send Message" : {
       "localizations" : {
         "ko" : {
@@ -23345,6 +24011,12 @@
           }
         }
       }
+    },
+    "Send message to general agent" : {
+
+    },
+    "Send message to voice session" : {
+
     },
     "Send Notification" : {
       "localizations" : {
@@ -23716,7 +24388,6 @@
       }
     },
     "Settings" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -23733,6 +24404,9 @@
       }
     },
     "Settings Default (%@)" : {
+
+    },
+    "Settings from README" : {
 
     },
     "Setup agent" : {
@@ -24076,6 +24750,12 @@
         }
       }
     },
+    "Show Desktop Pet" : {
+
+    },
+    "Show Desktop Pet across Spaces" : {
+
+    },
     "Show fewer" : {
 
     },
@@ -24190,6 +24870,12 @@
           }
         }
       }
+    },
+    "Show Novelty Voices" : {
+
+    },
+    "Show on Desktop" : {
+
     },
     "Show Onboarding" : {
       "localizations" : {
@@ -24540,6 +25226,9 @@
         }
       }
     },
+    "Sign in to Flowcy to load cloud media models." : {
+
+    },
     "Sign in to Flowcy to send notifications." : {
       "localizations" : {
         "zh-Hans" : {
@@ -24848,6 +25537,9 @@
         }
       }
     },
+    "Silence pet speech, including notification announcements" : {
+
+    },
     "Size" : {
       "localizations" : {
         "ko" : {
@@ -24915,6 +25607,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "技能市场"
+          }
+        }
+      }
+    },
+    "Skills" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "技能"
           }
         }
       }
@@ -25042,6 +25750,12 @@
         }
       }
     },
+    "Speak Daily Report" : {
+
+    },
+    "Speaker" : {
+
+    },
     "Specific days" : {
       "localizations" : {
         "zh-Hans" : {
@@ -25051,6 +25765,15 @@
           }
         }
       }
+    },
+    "Speech Recognizer" : {
+
+    },
+    "Speech Speed" : {
+
+    },
+    "Spoken Language" : {
+
     },
     "Standalone chat" : {
       "localizations" : {
@@ -25100,6 +25823,15 @@
           }
         }
       }
+    },
+    "Start Voice" : {
+
+    },
+    "Start Voice Mode" : {
+
+    },
+    "Start Voice Mode (%@)" : {
+
     },
     "Starts a chat" : {
       "localizations" : {
@@ -25252,6 +25984,15 @@
         }
       }
     },
+    "Stop music and close" : {
+
+    },
+    "Stop Preview" : {
+
+    },
+    "Stop Reading" : {
+
+    },
     "Stop running tasks" : {
       "localizations" : {
         "ko" : {
@@ -25267,6 +26008,15 @@
           }
         }
       }
+    },
+    "Stop Speaking" : {
+
+    },
+    "Stop Voice" : {
+
+    },
+    "Stop Voice Mode" : {
+
     },
     "Stop watching %@?" : {
       "localizations" : {
@@ -25583,6 +26333,9 @@
         }
       }
     },
+    "Switch to “Browse Hugging Face TTS” to install Kokoro-82M or any compatible MLX / GGUF speech synthesis model." : {
+
+    },
     "Switch Workspace" : {
       "localizations" : {
         "ko" : {
@@ -25675,6 +26428,15 @@
     "Syncing tasks (step 3 of 5)" : {
 
     },
+    "System" : {
+
+    },
+    "System Default" : {
+
+    },
+    "System Default follows the devices chosen in System Settings → Sound. A disconnected device falls back to the system default until it is reconnected." : {
+
+    },
     "Tag" : {
       "localizations" : {
         "zh-Hans" : {
@@ -25694,6 +26456,12 @@
           }
         }
       }
+    },
+    "Taking a photo" : {
+
+    },
+    "Talk to %@" : {
+
     },
     "Tap to answer" : {
       "comment" : "Notification body when Claude invokes AskUserQuestion.",
@@ -26427,6 +27195,9 @@
         }
       }
     },
+    "The pet only takes a single photo when you ask. It can photograph its display, another display, or a visible window. macOS may require reopening RxCode after access changes." : {
+
+    },
     "The preview uses the latest saved usage. Widget layouts adapt to the widget size." : {
 
     },
@@ -26525,6 +27296,12 @@
         }
       }
     },
+    "The seed controls sampling variation. Reusing it with the same model, voice, and text helps repeat a result." : {
+
+    },
+    "The seed stays the same for replies and notifications until you change it. Choose a new random seed to try another voice variation. Its effect depends on the model." : {
+
+    },
     "The selected file contains no readable text." : {
       "localizations" : {
         "zh-Hans" : {
@@ -26567,6 +27344,12 @@
           }
         }
       }
+    },
+    "The setup agent can read this model's README and build dedicated settings, such as the speaker names the model supports." : {
+
+    },
+    "The setup agent is reading this model's README…" : {
+
     },
     "The story will be removed. Its tasks will remain on the board." : {
       "localizations" : {
@@ -26698,6 +27481,9 @@
           }
         }
       }
+    },
+    "These apply in Audio Studio. Pet speech uses the voice and seed above." : {
+
     },
     "These instructions are included with every agent turn in this project, after the global prompt." : {
       "localizations" : {
@@ -26916,6 +27702,9 @@
           }
         }
       }
+    },
+    "This model is %@ and may use a large share of unified GPU memory on this Mac." : {
+
     },
     "This model is gated: request access on its [Hugging Face page](%@), then download it while signed in." : {
 
@@ -27419,6 +28208,9 @@
         }
       }
     },
+    "Tool activity sounds" : {
+
+    },
     "Tool details" : {
 
     },
@@ -27463,6 +28255,9 @@
       }
     },
     "Total with companions" : {
+
+    },
+    "Transcription Model" : {
 
     },
     "Transport" : {
@@ -27575,6 +28370,12 @@
     "Try Again" : {
 
     },
+    "Try another search term such as “Kokoro” or switch between MLX and GGUF formats." : {
+
+    },
+    "Try Another Seed" : {
+
+    },
     "Turning recording off keeps existing data. Exported files contain your prompt text." : {
 
     },
@@ -27607,6 +28408,9 @@
         }
       }
     },
+    "Type a message below to chat with your general agent, or start Voice Mode to speak. Choose your model in Pet Settings → General Agent." : {
+
+    },
     "Type your answer…" : {
       "localizations" : {
         "ko" : {
@@ -27633,7 +28437,19 @@
         }
       }
     },
+    "Unable to Change Look" : {
+
+    },
+    "Unable to Create Look" : {
+
+    },
+    "Unable to Load Media Models" : {
+
+    },
     "Unable to Save" : {
+
+    },
+    "Unable to Save Look" : {
 
     },
     "Unable to Save Rating" : {
@@ -27665,6 +28481,9 @@
         }
       }
     },
+    "Unavailable" : {
+
+    },
     "Understand how you work with Claude Code, Codex and ACP clients. Everything stays on this Mac." : {
 
     },
@@ -27691,6 +28510,9 @@
       }
     },
     "Unload" : {
+
+    },
+    "Unmute Pet" : {
 
     },
     "Unpin" : {
@@ -27967,6 +28789,9 @@
         }
       }
     },
+    "Use" : {
+
+    },
     "Use a %@ API key with read access to the selected scope. Stored only in Keychain." : {
 
     },
@@ -28084,6 +28909,12 @@
         }
       }
     },
+    "Use Voice" : {
+
+    },
+    "Use Voice & Save" : {
+
+    },
     "Use Workspace (.xcworkspace)" : {
       "localizations" : {
         "ko" : {
@@ -28109,6 +28940,9 @@
           }
         }
       }
+    },
+    "Used as the default working directory when starting threads or running tasks with the pet. You can still name any project in the workspace during conversation." : {
+
     },
     "Used for new sessions. You can override the effort level per session from the toolbar." : {
       "localizations" : {
@@ -28192,6 +29026,12 @@
         }
       }
     },
+    "Used for typed conversations, daily report summaries, and Local Speech voice mode. Choose any available Claude Code, Codex, ACP client, or RxCode Local Agent model with RxCode IDE tools. Codex Realtime has its own model in the Voice tab." : {
+
+    },
+    "Used only while Codex Realtime voice mode is live." : {
+
+    },
     "Used to auto-fill task and story forms, create tasks and stories from natural language, generate cron schedules, and write Swift filters and context-menu conditions. ACP clients run in a separate session." : {
       "localizations" : {
         "zh-Hans" : {
@@ -28241,6 +29081,12 @@
       }
     },
     "Uses existing agent connections" : {
+
+    },
+    "Uses the Apple Music account signed in to Music on this Mac. Catalog playback needs an active subscription." : {
+
+    },
+    "Uses the Audio Studio setup agent. Settings are shared with Audio Studio." : {
 
     },
     "Uses the default task agent from the Tasks tab (%@)." : {
@@ -28348,6 +29194,9 @@
           }
         }
       }
+    },
+    "Variation" : {
+
     },
     "Verification link expired — resend it to try again" : {
       "localizations" : {
@@ -28597,6 +29446,9 @@
         }
       }
     },
+    "View or generate today's workspace daily report" : {
+
+    },
     "View PR" : {
       "localizations" : {
         "ko" : {
@@ -28646,6 +29498,45 @@
 
     },
     "Views an agent opens in a dialog in this thread appear here." : {
+
+    },
+    "Voice" : {
+
+    },
+    "Voice Companion Notice" : {
+
+    },
+    "Voice Mode" : {
+
+    },
+    "Voice Model" : {
+
+    },
+    "Voice Model Error" : {
+
+    },
+    "Voice Preview Failed" : {
+
+    },
+    "Voice Seed" : {
+
+    },
+    "Voice Settings" : {
+
+    },
+    "Voice Settings can read this model's README to find every speaker it supports." : {
+
+    },
+    "Voice settings for %@" : {
+
+    },
+    "Voice Settings…" : {
+
+    },
+    "Voices come from this model's README, read by the setup agent." : {
+
+    },
+    "Voices…" : {
 
     },
     "Wait for the agent to finish responding" : {
@@ -28928,6 +29819,9 @@
         }
       }
     },
+    "When Background Works Finish or Need Input" : {
+
+    },
     "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix." : {
       "localizations" : {
         "ko" : {
@@ -29151,6 +30045,12 @@
           }
         }
       }
+    },
+    "Workspace & Project Scope" : {
+
+    },
+    "Workspace Default (%@)" : {
+
     },
     "Workspace name" : {
       "localizations" : {

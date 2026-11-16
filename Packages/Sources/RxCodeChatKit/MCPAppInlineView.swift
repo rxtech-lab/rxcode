@@ -185,7 +185,7 @@ final class MCPAppBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                 decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
         // No top-level escapes, downloads, file access, or external navigation.
         let allowed = navigationAction.request.url?.scheme == "about" && navigationAction.navigationType == .other
         decisionHandler(allowed ? .allow : .cancel)
@@ -193,7 +193,7 @@ final class MCPAppBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate
 
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
                  initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
-                 decisionHandler: @escaping (WKPermissionDecision) -> Void) { decisionHandler(.deny) }
+                 decisionHandler: @escaping @MainActor @Sendable (WKPermissionDecision) -> Void) { decisionHandler(.deny) }
 }
 
 struct MCPAppWebView {

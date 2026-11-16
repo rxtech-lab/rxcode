@@ -31,6 +31,14 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>RxCode connects directly to your paired iPhone or iPad over the local network for a faster, private peer-to-peer sync.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>RxCode plays songs from Apple Music only when you ask the desktop pet, and displays the current song and playback controls.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>RxCode captures a screen or window only when you ask the desktop pet to look at it and answer your question.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>RxCode uses the microphone so you can talk to the desktop pet in voice mode.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>RxCode transcribes your speech on device so the desktop pet can hear and answer you locally.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_rxcode-sync._tcp</string>

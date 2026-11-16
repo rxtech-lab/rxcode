@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 /// Result of running a single hook command.
-struct HookRunResult: Sendable {
+nonisolated struct HookRunResult: Sendable {
     let output: String
     let exitCode: Int32
     var isError: Bool { exitCode != 0 }
@@ -15,11 +15,11 @@ struct HookRunResult: Sendable {
 /// the result can be shown in chat and, for start hooks, injected into the
 /// agent's context.
 enum HookService {
-    private static let logger = Logger(subsystem: "com.claudework", category: "HookService")
+    private nonisolated static let logger = Logger(subsystem: "com.claudework", category: "HookService")
 
     /// Hard cap on captured output so a chatty hook can't blow up the message
     /// store or the injected system prompt.
-    private static let maxOutputBytes = 64 * 1024
+    private nonisolated static let maxOutputBytes = 64 * 1024
 
     /// Run a hook. Synthesizes the command from the hook's type with the same
     /// builder run profiles use (`RunTaskExecutor.mainCommandLines`), so a hook

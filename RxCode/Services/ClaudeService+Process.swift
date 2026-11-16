@@ -676,10 +676,10 @@ extension ClaudeCodeServer {
         _ = posix_spawn_file_actions_adddup2(&fileActions, stderrWriteFD, 2)
 
         let chdirRC = cwd.withCString { cwdPtr in
-            posix_spawn_file_actions_addchdir_np(&fileActions, cwdPtr)
+            posix_spawn_file_actions_addchdir(&fileActions, cwdPtr)
         }
         if chdirRC != 0 {
-            throw ClaudeError.spawnFailed("posix_spawn_file_actions_addchdir_np failed: \(chdirRC)")
+            throw ClaudeError.spawnFailed("posix_spawn_file_actions_addchdir failed: \(chdirRC)")
         }
 
         var attr: posix_spawnattr_t?

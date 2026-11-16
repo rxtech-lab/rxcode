@@ -59,7 +59,7 @@ enum SDKBackendFactory {
     /// Returns `nil` for a spec whose launch method names nothing to run — a
     /// binary entry whose path was never filled in, say. Spawning that would
     /// fail with a worse message than "no agent configured".
-    static func makeACPClient(_ spec: ACPClientSpec) -> ACPClient? {
+    nonisolated static func makeACPClient(_ spec: ACPClientSpec) -> ACPClient? {
         let id = AgentClientID.acp(spec.id)
         switch spec.launch {
         case .npx(let package, let args, let env):

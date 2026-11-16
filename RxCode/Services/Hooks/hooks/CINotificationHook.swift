@@ -1,7 +1,7 @@
 import Foundation
 import RxCodeCore
 
-/// Posts the "CI failed" banner. The failure-signature dedup and the
+/// Posts the "CI failed" banner. The failure-event dedup and the
 /// `notificationsEnabled` gate stay at the dispatch site.
 @MainActor
 final class CINotificationHook: Hook {
@@ -11,7 +11,8 @@ final class CINotificationHook: Hook {
         await controller.postCIFailed(
             projectName: payload.projectName,
             projectId: payload.projectId,
-            failingWorkflowNames: payload.failingWorkflowNames
+            failingWorkflowNames: payload.failingWorkflowNames,
+            runURL: payload.detailsURL
         )
         return .proceed
     }

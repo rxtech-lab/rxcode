@@ -4,7 +4,7 @@ import RxCodeCore
 
 // MARK: - ExternalEditor
 
-struct ExternalEditor: Identifiable, Hashable {
+nonisolated struct ExternalEditor: Identifiable, Hashable, Sendable {
     let id: String
     let displayName: String
     let bundleId: String?

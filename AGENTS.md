@@ -37,7 +37,7 @@ Project notes:
 
 - macOS app deployment target: macOS 26.0+
 - Swift tools version: 6.2
-- Main app bundle ID: `com.rxlab.RxCode`
+- Main app bundle ID: `app.rxlab.flowcy.code`
 - App-level dependencies: SwiftTerm and Sparkle
 - Package dependencies: ViewInspector
 - Mobile builds use Flowcy Cloud (`https://www.flowcy.dev`) in both Debug and Release configurations.

@@ -152,7 +152,7 @@ public protocol HookController: AnyObject {
     func postQuestionNeeded(projectName: String?, projectId: UUID?, sessionId: String?) async
     func postPermissionNeeded(toolName: String, projectName: String?, projectId: UUID?, sessionId: String?) async
     func postMCPDisconnected(name: String, error: String?) async
-    func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String]) async
+    func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String], runURL: URL?) async
     func postRemoteConfigChanged(title: String, body: String) async
 
     // MARK: Interactive UI
@@ -235,9 +235,8 @@ public protocol HookController: AnyObject {
     func docsIndexed(repoFullName: String) async -> Bool?
 
     /// One-shot: if a docs-setup chat was kicked off for `projectId` (via the
-    /// docs banner), returns the docs-publishing skill text to inject as the
-    /// session's system prompt and clears the pending flag. Returns `nil`
-    /// otherwise.
+    /// docs banner), returns a prompt to load the docs-publishing skill and
+    /// clears the pending flag. Returns `nil` otherwise.
     func consumePendingDocsSetupSkill(projectId: UUID) -> String?
 
     // MARK: Release
@@ -250,8 +249,8 @@ public protocol HookController: AnyObject {
     func releaseConfigured(repoFullName: String) async -> Bool?
 
     /// One-shot: if a release-setup chat was kicked off for `projectId` (via the
-    /// release banner), returns the release skill text to inject as the session's
-    /// system prompt and clears the pending flag. Returns `nil` otherwise.
+    /// release banner), returns a prompt to load the release skill and clears
+    /// the pending flag. Returns `nil` otherwise.
     func consumePendingReleaseSetupSkill(projectId: UUID) -> String?
 
     // MARK: Context menu actions

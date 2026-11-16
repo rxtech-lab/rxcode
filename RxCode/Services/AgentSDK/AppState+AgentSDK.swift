@@ -27,8 +27,8 @@ extension AppState {
         guard Self.isAgentSDKEnabled else { return }
         let backends = SDKBackendFactory.makeBackends(
             permissionServer: permission,
-            acpClients: { [weak self] in
-                await MainActor.run { self?.acpClients ?? [] }
+            acpClients: { @MainActor [weak self] in
+                self?.acpClients ?? []
             }
         )
         for (provider, backend) in backends {

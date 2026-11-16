@@ -205,7 +205,7 @@ struct BriefingRateLimitStatsView: View {
         appState.cachedRateLimitUsage(for: provider)?.hasFiveHourLimit ?? true
     }
 
-    private static func resetDetail(_ usage: RateLimitUsage) -> String? {
+    private nonisolated static func resetDetail(_ usage: RateLimitUsage) -> String? {
         if usage.hasFiveHourLimit {
             return usage.fiveHourResetsAt.map {
                 String(localized: "5-hour resets \($0.formatted(.relative(presentation: .named)))")
@@ -251,7 +251,7 @@ struct BriefingRateLimitStatsView: View {
     }
 
     /// Percentage points of a limit, e.g. `1.5%`.
-    static func formatDelta(_ value: Double) -> String {
+    nonisolated static func formatDelta(_ value: Double) -> String {
         (value / 100).formatted(.percent.precision(.fractionLength(0...2)))
     }
 

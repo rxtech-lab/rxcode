@@ -212,9 +212,6 @@ final class AppStateHookController: HookController {
                 // fix turn) is the reviewer's prose, not a list of tool names.
                 let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty { lines.append(text) }
-            default:
-                let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !text.isEmpty { lines.append(text) }
             }
         }
         return lines.joined(separator: "\n\n")
@@ -363,8 +360,6 @@ final class AppStateHookController: HookController {
                 // response. Synthetic-only / empty rows fall through and we keep
                 // looking past them.
                 if Self.isMeaningfulAssistantMessage(message) { return false }
-            default:
-                break
             }
         }
         return false
@@ -451,8 +446,8 @@ final class AppStateHookController: HookController {
         await NotificationService.shared.postMCPDisconnected(name: name, error: error)
     }
 
-    func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String]) async {
-        await NotificationService.shared.postCIFailed(projectName: projectName, projectId: projectId, failingWorkflowNames: failingWorkflowNames)
+    func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String], runURL: URL?) async {
+        await NotificationService.shared.postCIFailed(projectName: projectName, projectId: projectId, failingWorkflowNames: failingWorkflowNames, runURL: runURL)
     }
 
     func postRemoteConfigChanged(title: String, body: String) async {
@@ -653,7 +648,7 @@ final class AppStateHookController: HookController {
     func consumePendingDocsSetupSkill(projectId: UUID) -> String? {
         guard let app, app.pendingDocsSetupProjectId == projectId else { return nil }
         app.pendingDocsSetupProjectId = nil
-        return DocsSkill.systemPrompt
+        return "Load the \(DocsSkill.name) skill with ide__skill_get and follow it for this setup."
     }
 
     // MARK: Release
@@ -686,7 +681,7 @@ final class AppStateHookController: HookController {
     func consumePendingReleaseSetupSkill(projectId: UUID) -> String? {
         guard let app, app.pendingReleaseSetupProjectId == projectId else { return nil }
         app.pendingReleaseSetupProjectId = nil
-        return ReleaseSkill.systemPrompt
+        return "Load the \(ReleaseSkill.name) skill with ide__skill_get and follow it for this setup."
     }
 
     // MARK: Context menu actions

@@ -19,7 +19,7 @@ import RxCodeCore
 ///
 /// Not a `Sendable` value type: one instance belongs to one turn, and is only
 /// ever touched from the actor draining that turn's stream.
-final class AgentEventBridge {
+nonisolated final class AgentEventBridge {
     /// ACP agents report their model list mid-stream. RxCode routes that back
     /// into the matching `ACPClientSpec`, which is keyed by the client's id —
     /// so a bridge for a non-ACP client has nothing to attribute the list to
@@ -210,7 +210,7 @@ final class AgentEventBridge {
 // MARK: - Usage / context window
 
 private extension RxCodeCore.UsageInfo {
-    init(_ usage: RxAgentCore.UsageInfo) {
+    nonisolated init(_ usage: RxAgentCore.UsageInfo) {
         self.init(
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
@@ -221,7 +221,7 @@ private extension RxCodeCore.UsageInfo {
 }
 
 private extension RxCodeCore.ContextWindowInfo {
-    init(_ window: RxAgentCore.ContextWindowInfo) {
+    nonisolated init(_ window: RxAgentCore.ContextWindowInfo) {
         let used = window.fractionUsed * 100
         self.init(usedPercentage: used, remainingPercentage: 100 - used)
     }

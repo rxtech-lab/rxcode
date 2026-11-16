@@ -8,6 +8,7 @@ extension AppState {
     static let ciStatusPollInterval: TimeInterval = 60
 
     private static let ciSignaturesDefaultsKey = "ciHandledFailureSignatures"
+    private static let ciEventsDefaultsKey = "ciHandledFailureEvents"
 
     // MARK: - Poller lifecycle
 
@@ -141,8 +142,8 @@ extension AppState {
 
     // MARK: - Failure handling
 
-    /// Notify (always) and, when enabled, silently spawn a fix thread — but only
-    /// once per distinct failure (keyed by head sha / latest failing run).
+    /// Announce each newly observed failed run once. Auto-fix retains its
+    /// separate per-commit signature so multiple workflows do not spawn fixes.
     private func handleCITransition(for project: Project, status: ProjectCIStatus) async {
         guard status.overallState == .failure else {
             // Reset so a future failure on this project fires again.
@@ -153,21 +154,26 @@ extension AppState {
             return
         }
 
+        var ledger = ciFailureEventLedgers[project.id] ?? CIFailureEventLedger()
+        let newFailures = ledger.consume(status)
+        ciFailureEventLedgers[project.id] = ledger
+        if !newFailures.isEmpty, let data = try? JSONEncoder().encode(ciFailureEventLedgers) {
+            UserDefaults.standard.set(data, forKey: Self.ciEventsDefaultsKey)
+        }
+
+        if notificationsEnabled, !newFailures.isEmpty {
+            await hookManager.dispatchCIFailed(CIFailedPayload(
+                projectId: project.id,
+                projectName: project.name,
+                failingWorkflowNames: newFailures.compactMap(\.workflowName),
+                runURL: newFailures.compactMap(\.htmlUrl).first
+            ))
+        }
+
         let signature = Self.ciFailureSignature(status)
         guard lastHandledCIFailureSignature[project.id] != signature else { return }
         lastHandledCIFailureSignature[project.id] = signature
         persistHandledCIFailureSignatures()
-
-        let failingNames = status.failing.compactMap(\.workflowName)
-
-        if notificationsEnabled {
-            await hookManager.dispatchCIFailed(CIFailedPayload(
-                projectId: project.id,
-                projectName: project.name,
-                failingWorkflowNames: failingNames
-            ))
-        }
-
         if enableAutoCIFix {
             await startAutoCIFix(for: project, status: status)
         }
@@ -264,6 +270,10 @@ extension AppState {
     }
 
     private func loadHandledCIFailureSignatures() {
+        if let data = UserDefaults.standard.data(forKey: Self.ciEventsDefaultsKey),
+           let ledgers = try? JSONDecoder().decode([UUID: CIFailureEventLedger].self, from: data) {
+            ciFailureEventLedgers = ledgers
+        }
         guard let raw = UserDefaults.standard.dictionary(forKey: Self.ciSignaturesDefaultsKey) as? [String: String] else { return }
         var restored: [UUID: String] = [:]
         for (key, value) in raw {

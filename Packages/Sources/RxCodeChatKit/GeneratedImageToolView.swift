@@ -22,7 +22,7 @@ struct GeneratedImageToolView: View {
         return object
     }
 
-    private var path: String? { output["savedPath"]?.stringValue }
+    private var path: String? { output["savedPath"]?.stringValue ?? output["paths"]?.arrayValue?.first?.stringValue }
 
     private var revisedPrompt: String? {
         let prompt = output["revisedPrompt"]?.stringValue ?? toolCall.input["prompt"]?.stringValue

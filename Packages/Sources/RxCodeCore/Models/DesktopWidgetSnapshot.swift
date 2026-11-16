@@ -157,7 +157,7 @@ public struct WidgetAgentUsage: Codable, Equatable, Sendable, Identifiable {
 /// Both processes use the same App Group; snapshots contain no prompts or tokens.
 public enum DesktopWidgetStore {
     // macOS team-prefixed groups do not require provisioning-profile registration.
-    public static let appGroupID = "P9KK452K8P.com.rxlab.RxCode"
+    public static let appGroupID = "T7GYB573Y6.app.rxlab.flowcy.code"
     private static let key = "desktop.widget.snapshot.v1"
 
     public static func load() -> DesktopWidgetSnapshot {

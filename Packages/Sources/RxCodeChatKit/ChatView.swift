@@ -8,15 +8,18 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
     @Environment(WindowState.self) private var windowState
     @Environment(ChatBridge.self) private var chatBridge
 
+    private let showsStatusLine: Bool
     private let inputAccessory: InputAccessory
     private let bottomAccessory: BottomAccessory
     private let aboveInputAccessory: AboveInputAccessory
 
     public init(
+        showsStatusLine: Bool = true,
         @ViewBuilder inputAccessory: () -> InputAccessory,
         @ViewBuilder bottomAccessory: () -> BottomAccessory = { EmptyView() },
         @ViewBuilder aboveInputAccessory: () -> AboveInputAccessory = { EmptyView() }
     ) {
+        self.showsStatusLine = showsStatusLine
         self.inputAccessory = inputAccessory()
         self.bottomAccessory = bottomAccessory()
         self.aboveInputAccessory = aboveInputAccessory()
@@ -61,7 +64,7 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
                 bottomAccessory
             }
 
-            StatusLineView()
+            if showsStatusLine { StatusLineView() }
         }
         .background(ClaudeTheme.background)
         .onKeyPress(.escape, phases: .down) { _ in

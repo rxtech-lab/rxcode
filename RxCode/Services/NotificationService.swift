@@ -144,6 +144,7 @@ final class NotificationService: NSObject {
     /// transitions a server from connected to failed. Silently no-ops if the user
     /// hasn't granted notification permission.
     func postMCPDisconnected(name: String, error: String?) async {
+        routeToActiveVoice(title: "MCP server disconnected", body: "\(name): \(error ?? "connection lost")")
         guard !isRunningTests else { return }
         let detailForMirror = (error?.trimmingCharacters(in: .whitespacesAndNewlines))
             .flatMap { $0.isEmpty ? nil : $0 } ?? "connection lost"
@@ -194,14 +195,14 @@ final class NotificationService: NSObject {
     /// on GitHub Actions. Fans out to mobile and (when authorized) shows a local
     /// banner. Uses a per-project identifier so a newer failure replaces the
     /// previous banner instead of stacking.
-    func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String]) async {
+    func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String], runURL: URL?) async {
         guard !isRunningTests else { return }
         let body = Self.ciFailureBody(failingWorkflowNames)
         let projectSuffix: String = projectName.map { " — \($0)" } ?? ""
         await fanoutToMobile(.init(
             kind: .generic,
             title: "CI failed\(projectSuffix)",
-            body: body,
+            body: runURL.map { "\(body)\n\($0.absoluteString)" } ?? body,
             sessionID: nil,
             projectID: projectId
         ))
@@ -222,6 +223,8 @@ final class NotificationService: NSObject {
         content.body = body
         content.sound = .default
         if let projectId { content.userInfo = ["projectId": projectId.uuidString] }
+
+        if let runURL { content.userInfo["ciRunURL"] = runURL.absoluteString }
 
         // Stable per-project id: a fresh failure replaces the prior banner.
         let identifier = projectId.map { "ci-failed-\($0.uuidString)" } ?? "ci-failed-\(UUID().uuidString)"
@@ -253,6 +256,7 @@ final class NotificationService: NSObject {
     /// mobile and (when authorized) shows a local banner. Uses a per-task
     /// identifier so a newer update replaces the task's previous banner.
     func postTaskUpdate(title: String, body: String, taskId: UUID, projectId: UUID, sessionId: String?) async {
+        routeToActiveVoice(title: title, body: body)
         guard !isRunningTests else { return }
         let cleanBody = stripMarkdown(body)
         await fanoutToMobile(.init(
@@ -295,6 +299,7 @@ final class NotificationService: NSObject {
     /// desktop's skill / ACP / MCP configuration. Silently no-ops if the user
     /// has not authorized notifications.
     func postRemoteConfigChanged(title: String, body: String) async {
+        routeToActiveVoice(title: title, body: body)
         guard !isRunningTests else { return }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
@@ -372,6 +377,14 @@ final class NotificationService: NSObject {
         }
     }
 
+    /// Completion, permission, question and CI events are delivered by PetCompanionHook.
+    /// Forward the remaining notification kinds here without duplicating those hooks.
+    private func routeToActiveVoice(title: String, body: String) {
+        let pet = PetController.shared
+        guard pet.isVoiceActive else { return }
+        pet.notifyProactiveEvent(title: title, spokenText: body, mood: .curious, status: .listening, action: nil)
+    }
+
     /// Forward the notification to every paired mobile device. Best-effort —
     /// devices that are offline simply miss the live channel and fall back to
     /// the APNs path (when configured).
@@ -395,6 +408,11 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse
     ) async {
         let userInfo = response.notification.request.content.userInfo
+        if let rawURL = userInfo["ciRunURL"] as? String,
+           let url = CIFailedPayload(projectId: nil, projectName: nil, failingWorkflowNames: [], runURL: rawURL).detailsURL {
+            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            return
+        }
         guard let projectIdString = userInfo["projectId"] as? String,
               let projectId = UUID(uuidString: projectIdString),
               let sessionId = userInfo["sessionId"] as? String else { return }

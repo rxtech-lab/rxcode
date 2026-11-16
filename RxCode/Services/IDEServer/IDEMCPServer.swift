@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 import MCP
 import Network
@@ -623,12 +624,12 @@ actor IDEMCPServer {
 
     private static func mcpTool(_ tool: IDETool) throws -> MCP.Tool {
         let annotations: MCP.Tool.Annotations
-        if toolAnnotations(for: tool) != nil {
+        if let hints = toolAnnotations(for: tool) {
             annotations = .init(
                 readOnlyHint: true,
                 destructiveHint: false,
                 idempotentHint: true,
-                openWorldHint: false
+                openWorldHint: hints["openWorldHint"] as? Bool ?? false
             )
         } else {
             annotations = nil
@@ -643,6 +644,9 @@ actor IDEMCPServer {
 
     private static func toolAnnotations(for tool: IDETool) -> [String: Any]? {
         let readOnlyTools: Set<String> = [
+            "ide__flowcy_catalog",
+            "ide__get_ci_status",
+            "ide__search_docs",
             "ide__get_running_jobs",
             "ide__get_job_output",
             "ide__get_projects",
@@ -660,6 +664,9 @@ actor IDEMCPServer {
             "ide__get_integration_usage",
             "ide__briefing_list",
             "ide__briefing_get",
+            "ide__project_briefings",
+            "ide__project_briefing_get",
+            "ide__skill_get",
         ]
 
         guard readOnlyTools.contains(tool.name) else { return nil }
@@ -667,7 +674,7 @@ actor IDEMCPServer {
             "readOnlyHint": true,
             "destructiveHint": false,
             "idempotentHint": true,
-            "openWorldHint": false,
+            "openWorldHint": ["ide__get_ci_status", "ide__search_docs", "ide__skill_get"].contains(tool.name),
         ]
     }
 
@@ -746,11 +753,12 @@ private enum MemoryAPIError: LocalizedError {
 
 // MARK: - JSONValue <-> Any helpers
 
-private extension JSONValue {
+extension JSONValue {
     nonisolated static func fromAny(_ any: Any) -> JSONValue {
         if let s = any as? String { return .string(s) }
-        if let b = any as? Bool { return .bool(b) }
+        // Foundation also bridges numeric 0/1 to Bool. Only CFBoolean is a JSON Boolean.
         if let n = any as? NSNumber {
+            if CFGetTypeID(n) == CFBooleanGetTypeID() { return .bool(n.boolValue) }
             return .number(n.doubleValue)
         }
         if let arr = any as? [Any] {

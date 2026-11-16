@@ -13,6 +13,10 @@ extension AppState {
         do {
             let result: JSONValue
             switch name {
+            case "ide__project_briefings":
+                return try handleProjectBriefingList(arguments: arguments, sessionKey: sessionKey)
+            case "ide__project_briefing_get":
+                return try handleProjectBriefingGet(arguments: arguments)
             case "ide__briefing_list":
                 return try await handleBriefingList(arguments: arguments)
             case "ide__briefing_get":
@@ -37,6 +41,47 @@ extension AppState {
         } catch let error as BriefingStoreError {
             throw IDEToolError.invalidArguments(error.localizedDescription)
         }
+    }
+
+    private func handleProjectBriefingList(arguments: JSONValue, sessionKey: String) throws -> JSONValue {
+        let currentSessionId = resolveCurrentSessionId(sessionKey)
+        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+            ?? threadStore.fetch(id: currentSessionId)?.projectId
+            ?? threadStore.fetch(id: sessionKey)?.projectId
+            ?? allSessionSummaries.first(where: { $0.id == currentSessionId })?.projectId
+        guard let projectId, projectId != Project.globalChatID, sessionProject(id: projectId) != nil else {
+            throw IDEToolError.invalidArguments("Call from a project chat or pass a valid project_id from ide__get_projects.")
+        }
+        guard let offset = Int(exactly: arguments["offset"]?.numberValue ?? 0), offset >= 0,
+              let limit = Int(exactly: arguments["limit"]?.numberValue ?? 20), (1...50).contains(limit) else {
+            throw IDEToolError.invalidArguments("Pass a nonnegative integer offset and a limit between 1 and 50.")
+        }
+        let branch = trimmedString(arguments["branch"])
+        let briefings = threadStore.projectBriefingRecords(
+            projectId: projectId, branch: branch.isEmpty ? nil : branch, offset: offset, limit: limit
+        )
+        return jsonTextResult(.array(briefings.map { .object(projectBriefingJSON($0)) }))
+    }
+
+    private func handleProjectBriefingGet(arguments: JSONValue) throws -> JSONValue {
+        let id = trimmedString(arguments["id"])
+        guard !id.isEmpty, let briefing = threadStore.fetchBranchBriefing(id: id),
+              briefing.projectId != Project.globalChatID, sessionProject(id: briefing.projectId) != nil else {
+            throw IDEToolError.invalidArguments("Pass a valid briefing id from ide__project_briefings.")
+        }
+        var result = projectBriefingJSON(briefing)
+        result["content"] = .string(briefing.briefing)
+        return jsonTextResult(.object(result))
+    }
+
+    private func projectBriefingJSON(_ briefing: BranchBriefingRecord) -> [String: JSONValue] {
+        [
+            "id": .string(briefing.id),
+            "project_id": .string(briefing.projectId.uuidString),
+            "branch": .string(briefing.branch),
+            "day": briefing.day.map { .string(BranchBriefingRecord.dayKey($0)) } ?? .null,
+            "updated_at": .string(ISO8601DateFormatter().string(from: briefing.updatedAt)),
+        ]
     }
 
     // MARK: - Handlers

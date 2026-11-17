@@ -146,7 +146,7 @@ struct SessionStreamState {
 
 @Observable
 @MainActor
-final class AppState {
+final class AppState: IDEToolHandling {
     // MARK: - Logger
 
     let logger = Logger(subsystem: "com.claudework", category: "AppState")
@@ -580,6 +580,7 @@ final class AppState {
     /// so a steady-state red branch doesn't re-fire every 30s. Keyed by project id;
     /// persisted to UserDefaults so a fix isn't re-triggered across relaunches.
     @ObservationIgnored var lastHandledCIFailureSignature: [UUID: String] = [:]
+    @ObservationIgnored var ciFailureEventLedgers: [UUID: CIFailureEventLedger] = [:]
 
     // MARK: - Focus Mode
 
@@ -1419,7 +1420,7 @@ final class AppState {
                 await memoryService.start(threadStore: threadStore)
                 await searchService.backfillIfNeeded(
                     loadAll: { await threadStoreReader.loadSummaries() },
-                    loadFull: { @MainActor summary -> ChatSession? in
+                    loadFull: { @MainActor [weak self] summary -> ChatSession? in
                         let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
                         return await persistence.loadFullSession(summary: summary, cwd: cwd)
                     }

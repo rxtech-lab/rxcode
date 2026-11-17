@@ -6,8 +6,7 @@ import SwiftUI
 
 /// Surfaces a "set up release" banner on the new-chat screen when the project's
 /// GitHub repo has no release workflow configured, and — when the user accepts —
-/// injects the release skill into that chat's system prompt so the agent wires
-/// up the `.releaserc` + CI workflow. Mirrors `DocsHook`.
+/// asks the setup chat to load the release skill. Mirrors `DocsHook`.
 @MainActor
 final class AutopilotReleaseHook: Hook {
     let hookID = "builtin.release"
@@ -95,8 +94,7 @@ final class AutopilotReleaseHook: Hook {
     }
 
     /// When the user accepted the banner, a release-setup chat was started for
-    /// this project. Inject the release skill into the system prompt for that one
-    /// chat so the agent knows how to set everything up.
+    /// this project. Ask that chat to load the release skill.
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome {
         guard let skill = controller.consumePendingReleaseSetupSkill(projectId: payload.project.id) else {
             return .ignored
@@ -104,7 +102,7 @@ final class AutopilotReleaseHook: Hook {
         // Remember this session so `afterSessionEnd` knows to re-check the release
         // status once the agent is done and drop the banner if it's now set up.
         controller.markSetupSession(kind: HookSetupKind.release, sessionKey: payload.sessionKey)
-        logger.debug("[Hook] injecting release skill into session for project \(payload.project.id.uuidString, privacy: .public)")
+        logger.debug("[Hook] prompting session to load release skill for project \(payload.project.id.uuidString, privacy: .public)")
         return .output(skill)
     }
 

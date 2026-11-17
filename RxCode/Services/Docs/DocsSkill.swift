@@ -1,10 +1,10 @@
 import Foundation
 
-/// The docs-publishing skill, bundled as a string so the docs-setup hook can
-/// inject it as a system prompt with no app-resource plumbing. Distilled from
-/// argo-trading's docs CI (the `rxtech-lab/docs-publishing` skill is the
+/// The bundled docs-publishing skill, distilled from argo-trading's docs CI
+/// (the `rxtech-lab/docs-publishing` skill is the
 /// canonical, evolving copy — keep this in sync when that PR lands).
-enum DocsSkill {
+nonisolated enum DocsSkill {
+    static let name = "docs-publishing"
     static let systemPrompt: String = #"""
     # Skill: Set up documentation publishing
 

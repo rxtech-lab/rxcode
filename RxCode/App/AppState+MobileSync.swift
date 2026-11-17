@@ -524,7 +524,7 @@ extension AppState {
             _ = latestRateLimitUsage
             _ = latestCodexRateLimitUsage
             _ = runProfilesByProject.count
-        } onChange: {
+        } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 self?.scheduleMobileSnapshotBroadcast()
                 self?.observeMobileSnapshotInputs()

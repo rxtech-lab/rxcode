@@ -47,6 +47,8 @@ jobs:
       - name: Install provisioning profile
         env:
           MACOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SIGNING_CERTIFICATE_NAME: ${{ secrets.SIGNING_CERTIFICATE_NAME }}
         run: |
           if [ -z "$MACOS_PROVISIONING_PROFILE_BASE64" ]; then
             echo "::error::MACOS_PROVISIONING_PROFILE_BASE64 is required."
@@ -64,6 +66,8 @@ jobs:
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" "$PROFILE_PLIST")
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" "$PROFILE_PLIST")
 
+          python3 scripts/ci/validate-macos-signing.py "$PROFILE_PLIST"
+
           cp "$PROFILE_PATH" "$PROFILE_DIR/$PROFILE_UUID.provisionprofile"
           echo "MACOS_PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
           echo "MACOS_PROFILE_SPECIFIER=$PROFILE_NAME" >> "$GITHUB_ENV"
@@ -71,7 +75,13 @@ jobs:
       - name: Write Firebase config
         env:
           FIREBASE_MACOS_B64: ${{ secrets.FIREBASE_MACOS_B64 }}
-        run: ./scripts/ci/write-firebase-config.sh
+        run: |
+          ./scripts/ci/write-firebase-config.sh
+          FIREBASE_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print BUNDLE_ID" RxCode/GoogleService-Info.plist)
+          if [ "$FIREBASE_BUNDLE_ID" != "app.rxlab.flowcy.code" ]; then
+            echo "::error::FIREBASE_MACOS_B64 must contain the app.rxlab.flowcy.code configuration."
+            exit 1
+          fi
 
       - name: Bump version (release only)
         if: github.event_name == 'release'

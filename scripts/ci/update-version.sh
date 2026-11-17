@@ -10,7 +10,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 PROJECT_FILE="RxCode.xcodeproj/project.pbxproj"
-BUNDLE_IDENTIFIER="com.rxlab.RxCode"
+BUNDLE_IDENTIFIER="app.rxlab.flowcy.code"
 
 if [ ! -f "$PROJECT_FILE" ]; then
   echo "Error: $PROJECT_FILE not found"

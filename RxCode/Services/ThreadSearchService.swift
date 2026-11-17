@@ -46,7 +46,7 @@ actor ThreadSearchService {
 
     // MARK: - Stored types
 
-    private struct Chunk {
+    private struct Chunk: Sendable {
         let index: Int
         let projectId: UUID
         let text: String
@@ -160,7 +160,6 @@ actor ThreadSearchService {
         }
 
         var newChunks: [Chunk] = []
-        var rows: [ThreadEmbeddingChunk] = []
         var embedFailures = 0
         for (i, text) in texts.enumerated() {
             guard let vec = embed(text) else {
@@ -168,16 +167,6 @@ actor ThreadSearchService {
                 continue
             }
             newChunks.append(Chunk(index: i, projectId: session.projectId, text: text, vector: vec))
-            rows.append(ThreadEmbeddingChunk(
-                id: ThreadEmbeddingChunk.makeId(threadId: session.id, index: i),
-                threadId: session.id,
-                projectId: session.projectId,
-                chunkIndex: i,
-                text: text,
-                vector: ThreadEmbeddingChunk.encode(vec),
-                dim: vec.count,
-                updatedAt: .now
-            ))
         }
 
         if newChunks.isEmpty {
@@ -187,9 +176,21 @@ actor ThreadSearchService {
 
         index[session.id] = newChunks
         let threadId = session.id
-        let snapshot = rows
+        let encodedChunks = newChunks.map { (chunk: $0, data: ThreadEmbeddingChunk.encode($0.vector)) }
         await MainActor.run {
-            store.replaceEmbeddingChunks(threadId: threadId, chunks: snapshot)
+            let rows = encodedChunks.map { chunk, data in
+                ThreadEmbeddingChunk(
+                    id: ThreadEmbeddingChunk.makeId(threadId: threadId, index: chunk.index),
+                    threadId: threadId,
+                    projectId: chunk.projectId,
+                    chunkIndex: chunk.index,
+                    text: chunk.text,
+                    vector: data,
+                    dim: chunk.vector.count,
+                    updatedAt: .now
+                )
+            }
+            store.replaceEmbeddingChunks(threadId: threadId, chunks: rows)
         }
         logger.info("Indexed thread \(session.id, privacy: .public): \(newChunks.count) chunks (\(embedFailures) embed failures, \(session.messages.count) messages)")
     }

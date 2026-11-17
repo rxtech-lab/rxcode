@@ -135,7 +135,7 @@ final class RunProfileDetector {
 
     /// Decode the keys of a top-level object field (`scripts` or `tasks`) from a
     /// JSON file. Returns an empty array if the file is missing or unparseable.
-    static func scriptNames(atPath path: String, key: String) -> [String] {
+    nonisolated static func scriptNames(atPath path: String, key: String) -> [String] {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let entries = json[key] as? [String: Any]
@@ -146,7 +146,7 @@ final class RunProfileDetector {
     /// Sorted script/task names found in `package.json` (falling back to
     /// `deno.json` / `deno.jsonc` tasks) inside `directory`. Used by the editor
     /// to back the script dropdown.
-    static func packageScriptNames(inDirectory directory: String) -> [String] {
+    nonisolated static func packageScriptNames(inDirectory directory: String) -> [String] {
         let path = directory as NSString
         var names = scriptNames(atPath: path.appendingPathComponent("package.json"), key: "scripts")
         if names.isEmpty {
@@ -217,14 +217,14 @@ final class RunProfileDetector {
 
     /// Parse the `make` targets from a Makefile at `path`. Returns an empty
     /// array if the file is missing or unreadable.
-    static func makeTargets(atPath path: String) -> [String] {
+    nonisolated static func makeTargets(atPath path: String) -> [String] {
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
         return parseMakeTargets(content)
     }
 
     /// Try the standard Makefile names inside `root` and parse the first one
     /// that exists. Returns the resolved path alongside the targets.
-    static func defaultMakeTargets(inDirectory root: String) -> (path: String, targets: [String])? {
+    nonisolated static func defaultMakeTargets(inDirectory root: String) -> (path: String, targets: [String])? {
         let fm = FileManager.default
         let candidates = ["Makefile", "makefile", "GNUmakefile"]
         let dir = root as NSString
@@ -237,7 +237,7 @@ final class RunProfileDetector {
         return nil
     }
 
-    static func parseMakeTargets(_ content: String) -> [String] {
+    nonisolated static func parseMakeTargets(_ content: String) -> [String] {
         // Target lines look like `name:` or `name: deps` at column 0 (no leading
         // tab/space — those are recipe lines). Skip pattern rules (`%.o:`),
         // special targets (`.PHONY:`), variable assignments (`X := y`).
@@ -316,7 +316,7 @@ final class RunProfileDetector {
 
 /// Tiny one-shot latch used to guard `continuation.resume` against double
 /// firing when both the termination handler and the timeout race.
-private final class ManagedAtomicFlag: @unchecked Sendable {
+private nonisolated final class ManagedAtomicFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var flag = false
 

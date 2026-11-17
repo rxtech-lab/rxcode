@@ -1,10 +1,17 @@
 import SwiftUI
 import RxCodeCore
 
+private enum OpenJSONUIDialogKey: EnvironmentKey {
+    static var defaultValue: ((JSONUITool.Payload) -> Void)? { nil }
+}
+
 extension EnvironmentValues {
     /// Opens a `show_ui` view that asked for `presentation: "dialog"`. Hosts that present
     /// dialogs set it; without it, the chat draws those views inline.
-    @Entry public var openJSONUIDialog: ((JSONUITool.Payload) -> Void)?
+    public var openJSONUIDialog: ((JSONUITool.Payload) -> Void)? {
+        get { self[OpenJSONUIDialogKey.self] }
+        set { self[OpenJSONUIDialogKey.self] = newValue }
+    }
 }
 
 /// The body of a dialog `show_ui` card: a short note and a button reopening the view, in

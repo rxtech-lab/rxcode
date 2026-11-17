@@ -18,11 +18,17 @@ import RxCodeCore
 // `sessionKey` is the AppState session key the agent is bound to. The
 // listener allocates one port per session, so this is unambiguous.
 
-extension AppState: IDEToolHandling {
+extension AppState {
     public func ideAvailableTools(forSession sessionKey: String) async -> [IDETool] {
-        let provider = await MainActor.run { sessionStates[sessionKey]?.agentProvider } ?? .acp
+        let provider = ideAgentProvider(for: sessionKey)
         let caps = await backend(for: provider).capabilities(for: sessionKey)
         return IDEToolRegistry.tools(for: caps)
+    }
+
+    private func ideAgentProvider(for sessionKey: String) -> AgentProvider {
+        sessionStates[resolveCurrentSessionId(sessionKey)]?.agentProvider
+            ?? sessionStates[sessionKey]?.agentProvider
+            ?? .acp
     }
 
     public func ideHandleToolCall(
@@ -30,11 +36,49 @@ extension AppState: IDEToolHandling {
         arguments: JSONValue,
         sessionKey: String
     ) async throws -> JSONValue {
+        if sessionKey.hasPrefix("pet-codex-realtime-") {
+            return try await PetController.shared.withRealtimeIDEToolActivity(name: name) {
+                try await self.dispatchIDEToolCall(name: name, arguments: arguments, sessionKey: sessionKey)
+            }
+        }
+        return try await dispatchIDEToolCall(name: name, arguments: arguments, sessionKey: sessionKey)
+    }
+
+    private func dispatchIDEToolCall(
+        name: String,
+        arguments: JSONValue,
+        sessionKey: String
+    ) async throws -> JSONValue {
         switch name {
+        case "ide__skill_get":
+            let skillName = arguments["name"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !skillName.isEmpty else { throw IDEToolError.invalidArguments("Pass an RxCode skill name.") }
+            return textResult(try await marketplace.skillContent(named: skillName, for: ideAgentProvider(for: sessionKey)))
+        case "ide__media_models", "ide__generate_media", "ide__pet_draft":
+            return try await handleMediaTool(name: name, arguments: arguments, sessionKey: sessionKey)
+        case FlowcyTool.name, FlowcyTool.catalogName, "ide__get_ci_status":
+            return try await handleFlowcyTool(name: name, arguments: arguments, sessionKey: sessionKey)
+        case "ide__pet_show_image":
+            return try await PetController.shared.presentation.showImage(arguments)
+        case "ide__pet_status":
+            return try await PetController.shared.presentation.setWidget(arguments)
+        case "ide__pet_look":
+            return try await PetController.shared.looks.handle(arguments)
+        case "ide__pet_music":
+            return try await PetController.shared.music.handle(arguments)
+        case "ide__pet_list_desktop_targets":
+            return await PetController.shared.desktopActions.listTargets()
+        case "ide__pet_click", "ide__pet_scroll", "ide__pet_focus_window", "ide__pet_type_text":
+            let action = name == "ide__pet_click" ? "click" : name == "ide__pet_scroll" ? "scroll" : name == "ide__pet_type_text" ? "type" : "focus"
+            return try await PetController.shared.desktopActions.run(action, arguments: arguments)
+        case "ide__pet_list_capture_targets":
+            return try await PetController.shared.screenCapture.listTargets()
+        case "ide__pet_capture":
+            return try await PetController.shared.screenCapture.capture(arguments)
         case "ide__set_todos":
-            return try await handleSetTodos(arguments: arguments, sessionKey: sessionKey)
+            return try handleSetTodos(arguments: arguments, sessionKey: sessionKey)
         case "ide__get_running_jobs":
-            return await handleGetRunningJobs()
+            return handleGetRunningJobs()
         case "ide__get_job_output":
             throw IDEToolError.notSupported("ide__get_job_output is not yet implemented")
         case "ide__get_projects":
@@ -95,7 +139,8 @@ extension AppState: IDEToolHandling {
             return try await handleSetupDocsSecret(arguments: arguments, sessionKey: sessionKey)
         case "ide__setup_release":
             return try await handleSetupRelease(arguments: arguments, sessionKey: sessionKey)
-        case "ide__briefing_list", "ide__briefing_get", "ide__briefing_create",
+        case "ide__project_briefings", "ide__project_briefing_get",
+             "ide__briefing_list", "ide__briefing_get", "ide__briefing_create",
              "ide__briefing_update", "ide__briefing_delete", "ide__briefing_add_file",
              "ide__briefing_delete_file", "ide__briefing_publish":
             return try await handleBriefingToolCall(name: name, arguments: arguments, sessionKey: sessionKey)
@@ -499,74 +544,6 @@ extension AppState: IDEToolHandling {
     }
 
     @MainActor
-    private func handleMemorySearch(arguments: JSONValue) async throws -> JSONValue {
-        guard let query = arguments["query"]?.stringValue, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw IDEToolError.invalidArguments("missing 'query'")
-        }
-        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
-        let requestedLimit = Int(arguments["limit"]?.numberValue ?? 20)
-        let limit = max(1, min(requestedLimit, 100))
-        let hits = await searchMemoryItems(query: query, projectId: projectId, limit: limit)
-        return jsonTextResult(.array(hits.map { memoryJSON(item: $0.item, score: $0.score) }))
-    }
-
-    @MainActor
-    private func handleMemoryAdd(arguments: JSONValue) async throws -> JSONValue {
-        guard memoryEnabled else {
-            throw IDEToolError.handlerFailed("Memory is disabled. Turn on Enable Memory in RxCode Settings → General → Memory, then retry.")
-        }
-        guard let content = arguments["content"]?.stringValue, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw IDEToolError.invalidArguments("missing 'content'")
-        }
-        let scope = arguments["scope"]?.stringValue ?? "project"
-        let kind = arguments["kind"]?.stringValue ?? "fact"
-        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
-        guard let item = await addMemoryItem(
-            content: content,
-            projectId: projectId,
-            kind: kind,
-            scope: scope
-        ) else {
-            throw IDEToolError.handlerFailed("Memory could not be embedded or stored.")
-        }
-        return jsonTextResult(memoryJSON(item: item, score: nil))
-    }
-
-    @MainActor
-    private func handleMemoryUpdate(arguments: JSONValue) async throws -> JSONValue {
-        guard memoryEnabled else {
-            throw IDEToolError.handlerFailed("Memory is disabled. Turn on Enable Memory in RxCode Settings → General → Memory, then retry.")
-        }
-        guard let id = arguments["id"]?.stringValue, !id.isEmpty else {
-            throw IDEToolError.invalidArguments("missing 'id'")
-        }
-        guard let content = arguments["content"]?.stringValue, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw IDEToolError.invalidArguments("missing 'content'")
-        }
-        let scope = arguments["scope"]?.stringValue ?? "project"
-        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
-        guard let item = await updateMemoryItem(
-            id: id,
-            content: content,
-            projectId: projectId,
-            kind: arguments["kind"]?.stringValue ?? "fact",
-            scope: scope
-        ) else {
-            throw IDEToolError.handlerFailed("Memory \(id) could not be updated.")
-        }
-        return jsonTextResult(memoryJSON(item: item, score: nil))
-    }
-
-    @MainActor
-    private func handleMemoryDelete(arguments: JSONValue) async throws -> JSONValue {
-        guard let id = arguments["id"]?.stringValue, !id.isEmpty else {
-            throw IDEToolError.invalidArguments("missing 'id'")
-        }
-        await deleteMemoryItem(id: id)
-        return textResult("Deleted memory \(id).")
-    }
-
-    @MainActor
     private func handleSendToThread(arguments: JSONValue) async throws -> JSONValue {
         guard let prompt = arguments["prompt"]?.stringValue, !prompt.isEmpty else {
             throw IDEToolError.invalidArguments("missing 'prompt'")
@@ -634,198 +611,6 @@ extension AppState: IDEToolHandling {
             throw IDEToolError.invalidArguments("'project_id' is not a valid UUID: \(raw)")
         }
         return id
-    }
-
-    private func memoryJSON(item: MemoryItem, score: Float?) -> JSONValue {
-        var obj: [String: JSONValue] = [
-            "id": .string(item.id),
-            "content": .string(item.content),
-            "kind": .string(item.kind),
-            "scope": .string(item.scope),
-            "created_at": .string(ISO8601DateFormatter().string(from: item.createdAt)),
-            "updated_at": .string(ISO8601DateFormatter().string(from: item.updatedAt)),
-            "project_id": item.projectId.map { .string($0.uuidString) } ?? .null,
-            "session_id": item.sessionId.map { .string($0) } ?? .null,
-        ]
-        if let sourceMessageId = item.sourceMessageId {
-            obj["source_message_id"] = .string(sourceMessageId.uuidString)
-        }
-        if let lastUsedAt = item.lastUsedAt {
-            obj["last_used_at"] = .string(ISO8601DateFormatter().string(from: lastUsedAt))
-        }
-        if let score {
-            obj["score"] = .number(Double(score))
-        }
-        return .object(obj)
-    }
-
-    @MainActor
-    private func handleSearchDocs(arguments: JSONValue) async throws -> JSONValue {
-        guard let query = arguments["query"]?.stringValue,
-              !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw IDEToolError.invalidArguments("missing 'query'")
-        }
-        let repo = arguments["repository"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let requestedLimit = Int(arguments["limit"]?.numberValue ?? 10)
-        let limit = max(1, min(requestedLimit, 50))
-        do {
-            let hits = try await docs.search(query: query, repo: (repo?.isEmpty == false) ? repo : nil, limit: limit)
-            let entries: [JSONValue] = hits.map { hit in
-                var obj: [String: JSONValue] = ["doc_id": .string(hit.docId)]
-                if let repository = hit.repository { obj["repository"] = .string(repository) }
-                if let snippet = hit.snippet { obj["snippet"] = .string(snippet) }
-                if let score = hit.score { obj["score"] = .number(score) }
-                if let link = hit.originalLink { obj["original_link"] = .string(link) }
-                return .object(obj)
-            }
-            return jsonTextResult(.array(entries))
-        } catch {
-            throw IDEToolError.handlerFailed(error.localizedDescription)
-        }
-    }
-
-    @MainActor
-    private func handleSetupDocsSecret(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
-        // Prefer an explicit `owner/repo`; otherwise fall back to the repo linked
-        // to the calling session's project.
-        let explicit = arguments["repository"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let repo: String
-        if let explicit, !explicit.isEmpty {
-            repo = explicit
-        } else if let thread = threadStore.fetch(id: sessionKey),
-                  let linked = projects.first(where: { $0.id == thread.projectId })?.gitHubRepo,
-                  !linked.isEmpty {
-            repo = linked
-        } else {
-            throw IDEToolError.invalidArguments(
-                "No 'repository' given and the current project has no linked GitHub repo. Pass repository as 'owner/repo'."
-            )
-        }
-        // The install endpoint 404s on unregistered repos, so register first if
-        // needed (these throw IDEToolError with their own messages — keep them
-        // outside the catch below so they aren't re-wrapped).
-        let registered = try await ensureDocsRepoRegistered(repo)
-        do {
-            let result = try await docs.installGithubSecret(repoId: repo)
-            return jsonTextResult(.object([
-                "installed": .bool(true),
-                "registered": .bool(registered),
-                "secret_name": .string(result.secretName),
-                "repository": .string(result.repositoryFullName),
-            ]))
-        } catch {
-            throw IDEToolError.handlerFailed(error.localizedDescription)
-        }
-    }
-
-    /// Ensures `repo` (an `owner/repo`) is registered with the docs service,
-    /// registering it if not. Returns true when it had to register it. Throws a
-    /// descriptive `IDEToolError` when the repo isn't accessible to the GitHub
-    /// App (so it can't be registered).
-    @MainActor
-    private func ensureDocsRepoRegistered(_ repo: String) async throws -> Bool {
-        if let status = try? await docs.statuses(forRepos: [repo]).first, status.hasDocs {
-            return false
-        }
-        guard let managed = try await findManagedRepo(fullName: repo) else {
-            throw IDEToolError.handlerFailed(
-                "\(repo) isn't set up for docs and isn't accessible to the RxLab GitHub App. Install the GitHub App on this repository, then retry."
-            )
-        }
-        _ = try await docs.addRepository(
-            AddDocsRepoBody(
-                installationId: managed.installationId,
-                repositoryId: managed.id,
-                repositoryFullName: managed.fullName
-            )
-        )
-        return true
-    }
-
-    @MainActor
-    private func handleSetupRelease(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
-        // Prefer an explicit `owner/repo`; otherwise fall back to the repo linked
-        // to the calling session's project.
-        let explicit = arguments["repository"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let repo: String
-        if let explicit, !explicit.isEmpty {
-            repo = explicit
-        } else if let thread = threadStore.fetch(id: sessionKey),
-                  let linked = projects.first(where: { $0.id == thread.projectId })?.gitHubRepo,
-                  !linked.isEmpty {
-            repo = linked
-        } else {
-            throw IDEToolError.invalidArguments(
-                "No 'repository' given and the current project has no linked GitHub repo. Pass repository as 'owner/repo'."
-            )
-        }
-        // Register (and scan workflows) first if needed; throws a descriptive
-        // IDEToolError when the repo isn't accessible to the GitHub App.
-        let registered = try await ensureReleaseRepoRegistered(repo)
-
-        // The RELEASE_TOKEN is user-supplied — only install when provided.
-        let token = arguments["release_token"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let token, !token.isEmpty else {
-            return jsonTextResult(.object([
-                "registered": .bool(registered),
-                "secret_installed": .bool(false),
-                "repository": .string(repo),
-                "note": .string("Repository registered and workflows scanned. No release_token was provided, so RELEASE_TOKEN was not installed — ask the user for a GitHub token with contents:write and call again with release_token to finish setup."),
-            ]))
-        }
-        do {
-            let result = try await release.installReleaseToken(repoId: repo, value: token)
-            return jsonTextResult(.object([
-                "registered": .bool(registered),
-                "secret_installed": .bool(true),
-                "secret_name": .string(result.secretName),
-                "repository": .string(result.repositoryFullName),
-            ]))
-        } catch {
-            throw IDEToolError.handlerFailed(error.localizedDescription)
-        }
-    }
-
-    /// Ensures `repo` (an `owner/repo`) is registered with the release service,
-    /// registering it if not. Returns true when it had to register it. Throws a
-    /// descriptive `IDEToolError` when the repo isn't accessible to the GitHub
-    /// App (so it can't be registered).
-    @MainActor
-    private func ensureReleaseRepoRegistered(_ repo: String) async throws -> Bool {
-        if let status = try? await release.statuses(forRepos: [repo]).first, status.isManaged {
-            return false
-        }
-        guard let managed = try await findManagedRepo(fullName: repo) else {
-            throw IDEToolError.handlerFailed(
-                "\(repo) isn't set up for releases and isn't accessible to the RxLab GitHub App. Install the GitHub App on this repository, then retry."
-            )
-        }
-        _ = try await release.addRepository(
-            AddReleaseRepoBody(
-                installationId: managed.installationId,
-                repositoryId: managed.id,
-                repositoryFullName: managed.fullName
-            )
-        )
-        return true
-    }
-
-    /// Finds the accessible GitHub repo matching `fullName` (`owner/repo`) in the
-    /// secrets `repositories/all` listing — the source of the `installationId` +
-    /// `repositoryId` the docs add-repo API needs. Pages defensively in case the
-    /// search filter returns more than one page.
-    @MainActor
-    private func findManagedRepo(fullName: String) async throws -> SecretsManagedRepo? {
-        let target = fullName.lowercased()
-        var cursor: String?
-        repeat {
-            let page = try await secrets.listManagedRepositories(search: fullName, cursor: cursor, pageSize: 100)
-            if let match = page.items.first(where: { $0.fullName.lowercased() == target }) {
-                return match
-            }
-            cursor = page.pagination.hasMore ? page.pagination.nextCursor : nil
-        } while cursor != nil
-        return nil
     }
 
     private func handleGetUsage() async -> JSONValue {

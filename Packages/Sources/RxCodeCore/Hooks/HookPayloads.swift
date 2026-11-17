@@ -268,11 +268,35 @@ public struct CIFailedPayload: Codable, Sendable {
     public let projectId: UUID?
     public let projectName: String?
     public let failingWorkflowNames: [String]
+    public let runURL: String?
 
-    public init(projectId: UUID?, projectName: String?, failingWorkflowNames: [String]) {
+    public init(projectId: UUID?, projectName: String?, failingWorkflowNames: [String], runURL: String? = nil) {
         self.projectId = projectId
         self.projectName = projectName
         self.failingWorkflowNames = failingWorkflowNames
+        self.runURL = runURL
+    }
+}
+
+public extension CIFailedPayload {
+    /// Only web links from the CI event may become notification actions.
+    var detailsURL: URL? {
+        guard let runURL, let url = URL(string: runURL),
+              ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
+              url.host != nil else { return nil }
+        return url
+    }
+
+    var spokenSummary: String {
+        let project = projectName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = project.flatMap { $0.isEmpty ? nil : $0 } ?? "a monitored project"
+        let names = failingWorkflowNames.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !names.isEmpty else { return "GitHub Actions CI failed in \(label)." }
+        let listed = names.prefix(3).joined(separator: ", ")
+        let remainder = names.count > 3
+            ? " and \(names.count - 3) more \(names.count == 4 ? "workflow" : "workflows")" : ""
+        return "GitHub Actions CI failed in \(label): \(listed)\(remainder)."
     }
 }
 

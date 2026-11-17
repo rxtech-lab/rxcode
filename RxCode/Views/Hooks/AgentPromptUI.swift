@@ -25,7 +25,7 @@ struct AgentPromptUIModifier: ViewModifier {
            !confirmation.isMinimized {
             return .confirmation(confirmation)
         }
-        return appState.agentPrompts.dialogs.first.map { .dialog($0) }
+        return appState.agentPrompts.dialogs.first(where: { !$0.isPetPresentation }).map { .dialog($0) }
     }
 
     func body(content: Content) -> some View {

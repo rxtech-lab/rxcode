@@ -1,0 +1,6 @@
+simulation: flowcy-media
+routing: path
+mocks:
+  - name: flowcy-media
+    routeKey: media
+    path: postman/mocks/flowcy-media/config.yaml

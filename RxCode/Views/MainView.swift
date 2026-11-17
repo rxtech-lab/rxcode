@@ -417,8 +417,7 @@ struct MainView: View {
         }
         .onChange(of: appState.docsSetupRequest?.id) { _, _ in
             guard let request = appState.docsSetupRequest else { return }
-            // Start a fresh chat in this project; DocsHook.onSessionStart injects
-            // the docs-publishing skill into its system prompt on first send.
+            // The setup hook asks the new chat to load the docs-publishing skill.
             if let projectId = request.projectId,
                let project = appState.projects.first(where: { $0.id == projectId }),
                windowState.selectedProject?.id != projectId
@@ -439,8 +438,7 @@ struct MainView: View {
         }
         .onChange(of: appState.releaseSetupRequest?.id) { _, _ in
             guard let request = appState.releaseSetupRequest else { return }
-            // Start a fresh chat in this project; ReleaseHook.onSessionStart
-            // injects the release skill into its system prompt on first send.
+            // The setup hook asks the new chat to load the release skill.
             if let projectId = request.projectId,
                let project = appState.projects.first(where: { $0.id == projectId }),
                windowState.selectedProject?.id != projectId

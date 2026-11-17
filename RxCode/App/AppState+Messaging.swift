@@ -453,7 +453,7 @@ extension AppState {
         let effectiveProvider = sessionStates[sessionKey]?.agentProvider ?? selection.provider
         let effectiveModel = sessionStates[sessionKey]?.model ?? selection.model
         if let debugLogPrefix {
-            logger.info("\(debugLogPrefix, privacy: .public) phase=sendPromptReady stream=\(streamId) sessionKey=\(sessionKey, privacy: .public) provider=\(effectiveProvider.rawValue, privacy: .public) model=\(effectiveModel ?? "<default>", privacy: .public) cwd=\(effectiveCwd, privacy: .public)")
+            logger.info("\(debugLogPrefix, privacy: .public) phase=sendPromptReady stream=\(streamId) sessionKey=\(sessionKey, privacy: .public) provider=\(effectiveProvider.rawValue, privacy: .public) model=\(effectiveModel, privacy: .public) cwd=\(effectiveCwd, privacy: .public)")
         }
 
         let acpSelection = effectiveProvider == .acp ? acpSelectionParts(for: effectiveModel) : nil

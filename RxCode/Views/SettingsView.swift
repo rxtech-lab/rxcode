@@ -31,6 +31,10 @@ struct SettingsView: View {
                 }
                 .tag(5)
 
+            MediaGenerationSettingsTab()
+                .tabItem { Label("Media", systemImage: "photo.on.rectangle") }
+                .tag(10)
+
             ChatSettingsTab()
                 .tabItem {
                     Label("Message", systemImage: "bubble.left.and.bubble.right")
@@ -45,7 +49,7 @@ struct SettingsView: View {
 
             SkillMarketView(isEmbedded: true)
                 .tabItem {
-                    Label("Skill Marketplace", systemImage: "brain.head.profile")
+                    Label("Skills", systemImage: "brain.head.profile")
                 }
                 .tag(3)
 
@@ -77,7 +81,7 @@ struct SettingsView: View {
                 .tabItem { Label("Developer", systemImage: "hammer") }
                 .tag(9)
         }
-        .frame(width: 680, height: 620)
+        .frame(width: 720, height: 620)
         .background(ClaudeTheme.background)
         .foregroundStyle(ClaudeTheme.textPrimary)
         .tint(ClaudeTheme.accent)
@@ -126,6 +130,8 @@ struct GeneralSettingsTab: View {
                 themeSection
                 Divider()
                 fontSizeSection
+                Divider()
+                PetSettingsSection()
                 Divider()
                 notificationsSection(appState: $appState.notificationsEnabled)
                 Divider()
@@ -588,6 +594,7 @@ private struct ProjectPromptsSheet: View {
                         systemImage: "folder",
                         description: Text("Add a project to configure its prompt.")
                     )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(appState.projects) { project in
                         NavigationLink(value: project.id) {
@@ -606,6 +613,7 @@ private struct ProjectPromptsSheet: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle("Project Prompts")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -656,6 +664,7 @@ private struct ProjectPromptDetailPage: View {
                 }
             } else {
                 ContentUnavailableView("Project Unavailable", systemImage: "folder.badge.questionmark")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }

@@ -1,6 +1,19 @@
 #!/bin/bash
 set -e
 
+# Pasted GitHub secrets can include line endings. Apple credentials are single
+# line values; passing a trailing newline makes notarytool reject a valid secret.
+for credential in APPLE_ID APPLE_TEAM_ID APPLE_ID_PWD; do
+  value="${!credential}"
+  value="${value//$'\r'/}"
+  value="${value//$'\n'/}"
+  if [ -z "$value" ]; then
+    echo "Missing notarization credential: $credential"
+    exit 1
+  fi
+  printf -v "$credential" '%s' "$value"
+done
+
 APP_NAME="./output/output.xcarchive/Products/Applications/RxCode.app"
 DMG_NAME="RxCode.dmg"
 

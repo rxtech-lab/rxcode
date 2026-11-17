@@ -2,7 +2,7 @@ import Foundation
 import os
 import Security
 
-enum KeychainHelper {
+nonisolated enum KeychainHelper {
 
     private static let logger = Logger(subsystem: "com.claudework", category: "Keychain")
 

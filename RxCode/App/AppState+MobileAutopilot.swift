@@ -64,7 +64,7 @@ extension AppState {
     }
 
     // swiftlint:disable:next cyclomatic_complexity function_body_length
-    private func performAutopilotOperation(_ op: AutopilotOp, request: AutopilotRequestPayload) async throws -> Data? {
+    func performAutopilotOperation(_ op: AutopilotOp, request: AutopilotRequestPayload) async throws -> Data? {
         let encoder = JSONEncoder()
         switch op {
 

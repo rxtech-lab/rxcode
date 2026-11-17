@@ -926,7 +926,7 @@ extension AppState {
                 return await persistence.loadFullSession(summary: summary, cwd: cwd)
             },
             progress: { [weak self] done, total in
-                Task { @MainActor in self?.reindexProgress = (done, total) }
+                Task { @MainActor [weak self] in self?.reindexProgress = (done, total) }
             }
         )
         reindexProgress = nil

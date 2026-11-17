@@ -328,3 +328,36 @@ public struct CIStatusBatchResponse: Codable, Sendable {
     }
 }
 
+/// Persistent event history for CI announcements. Survives green/pending polls so
+/// switching branches or restarting the app does not announce an old run again.
+public struct CIFailureEventLedger: Codable, Sendable {
+    private var handled: [String] = []
+
+    public init() {}
+
+    public mutating func consume(_ status: ProjectCIStatus) -> [CIFailingWorkflow] {
+        guard status.overallState == .failure else { return [] }
+        let reported = status.failing.isEmpty ? status.workflows
+            .filter { ["failure", "timed_out", "startup_failure"].contains($0.conclusion ?? "") }
+            .map { CIFailingWorkflow(workflowName: $0.workflowName, htmlUrl: $0.htmlUrl) } : status.failing
+        let failures = reported.isEmpty ? [CIFailingWorkflow(workflowName: nil, htmlUrl: nil)] : reported
+        return failures.compactMap { failure in
+            let workflow = status.workflows.first { workflow in
+                if let url = failure.htmlUrl { return workflow.htmlUrl == url }
+                if let name = failure.workflowName { return workflow.workflowName == name }
+                return false
+            }
+            // GitHub run URLs identify runs; updatedAt distinguishes completed
+            // re-run attempts which keep the same URL and run number.
+            let identity = failure.htmlUrl ?? workflow?.htmlUrl
+                ?? workflow?.runNumber.map(String.init) ?? status.headSha ?? status.branch ?? "unknown"
+            let name = failure.workflowName ?? workflow?.workflowName
+            let parts = [status.owner.lowercased(), status.repo.lowercased(),
+                         name ?? "", identity, workflow?.updatedAt ?? ""]
+            let key = parts.map { "\($0.utf8.count):\($0)" }.joined()
+            guard !handled.contains(key) else { return nil }
+            handled.append(key)
+            return CIFailingWorkflow(workflowName: name, htmlUrl: failure.htmlUrl ?? workflow?.htmlUrl)
+        }
+    }
+}

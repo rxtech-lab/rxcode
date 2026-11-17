@@ -58,7 +58,7 @@ struct UsageBreakdownPopover: View {
         /// Formats slice values and the donut total; defaults to compact counts.
         var format: (Double) -> String = Self.compactCount
 
-        static func compactCount(_ value: Double) -> String {
+        nonisolated static func compactCount(_ value: Double) -> String {
             Int(value).formatted(.number.notation(.compactName).precision(.fractionLength(0...1)))
         }
         var id: String { title }

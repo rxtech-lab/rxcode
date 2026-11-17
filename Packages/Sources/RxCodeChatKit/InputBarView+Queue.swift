@@ -253,21 +253,19 @@ extension InputBarView {
     }
 
     func loadFileURLAsAttachment(from provider: NSItemProvider) {
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
-            if let data = item as? Data,
-               let url = URL(dataRepresentation: data, relativeTo: nil),
-               let attachment = AttachmentFactory.fromFileURL(url) {
-                DispatchQueue.main.async { windowState.addAttachment(attachment) }
-                return
+        Task { @MainActor in
+            let attachment = await withCheckedContinuation { (continuation: CheckedContinuation<Attachment?, Never>) in
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
+                    let attachment = (item as? Data)
+                        .flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
+                        .flatMap { AttachmentFactory.fromFileURL($0) }
+                    continuation.resume(returning: attachment)
+                }
             }
-            // Inlined (not factored into loadImageDataAsAttachment) to keep `provider` within
-            // this nonisolated closure — passing it to a MainActor method violates Sendable.
-            guard provider.hasRepresentationConforming(toTypeIdentifier: UTType.image.identifier) else { return }
-            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
-                guard let data else { return }
-                let name = "drop-\(UUID().uuidString.prefix(8)).png"
-                let attachment = Attachment(type: .image, name: name, imageData: data)
-                DispatchQueue.main.async { windowState.addAttachment(attachment) }
+            if let attachment {
+                windowState.addAttachment(attachment)
+            } else if provider.hasRepresentationConforming(toTypeIdentifier: UTType.image.identifier) {
+                loadImageDataAsAttachment(from: provider)
             }
         }
     }

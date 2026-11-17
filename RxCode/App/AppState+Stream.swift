@@ -542,7 +542,7 @@ extension AppState {
                 stopHooksHandledStreamIds.insert(streamToCancel)
             }
             if fireStopHooks, streamToCancel != nil, !alreadyHandled {
-                await hookManager.dispatchBeforeSessionEnd(SessionEndPayload(
+                _ = await hookManager.dispatchBeforeSessionEnd(SessionEndPayload(
                     project: project,
                     sessionKey: key,
                     sessionId: key,
@@ -556,7 +556,7 @@ extension AppState {
                 await saveSession(sessionId: key, projectId: project.id, messages: messages)
             }
             if fireStopHooks, streamToCancel != nil, !alreadyHandled {
-                await hookManager.dispatchAfterSessionEnd(SessionEndPayload(
+                _ = await hookManager.dispatchAfterSessionEnd(SessionEndPayload(
                     project: project,
                     sessionKey: key,
                     sessionId: key,

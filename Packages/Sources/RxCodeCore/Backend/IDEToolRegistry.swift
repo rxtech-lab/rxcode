@@ -1,39 +1,20 @@
 import Foundation
 
-/// Catalog of IDE-side MCP tools the editor can expose to agent backends.
-/// Tools are gated by the *complement* of the backend's capability set:
-/// if a backend natively supports a feature, the corresponding polyfill
-/// tool is NOT registered for that session. Tools tagged `.alwaysIDEOnly`
-/// are exposed to every backend regardless of capabilities, including
-/// IDE state and prompts that must remain available in every agent mode.
-public struct IDETool: Sendable {
-    public enum Visibility: Sendable {
-        /// Exposed only when the backend lacks the matched capability.
-        case polyfill(BackendCapability)
-        /// Exposed unconditionally, independent of native tools or agent mode.
-        case alwaysIDEOnly
-    }
-
-    public let name: String
-    public let description: String
-    public let visibility: Visibility
-    /// JSON Schema for the tool's input parameters, serialized as a
-    /// `JSONValue` object. Consumed by the MCP server's `tools/list` handler.
-    public let inputSchema: JSONValue
-
-    public init(name: String, description: String, visibility: Visibility, inputSchema: JSONValue) {
-        self.name = name
-        self.description = description
-        self.visibility = visibility
-        self.inputSchema = inputSchema
-    }
-}
-
 public enum IDEToolRegistry {
-    public static let allTools: [IDETool] = [
+    public static let allTools: [IDETool] = petCaptureTools + petInteractionTools + flowcyTools + mediaTools + [
         usageCardsTool,
         integrationUsageTool,
         taskViewsTool,
+        IDETool(
+            name: "ide__skill_get",
+            description: "Load an RxCode skill's instructions by its advertised name.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object(["name": .object(["type": .string("string")])]),
+                "required": .array([.string("name")]),
+            ])
+        ),
         IDETool(
             name: "ide__ask_user",
             description: "Ask the user a question and wait for their selection. Use when you need clarification or a decision the user must make.",
@@ -179,7 +160,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__create_task",
-            description: "Create a task from the user's chat request. Pass story_id to add it to an existing story found with ide__get_stories; omit it for an independent task. Uses the current chat's project unless project_id is given. If title is omitted, RxCode derives one from details. Pass starts_after_task_ids when the task must wait for several existing tasks; create prerequisite tasks first and use their returned ids.",
+            description: "Create a task from the user's chat request. Write the title and details as actionable work for the assigned agent. Do not add tracking-only labels, tracking commentary, or instructions such as 'no agent run is requested' unless the user explicitly requests them. Pass story_id to add it to an existing story found with ide__get_stories; omit it for an independent task. Uses the current chat's project unless project_id is given. If title is omitted, RxCode derives one from details. Pass starts_after_task_ids when the task must wait for several existing tasks; create prerequisite tasks first and use their returned ids.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
@@ -526,7 +507,7 @@ public enum IDEToolRegistry {
         IDETool(
             name: "ide__search_docs",
             description: "Semantic search over the project's published documentation (design docs, API docs, code docs) indexed by the docs service. Use this to look up how something works before reading source. Returns ranked snippets with their document ids.",
-            visibility: .polyfill(.docsSearch),
+            visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
                 "properties": .object([
@@ -544,6 +525,30 @@ public enum IDEToolRegistry {
                     ]),
                 ]),
                 "required": .array([.string("query")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__project_briefings",
+            description: "List generated project briefing IDs, branches, and dates, including older briefings. Defaults to the current chat's project. Use ide__project_briefing_get for the full text.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "project_id": .object(["type": .string("string"), "description": .string("Project UUID.")]),
+                    "branch": .object(["type": .string("string"), "description": .string("Exact branch name. Defaults to all branches.")]),
+                    "limit": .object(["type": .string("integer"), "minimum": .number(1), "maximum": .number(50), "default": .number(20)]),
+                    "offset": .object(["type": .string("integer"), "minimum": .number(0), "default": .number(0)]),
+                ]),
+            ])
+        ),
+        IDETool(
+            name: "ide__project_briefing_get",
+            description: "Read a full generated project briefing by its ID from ide__project_briefings.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object(["id": .object(["type": .string("string")])]),
+                "required": .array([.string("id")]),
             ])
         ),
         IDETool(
@@ -775,7 +780,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__setup_release",
-            description: "Register the repository with the release service and (optionally) install its RELEASE_TOKEN GitHub Actions secret in one step, so the repo's semantic-release CI can create releases. Use this when setting up release publishing. If the repository isn't registered yet, it's registered automatically (the RxLab GitHub App must be installed on it) and its workflows are scanned. The RELEASE_TOKEN is user-supplied: ask the user for a GitHub token with `contents:write`, then pass it as `release_token` so it's installed as the repo's `RELEASE_TOKEN` secret. If the call fails with a permission error, tell the user to re-authorize the RxLab GitHub App (Actions secrets: read & write) and retry.",
+            description: "Register a repository with the native Flowcy release service and scan workflows. Uses the linked project repository when omitted. To install RELEASE_TOKEN, open ide__flowcy releaseTokenSetup and enter credentials only in the native UI. Never ask the user to paste a token into chat or MCP.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
@@ -784,27 +789,8 @@ public enum IDEToolRegistry {
                         "type": .string("string"),
                         "description": .string("Optional `owner/repo` full name. Omit to use the current project's repository."),
                     ]),
-                    "release_token": .object([
-                        "type": .string("string"),
-                        "description": .string("Optional user-supplied GitHub token (e.g. a PAT with `contents:write`) to install as the repo's `RELEASE_TOKEN` Actions secret. Omit to only register the repository without installing a secret."),
-                    ]),
                 ]),
             ])
         ),
     ]
-
-    /// Returns the tools that should be exposed to an agent whose declared
-    /// capabilities are `capabilities`. Polyfill tools whose capability is
-    /// already covered natively are filtered out; `alwaysIDEOnly` tools
-    /// always pass through.
-    public static func tools(for capabilities: CapabilitySet) -> [IDETool] {
-        allTools.filter { tool in
-            switch tool.visibility {
-            case .polyfill(let cap):
-                return !capabilities.contains(cap)
-            case .alwaysIDEOnly:
-                return true
-            }
-        }
-    }
 }

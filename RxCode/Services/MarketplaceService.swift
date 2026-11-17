@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 import RxCodeCore
 import os
 
@@ -495,38 +494,59 @@ actor MarketplaceService {
         }
     }
 
-    func promptContext(for provider: AgentProvider) async -> String? {
+    func promptContext(for provider: AgentProvider) -> String {
+        var names = [PetLookSkill.name]
         do {
-            let records = try loadConfig().plugins
-                .filter { $0.isEnabled(for: provider) }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            guard !records.isEmpty else { return nil }
-
-            // Keep discovery small; agents load full instructions only when needed.
-            // The temporary directory is also within Antigravity's native read scope.
-            let directory = FileManager.default.temporaryDirectory.appending(path: "RxCode-skills")
-            return try skillPromptContext(records: records, directory: directory)
+            let records = try enabledSkillRecords(for: provider)
+            let recordsByName = Dictionary(grouping: records, by: \.name)
+            let builtInNames = [PetLookSkill.name, DocsSkill.name, ReleaseSkill.name]
+            names += records.map { record in
+                if recordsByName[record.name]?.count == 1, !builtInNames.contains(record.name) {
+                    return record.name
+                }
+                return record.id
+            }
         } catch {
             logger.warning("Failed to build skill prompt context: \(error.localizedDescription)")
-            return nil
         }
+        return "# RxCode skills (use ide__skill_get before use)\n" + names.sorted().joined(separator: ", ")
     }
 
-    func skillPromptContext(records: [MarketplacePluginRecord], directory: URL) throws -> String {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        var lines = ["# Installed RxCode skills\nRead a matching skill's file before using it."]
-        for record in records {
-            let filename = SHA256.hash(data: Data(record.id.utf8)).map { String(format: "%02x", $0) }.joined()
-            let url = directory.appending(path: filename + ".md")
-            let detail = record.instructions ?? record.summary ?? record.name
-            if (try? String(contentsOf: url, encoding: .utf8)) != detail {
-                try detail.write(to: url, atomically: true, encoding: .utf8)
-            }
-            let description = record.summary ?? parseSkillMetadata(detail).description ?? record.name
-            let summary = description.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            lines.append("- \(record.name): \(summary.prefix(200))\n  Read: \(url.path)")
+    func skillContent(named name: String, for provider: AgentProvider) async throws -> String {
+        switch name {
+        case PetLookSkill.name: return try PetLookSkill.instructions()
+        case DocsSkill.name: return DocsSkill.systemPrompt
+        case ReleaseSkill.name: return ReleaseSkill.systemPrompt
+        default: break
         }
-        return lines.joined(separator: "\n")
+
+        let records = try enabledSkillRecords(for: provider)
+        let matches = records.filter { $0.name == name }
+        guard let record = records.first(where: { $0.id == name }) ?? (matches.count == 1 ? matches.first : nil) else {
+            if matches.count > 1 {
+                let names = matches.map(\.id).sorted().joined(separator: ", ")
+                throw IDEToolError.invalidArguments("Several skills are named '\(name)'. Choose one of: \(names).")
+            }
+            throw IDEToolError.invalidArguments("No enabled RxCode skill named '\(name)'.")
+        }
+        if let instructions = record.instructions, !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return instructions
+        }
+        if let source = record.marketplaceSource {
+            for path in record.skillPaths ?? [] {
+                if let instructions = await fetchRawSkillInstructions(source: source, path: path) {
+                    return instructions
+                }
+            }
+        }
+        if let summary = record.summary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Full instructions are unavailable for '\(name)'. Skill description:\n\(summary)"
+        }
+        throw IDEToolError.handlerFailed("Full instructions are unavailable for '\(name)'.")
+    }
+
+    private func enabledSkillRecords(for provider: AgentProvider) throws -> [MarketplacePluginRecord] {
+        try loadConfig().plugins.filter { $0.isEnabled(for: provider) }
     }
 
     private func skillInstructions(for plugin: MarketplacePlugin) async -> String? {

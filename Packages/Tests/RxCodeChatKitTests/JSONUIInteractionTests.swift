@@ -7,6 +7,18 @@ import RxCodeCore
 @MainActor
 @Suite("JSON UI local interactions")
 struct JSONUIInteractionTests {
+    @Test func retainedRendererStatePreservesEditedFields() throws {
+        let state = JSONUIInteraction(spec: spec)
+        state.perform(["type": "set", "name": "name", "value": "Edited draft"])
+        for _ in 0..<2 {
+            let host = try JSONUIRenderer(spec: spec, interaction: state).inspect()
+                .find(JSONUIInteractiveHost<AnyView>.self).actualView()
+            #expect(host.interaction === state)
+        }
+        #expect(state.values["name"] == "Edited draft")
+        #expect(state.notice == "Value updated locally.")
+    }
+
     @Test func renderedButtonDispatchesItsDeclaredAction() throws {
         let state = JSONUIInteraction(spec: spec)
         let control = JSONUIControl(id: "open", element: .init(type: "Button", props: [

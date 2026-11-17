@@ -25,6 +25,9 @@ jobs:
       - name: Test package resolution retries
         run: python3 -m unittest discover -s scripts/ci -p test_resolve_packages.py -v
 
+      - name: Test mobile screenshot helpers
+        run: python3 -m unittest discover -s scripts/mobile-visual -p 'test_*.py' -v
+
   test-packages:
     name: swift test (Packages)
     runs-on: [self-hosted, regular]
@@ -79,9 +82,20 @@ jobs:
             -configuration Debug \
             -destination platform=macOS \
             -testPlan UnitTestPlan \
+            -resultBundlePath TestResults-macOS.xcresult \
             -enableCodeCoverage NO \
             CODE_SIGNING_ALLOWED=NO \
-            test | xcpretty
+            test 2>&1 | tee TestResults-macOS.log
+
+      - name: Upload macOS test failures
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-test-results
+          path: |
+            TestResults-macOS.xcresult
+            TestResults-macOS.log
+          retention-days: 14
 
   build-smoke:
     name: xcodebuild build (Release)

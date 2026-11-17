@@ -476,7 +476,7 @@ private struct DiffRowBody: View {
                 ? Text("  ").foregroundStyle(ClaudeTheme.textTertiary)
                 : Text("")
         }
-        return prefix + bodyTextView
+        return Text("\(prefix)\(bodyTextView)")
     }
 
     /// Body of the row. Uses `SyntaxHighlighter` for code rows when a language

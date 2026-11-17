@@ -32,7 +32,7 @@ Android), a Go relay server for mobile sync, and the public website.
 
 - macOS app deployment target: macOS 26.0+
 - Swift tools version: 6.2
-- Main app bundle ID: `com.rxlab.RxCode`
+- Main app bundle ID: `app.rxlab.flowcy.code`
 - App-level dependencies: SwiftTerm, Sparkle
 - Package dependencies: ViewInspector
 - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and

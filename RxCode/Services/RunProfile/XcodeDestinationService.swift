@@ -85,7 +85,7 @@ actor XcodeDestinationService {
     }
 }
 
-private final class OnceLatch: @unchecked Sendable {
+private nonisolated final class OnceLatch: @unchecked Sendable {
     private let lock = NSLock()
     private var fired = false
     func set() -> Bool {

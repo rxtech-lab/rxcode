@@ -25,6 +25,7 @@ extension AppState {
         hookManager.register(AutopilotDocsHook())
         hookManager.register(AutopilotReleaseHook())
         hookManager.register(CIUpdateHook())
+        hookManager.register(PetCompanionHook())
         #endif
         // The task board moves a card on session stop before any review starts:
         // it only edits the board, and a card must already sit in its

@@ -1,6 +1,6 @@
 import Foundation
 
-enum GeneratedTextSanitizer {
+nonisolated enum GeneratedTextSanitizer {
     static func cleanSummary(_ raw: String?, limit: Int, errorPrefixes: [String]) -> String? {
         guard let raw else { return nil }
         let cleaned = cleanMarkdownDocument(raw)

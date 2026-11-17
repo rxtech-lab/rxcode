@@ -629,10 +629,10 @@ final class LocalModelStore {
         runtimeDownload = Download(id: "runtime", title: format.runtimeName, receivedBytes: 0, totalBytes: 0)
         defer { runtimeDownload = nil }
         let root = appSupport
-        let installed = try await DownloadCenter.track("\(format.runtimeName) runtime", kind: .modelRuntime) { item in
+        let installed = try await DownloadCenter.track("\(format.runtimeName) runtime", kind: .modelRuntime) { [weak self] item in
             // `(0, 0)` marks the end of the download: unpacking and package
             // installs follow with no byte progress.
-            let progress: @Sendable (Int64, Int64) -> Void = { received, total in
+            let progress: @Sendable (Int64, Int64) -> Void = { [weak self] received, total in
                 DownloadCenter.update(item, phase: received == 0 && total == 0 ? .installing : .downloading,
                                       receivedBytes: received, totalBytes: total)
                 Task { @MainActor [weak self] in
@@ -677,7 +677,7 @@ final class LocalModelStore {
         let item = DownloadCenter.shared.begin(title, kind: .localModel, recovery: recovery) { [weak self] in self?.cancelDownload(id: key) }
         DownloadCenter.shared.update(item, phase: .downloading, receivedBytes: 0, totalBytes: variant.sizeBytes)
 
-        let work = Task { @MainActor in
+        let work = Task { @MainActor [weak self] in
             let metadata = try await HuggingFaceClient.model(summary.id, format: summary.format)
             try Task.checkCancellation()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -694,7 +694,7 @@ final class LocalModelStore {
                         onTransferProgress: { received, _, transferred in
                             DownloadCenter.update(item, phase: .downloading, receivedBytes: base + received, transferredBytes: transferred)
                         }
-                    ) { received, _ in
+                    ) { [weak self] received, _ in
                         Task { @MainActor [weak self] in self?.downloads[key]?.receivedBytes = base + received }
                     }
                 }

@@ -777,7 +777,7 @@ extension AppState {
                     // (ResponseNotificationHook), which self-suppresses unless
                     // the turn genuinely completed without error.
                     if let stopProject {
-                        await hookManager.dispatchAfterSessionEnd(SessionEndPayload(
+                        _ = await hookManager.dispatchAfterSessionEnd(SessionEndPayload(
                             project: stopProject,
                             sessionKey: sessionKey,
                             sessionId: resultEvent.sessionId,

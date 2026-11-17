@@ -173,6 +173,8 @@ extension AppState {
     }
 
     func generateResponseNotificationSummary(responseText: String, summary: ChatSession.Summary) async -> String? {
+        // During a voice conversation, its assistant alone summarizes incoming updates.
+        guard !PetController.shared.isVoiceActive else { return nil }
         let trimmedResponse = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedResponse.isEmpty else { return nil }
 

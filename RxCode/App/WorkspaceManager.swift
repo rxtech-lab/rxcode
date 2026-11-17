@@ -32,6 +32,7 @@ final class WorkspaceManager {
         let core = AppCore()
         self.core = core
         self.frontmostWorkspaceID = core.workspaceRegistry.load().active.id
+        PetController.shared.bind(to: self)
     }
 
     /// Known workspaces — source of truth is the shared registry.
@@ -76,6 +77,16 @@ final class WorkspaceManager {
     /// AppState for the frontmost workspace window — used by global surfaces.
     var frontmostAppState: AppState { appState(for: frontmostWorkspaceID) }
 
+    /// Every AppState created so far, frontmost workspace first.
+    var loadedAppStates: [AppState] {
+        let front = appStatesByWorkspaceID[frontmostWorkspaceID]
+        let others = appStatesByWorkspaceID
+            .filter { $0.key != frontmostWorkspaceID }
+            .sorted { $0.key < $1.key }
+            .map(\.value)
+        return (front.map { [$0] } ?? []) + others
+    }
+
     /// Whether an AppState has already been created for this workspace.
     func hasAppState(for workspaceID: String) -> Bool {
         appStatesByWorkspaceID[workspaceID] != nil
@@ -91,6 +102,8 @@ final class WorkspaceManager {
         state.scheduleDesktopWidgetUpdate()
         transferMobileSyncOwnership(to: workspaceID)
         bindMemoryMCPServer(to: appState(for: workspaceID))
+        PetController.shared.bind(to: self)
+        PetController.shared.refreshPetState()
     }
 
     private func bindMemoryMCPServer(to appState: AppState) {

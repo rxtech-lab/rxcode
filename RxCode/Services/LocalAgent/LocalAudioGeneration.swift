@@ -37,7 +37,7 @@ nonisolated enum LocalAudioMode: String, Codable, Sendable {
 }
 
 extension LocalMediaRecipe {
-    func speechArguments(model: URL, directory: URL, text: String, output: URL, settings: AudioGenerationSettings, seed: Int) -> [String] {
+    nonisolated func speechArguments(model: URL, directory: URL, text: String, output: URL, settings: AudioGenerationSettings, seed: Int) -> [String] {
         let settings = settings.validated
         var arguments = ["-m", model.path]
         for companion in companions where companion.flag == "mmproj" {

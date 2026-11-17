@@ -233,6 +233,12 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     public var result: String?
     public var isError: Bool
 
+    public var isImageGeneration: Bool {
+        let lower = name.lowercased()
+        return lower == "imagegeneration" || ((lower == "ide__generate_media" || lower.hasSuffix("__ide__generate_media"))
+            && input["kind"]?.stringValue == "image")
+    }
+
     public var hasNonEmptyResult: Bool {
         result.map { !$0.isEmpty } ?? false
     }

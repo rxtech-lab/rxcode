@@ -29,8 +29,8 @@ extension AppState {
         var ideBridgeCommand: MCPBridgeCommand?
     }
 
-    /// Runs the expensive, independent pre-spawn work (memory lookup, git
-    /// branch + briefing, IDE-MCP port allocation, skill-context resolution,
+    /// Runs the expensive, independent pre-spawn work (memory lookup,
+    /// IDE-MCP port allocation, skill-context resolution,
     /// session-start hooks) concurrently, then resolves the per-backend
     /// send-request fields. Reads `sessionKey` but never mutates it — the
     /// caller owns the `var sessionKey` used by the event loop.
@@ -72,7 +72,7 @@ extension AppState {
         }
 
         // Kick off the expensive, independent pre-spawn work concurrently.
-        // Memory lookup, git branch + briefing, IDE-MCP port allocation, and
+        // Memory lookup, IDE-MCP port allocation, and
         // skill-context resolution all hop off MainActor and previously ran
         // stacked serially — pushing the first stream event well after the
         // user pressed send. Each `async let` starts immediately and is only
@@ -110,14 +110,13 @@ extension AppState {
                 minScore: memoryMinScore
             )
             : []
-        async let currentBranchAsync = GitHelper.currentBranch(at: cwd)
         async let idePortAsync: UInt16? = shouldIncludeIDEMCP
             ? ideMCPServer.allocate(
                 sessionKey: capturedSessionKey,
                 capabilities: agentProvider.staticCapabilities
             )
             : nil
-        async let skillContextAsync: String? = marketplace.promptContext(for: agentProvider)
+        async let skillContextAsync = shouldIncludeIDEMCP ? marketplace.promptContext(for: agentProvider) : ""
         async let codexSkillOverridesAsync: [String] = shouldIncludeIDEMCP && agentProvider == .codex
             ? await marketplace.codexConfigOverrides()
             : []
@@ -137,20 +136,6 @@ extension AppState {
             detail: "enabled=\(memoryActive) mode=\(memoryMode.title) minScore=\(String(format: "%.2f", memoryMinScore)) hits=\(memoryHitCount) contextChars=\(resolvedMemoryContext.count)"
         )
 
-        let branchBriefingContext: String
-        if let branch = await currentBranchAsync,
-           let briefing = threadStore.branchBriefingItems(projectId: projectId, branch: branch)
-            .max(by: { ($0.day ?? $0.updatedAt) < ($1.day ?? $1.updatedAt) })?.briefing {
-            branchBriefingContext = Self.branchBriefingSystemPrompt(
-                branch: branch,
-                briefing: briefing
-            )
-            logPreflight("branchBriefing", detail: "branch=\(branch) contextChars=\(branchBriefingContext.count)")
-        } else {
-            branchBriefingContext = ""
-            logPreflight("branchBriefing", detail: "contextChars=0")
-        }
-
         let configuredPromptContext = Self.configuredPromptContext(
             global: UserDefaults.standard.string(forKey: "globalAgentPrompt"),
             project: projects.first(where: { $0.id == projectId })?.customPrompt
@@ -159,17 +144,21 @@ extension AppState {
         // The IDE-MCP port is provider-agnostic at allocation time — the
         // bridge command is built from the port. Per-backend MCP config
         // writes still happen serially after this since they consume the
-        // bridge, but they no longer block memory/git/skill resolution.
+        // bridge, but they no longer block memory or skill resolution.
         let idePort = await idePortAsync
         let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
         logPreflight(
             "ideMCP",
             detail: "enabled=\(shouldIncludeIDEMCP) port=\(idePort.map(String.init) ?? "<nil>")"
         )
+        let briefingContext = projectBriefingSystemPrompt(projectId: projectId, canFetchDetails: bridge != nil)
+        logPreflight("projectBriefing", detail: "contextChars=\(briefingContext.count)")
+        let skillContext = bridge != nil ? await skillContextAsync : ""
+        logPreflight("skillContext", detail: "chars=\(skillContext.count)")
 
         // Session-start hooks fire once, only for a brand-new thread (no resumed
         // CLI session). Their stdout is injected into this turn's agent context
-        // the same way the branch briefing / memory context is, and the status
+        // alongside the briefing and memory context, and the status
         // cards inserted by UserAddedHook persist via the `.result` save.
         //
         // Project-new-chat hooks update passive banners and are driven by the
@@ -188,17 +177,10 @@ extension AppState {
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
             appendExtraSystemPrompt(configuredPromptContext)
-            // Surface the accumulated briefing for the project's current branch
-            // to the agent as background context via `--append-system-prompt`.
-            appendExtraSystemPrompt(branchBriefingContext)
+            appendExtraSystemPrompt(briefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
             appendExtraSystemPrompt(hookStartContext)
-            if let skillContext = await skillContextAsync {
-                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-                appendExtraSystemPrompt(skillContext)
-            } else {
-                logPreflight("skillContext", detail: "chars=0")
-            }
+            appendExtraSystemPrompt(skillContext)
         case .codex:
             mcpCodexOverrides = await mcp.codexConfigOverrides(
                 projectPath: cwd,
@@ -215,10 +197,8 @@ extension AppState {
             let codexSkillOverrides = await codexSkillOverridesAsync
             logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
             mcpCodexOverrides += codexSkillOverrides
-            let skillContext = await skillContextAsync ?? ""
-            logPreflight("skillContext", detail: "chars=\(skillContext.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [skillContext, configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             resolvedSendMode = registerMode
@@ -226,13 +206,10 @@ extension AppState {
             // The harness renders one system prompt per turn, so background
             // context goes there rather than into the user's message.
             appendExtraSystemPrompt(configuredPromptContext)
-            appendExtraSystemPrompt(branchBriefingContext)
+            appendExtraSystemPrompt(briefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
             appendExtraSystemPrompt(hookStartContext)
-            if let skillContext = await skillContextAsync {
-                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-                appendExtraSystemPrompt(skillContext)
-            }
+            appendExtraSystemPrompt(skillContext)
             resolvedSendMode = registerMode
             if !localModels.isAvailable {
                 earlyStream = AsyncStream<StreamEvent> { c in
@@ -255,10 +232,8 @@ extension AppState {
                 bridgeCommand: bridge
             )
             logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
-            let skillContext = await skillContextAsync ?? ""
-            logPreflight("skillContext", detail: "chars=\(skillContext.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [skillContext, configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             // `model` may be a composite `<clientId>::<model>` key (from the picker)

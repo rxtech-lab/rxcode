@@ -9,7 +9,7 @@ extension FileHandle {
     /// on an idle pipe, every other `bytes` reader in the app starves, so a new
     /// agent's replies sit in its pipe and never wake the `for await`. A
     /// readability handler gets its own per-handle dispatch source instead.
-    func lineStream() -> AsyncStream<String> {
+    nonisolated func lineStream() -> AsyncStream<String> {
         AsyncStream { continuation in
             // `buffer` is touched only from the readabilityHandler, which Dispatch
             // serializes onto a single internal queue per FileHandle — no lock needed.

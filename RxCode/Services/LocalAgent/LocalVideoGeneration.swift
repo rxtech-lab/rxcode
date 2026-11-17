@@ -46,8 +46,7 @@ nonisolated struct LocalVideoRecipe: Codable, Equatable, Sendable {
     /// encoder runs on the CPU so the denoiser keeps the GPU's working set.
     func arguments(denoiser: URL, directory: URL, prompt: String, output: URL, settings: VideoGenerationSettings = .init()) -> [String] {
         let settings = settings.validated
-        return
-        [
+        return [
             "--mode", "vid_gen",
             "--diffusion-model", denoiser.path,
             "--llm", directory.appending(path: textEncoder.localName).path,

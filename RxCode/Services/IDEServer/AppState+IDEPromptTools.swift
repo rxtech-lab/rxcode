@@ -9,6 +9,10 @@ struct AgentConfirmation: Identifiable, Hashable {
     let sessionKey: String
     let projectId: UUID?
     var isMinimized = false
+
+    /// Whether the desktop pet / voice companion asked for this confirmation.
+    /// Its sessions all use a `pet-` key.
+    var isFromPetCompanion: Bool { sessionKey.hasPrefix("pet-") }
 }
 
 /// An `ide__show_ui` view opened with `presentation: "dialog"`, kept with the
@@ -19,6 +23,16 @@ struct AgentUIDialog: Identifiable, Hashable {
     let sessionKey: String
     let title: String?
     let spec: JSONUISpec
+    var petPresentation: String? = nil
+    /// Only short, read-only information belongs in the caption.
+    var captionLines: [String]? {
+        let supported: Set<String> = ["Stack", "Card", "Heading", "Text", "Badge", "Stat", "Callout", "KeyValue", "List", "Progress", "Divider"]
+        guard spec.elements.values.allSatisfy({ supported.contains($0.type) }) else { return nil }
+        let lines = spec.textLines.flatMap { $0.components(separatedBy: .newlines) }.filter { !$0.isEmpty }
+        return (1...5).contains(lines.count) ? lines : nil
+    }
+    var usesPetCaption: Bool { isPetPresentation && petPresentation != "popover" && captionLines != nil }
+    var isPetPresentation: Bool { sessionKey.hasPrefix("pet-") || petPresentation != nil }
 }
 
 /// Agent prompts queued for the user, oldest first. `AgentPromptUIModifier`
@@ -43,18 +57,50 @@ struct AgentPromptState {
 extension AppState {
     @MainActor
     func handleShowUI(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let requestedPetStyle = arguments["pet_presentation"]?.stringValue
+        if arguments["pet_presentation"] != nil && !["popover", "bubble"].contains(requestedPetStyle ?? "") {
+            throw IDEToolError.invalidArguments("pet_presentation must be popover or bubble.")
+        }
+        // Pet sessions always use the floating pet surface, even when the agent
+        // omits pet_presentation or sends the shared tool's inline default.
+        let petStyle = requestedPetStyle ?? (sessionKey.hasPrefix("pet-") ? "bubble" : nil)
+        var input = arguments.objectValue ?? [:]
+        if petStyle != nil { input["presentation"] = .string("dialog") }
         let validated: (payload: JSONUITool.Payload, spec: JSONUISpec, message: String)
         do {
-            validated = try JSONUITool.validated(arguments)
+            validated = try JSONUITool.validated(.object(input))
         } catch {
             throw IDEToolError.invalidArguments(error.localizedDescription)
         }
         if validated.payload.presentation == .dialog {
-            let dialog = AgentUIDialog(sessionKey: sessionKey, title: validated.payload.title, spec: validated.spec)
+            var dialog = AgentUIDialog(sessionKey: sessionKey, title: validated.payload.title, spec: validated.spec, petPresentation: petStyle)
+            if dialog.isPetPresentation && !dialog.usesPetCaption { dialog.petPresentation = "popover" }
+            if dialog.isPetPresentation {
+                guard PetController.shared.configuration.isEnabled else { throw IDEToolError.handlerFailed("Enable the desktop pet to show this interactive view.") }
+                PetController.shared.presentation.expand(dialog.id)
+                PetController.shared.panelController.show()
+            }
             agentPrompts.views.append(dialog)
             agentPrompts.dialogs.append(dialog)
+            if dialog.isPetPresentation {
+                do { try await PetController.shared.presentation.waitUntilVisible { PetController.shared.presentation.visibleDialogID == dialog.id } }
+                catch { removeAgentUIView(id: dialog.id); throw error }
+                let visibleStyle = agentPrompts.dialogs.first { $0.id == dialog.id }?.petPresentation ?? "bubble"
+                return PetPresentation.result("presented", "The UI is visibly presented in the pet-anchored \(visibleStyle).")
+            }
         }
         return textResult(validated.message)
+    }
+
+    /// A caption exceeding the full five-row budget needs a popover.
+    func expandPetCaptionToPopover(id: UUID) {
+        for index in agentPrompts.dialogs.indices where agentPrompts.dialogs[index].id == id {
+            agentPrompts.dialogs[index].petPresentation = "popover"
+        }
+        for index in agentPrompts.views.indices where agentPrompts.views[index].id == id {
+            agentPrompts.views[index].petPresentation = "popover"
+        }
+        PetController.shared.panelController.updatePanelLayout()
     }
 
     @MainActor
@@ -108,6 +154,12 @@ extension AppState {
     func agentConfirmations(forSession sessionKey: String) -> [AgentConfirmation] {
         let resolved = resolveCurrentSessionId(sessionKey)
         return agentPrompts.confirmations.filter { resolveCurrentSessionId($0.sessionKey) == resolved }
+    }
+
+    /// Confirmations the desktop pet / voice companion is waiting on that the
+    /// user hasn't hidden, oldest first.
+    var pendingPetConfirmations: [AgentConfirmation] {
+        agentPrompts.confirmations.filter { $0.isFromPetCompanion && !$0.isMinimized }
     }
 
     /// Changes presentation without resolving the waiting tool call.
@@ -177,7 +229,11 @@ extension AppState {
 
     /// Closes the open dialog. The view stays in its thread's Views list.
     func dismissAgentUIDialog(id: UUID) {
-        agentPrompts.dialogs.removeAll { $0.id == id }
+        if agentPrompts.dialogs.contains(where: { $0.id == id && $0.isPetPresentation }) {
+            PetController.shared.presentation.collapse(id)
+        } else {
+            agentPrompts.dialogs.removeAll { $0.id == id }
+        }
     }
 
     /// The dialog views shown in thread `sessionKey`, oldest first.
@@ -188,6 +244,11 @@ extension AppState {
     /// Opens a kept view in front. A dialog open at the time closes, and stays
     /// in its thread's Views list.
     func openAgentUIView(id: UUID) {
+        if let view = agentPrompts.views.first(where: { $0.id == id && $0.isPetPresentation }) {
+            if !agentPrompts.dialogs.contains(where: { $0.id == id }) { agentPrompts.dialogs.append(view) }
+            PetController.shared.presentation.expand(id)
+            return
+        }
         guard let view = agentPrompts.views.first(where: { $0.id == id }),
               agentPrompts.dialogs.first?.id != id else { return }
         agentPrompts.dialogs.removeAll { $0.id == id }
@@ -208,6 +269,7 @@ extension AppState {
 
     /// Removes a view from its thread's Views list, closing it if open.
     func removeAgentUIView(id: UUID) {
+        PetController.shared.presentation.removeDialog(id)
         agentPrompts.views.removeAll { $0.id == id }
         agentPrompts.dialogs.removeAll { $0.id == id }
     }

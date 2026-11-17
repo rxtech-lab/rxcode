@@ -120,6 +120,31 @@ final class ThreadStore {
         fetchBranchBriefings(projectId: projectId, branch: branch).map { $0.toItem() }
     }
 
+    func recentProjectBriefingItems(projectId: UUID, startingAt start: Date, before end: Date) -> [BranchBriefingItem] {
+        let undated = Date.distantPast
+        let descriptor = FetchDescriptor<BranchBriefingRecord>(
+            predicate: #Predicate { $0.projectId == projectId && ($0.day ?? undated) >= start && ($0.day ?? undated) < end },
+            sortBy: [SortDescriptor(\.day, order: .reverse), SortDescriptor(\.updatedAt, order: .reverse), SortDescriptor(\.id)]
+        )
+        return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
+    }
+
+    func projectBriefingRecords(projectId: UUID, branch: String?, offset: Int, limit: Int) -> [BranchBriefingRecord] {
+        let predicate: Predicate<BranchBriefingRecord>
+        if let branch {
+            predicate = #Predicate { $0.projectId == projectId && $0.branch == branch }
+        } else {
+            predicate = #Predicate { $0.projectId == projectId }
+        }
+        var descriptor = FetchDescriptor<BranchBriefingRecord>(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\.day, order: .reverse), SortDescriptor(\.updatedAt, order: .reverse), SortDescriptor(\.id)]
+        )
+        descriptor.fetchOffset = offset
+        descriptor.fetchLimit = limit
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
     /// The whole branch story: every day's briefing merged oldest first.
     func combinedBranchBriefing(projectId: UUID, branch: String) -> String? {
         branchBriefingItems(projectId: projectId, branch: branch)
@@ -536,7 +561,7 @@ final class ThreadStore {
         context.delete(row)
     }
 
-    private func fetchBranchBriefing(id: String) -> BranchBriefingRecord? {
+    func fetchBranchBriefing(id: String) -> BranchBriefingRecord? {
         var descriptor = FetchDescriptor<BranchBriefingRecord>(
             predicate: #Predicate { $0.id == id }
         )

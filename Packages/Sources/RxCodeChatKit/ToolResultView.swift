@@ -56,7 +56,7 @@ struct ToolResultView: View {
         if toolCall.name == ReviewCountdownCard.toolName {
             // Interactive "review will start in N seconds" card (Stop / Start now).
             ReviewCountdownCardView(toolCall: toolCall)
-        } else if toolNameLower == "imagegeneration" {
+        } else if toolCall.isImageGeneration {
             GeneratedImageToolView(toolCall: toolCall, isStreaming: isMessageStreaming)
         } else if toolNameLower == VideoGenerationProgress.toolName.lowercased() {
             GeneratedVideoToolView(toolCall: toolCall, isStreaming: isMessageStreaming)

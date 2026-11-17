@@ -6,7 +6,7 @@ extension AgentRuntimeInstaller.Runtime: Identifiable {
         rawValue
     }
 
-    var displayName: String {
+    nonisolated var displayName: String {
         switch self {
         case .claude: "Claude Code"
         case .codex: "Codex"

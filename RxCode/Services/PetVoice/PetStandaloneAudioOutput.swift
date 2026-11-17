@@ -1,10 +1,17 @@
 import AVFoundation
 import Foundation
 
+nonisolated protocol PetSpeechOutput: Sendable {
+    func prepare(deviceUID: String?, envelope: PetSpeechEnvelope?) async throws
+    func schedule(_ data: Data, completion: @escaping @Sendable () -> Void)
+    func stop()
+    func teardown()
+}
+
 /// AVFAudio may synchronously wait for its internal default-QoS threads. Confine
 /// the entire graph to this queue so playback control never blocks the UI thread.
 /// All mutable state and AVFAudio objects are accessed only on `queue`.
-nonisolated final class PetStandaloneAudioOutput: @unchecked Sendable {
+nonisolated final class PetStandaloneAudioOutput: PetSpeechOutput, @unchecked Sendable {
     private let queue = DispatchQueue(label: "app.rxlab.pet.speech-output", qos: .default)
     private var engine: AVAudioEngine?
     private var player: AVAudioPlayerNode?

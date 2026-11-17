@@ -689,7 +689,7 @@ private final class SystemSpeechBufferBox {
 /// Daily Reports, and Voice Model previews when a live voice call is not active.
 @MainActor
 final class PetStandaloneSpeaker {
-    private let output = PetStandaloneAudioOutput()
+    private let output: any PetSpeechOutput
     /// Speaker device UID read before each utterance; `nil` follows the system default.
     var outputDeviceUID: () -> String? = { nil }
 
@@ -700,6 +700,10 @@ final class PetStandaloneSpeaker {
     var speechPlayback: PetSpeechPlaybackSignal?
 
     var isSpeaking: Bool { speakTask != nil }
+
+    init(output: any PetSpeechOutput = PetStandaloneAudioOutput()) {
+        self.output = output
+    }
 
     deinit {
         output.teardown()
@@ -720,9 +724,7 @@ final class PetStandaloneSpeaker {
             guard let self else { return }
             do {
                 try Task.checkCancellation()
-                try await self.output.prepare(deviceUID: desiredUID, envelope: self.speechPlayback?.envelope)
-                try Task.checkCancellation()
-                guard self.generation == token else { return }
+                var outputPrepared = false
                 var scheduledGroup = 0
                 for chunk in SpokenTextChunker.speechChunks(cleaned) {
                     try Task.checkCancellation()
@@ -732,6 +734,14 @@ final class PetStandaloneSpeaker {
                         try Task.checkCancellation()
                         guard self.generation == token else { return }
                         guard !frame.data.isEmpty else { continue }
+                        // Synthesis can fail before producing audio (for example, a missing
+                        // model). Do not open a hardware graph on that error path.
+                        if !outputPrepared {
+                            try await self.output.prepare(deviceUID: desiredUID, envelope: self.speechPlayback?.envelope)
+                            try Task.checkCancellation()
+                            guard self.generation == token else { return }
+                            outputPrepared = true
+                        }
                         receivedAudio = true
                         scheduledGroup += 1
                         self.speechPlayback?.begin()

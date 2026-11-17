@@ -473,23 +473,24 @@ struct PetVoiceAndStateTests {
         }
     }
 
-    @Test("PetSpriteCache decodes RxBuddy 8x6 sprite atlas and settles after one playback")
+    @Test("PetSpriteCache decodes all four RxBuddy sheets and settles after one playback")
     @MainActor
     func spriteAtlasDecodingAndFrameTiming() throws {
         let character = PetCharacter.rxcodeBuddy
         let atlas = try #require(PetSpriteCache.shared.atlas(for: character))
 
         #expect(atlas.frames.count == 8)
+        #expect(character.additionalSpriteSheetURLs.count == 3)
         for row in atlas.frames {
-            #expect(row.count == 6)
+            #expect(row.count == 24)
         }
-        #expect(atlas.manifest.frameWidth == 181)
-        #expect(atlas.manifest.frameHeight == 181)
-        #expect(atlas.manifest.frames.count == 48)
+        #expect(atlas.manifest.frameWidth == 256)
+        #expect(atlas.manifest.frameHeight == 256)
+        #expect(atlas.manifest.frames.count == 192)
         for row in atlas.frames {
             for frame in row {
-                #expect(frame.width == 181)
-                #expect(frame.height == 181)
+                #expect(frame.width == 256)
+                #expect(frame.height == 256)
                 #expect(frame.alphaInfo != .none)
             }
         }
@@ -498,14 +499,15 @@ struct PetVoiceAndStateTests {
         let later = PetSpriteCache.shared.frameIndex(for: character, motion: .working, at: 0.25)
         #expect(first == 0)
         #expect(later > first)
-        #expect(later < 6)
+        #expect(later < 24)
+        #expect(PetSpriteCache.shared.frameIndex(for: character, motion: .working, at: 0.5) == 6)
 
         for motion in PetMotion.allCases {
             let duration = PetSpriteCache.shared.animationDuration(for: character, motion: motion)
             #expect(duration > 0)
             #expect(PetSpriteCache.shared.frameIndex(for: character, motion: motion, at: -1) == 0)
-            #expect(PetSpriteCache.shared.frameIndex(for: character, motion: motion, at: duration + 0.01) == 5)
-            #expect(PetSpriteCache.shared.frameIndex(for: character, motion: motion, at: duration * 100) == 5)
+            #expect(PetSpriteCache.shared.frameIndex(for: character, motion: motion, at: duration + 0.01) == 23)
+            #expect(PetSpriteCache.shared.frameIndex(for: character, motion: motion, at: duration * 100) == 23)
         }
     }
 

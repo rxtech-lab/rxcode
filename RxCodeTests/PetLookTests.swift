@@ -339,7 +339,8 @@ struct PetSpeechFrameTests {
         #expect(!envelope.isMouthOpen(at: 9.99))
         #expect(envelope.isMouthOpen(at: 10.01))
         #expect(envelope.isMouthOpen(at: 10.04))
-        #expect(!envelope.isMouthOpen(at: 10.07))
+        #expect(envelope.isMouthOpen(at: 10.07))
+        #expect(!envelope.isMouthOpen(at: 10.20))
         envelope.setEnabled(false)
         #expect(!envelope.isMouthOpen(at: 10.01))
     }

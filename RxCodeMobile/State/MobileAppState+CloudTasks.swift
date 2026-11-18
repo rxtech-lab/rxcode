@@ -14,6 +14,8 @@ extension MobileAppState {
         cloudTaskBoardCalls = [:]
         cloudTaskProjects = []
         cloudTaskBoards = [:]
+        for read in cloudActivityReads.values { read.task.cancel() }
+        cloudActivityReads = [:]
         cloudTaskActivityByProject = [:]
         deferredCloudTaskBoardSnapshots = [:]
         pruneTaskCache(keepCloud: false)
@@ -32,6 +34,12 @@ extension MobileAppState {
 
     /// The board views use one command path; only the storage transport changes.
     func cloudTaskBoardCall(_ request: TaskBoardRequestPayload) async throws -> TaskBoardResultPayload {
+        if request.operation == .fetch, let call = cloudTaskBoardCalls[request.projectID],
+           call.fetch, call.account == taskCloud?.accountID {
+            let result = try await call.task.value
+            return TaskBoardResultPayload(clientRequestID: request.clientRequestID, projectID: result.projectID,
+                ok: result.ok, errorMessage: result.errorMessage, snapshot: result.snapshot)
+        }
         let previous = cloudTaskBoardCalls[request.projectID]?.task
         let id = UUID()
         let accountID = taskCloud?.accountID
@@ -41,7 +49,7 @@ extension MobileAppState {
             guard self.taskCloud?.accountID == accountID else { throw CancellationError() }
             return try await self.performCloudTaskBoardCall(request)
         }
-        cloudTaskBoardCalls[request.projectID] = (id, task)
+        cloudTaskBoardCalls[request.projectID] = (id, request.operation == .fetch, accountID, task)
         defer {
             if cloudTaskBoardCalls[request.projectID]?.id == id {
                 cloudTaskBoardCalls[request.projectID] = nil
@@ -115,7 +123,7 @@ extension MobileAppState {
         }
         if request.operation == .fetch || request.operation == .upsertView {
             for attempt in 0..<3 {
-                guard let remote = try await cloud.savedViews(remoteID) else {
+                guard let remote = try await cloud.savedViews(remoteID, revision: request.operation == .fetch && attempt == 0 ? cloud.boards[remoteID]?.savedViewsRevision : nil) else {
                     // Keep the freshly loaded tasks and cached views available while reporting the sync failure.
                     if request.operation == .fetch {
                         storeTaskBoardSnapshot(MobileTaskBoardSnapshot(projectID: request.projectID, board: board), cloud: true)

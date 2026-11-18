@@ -378,7 +378,6 @@ struct PetOverlayView: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(controller.isMuted)
             .help(controller.isVoiceActive ? "End Voice Mode" : "Start Voice Mode (\(controller.configuration.voiceMode.shortTitle))")
 
             Button {
@@ -390,8 +389,8 @@ struct PetOverlayView: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
-            .help(controller.isMuted ? "Unmute Pet" : "Mute Pet (including notifications)")
-            .accessibilityLabel(controller.isMuted ? "Unmute Pet" : "Mute Pet")
+            .help(controller.isMuted ? "Unmute Microphone" : "Mute Microphone (keep conversation connected)")
+            .accessibilityLabel(controller.isMuted ? "Unmute Microphone" : "Mute Microphone")
 
             if controller.petState.status == .speaking || controller.isStandaloneSpeaking {
                 Button {
@@ -470,12 +469,11 @@ struct PetOverlayView: View {
                 systemImage: controller.isVoiceActive ? "phone.down.fill" : "phone.fill"
             )
         }
-        .disabled(controller.isMuted)
 
         Button {
             controller.toggleMute()
         } label: {
-            Label(controller.isMuted ? "Unmute Pet" : "Mute Pet", systemImage: controller.isMuted ? "mic.slash.fill" : "mic.fill")
+            Label(controller.isMuted ? "Unmute Microphone" : "Mute Microphone", systemImage: controller.isMuted ? "mic.slash.fill" : "mic.fill")
         }
 
         Menu("Voice Mode") {

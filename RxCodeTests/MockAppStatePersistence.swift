@@ -118,8 +118,12 @@ actor MockAppStatePersistence: AppStatePersistenceService {
     }
 
     func saveScheduledTasks(_ tasks: [ScheduledTask]) throws {
+        if failScheduledTaskSaves { throw NSError(domain: "ScheduledTaskPersistenceTest", code: 1) }
         scheduledTasks = tasks
     }
+
+    private var failScheduledTaskSaves = false
+    func setFailScheduledTaskSaves(_ value: Bool) { failScheduledTaskSaves = value }
 
     func loadScheduledTasks() -> [ScheduledTask] {
         scheduledTasks

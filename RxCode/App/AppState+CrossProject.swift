@@ -724,7 +724,8 @@ extension AppState {
                             reason: .completed,
                             turnDidError: resultEvent.isError,
                             lastAssistantText: finalAssistantText,
-                            hasQueuedFollowups: hasQueuedFollowups
+                            hasQueuedFollowups: hasQueuedFollowups,
+                            deliveryID: streamId.uuidString
                         ))
                         if stopResult.hasError {
                             stopHookFailureOutput = stopResult.combinedOutput
@@ -784,7 +785,8 @@ extension AppState {
                             reason: .completed,
                             turnDidError: resultEvent.isError,
                             lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages),
-                            hasQueuedFollowups: hasQueuedFollowups
+                            hasQueuedFollowups: hasQueuedFollowups,
+                            deliveryID: streamId.uuidString
                         ))
                     }
 

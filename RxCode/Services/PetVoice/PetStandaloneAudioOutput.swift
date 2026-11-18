@@ -63,7 +63,7 @@ nonisolated final class PetStandaloneAudioOutput: PetSpeechOutput, @unchecked Se
         self.engine = engine
         self.player = player
         routedDeviceUID = deviceUID
-        PetAudioDevices.route(engine.outputNode.audioUnit, toDeviceUID: deviceUID, direction: .output)
+        try PetAudioDevices.route(engine.outputNode.audioUnit, toDeviceUID: deviceUID, direction: .output)
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: Self.format)
         engine.prepare()

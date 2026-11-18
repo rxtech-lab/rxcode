@@ -11,6 +11,12 @@ extension AppState {
         scheduledTaskRuns = ScheduledTaskRun.pruned(
             ScheduledTaskRun.restored(await persistence.loadScheduledTaskRuns())
         )
+        for task in scheduledTasks where task.dueAt != nil && task.claimedAt != nil && task.lastRunAt == nil && task.pendingPetReport == nil {
+            if !scheduledTaskRuns.contains(where: { $0.taskId == task.id }) {
+                scheduledTaskRuns.append(ScheduledTaskRun(taskId: task.id, projectId: task.projectId, status: .interrupted,
+                    finishedAt: .now, errorMessage: "The app stopped after claiming this one-off task. It was not automatically executed again."))
+            }
+        }
     }
 
     /// Inserts `task`, or replaces the stored task with the same id, and
@@ -31,12 +37,14 @@ extension AppState {
         guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }),
               scheduledTasks[idx].isEnabled != enabled
         else { return }
+        if enabled && scheduledTasks[idx].dueAt != nil && scheduledTasks[idx].claimedAt != nil { return }
         scheduledTasks[idx].isEnabled = enabled
         scheduledTasks[idx].updatedAt = .now
         saveScheduledTasks()
     }
 
     func deleteScheduledTask(id: UUID) {
+        (scheduledPetReportReceiver ?? .shared).cancelScheduledReport(id: id)
         scheduledTasks.removeAll { $0.id == id }
         saveScheduledTasks()
         if scheduledTaskRuns.contains(where: { $0.taskId == id }) {
@@ -49,6 +57,7 @@ extension AppState {
     func deleteScheduledTasks(projectId: UUID) {
         guard scheduledTasks.contains(where: { $0.projectId == projectId }) else { return }
         let ids = Set(scheduledTasks.filter { $0.projectId == projectId }.map(\.id))
+        for id in ids { (scheduledPetReportReceiver ?? .shared).cancelScheduledReport(id: id) }
         scheduledTasks.removeAll { $0.projectId == projectId }
         saveScheduledTasks()
         scheduledTaskRuns.removeAll { ids.contains($0.taskId) }
@@ -63,31 +72,42 @@ extension AppState {
 
     // MARK: - Scheduler
 
-    /// How often the scheduler checks for due tasks. Cron is minute-granular,
-    /// so a shorter tick only matters for how late within the minute a run starts.
+    /// Cron checks stay coalesced; one-off instants and pending reports are checked each second.
     static let scheduledTaskCheckInterval: Duration = .seconds(20)
 
     /// Starts the loop that runs enabled tasks when their schedule comes due.
-    /// Fires missed while the app was closed are skipped; fires missed while
-    /// the Mac slept run once on the next check.
+    /// Missed cron fires while closed are skipped. Unclaimed overdue one-offs run after
+    /// launch/wake; claimed one-offs are never silently repeated after interruption.
     func startScheduledTaskTimer() {
         guard scheduledTaskTimer == nil else { return }
         scheduledTaskTimer = Task { [weak self] in
             // Fires between one check and the next run once.
             var lastCheck = Date.now
+            self?.runDueScheduledTasks(since: lastCheck, now: lastCheck, includeRecurring: false)
             while !Task.isCancelled {
-                try? await Task.sleep(for: AppState.scheduledTaskCheckInterval)
+                try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
                 let now = Date.now
-                self?.runDueScheduledTasks(since: lastCheck, now: now)
-                lastCheck = now
+                let includeRecurring = now.timeIntervalSince(lastCheck) >= 20
+                self?.runDueScheduledTasks(since: lastCheck, now: now, includeRecurring: includeRecurring)
+                if includeRecurring { lastCheck = now }
+                self?.deliverPendingPetReports()
             }
         }
     }
 
     /// Runs every enabled task whose schedule fired after `since` and by `now`.
-    func runDueScheduledTasks(since: Date, now: Date) {
-        for task in dueScheduledTasks(since: since, now: now) {
+    func runDueScheduledTasks(since: Date, now: Date, includeRecurring: Bool = true) {
+        for task in dueScheduledTasks(since: since, now: now, includeRecurring: includeRecurring) {
+            if task.isPetSchedule {
+                guard let index = scheduledTasks.firstIndex(where: { $0.id == task.id }) else { continue }
+                scheduledTasks[index].claimedAt = now
+                if task.dueAt != nil { scheduledTasks[index].isEnabled = false }
+                scheduledPetChecksInFlight.insert(task.id)
+                let claimed = scheduledTasks[index]
+                Task { [weak self] in await self?.executePetScheduledReport(claimed) }
+                continue
+            }
             logger.info("[Scheduled] firing task \(task.id.uuidString, privacy: .public)")
             Task { [weak self] in
                 await self?.runScheduledTask(task, trigger: .schedule)
@@ -96,9 +116,12 @@ extension AppState {
     }
 
     /// Enabled, idle tasks whose schedule fired after `since` and by `now`.
-    func dueScheduledTasks(since: Date, now: Date, calendar: Calendar = .current) -> [ScheduledTask] {
+    func dueScheduledTasks(since: Date, now: Date, calendar: Calendar = .current, includeRecurring: Bool = true) -> [ScheduledTask] {
         scheduledTasks.filter { task in
             guard task.isEnabled,
+                  task.dueAt != nil || includeRecurring,
+                  !scheduledPetChecksInFlight.contains(task.id),
+                  !task.isPetSchedule || task.pendingPetReport == nil,
                   !isScheduledTaskRunning(task.id),
                   let next = task.nextRunDate(after: since, calendar: calendar)
             else { return false }
@@ -114,6 +137,16 @@ extension AppState {
     /// opened, or `nil` when it couldn't start.
     @discardableResult
     func runScheduledTask(_ task: ScheduledTask, trigger: ScheduledTaskRun.Trigger = .schedule) async -> String? {
+        if task.isPetSchedule {
+            guard !scheduledPetChecksInFlight.contains(task.id),
+                  let index = scheduledTasks.firstIndex(where: { $0.id == task.id }),
+                  task.dueAt == nil || task.claimedAt == nil else { return nil }
+            scheduledTasks[index].claimedAt = .now
+            if task.dueAt != nil { scheduledTasks[index].isEnabled = false }
+            scheduledPetChecksInFlight.insert(task.id)
+            await executePetScheduledReport(scheduledTasks[index])
+            return nil
+        }
         let project: Project
         if let projectId = task.projectId {
             guard let found = projects.first(where: { $0.id == projectId }) else {
@@ -383,11 +416,26 @@ extension AppState {
         continuation.resume(returning: task)
     }
 
-    private func saveScheduledTasks() {
+    private func enqueueScheduledTaskSave() -> Task<Void, Error> {
+        let previous = scheduledTaskPersistenceTask
         let tasks = scheduledTasks
-        Task { [persistence, logger] in
+        let next = Task { [persistence] in
+            _ = try? await previous?.value
+            try await persistence.saveScheduledTasks(tasks)
+        }
+        scheduledTaskPersistenceTask = next
+        return next
+    }
+
+    func persistScheduledTasks() async throws {
+        try await enqueueScheduledTaskSave().value
+    }
+
+    private func saveScheduledTasks() {
+        let saved = enqueueScheduledTaskSave()
+        Task { [logger] in
             do {
-                try await persistence.saveScheduledTasks(tasks)
+                try await saved.value
             } catch {
                 logger.error("Failed to save scheduled tasks: \(error.localizedDescription)")
             }

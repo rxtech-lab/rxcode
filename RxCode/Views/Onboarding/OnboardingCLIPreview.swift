@@ -77,7 +77,7 @@ struct CLISetupPreview: View {
             }
 
             HStack {
-                Text(claudeInstalled || codexInstalled ? LocalizedStringKey("Ready to start.") : LocalizedStringKey("Install one CLI, then check again."))
+                Text(claudeInstalled || codexInstalled ? LocalizedStringKey("Ready to start.") : LocalizedStringKey("You can continue without installing either CLI."))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.64))
                 Spacer()

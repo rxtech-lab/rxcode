@@ -7,13 +7,17 @@ struct AgentRuntimeSettingsView: View {
     let catalog: Bool
     @State private var installingRuntime: AgentRuntimeInstaller.Runtime?
     @State private var signingInRuntime: AgentRuntimeInstaller.Runtime?
-    @State private var installSheetRuntime: AgentRuntimeInstaller.Runtime?
+    private struct InstallRequest: Identifiable {
+        let id = UUID()
+        let version: String?
+    }
+
+    @State private var installRequest: InstallRequest?
     @State private var runtimeMessage: String?
     @State private var pendingRemoval: AgentRuntimeInstaller.Runtime?
     @State private var latestVersion: String?
     @State private var updateCheckFailed = false
     @State private var isCheckingForUpdates = false
-    @State private var initialInstallVersion: String?
 
     private var currentVersion: String? {
         runtime == .claude ? appState.claudeVersion : appState.codexVersion
@@ -33,11 +37,11 @@ struct AgentRuntimeSettingsView: View {
             version: runtime == .claude ? appState.claudeVersion : appState.codexVersion,
             path: runtime == .claude ? appState.claudeBinaryPath : appState.codexBinaryPath,
         )
-            .sheet(item: $installSheetRuntime) { runtime in
+            .sheet(item: $installRequest) { request in
                 AgentRuntimeInstallSheet(
                     runtime: runtime,
                     installedVersion: AgentRuntimeVersion.parse(currentVersion),
-                    initialVersion: initialInstallVersion,
+                    initialVersion: request.version,
                     onInstalled: { await appState.refreshAgentInstallations() },
                 )
             }
@@ -75,13 +79,11 @@ struct AgentRuntimeSettingsView: View {
         return Menu("Manage…") {
             if let availableUpdate {
                 Button("Update to \(availableUpdate)…") {
-                    initialInstallVersion = availableUpdate
-                    installSheetRuntime = runtime
+                    installRequest = InstallRequest(version: availableUpdate)
                 }
             }
             Button("Install Version…") {
-                initialInstallVersion = nil
-                installSheetRuntime = runtime
+                installRequest = InstallRequest(version: nil)
             }
             Button(isCheckingForUpdates ? "Checking for Updates…" : "Check for Updates") {
                 Task { await checkForUpdates(forceRefresh: true) }
@@ -157,8 +159,7 @@ struct AgentRuntimeSettingsView: View {
             }
             if catalog {
                 Button("Install…") {
-                    initialInstallVersion = nil
-                    installSheetRuntime = runtime
+                    installRequest = InstallRequest(version: nil)
                 }
                     .controlSize(.small)
                     .disabled(signingInRuntime != nil || installingRuntime != nil)

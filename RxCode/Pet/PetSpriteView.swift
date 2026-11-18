@@ -223,12 +223,14 @@ struct PetSpriteView: View {
     @State private var previousGesture: PetGesture?
     @State private var anchorDate = Date.now
     @State private var bounceScale: CGFloat = 1.0
+    @State private var bodyVolumeStep = 0
     @State private var showPatSparkle = false
     @State private var idleScript = PetIdleScript()
 
     var body: some View {
         let motion = gesture?.motion ?? state.resolvedMotion
         let activeLevel = CGFloat(max(inputLevel, outputLevel))
+        let volumeStep = Int((min(1, max(0, activeLevel)) * 4).rounded())
 
         ZStack {
             // Subtle voice aura ring when voice mode is active
@@ -314,7 +316,18 @@ struct PetSpriteView: View {
             }
         }
         .frame(width: size, height: size)
-        .scaleEffect(bounceScale * (1.0 + activeLevel * 0.045))
+        .scaleEffect(bounceScale * (1.0 + CGFloat(bodyVolumeStep) / 4 * 0.045))
+        .task(id: volumeStep) {
+            guard volumeStep != bodyVolumeStep else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(180))
+            } catch {
+                return
+            }
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                bodyVolumeStep = volumeStep
+            }
+        }
         .onChange(of: animationDebugSummary, initial: true) { _, summary in
             petAnimationLogger.debug("[\(character.id, privacy: .public)] size=\(Int(size)) \(summary, privacy: .public)")
         }

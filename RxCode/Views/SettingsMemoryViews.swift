@@ -116,7 +116,7 @@ struct MemorySettingsSection: View {
             .fixedSize()
             .disabled(!appState.memoryEnabled || !appState.memoryInjectEnabled)
 
-            Text("Saved memory history is available from Manage.")
+            Text("Global memories are shared by all pets and workspaces on this Mac. Project memories stay scoped to their project. Pet memories are available to pets in this workspace. Manage edits or forgets these same records; voice transcript history is separate. No cross-device memory sync is provided.")
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
 
@@ -409,7 +409,7 @@ struct MemoryBrowserSheet: View {
             }
             Button("Cancel", role: .cancel) { deleteTarget = nil }
         } message: {
-            Text("This memory will be removed from future agent context.")
+            Text("This saved memory will be removed from future prompts. Existing conversations may still retain its text. Voice transcript history is managed separately.")
         }
         .alert("Delete All Memories?", isPresented: $showDeleteAllConfirmation) {
             Button("Delete All", role: .destructive) {
@@ -420,7 +420,7 @@ struct MemoryBrowserSheet: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("All saved memories will be removed. This action cannot be undone.")
+            Text("Delete all user-global memories shared by pets and workspaces on this Mac, plus this workspace's project and pet memories? Other workspaces' project memories and voice transcripts are unchanged. This action cannot be undone.")
         }
     }
 
@@ -469,7 +469,7 @@ struct MemoryBrowserSheet: View {
 
     private func memoryRow(_ item: MemoryItem) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: item.scope == "global" ? "globe" : "folder")
+            Image(systemName: item.scope == "pet" ? "pawprint" : (item.scope == "global" ? "globe" : "folder"))
                 .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 .foregroundStyle(ClaudeTheme.accent)
                 .frame(width: 18, height: 18)
@@ -525,7 +525,7 @@ struct MemoryBrowserSheet: View {
         if trimmed.isEmpty {
             items = await appState.allMemoryItems()
         } else {
-            items = await appState.searchMemoryItems(query: trimmed, limit: 100).map(\.item)
+            items = await appState.searchMemoryItems(query: trimmed, limit: 100, includePet: true).map(\.item)
         }
         isLoading = false
     }
@@ -600,6 +600,7 @@ struct MemoryEditorSheet: View {
                 Picker("Scope", selection: $draft.scope) {
                     Text("Project").tag("project")
                     Text("Global").tag("global")
+                    Text("Pet").tag("pet")
                 }
                 .pickerStyle(.menu)
                 .frame(width: 180)

@@ -24,6 +24,9 @@ struct PetCodexRealtimeEngine: VoiceEngine {
         var idePort: UInt16?
         var requestApproval: @Sendable (RxAgentCore.JSONValue) async -> Bool
         var onUserTurn: @Sendable () async -> Void
+        /// Thread instructions only reach the backing Codex model; this compact context is
+        /// seeded into the realtime session so the speaking model sees persona, memory and history.
+        var realtimeContext: String = ""
     }
 
     let prepareLaunch: @Sendable () async throws -> LaunchParameters
@@ -32,6 +35,11 @@ struct PetCodexRealtimeEngine: VoiceEngine {
     let onConnected: @Sendable () async -> Void
     let onToolEvent: @Sendable (AgentEvent?) async -> Void
     let bindWebRTCMuteHandler: @Sendable (@escaping @Sendable (Bool) -> Void) -> Void
+    let notifications: PetRealtimeVoiceNotifications
+    var makeClient: @Sendable (LaunchParameters) -> CodexClient = { launch in
+        CodexClient(approvalPolicy: .onRequest, sandbox: .workspaceWrite, configOverrides: launch.configOverrides)
+    }
+    var makePeer: @Sendable (@escaping @Sendable (CodexRealtimePeer.State) -> Void) -> any PetCodexVoicePeer = { CodexRealtimePeer(onStateChange: $0) }
 
     /// Scope automatic tool access to the trusted IDE bridge, preserving shell, file,
     /// external MCP and resource-access approval policies.
@@ -164,7 +172,8 @@ struct PetCodexRealtimeEngine: VoiceEngine {
             onLevels: onLevels,
             onConnected: onConnected,
             onToolEvent: onToolEvent,
-            bindWebRTCMuteHandler: bindWebRTCMuteHandler
+            bindWebRTCMuteHandler: bindWebRTCMuteHandler,
+            notifications: notifications, makeClient: makeClient, makePeer: makePeer
         )
         try await connection.start()
         return connection
@@ -186,14 +195,19 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
     private let onConnected: @Sendable () async -> Void
     private let onToolEvent: @Sendable (AgentEvent?) async -> Void
     private let bindWebRTCMuteHandler: @Sendable (@escaping @Sendable (Bool) -> Void) -> Void
+    private let notifications: PetRealtimeVoiceNotifications
+    private let makeClient: @Sendable (PetCodexRealtimeEngine.LaunchParameters) -> CodexClient
+    private let makePeer: @Sendable (@escaping @Sendable (CodexRealtimePeer.State) -> Void) -> any PetCodexVoicePeer
 
     private var session: CodexRealtimeSession?
-    private var peer: CodexRealtimePeer?
+    private var peer: (any PetCodexVoicePeer)?
     private var eventReaderTask: Task<Void, Never>?
     private var levelPollingTask: Task<Void, Never>?
     private var currentAssistantItemID: String?
     private var receivedAssistantDeltas = false
     private var receivedUserDeltas = false
+    private var lastAssistantFinal: String?
+    private var lastAssistantItemID: String?
     private var isReadyEmitted = false
     private var closed = false
 
@@ -204,7 +218,10 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
         onLevels: @escaping @Sendable (Float, Float) -> Void,
         onConnected: @escaping @Sendable () async -> Void,
         onToolEvent: @escaping @Sendable (AgentEvent?) async -> Void,
-        bindWebRTCMuteHandler: @escaping @Sendable (@escaping @Sendable (Bool) -> Void) -> Void
+        bindWebRTCMuteHandler: @escaping @Sendable (@escaping @Sendable (Bool) -> Void) -> Void,
+        notifications: PetRealtimeVoiceNotifications,
+        makeClient: @escaping @Sendable (PetCodexRealtimeEngine.LaunchParameters) -> CodexClient,
+        makePeer: @escaping @Sendable (@escaping @Sendable (CodexRealtimePeer.State) -> Void) -> any PetCodexVoicePeer
     ) {
         self.launch = launch
         self.instructions = instructions
@@ -213,19 +230,18 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
         self.onConnected = onConnected
         self.onToolEvent = onToolEvent
         self.bindWebRTCMuteHandler = bindWebRTCMuteHandler
+        self.notifications = notifications
+        self.makeClient = makeClient
+        self.makePeer = makePeer
         (events, output) = AsyncStream.makeStream()
     }
 
     func start() async throws {
-        let client = CodexClient(
-            approvalPolicy: .onRequest,
-            sandbox: .workspaceWrite,
-            configOverrides: launch.configOverrides
-        )
+        let client = makeClient(launch)
 
         let transport: CodexRealtimeTransport
         if launch.transportPreference == .webRTC {
-            let webrtcPeer = CodexRealtimePeer { [weak self] state in
+            let webrtcPeer = makePeer { [weak self] state in
                 Task { await self?.handlePeerStateChange(state) }
             }
             self.peer = webrtcPeer
@@ -242,6 +258,7 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
             let realtimeSession = try await client.startRealtime(
                 workingDirectory: launch.workingDirectory,
                 instructions: instructions,
+                initialItems: launch.realtimeContext.isEmpty ? [] : [.init(role: .developer, text: launch.realtimeContext)],
                 voice: launch.voice.isEmpty ? nil : launch.voice,
                 model: (launch.model?.isEmpty == false) ? launch.model : nil,
                 transport: transport,
@@ -257,6 +274,10 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
                 throw CancellationError()
             }
             self.session = realtimeSession
+            await notifications.bind { [weak self] text in
+                guard let self else { throw VoiceError.invalidState }
+                try await self.sendAnnouncement(text)
+            }
 
             eventReaderTask = Task { [weak self] in
                 for await event in realtimeSession.events {
@@ -290,8 +311,15 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
         guard !closed, let session else { throw VoiceError.invalidState }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        lastAssistantFinal = nil
         output.yield(.userTranscript(itemID: UUID().uuidString, text: trimmed, isFinal: true))
         try await session.appendText(trimmed)
+    }
+
+    private func sendAnnouncement(_ text: String) async throws {
+        guard !closed, let session else { throw VoiceError.invalidState }
+        lastAssistantFinal = nil
+        try await session.appendSpeech(text)
     }
 
     func interrupt(_ interruption: VoiceInterruption) async throws {
@@ -307,6 +335,7 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
     func close() async {
         guard !closed else { return }
         closed = true
+        await notifications.disconnected()
         eventReaderTask?.cancel()
         eventReaderTask = nil
         levelPollingTask?.cancel()
@@ -332,6 +361,7 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
         switch event.method {
         case "thread/realtime/started":
             if launch.transportPreference == .websocket && !isReadyEmitted {
+                await notifications.connected()
                 isReadyEmitted = true
                 output.yield(.ready)
                 await onConnected()
@@ -355,7 +385,11 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
                   rate > 0, rate <= 192_000, channels > 0, channels <= 8 else {
                 return
             }
-            let itemID = audio["itemId"]?.stringValue ?? ensureAssistantItemID()
+            // Output can trail transcript completion. Keep it attached to that reply
+            // instead of creating a new transcript item or reopening notification activity.
+            let itemID = audio["itemId"]?.stringValue
+                ?? (lastAssistantFinal != nil ? lastAssistantItemID : nil)
+                ?? ensureAssistantItemID()
             if let frame = try? VoiceAudioFrame(
                 data: data,
                 format: VoicePCMFormat(sampleRate: Int(rate), channels: Int(channels))
@@ -366,7 +400,9 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
         case "thread/realtime/transcript/delta":
             guard let delta = params["delta"]?.stringValue, !delta.isEmpty else { return }
             if isUser {
+                lastAssistantFinal = nil
                 if !receivedUserDeltas {
+                    await notifications.responseStarted()
                     output.yield(.userSpeechStarted)
                     await launch.onUserTurn()
                 }
@@ -374,6 +410,8 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
                 return
             }
             let itemID = ensureAssistantItemID()
+            lastAssistantFinal = nil
+            await notifications.responseStarted()
             let normalized = receivedAssistantDeltas ? delta : String(delta.drop(while: \.isWhitespace))
             receivedAssistantDeltas = true
             if !normalized.isEmpty {
@@ -384,19 +422,24 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
             let text = (params["text"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if isUser {
                 if !text.isEmpty {
+                    lastAssistantFinal = nil
                     output.yield(.userSpeechStopped)
                     if !receivedUserDeltas { await launch.onUserTurn() }
                     output.yield(.userTranscript(itemID: UUID().uuidString, text: text, isFinal: true))
                 }
                 receivedUserDeltas = false
             } else {
+                guard text != lastAssistantFinal || receivedAssistantDeltas || currentAssistantItemID != nil else { return }
                 let itemID = currentAssistantItemID ?? UUID().uuidString
                 if !receivedAssistantDeltas && !text.isEmpty {
                     output.yield(.assistantText(itemID: itemID, delta: text))
                 }
                 output.yield(.assistantDone(itemID: itemID))
+                await notifications.responseFinished()
                 currentAssistantItemID = nil
                 receivedAssistantDeltas = false
+                lastAssistantFinal = text
+                lastAssistantItemID = itemID
             }
 
         case "item/started", "item/completed":
@@ -427,6 +470,7 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
         switch state {
         case .connected:
             if !isReadyEmitted {
+                await notifications.connected()
                 isReadyEmitted = true
                 output.yield(.ready)
                 await onConnected()
@@ -481,25 +525,34 @@ private actor PetCodexRealtimeConnection: VoiceConnection {
 
 // MARK: - Nonisolated WebRTC Peer Connection
 
-nonisolated final class CodexRealtimePeer: NSObject, RTCPeerConnectionDelegate, @unchecked Sendable {
+nonisolated protocol PetCodexVoicePeer: Sendable {
+    func makeOffer() async throws -> String
+    func accept(answer: String) async throws
+    func setMicrophoneMuted(_ muted: Bool)
+    func levels() async -> (input: Double, output: Double)
+    func close()
+}
+
+nonisolated final class CodexRealtimePeer: NSObject, RTCPeerConnectionDelegate, PetCodexVoicePeer, @unchecked Sendable {
     enum State: Sendable {
         case connected
         case failed
     }
 
-    private static let factory: RTCPeerConnectionFactory = {
-        RTCInitializeSSL()
-        return RTCPeerConnectionFactory()
-    }()
+    private static let initializeSSL: Void = { _ = RTCInitializeSSL() }()
+    private let factory: RTCPeerConnectionFactory
 
     private let onStateChange: @Sendable (State) -> Void
     private let lock = NSLock()
     private var connection: RTCPeerConnection?
     private var audioTrack: RTCAudioTrack?
+    private var microphoneMuted = true
     private var eventsChannel: RTCDataChannel?
     private var remoteSpeechEnergy = PetRemoteSpeechEnergy()
 
-    init(onStateChange: @escaping @Sendable (State) -> Void) {
+    init(device: PetRTCDevice? = nil, onStateChange: @escaping @Sendable (State) -> Void) {
+        _ = Self.initializeSSL
+        factory = device?.makeFactory() ?? RTCPeerConnectionFactory()
         self.onStateChange = onStateChange
         super.init()
     }
@@ -509,7 +562,7 @@ nonisolated final class CodexRealtimePeer: NSObject, RTCPeerConnectionDelegate, 
         config.sdpSemantics = .unifiedPlan
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 
-        guard let peerConn = Self.factory.peerConnection(with: config, constraints: constraints, delegate: self) else {
+        guard let peerConn = factory.peerConnection(with: config, constraints: constraints, delegate: self) else {
             throw VoiceError.unavailable("Failed to create WebRTC peer connection.")
         }
 
@@ -519,14 +572,17 @@ nonisolated final class CodexRealtimePeer: NSObject, RTCPeerConnectionDelegate, 
             "googAutoGainControl": "true",
             "googHighpassFilter": "true",
         ])
-        let source = Self.factory.audioSource(with: audioConstraints)
-        let micTrack = Self.factory.audioTrack(with: source, trackId: "rxcode-mic")
+        let source = factory.audioSource(with: audioConstraints)
+        let micTrack = factory.audioTrack(with: source, trackId: "rxcode-mic")
+        lock.withLock {
+            micTrack.isEnabled = !microphoneMuted
+            audioTrack = micTrack
+        }
         peerConn.add(micTrack, streamIds: ["rxcode-pet"])
         let dataChannel = peerConn.dataChannel(forLabel: "oai-events", configuration: RTCDataChannelConfiguration())
 
         lock.withLock {
             connection = peerConn
-            audioTrack = micTrack
             eventsChannel = dataChannel
         }
 
@@ -561,10 +617,10 @@ nonisolated final class CodexRealtimePeer: NSObject, RTCPeerConnectionDelegate, 
     }
 
     func setMicrophoneMuted(_ muted: Bool) {
-        lock.lock()
-        let track = audioTrack
-        lock.unlock()
-        track?.isEnabled = !muted
+        lock.withLock {
+            microphoneMuted = muted
+            audioTrack?.isEnabled = !muted
+        }
     }
 
     func levels() async -> (input: Double, output: Double) {

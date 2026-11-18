@@ -64,7 +64,7 @@ struct ScheduledTaskFormSheet: View {
     private var canSave: Bool {
         !trimmedName.isEmpty && !trimmedPrompt.isEmpty
             && projectIsValid
-            && (try? parseResult.get()) != nil
+            && (draft.dueAt != nil || (try? parseResult.get()) != nil)
     }
 
     private var canGenerateDraft: Bool {
@@ -75,7 +75,7 @@ struct ScheduledTaskFormSheet: View {
 
     /// No project is a valid choice; a chosen one must still exist.
     private var projectIsValid: Bool {
-        guard let projectId = draft.projectId else { return true }
+        guard let projectId = draft.projectId else { return !draft.isPetProgressCheck }
         return appState.projects.contains { $0.id == projectId }
     }
 
@@ -210,17 +210,23 @@ struct ScheduledTaskFormSheet: View {
                 }
             }
             Section {
-                projectPicker
+                if draft.resolvedPetScheduleKind == .reminder {
+                    LabeledContent("Type", value: "Pet reminder · No project")
+                } else {
+                    projectPicker
+                }
                 TextField("Name", text: $draft.name, prompt: Text("Daily dependency check"))
-                LabeledContent("Model") {
-                    modelMenu
+                if !draft.isPetSchedule {
+                    LabeledContent("Model") { modelMenu }
                 }
                 Toggle("Enabled", isOn: $draft.isEnabled)
             } footer: {
-                projectFooter
+                if draft.resolvedPetScheduleKind == .reminder {
+                    Text("General reminders are independent of projects.")
+                } else { projectFooter }
             }
 
-            Section("Prompt") {
+            Section(draft.resolvedPetScheduleKind == .reminder ? "Reminder text" : (draft.isPetSchedule ? "Request (context only)" : "Prompt")) {
                 TextEditor(text: $draft.prompt)
                     .font(.system(size: 13))
                     .frame(minHeight: 100)
@@ -228,6 +234,12 @@ struct ScheduledTaskFormSheet: View {
             }
 
             Section {
+                if draft.dueAt != nil {
+                    DatePicker("Run Once", selection: Binding(get: { draft.dueAt ?? .now }, set: { draft.dueAt = $0 }), displayedComponents: [.date, .hourAndMinute])
+                        .environment(\.timeZone, TimeZone(identifier: draft.timeZoneIdentifier ?? "") ?? .current)
+                    Text("Timezone: \(draft.timeZoneIdentifier ?? TimeZone.current.identifier). Overdue tasks run once after launch or wake. A claimed task is not repeated after interruption.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
                 HStack {
                     Text(draft.cronExpression)
                         .font(.system(size: 13, design: .monospaced))
@@ -241,6 +253,7 @@ struct ScheduledTaskFormSheet: View {
                     .accessibilityIdentifier("scheduled-task-edit-schedule")
                 }
                 parsedSchedulePreview
+                }
             } header: {
                 Text("Schedule")
             } footer: {
@@ -249,6 +262,17 @@ struct ScheduledTaskFormSheet: View {
                     .foregroundStyle(.secondary)
             }
 
+            if draft.isPetSchedule {
+                Section(draft.resolvedPetScheduleKind == .reminder ? "Pet Reminder" : "Pet Report") {
+                    if draft.resolvedPetScheduleKind == .reminder {
+                        Text("At the due time, the pet delivers this reminder text as a caption and spoken notification according to Pet & Voice preferences. No project is checked and no agent is dispatched. Muting the microphone does not silence notifications.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("This check reads observed task-board and thread activity. It does not dispatch an agent or execute the request as project actions. Captions and speech follow Pet & Voice notification preferences; a muted microphone does not silence output.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
             Section {
                 Picker("When a run finishes", selection: $draft.notification) {
                     ForEach(ScheduledTaskNotification.allCases, id: \.self) { option in
@@ -260,6 +284,7 @@ struct ScheduledTaskFormSheet: View {
                 Text("Notification")
             } footer: {
                 notificationFooter
+            }
             }
         }
         .formStyle(.grouped)

@@ -399,6 +399,9 @@ final class AppState: IDEToolHandling {
     var agentPrompts = AgentPromptState()
     /// The loop that fires scheduled tasks when their cron schedule comes due.
     @ObservationIgnored var scheduledTaskTimer: Task<Void, Never>?
+    @ObservationIgnored var scheduledPetChecksInFlight: Set<UUID> = []
+    @ObservationIgnored var scheduledTaskPersistenceTask: Task<Void, Error>?
+    @ObservationIgnored weak var scheduledPetReportReceiver: PetController?
 
     /// Selected default ACP client id (when `selectedAgentProvider == .acp`).
     var selectedACPClientId: String = "" {
@@ -1151,7 +1154,7 @@ final class AppState: IDEToolHandling {
     /// sent through Autopilot, scoped to this workspace.
     let notificationStore: NotificationStore
     var searchService = ThreadSearchService()
-    var memoryService = MemoryService()
+    var memoryService = MemoryService(globalMemories: .userGlobal)
     /// Live progress for a user-triggered full reindex. `nil` when idle.
     var reindexProgress: (done: Int, total: Int)? = nil
     let runService = RunService()
@@ -1243,6 +1246,7 @@ final class AppState: IDEToolHandling {
     @ObservationIgnored var cloudSyncDebounceTasks: [UUID: Task<Void, Never>] = [:]
     /// Projects changed again while their sync was running, so it re-runs.
     @ObservationIgnored var cloudSyncRerunProjectIds: Set<UUID> = []
+    @ObservationIgnored var cloudNextPoll: [UUID: Date] = [:]
     @ObservationIgnored var cloudSyncPollTask: Task<Void, Never>?
 
     // MARK: - Run Profiles
@@ -1367,6 +1371,7 @@ final class AppState: IDEToolHandling {
         self.marketplace = MarketplaceService(baseURL: active.storageURL)
         self.mcp = MCPService(baseURL: active.storageURL, claudeService: claude)
         let threadStore = ThreadStore.make(baseURL: active.storageURL)
+        if active.isPersonal && !AppSupport.isTestProcess { MemoryService.registerPersonalStore(threadStore) }
         self.threadStore = threadStore
         self.threadStoreReader = ThreadStoreReader(container: threadStore.container)
         self.briefingStore = BriefingStore(
@@ -1410,6 +1415,7 @@ final class AppState: IDEToolHandling {
             // of any threads that don't have chunks yet.
             let searchService = self.searchService
             let memoryService = self.memoryService
+            let keepsGlobalRows = self.activeWorkspace.isPersonal
             let threadStore = self.threadStore
             let threadStoreReader = self.threadStoreReader
             let persistence = self.persistence
@@ -1417,7 +1423,7 @@ final class AppState: IDEToolHandling {
             Task.detached(priority: .utility) { [weak self] in
                 await searchService.setWorkspaceDefaults(workspaceDefaults)
                 await searchService.start(threadStore: threadStore, reader: threadStoreReader)
-                await memoryService.start(threadStore: threadStore)
+                await memoryService.start(threadStore: threadStore, keepsGlobalRows: keepsGlobalRows)
                 await searchService.backfillIfNeeded(
                     loadAll: { await threadStoreReader.loadSummaries() },
                     loadFull: { @MainActor [weak self] summary -> ChatSession? in

@@ -291,18 +291,23 @@ private struct ScheduledTaskRow: View {
                         .lineLimit(2)
                 }
                 HStack(spacing: 10) {
-                    Text(task.cronExpression)
+                    Text(task.dueAt.map { "Once: \($0.formatted(date: .abbreviated, time: .shortened))" } ?? task.cronExpression)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(ClaudeTheme.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 4))
                     nextRunLabel
+                    if task.isPetSchedule {
+                        Label(task.resolvedPetScheduleKind == .reminder ? "Pet reminder" : "Pet progress report", systemImage: "waveform")
+                            .font(.system(size: 11)).foregroundStyle(ClaudeTheme.textTertiary)
+                    } else {
                     Label(appState.taskAgentLabel(appState.resolvedAgent(for: task)), systemImage: "sparkles")
                         .font(.system(size: 11))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                         .lineLimit(1)
                         .help(task.agent.isAssigned ? "Model" : "Default task agent")
+                    }
                     if task.notification != .none {
                         Label(task.notification.title, systemImage: "envelope")
                             .font(.system(size: 11))
@@ -341,6 +346,7 @@ private struct ScheduledTaskRow: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .labelsHidden()
+            .disabled(task.dueAt != nil && task.claimedAt != nil)
             .help(task.isEnabled ? "Pause this schedule" : "Resume this schedule")
         }
         .padding(.horizontal, 14)
@@ -376,7 +382,10 @@ private struct ScheduledTaskRow: View {
 
     @ViewBuilder
     private var nextRunLabel: some View {
-        if task.schedule == nil {
+        if task.dueAt != nil && task.claimedAt != nil {
+            Label(task.pendingPetReport != nil ? "Report pending" : task.lastRunAt != nil ? "Completed" : "Claimed", systemImage: "checkmark.circle")
+                .font(.system(size: 11)).foregroundStyle(ClaudeTheme.textTertiary)
+        } else if task.schedule == nil && task.dueAt == nil {
             Label("Invalid schedule", systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: 11))
                 .foregroundStyle(ClaudeTheme.statusError)

@@ -159,9 +159,7 @@ extension PetController {
                 if let driver = self.currentHardwareAudioDriver {
                     driver.playToolCue()
                 } else {
-                    // WebRTC owns its audio graph; use the default output alongside that graph.
-                    let device = self.activeVoiceMode == .codexRealtime ? nil : self.configuration.speakerDeviceUID
-                    await self.toolSounds.playActivityCue(outputDeviceUID: device)
+                    await self.toolSounds.playActivityCue(outputDeviceUID: self.configuration.speakerDeviceUID)
                 }
                 do {
                     try await Task.sleep(for: .milliseconds(300))
@@ -180,21 +178,21 @@ nonisolated final class PetToolSoundPlayer: Sendable {
     private let queue = DispatchQueue(label: "com.rxlab.RxCode.pet-tool-sounds", qos: .userInitiated)
     private let activityCue: @Sendable (String?) -> Void
     private let stopCue: @Sendable () -> Void
-    private let apply: @Sendable (_ isRunning: Bool, _ didFinish: Bool) -> Void
+    private let apply: @Sendable (Bool, Bool, String?) -> Void
 
     init(loadingSoundName: String = "Pop", apply: (@Sendable (Bool, Bool) -> Void)? = nil) {
         let sounds = Sounds(loadingSoundName: loadingSoundName)
         self.activityCue = { sounds.playActivityCue(outputDeviceUID: $0) }
         self.stopCue = { sounds.stopActivityCue() }
         if let apply {
-            self.apply = apply
+            self.apply = { running, finished, _ in apply(running, finished) }
         } else {
-            self.apply = { sounds.update(isRunning: $0, didFinish: $1) }
+            self.apply = { sounds.update(isRunning: $0, didFinish: $1, outputDeviceUID: $2) }
         }
     }
 
-    func update(isRunning: Bool, didFinish: Bool) {
-        queue.async { [apply] in apply(isRunning, didFinish) }
+    func update(isRunning: Bool, didFinish: Bool, outputDeviceUID: String? = nil) {
+        queue.async { [apply] in apply(isRunning, didFinish, outputDeviceUID) }
     }
 
     func playActivityCue(outputDeviceUID: String?) async {
@@ -213,7 +211,7 @@ nonisolated final class PetToolSoundPlayer: Sendable {
 
     deinit {
         // The queued closure owns the sounds until stop and destruction finish off-main.
-        queue.async { [apply, stopCue] in apply(false, false); stopCue() }
+        queue.async { [apply, stopCue] in apply(false, false, nil); stopCue() }
     }
 
     /// Only touched by the player's serial queue, including final release.
@@ -244,11 +242,12 @@ nonisolated final class PetToolSoundPlayer: Sendable {
             activity?.stop()
         }
 
-        func update(isRunning: Bool, didFinish: Bool) {
+        func update(isRunning: Bool, didFinish: Bool, outputDeviceUID: String? = nil) {
             dispatchPrecondition(condition: .notOnQueue(.main))
             if isRunning {
                 if loading == nil {
-                    loading = NSSound(named: NSSound.Name(loadingSoundName))
+                    loading = NSSound(named: NSSound.Name(loadingSoundName))?.copy() as? NSSound
+                    loading?.playbackDeviceIdentifier = outputDeviceUID
                     loading?.volume = 0.12
                     loading?.loops = true
                 }
@@ -259,10 +258,11 @@ nonisolated final class PetToolSoundPlayer: Sendable {
             }
             if didFinish {
                 if done == nil {
-                    done = NSSound(named: NSSound.Name("Glass"))
+                    done = NSSound(named: NSSound.Name("Glass"))?.copy() as? NSSound
                     done?.volume = 0.2
                 }
                 done?.stop()
+                done?.playbackDeviceIdentifier = outputDeviceUID
                 done?.play()
             }
         }

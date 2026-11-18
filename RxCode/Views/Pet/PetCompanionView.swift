@@ -14,6 +14,7 @@ struct PetCompanionView: View {
     @State private var isAtBottom = true
     @State private var transcriptStartedAt = Date()
     @FocusState private var isComposerFocused: Bool
+    @State private var tapDebouncer = PetTapDebouncer()
 
     private var appState: AppState {
         controller.appState ?? workspaceManager.frontmostAppState
@@ -92,6 +93,7 @@ struct PetCompanionView: View {
         }
         .frame(minWidth: 620, idealWidth: 700, maxWidth: .infinity,
                minHeight: 560, idealHeight: 660, maxHeight: .infinity)
+        .task(id: controller.displayedHistoryScope) { await controller.loadDisplayedHistory() }
         .environment(chatBridge)
         .onChange(of: transcriptMessages, initial: true) { _, messages in
             chatBridge.messages = messages
@@ -214,8 +216,11 @@ struct PetCompanionView: View {
 
                 if controller.isVoiceActive {
                     HStack(spacing: 8) {
-                        levelMeter(label: "Mic", value: controller.inputLevel, tint: .cyan)
-                        levelMeter(label: "Voice", value: controller.outputLevel, tint: .blue)
+                        levelMeter(label: controller.isMuted ? "Microphone muted" : "Microphone level",
+                                   systemImage: controller.isMuted ? "mic.slash.fill" : "mic.fill",
+                                   value: controller.inputLevel, tint: .cyan, isEnabled: !controller.isMuted)
+                        levelMeter(label: "\(controller.character.displayName) voice level",
+                                   systemImage: "speaker.wave.2.fill", value: controller.outputLevel, tint: .blue)
                     }
                 }
             }
@@ -258,20 +263,21 @@ struct PetCompanionView: View {
         }
     }
 
-    private func levelMeter(label: String, value: Float, tint: Color) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.system(size: ClaudeTheme.size(9), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(ClaudeTheme.surfaceSecondary)
-                    .frame(width: 40, height: 5)
-                Capsule()
-                    .fill(tint)
-                    .frame(width: max(2, min(40, CGFloat(value) * 40)), height: 5)
-            }
+    private func levelMeter(label: String, systemImage: String, value: Float, tint: Color, isEnabled: Bool = true) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                .foregroundStyle(isEnabled ? tint : ClaudeTheme.textTertiary)
+                .frame(width: 12)
+            PetVoiceWaveform(level: value, tint: tint, isEnabled: isEnabled, barWidth: 2, barSpacing: 1.5)
+                .frame(width: 46, height: 14)
         }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(ClaudeTheme.surfaceSecondary.opacity(0.7), in: Capsule())
+        .help(label)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
     }
 
     private var statusTint: Color {
@@ -305,7 +311,7 @@ struct PetCompanionView: View {
                         )
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(controller.isVoiceActive || controller.isMuted)
+                    .disabled(controller.isVoiceActive)
 
                     Button {
                         Task { await controller.triggerDailyReport(speakAloud: true, openSheet: true) }
@@ -337,17 +343,25 @@ struct PetCompanionView: View {
 
     // Keep row and text-block identities stable as each reply streams in.
     private var transcriptMessages: [ChatMessage] {
-        if controller.isVoiceActive {
-            return (controller.voiceSession?.transcript ?? []).map { entry in
-                transcriptMessage(id: entry.id, isUser: entry.isUser, text: entry.text,
-                                  isStreaming: !entry.isFinal)
+        let archive = controller.displayedHistory
+        let saved = archive?.scope == controller.displayedHistoryScope ? archive?.turns ?? [] : []
+        let live: [ChatMessage]
+        if controller.isVoiceActive, controller.voiceHistoryBinding?.scope == controller.displayedHistoryScope {
+            live = (controller.voiceSession?.transcript ?? []).map { entry in
+                transcriptMessage(id: entry.id, isUser: entry.isUser, text: entry.text, isStreaming: !entry.isFinal)
             }
+        } else if controller.isSendingText, controller.textHistoryID == archive?.id,
+                  archive?.scope == controller.displayedHistoryScope {
+            live = controller.chatTranscript.map { entry in
+                transcriptMessage(id: entry.id, isUser: entry.isUser, text: entry.text, isStreaming: !entry.isUser)
+            }
+        } else {
+            live = []
         }
-        return controller.chatTranscript.map { entry in
-            transcriptMessage(id: entry.id, isUser: entry.isUser, text: entry.text,
-                              isStreaming: controller.isSendingText && !entry.isUser
-                                  && entry.id == controller.chatTranscript.last?.id)
-        }
+        let liveIDs = Set(live.map(\.id))
+        return saved.filter { !liveIDs.contains($0.id) }.map {
+            transcriptMessage(id: $0.id, isUser: $0.isUser, text: $0.text, isStreaming: false)
+        } + live
     }
 
     private func transcriptMessage(id: UUID, isUser: Bool, text: String, isStreaming: Bool) -> ChatMessage {
@@ -396,7 +410,7 @@ struct PetCompanionView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        controller.toggleVoice()
+                        tapDebouncer.run("voice") { controller.toggleVoice() }
                     } label: {
                         Label(
                             controller.isVoiceActive ? "Stop Voice" : "Start Voice",
@@ -405,18 +419,8 @@ struct PetCompanionView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(controller.isVoiceActive ? .red : ClaudeTheme.accent)
-                    .disabled(controller.isMuted)
 
-                    Button {
-                        controller.toggleMute()
-                    } label: {
-                        Label(
-                            controller.isMuted ? "Unmute Pet" : "Mute Pet",
-                            systemImage: controller.isMuted ? "mic.slash.fill" : "mic.fill"
-                        )
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Silence pet speech, including notification announcements")
+                    microphoneButton
 
                     if controller.isVoiceActive, let session = controller.voiceSession {
                         if session.activity == .agentSpeaking || controller.isStandaloneSpeaking {
@@ -461,6 +465,46 @@ struct PetCompanionView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
         .padding(.top, 8)
+    }
+
+    private var microphoneButton: some View {
+        let muted = controller.isMuted
+        let live = controller.isVoiceActive && !muted
+        return Button {
+            tapDebouncer.run("mute") { controller.toggleMute() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: muted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                    .foregroundStyle(muted ? Color.orange : (live ? Color.cyan : ClaudeTheme.textSecondary))
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 14)
+                if live {
+                    PetVoiceWaveform(level: controller.inputLevel, tint: .cyan, barWidth: 2, barSpacing: 1.5)
+                        .frame(width: 40, height: 14)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+                } else if muted {
+                    Text("Muted")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .foregroundStyle(Color.orange)
+                        .transition(.opacity)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(
+                Capsule().fill(muted ? Color.orange.opacity(0.14)
+                               : (live ? Color.cyan.opacity(0.12) : ClaudeTheme.surfaceSecondary))
+            )
+            .overlay(Capsule().strokeBorder(muted ? Color.orange.opacity(0.35)
+                                            : (live ? Color.cyan.opacity(0.3) : ClaudeTheme.border)))
+            .contentShape(Capsule())
+            .animation(.snappy(duration: 0.22), value: muted)
+            .animation(.snappy(duration: 0.22), value: live)
+        }
+        .buttonStyle(.plain)
+        .help(muted ? "Unmute Microphone" : "Mute Microphone (keep conversation connected)")
+        .accessibilityLabel(muted ? "Unmute Microphone" : "Mute Microphone")
     }
 
     private func submitTypedMessage() {

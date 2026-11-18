@@ -3356,6 +3356,7 @@
       }
     },
     "All saved memories will be removed. This action cannot be undone." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4063,6 +4064,9 @@
         }
       }
     },
+    "At the due time, the pet delivers this reminder text as a caption and spoken notification according to Pet & Voice preferences. No project is checked and no agent is dispatched. Muting the microphone does not silence notifications." : {
+
+    },
     "Attachments" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4074,6 +4078,9 @@
       }
     },
     "Audio Devices" : {
+
+    },
+    "Audio level" : {
 
     },
     "Authenticate on GitHub" : {
@@ -5712,6 +5719,9 @@
         }
       }
     },
+    "Claimed" : {
+
+    },
     "Claude CLI Installation Check" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6366,9 +6376,6 @@
     "Codex Realtime connects through RxAgentSDK and exposes RxCode IDE tools so you can manage tasks, send threads, and open interactive views by voice." : {
 
     },
-    "Codex Realtime over WebRTC always uses the system default microphone and speaker. The devices chosen here apply to the Local Pipeline, the WebSocket transport, and pet announcements." : {
-
-    },
     "Codex Realtime Voice" : {
 
     },
@@ -6654,6 +6661,9 @@
         }
       }
     },
+    "Completed" : {
+
+    },
     "Completion could not be verified. Review the task and continue its chat." : {
       "localizations" : {
         "zh-Hans" : {
@@ -6844,6 +6854,7 @@
       }
     },
     "Connect at least one agent CLI" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8782,6 +8793,9 @@
         }
       }
     },
+    "Delete all user-global memories shared by pets and workspaces on this Mac, plus this workspace's project and pet memories? Other workspaces' project memories and voice transcripts are unchanged. This action cannot be undone." : {
+
+    },
     "Delete Briefing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9780,6 +9794,9 @@
 
     },
     "Download Action Failed" : {
+
+    },
+    "Download an agent now or add one later in Settings." : {
 
     },
     "Download Anyway" : {
@@ -12221,6 +12238,9 @@
         }
       }
     },
+    "General reminders are independent of projects." : {
+
+    },
     "Generate" : {
       "localizations" : {
         "ko" : {
@@ -12559,6 +12579,9 @@
         }
       }
     },
+    "Global memories are shared by all pets and workspaces on this Mac. Project memories stay scoped to their project. Pet memories are available to pets in this workspace. Manage edits or forgets these same records; voice transcript history is separate. No cross-device memory sync is provided." : {
+
+    },
     "Global prompt" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12632,6 +12655,9 @@
           }
         }
       }
+    },
+    "Hearing you" : {
+
     },
     "hf_…" : {
 
@@ -13636,6 +13662,7 @@
 
     },
     "Install one CLI, then check again." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -15799,6 +15826,9 @@
     "Microphone access is restricted by this Mac's policy. Contact your administrator." : {
 
     },
+    "Microphone input level" : {
+
+    },
     "Milestone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16133,10 +16163,13 @@
         }
       }
     },
-    "Mute Pet" : {
+    "Mute Microphone" : {
 
     },
-    "Mute Pet (including notifications)" : {
+    "Mute Microphone (keep conversation connected)" : {
+
+    },
+    "Muted" : {
 
     },
     "My Relay Server" : {
@@ -19783,6 +19816,18 @@
     "Pet Player" : {
 
     },
+    "Pet progress report" : {
+
+    },
+    "Pet reminder" : {
+
+    },
+    "Pet Reminder" : {
+
+    },
+    "Pet Report" : {
+
+    },
     "Pet Size" : {
 
     },
@@ -19975,6 +20020,9 @@
 
     },
     "Play quiet activity cues while pet tools run. Cues pause during speech and while the call is muted." : {
+
+    },
+    "Play Test Sound" : {
 
     },
     "Point at the chart to read every provider's usage at that time." : {
@@ -21347,6 +21395,9 @@
         }
       }
     },
+    "Reminder text" : {
+
+    },
     "Remote" : {
       "localizations" : {
         "ko" : {
@@ -21855,6 +21906,9 @@
         }
       }
     },
+    "Report pending" : {
+
+    },
     "Report Time" : {
 
     },
@@ -21895,6 +21949,9 @@
           }
         }
       }
+    },
+    "Request (context only)" : {
+
     },
     "Required for requested window focus, clicks, scrolling and typing. Enable this copy of RxCode in System Settings. If authorization does not update, fully quit and reopen the same app. Screen Recording is a separate permission." : {
 
@@ -22133,6 +22190,9 @@
           }
         }
       }
+    },
+    "Retry Account Check" : {
+
     },
     "Retry Loading Categories" : {
 
@@ -22410,6 +22470,9 @@
           }
         }
       }
+    },
+    "Run Once" : {
+
     },
     "Run order shown on cards" : {
 
@@ -22704,6 +22767,7 @@
 
     },
     "RxCode runs Claude Code or Codex locally. Install one of them to start your first project." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -22899,6 +22963,7 @@
       }
     },
     "Saved memory history is available from Manage." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -24255,6 +24320,9 @@
         }
       }
     },
+    "Set up Claude Code or Codex" : {
+
+    },
     "Set Up Docs" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -25537,9 +25605,6 @@
         }
       }
     },
-    "Silence pet speech, including notification announcements" : {
-
-    },
     "Size" : {
       "localizations" : {
         "ko" : {
@@ -26434,7 +26499,7 @@
     "System Default" : {
 
     },
-    "System Default follows the devices chosen in System Settings → Sound. A disconnected device falls back to the system default until it is reconnected." : {
+    "System Default follows System Settings → Sound. You can change devices during a call." : {
 
     },
     "Tag" : {
@@ -26806,6 +26871,18 @@
           }
         }
       }
+    },
+    "Test Microphone" : {
+
+    },
+    "Test Microphone…" : {
+
+    },
+    "Test Speaker" : {
+
+    },
+    "Test Speaker…" : {
+
     },
     "Testing…" : {
       "localizations" : {
@@ -27603,6 +27680,9 @@
         }
       }
     },
+    "This check reads observed task-board and thread activity. It does not dispatch an agent or execute the request as project actions. Captions and speech follow Pet & Voice notification preferences; a muted microphone does not silence output." : {
+
+    },
     "This client doesn't advertise any sign-in methods. It may use its own saved credentials or environment variables set in Edit." : {
       "localizations" : {
         "zh-Hans" : {
@@ -27688,6 +27768,7 @@
 
     },
     "This memory will be removed from future agent context." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -27801,6 +27882,9 @@
 
     },
     "This run has no chat thread, or it was deleted." : {
+
+    },
+    "This saved memory will be removed from future prompts. Existing conversations may still retain its text. Voice transcript history is managed separately." : {
 
     },
     "This schedule never runs." : {
@@ -28097,6 +28181,9 @@
           }
         }
       }
+    },
+    "Timezone: %@. Overdue tasks run once after launch or wake. A claimed task is not repeated after interruption." : {
+
     },
     "Title" : {
       "localizations" : {
@@ -28512,7 +28599,7 @@
     "Unload" : {
 
     },
-    "Unmute Pet" : {
+    "Unmute Microphone" : {
 
     },
     "Unpin" : {
@@ -29601,6 +29688,9 @@
     "Waiting for sign-in… Complete it in your browser if one opened." : {
 
     },
+    "Waiting for sound" : {
+
+    },
     "Waiting for usage data" : {
 
     },
@@ -30216,6 +30306,9 @@
           }
         }
       }
+    },
+    "You can continue without installing either CLI." : {
+
     },
     "You're already in this setup chat" : {
       "localizations" : {

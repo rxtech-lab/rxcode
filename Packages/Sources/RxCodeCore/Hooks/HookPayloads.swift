@@ -110,6 +110,8 @@ public struct SessionEndPayload: Codable, Sendable {
     /// hooks that act on the change (code review, commit & push) defer while
     /// this is true so they only run once the queue has fully drained.
     public let hasQueuedFollowups: Bool
+    /// Stable per-turn event identity for consumers that must deduplicate delivery.
+    public let deliveryID: String?
 
     public init(
         project: Project,
@@ -118,7 +120,8 @@ public struct SessionEndPayload: Codable, Sendable {
         reason: SessionEndReason,
         turnDidError: Bool,
         lastAssistantText: String,
-        hasQueuedFollowups: Bool = false
+        hasQueuedFollowups: Bool = false,
+        deliveryID: String? = nil
     ) {
         self.project = project
         self.sessionKey = sessionKey
@@ -127,6 +130,7 @@ public struct SessionEndPayload: Codable, Sendable {
         self.turnDidError = turnDidError
         self.lastAssistantText = lastAssistantText
         self.hasQueuedFollowups = hasQueuedFollowups
+        self.deliveryID = deliveryID
     }
 }
 

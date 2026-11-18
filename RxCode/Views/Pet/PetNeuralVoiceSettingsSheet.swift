@@ -342,10 +342,6 @@ final class PetVoiceDraftPreview {
 
     func play(configuration: PetConfiguration, controller: PetController) {
         stop()
-        guard !controller.isMuted else {
-            errorMessage = "Unmute the pet to preview a voice."
-            return
-        }
         controller.voiceDraftPreview = self
         self.configuration = configuration
         speaker.speechPlayback = controller.speechPlayback
@@ -364,7 +360,7 @@ final class PetVoiceDraftPreview {
         }
         startTask = Task {
             await controller.stopVoice(drainAnnouncements: false)
-            guard !Task.isCancelled, !controller.isMuted else { return }
+            guard !Task.isCancelled else { return }
             controller.standaloneSpeaker.stop()
             speaker.speak(text: "Hi there! I am RxBuddy, your RxCode voice companion.", synthesizer: synthesizer)
         }

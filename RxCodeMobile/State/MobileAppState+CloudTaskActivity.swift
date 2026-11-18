@@ -14,6 +14,24 @@ extension MobileAppState {
               let remoteID = cloudTaskProjects.first(where: { $0.id == projectID })?.cloudId else { return }
         let accountID = cloud.accountID
         let recipient = identity.publicKeyHex
+        if let read = cloudActivityReads[projectID], read.account == accountID,
+           read.recipient == recipient, read.project == remoteID {
+            return try await read.task.value
+        }
+        let id = UUID()
+        let task = Task {
+            try await applyCloudActivity(projectID: projectID, remoteID: remoteID, accountID: accountID,
+                                         recipient: recipient, cloud: cloud)
+        }
+        cloudActivityReads[projectID] = (id, accountID, recipient, remoteID, task)
+        defer {
+            if cloudActivityReads[projectID]?.id == id { cloudActivityReads[projectID] = nil }
+        }
+        try await task.value
+    }
+
+    private func applyCloudActivity(projectID: UUID, remoteID: String, accountID: String?,
+                                    recipient: String, cloud: MobileCloudState) async throws {
         let records = try await cloud.taskActivity(projectID: remoteID, recipient: recipient)
         guard cloud.accountID == accountID, identity.publicKeyHex == recipient, usesCloudTasks else { return }
         let trusted = Set(pairedDesktops.map(\.pubkeyHex))
@@ -27,14 +45,33 @@ extension MobileAppState {
         for failure in decoded.failures {
             logger.warning("[TaskActivity] unreadable record project=\(remoteID, privacy: .public) task=\(failure.taskID, privacy: .public) sender=\(failure.sender, privacy: .public) recipient=\(recipient, privacy: .public) error=\(failure.errorDomain, privacy: .public):\(failure.errorCode, privacy: .public)")
         }
-        var activities = cloudTaskActivityByProject[projectID] ?? [:]
+        let previous = cloudTaskActivityByProject[projectID] ?? [:]
+        let present = Dictionary(grouping: records, by: \.taskId)
+        var activities = previous.filter { id, activity in
+            present[id]?.contains { $0.envelope.sender == activity.senderPublicKey } == true
+        }
         for activity in decoded.activities {
             if let existing = activities[activity.taskID], existing.updatedAt > activity.updatedAt { continue }
             activities[activity.taskID] = activity
         }
         let currentTrusted = Set(pairedDesktops.map(\.pubkeyHex))
-        cloudTaskActivityByProject[projectID] = activities.filter { currentTrusted.contains($0.value.senderPublicKey) }
-        if let snapshot = cloudTaskBoards[projectID] { storeTaskBoardSnapshot(snapshot, cloud: true) }
+        activities = activities.filter { currentTrusted.contains($0.value.senderPublicKey) }
+        guard cloudTaskProjects.contains(where: { $0.id == projectID && $0.cloudId == remoteID }) else { return }
+        cloudTaskActivityByProject[projectID] = activities
+        guard let snapshot = deferredCloudTaskBoardSnapshots[projectID] ?? cloudTaskBoards[projectID] else { return }
+        var board = snapshot.board
+        var connections = snapshot.taskLinkedSessions
+        for index in board.tasks.indices {
+            let id = board.tasks[index].id
+            guard let remote = board.cloudSync?.taskRemoteId(id), activities[remote] == nil,
+                  let removed = previous[remote] else { continue }
+            if board.tasks[index].attentionReason == removed.attentionReason { board.tasks[index].attentionReason = nil }
+            if connections[id.uuidString] == removed.connections { connections[id.uuidString] = nil }
+        }
+        storeTaskBoardSnapshot(MobileTaskBoardSnapshot(projectID: projectID, board: board,
+            taskSessionIDs: snapshot.taskSessionIDs, taskLinkedSessions: connections,
+            taskCloudIDs: snapshot.taskCloudIDs, classifyingTaskIDs: snapshot.classifyingTaskIDs,
+            defaultAgent: snapshot.defaultAgent), cloud: true)
     }
 
     func applyingDecryptedTaskActivity(to snapshot: MobileTaskBoardSnapshot) -> MobileTaskBoardSnapshot {

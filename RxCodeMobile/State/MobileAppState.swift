@@ -266,10 +266,11 @@ final class MobileAppState: ObservableObject {
     @Published var isResumingFromBackground = false
     @Published var usesCloudTasks = false
     @Published var cloudTaskProjects: [Project] = []
+    var cloudActivityReads: [UUID: (id: UUID, account: String?, recipient: String, project: String, task: Task<Void, Error>)] = [:]
     @Published var cloudTaskActivityByProject: [UUID: [String: CloudTaskActivity]] = [:]
     @Published var cloudTaskBoards: [UUID: MobileTaskBoardSnapshot] = [:]
     // Serialize each cloud board's reads and writes so a late fetch cannot undo a view edit.
-    var cloudTaskBoardCalls: [UUID: (id: UUID, task: Task<TaskBoardResultPayload, Error>)] = [:]
+    var cloudTaskBoardCalls: [UUID: (id: UUID, fetch: Bool, account: String?, task: Task<TaskBoardResultPayload, Error>)] = [:]
     var taskCloud: MobileCloudState?
     /// Which paired Mac each task was last run on, and its session there;
     /// keyed by `taskRunLinkKey(for:)`. Persisted across launches.

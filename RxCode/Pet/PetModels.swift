@@ -563,7 +563,7 @@ nonisolated struct PetConfiguration: Codable, Equatable, Sendable {
     var toolSoundsEnabled: Bool? = nil
     var playsToolSounds: Bool { toolSoundsEnabled ?? true }
 
-    /// Optional for preferences saved before the persistent pet mute control.
+    /// Microphone-only mute. Optional for preferences saved before the persistent mute control.
     var isMuted: Bool? = nil
 
     // Audio routing. `nil` follows the macOS system default device.

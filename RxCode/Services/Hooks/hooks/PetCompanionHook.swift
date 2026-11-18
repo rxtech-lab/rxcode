@@ -18,8 +18,14 @@ final class PetCompanionHook: Hook {
         }
         guard payload.reason != .cancelled else { return .ignored }
 
-        guard pet.configuration.isEnabled, pet.isVoiceActive || pet.configuration.proactiveMode != .off else {
+        guard pet.configuration.isEnabled, pet.configuration.proactiveMode != .off else {
             return .ignored
+        }
+        guard payload.turnDidError || (payload.reason == .completed && !payload.hasQueuedFollowups) else { return .ignored }
+        if let id = payload.deliveryID {
+            guard !pet.announcedCompletionEventIDs.contains(id) else { return .ignored }
+            pet.announcedCompletionEventIDs.append(id)
+            if pet.announcedCompletionEventIDs.count > 512 { pet.announcedCompletionEventIDs.removeFirst() }
         }
 
         let sessionTitle = controller.sessionTitle(sessionId: payload.sessionId)
@@ -71,7 +77,7 @@ final class PetCompanionHook: Hook {
     }
 
     func onPermissionAsk(_ payload: PermissionAskPayload, controller: any HookController) async -> HookOutcome {
-        guard pet.configuration.isEnabled, pet.isVoiceActive || pet.configuration.proactiveMode != .off else {
+        guard pet.configuration.isEnabled, pet.configuration.proactiveMode != .off else {
             return .ignored
         }
         guard pet.shouldAnnouncePermission(eventID: payload.toolUseId, sessionID: payload.sessionId) else { return .ignored }
@@ -91,7 +97,7 @@ final class PetCompanionHook: Hook {
     }
 
     func onQuestionAsk(_ payload: QuestionAskPayload, controller: any HookController) async -> HookOutcome {
-        guard pet.configuration.isEnabled, pet.isVoiceActive || pet.configuration.proactiveMode != .off else {
+        guard pet.configuration.isEnabled, pet.configuration.proactiveMode != .off else {
             return .ignored
         }
         let label = payload.projectName ?? "An agent"
@@ -110,7 +116,7 @@ final class PetCompanionHook: Hook {
     }
 
     func onCIFailed(_ payload: CIFailedPayload, controller: any HookController) async -> HookOutcome {
-        guard pet.configuration.isEnabled, pet.isVoiceActive || pet.configuration.proactiveMode != .off else {
+        guard pet.configuration.isEnabled, pet.configuration.proactiveMode != .off else {
             return .ignored
         }
         let projName = payload.projectName ?? "Project"

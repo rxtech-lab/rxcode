@@ -23,7 +23,7 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
     var speechPlayback: PetSpeechPlaybackSignal?
     var suppressesCaptureDuringPlayback: Bool = true
 
-    private var captureEnabled = true
+    private var captureEnabled = false
     private var isStarted = false
     private var frameContinuation: AsyncStream<VoiceAudioFrame>.Continuation?
     private var pendingOutputBuffers = 0
@@ -31,8 +31,27 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
     private var renderedOutputFrames: Int64 = 0
     private var echoTailDeadline: ContinuousClock.Instant = .now
 
-    private let inputDeviceUID: String?
-    private let outputDeviceUID: String?
+    private var inputDeviceUID: String?
+    private var outputDeviceUID: String?
+
+    var realtimeDevice: PetRTCDevice?
+    var captureDidChange: ((Bool) -> Void)? {
+        didSet { captureDidChange?(captureEnabled) }
+    }
+    private var routeChangeInProgress = false
+    private var activeFormat: VoicePCMFormat?
+
+    func selectDevices(input: String?, output: String?) async throws {
+        inputDeviceUID = input
+        outputDeviceUID = output
+        guard !routeChangeInProgress, let activeFormat else { return }
+        routeChangeInProgress = true
+        defer { routeChangeInProgress = false }
+        if isStarted { flush() }
+        isStarted = false
+        hardware.stop()
+        try await startHardware(format: activeFormat, token: generation)
+    }
 
     init(
         meters: VoiceMeters? = nil,
@@ -68,10 +87,25 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
         pendingOutputBuffers = 0
 
         do {
+            try await startHardware(format: format, token: token)
+            activeFormat = format
+            return stream
+        } catch {
+            if generation == token { stop() }
+            continuation.finish()
+            throw error
+        }
+    }
+
+    private func startHardware(format: VoicePCMFormat, token: UUID) async throws {
+        while generation == token {
+            let input = inputDeviceUID
+            let output = outputDeviceUID
             try await hardware.start(
                 format: format,
                 inputDeviceUID: inputDeviceUID,
                 outputDeviceUID: outputDeviceUID,
+                realtimeDevice: realtimeDevice,
                 envelope: speechPlayback?.envelope
             ) { [weak self] frame, rms in
                 Task { @MainActor [weak self] in
@@ -87,13 +121,13 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
             guard generation == token, !Task.isCancelled else {
                 throw CancellationError()
             }
-            isStarted = true
-            return stream
-        } catch {
-            if generation == token { stop() }
-            continuation.finish()
-            throw error
+            if input == inputDeviceUID, output == outputDeviceUID {
+                isStarted = true
+                return
+            }
+            hardware.stop()
         }
+        throw CancellationError()
     }
 
     func play(_ frame: VoiceAudioFrame) throws {
@@ -220,13 +254,14 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
 
     func setCaptureEnabled(_ enabled: Bool) {
         captureEnabled = enabled
-        speechPlayback?.setSuppressed(!enabled)
+        captureDidChange?(enabled)
         if !enabled {
             meters?.input = 0
         }
     }
 
     func stop() {
+        activeFormat = nil
         isStarted = false
         generation = UUID()
         playbackGeneration = UUID()
@@ -316,6 +351,7 @@ private nonisolated final class PetVoiceAudioHardware: @unchecked Sendable {
     // Share the queue across sessions so a replacement waits for the previous device teardown.
     private static let queue = DispatchQueue(label: "com.rxlab.RxCode.pet-audio", qos: .userInitiated)
     private final class Graph {
+        let inputEngine = AVAudioEngine()
         let engine = AVAudioEngine()
         let player = AVAudioPlayerNode()
         let cuePlayer = AVAudioPlayerNode()
@@ -335,22 +371,29 @@ private nonisolated final class PetVoiceAudioHardware: @unchecked Sendable {
         format: VoicePCMFormat,
         inputDeviceUID: String?,
         outputDeviceUID: String?,
+        realtimeDevice: PetRTCDevice?,
         envelope: PetSpeechEnvelope?,
         onFrame: @escaping @Sendable (VoiceAudioFrame, Float) -> Void
     ) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             Self.queue.async { [self] in
                 do {
-                    graph = Graph()
+                    let next = Graph()
+                    graph = next
+                    realtimeDevice?.hardwareWillStart()
                     // Route both AUHAL units before any format is read so the graph
                     // is built against the chosen devices' native formats.
-                    PetAudioDevices.route(engine.inputNode.audioUnit, toDeviceUID: inputDeviceUID, direction: .input)
-                    PetAudioDevices.route(engine.outputNode.audioUnit, toDeviceUID: outputDeviceUID, direction: .output)
+                    try PetAudioDevices.route(next.inputEngine.inputNode.audioUnit, toDeviceUID: inputDeviceUID, direction: .input)
+                    try PetAudioDevices.route(engine.outputNode.audioUnit, toDeviceUID: outputDeviceUID, direction: .output)
+                    if let source = realtimeDevice?.makeSource() {
+                        engine.attach(source)
+                        engine.connect(source, to: engine.mainMixerNode, format: playbackFormat)
+                    }
                     engine.attach(player)
                     engine.attach(cuePlayer)
                     engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
                     engine.connect(cuePlayer, to: engine.mainMixerNode, format: playbackFormat)
-                    let input = engine.inputNode
+                    let input = next.inputEngine.inputNode
                     let hwFormat = input.outputFormat(forBus: 0)
                     guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0 else {
                         throw VoiceError.unavailable("No active audio input device was found on this Mac.")
@@ -362,15 +405,20 @@ private nonisolated final class PetVoiceAudioHardware: @unchecked Sendable {
                         throw VoiceError.invalidAudio
                     }
                     let tap = AudioInputTapBox(
-                        converter: converter, targetFormat: target, pcmFormat: format, onFrame: onFrame
-                    )
+                        converter: converter, targetFormat: target, pcmFormat: format
+                    ) { frame, rms in
+                        realtimeDevice?.recordPCM(frame.data)
+                        onFrame(frame, rms)
+                    }
                     input.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { buffer, _ in
                         tap.consume(buffer)
                     }
                     hasTap = true
+                    next.inputEngine.prepare()
+                    try next.inputEngine.start()
                     engine.prepare()
                     try engine.start()
-                    if let envelope {
+                    if realtimeDevice == nil, let envelope {
                         let latency = engine.outputNode.outputPresentationLatency
                         player.installTap(onBus: 0, bufferSize: 480, format: playbackFormat) { buffer, time in
                             envelope.consume(buffer, at: time, latency: latency)
@@ -395,58 +443,19 @@ private nonisolated final class PetVoiceAudioHardware: @unchecked Sendable {
     private func stopGraph() {
         guard graph != nil else { return }
         if hasTap {
-            engine.inputNode.removeTap(onBus: 0)
+            graph?.inputEngine.inputNode.removeTap(onBus: 0)
             hasTap = false
         }
         if hasSpeechTap {
             player.removeTap(onBus: 0)
             hasSpeechTap = false
         }
-        player.stop()
-        cuePlayer.stop()
+        graph?.inputEngine.stop()
         engine.stop()
-        engine.detach(player)
-        engine.detach(cuePlayer)
+        if player.engine != nil { engine.detach(player) }
+        if cuePlayer.engine != nil { engine.detach(cuePlayer) }
         // Release the native audio objects here as well; their destructors can touch devices.
         graph = nil
-    }
-}
-
-// MARK: - Passive Driver for WebRTC Transport
-
-/// Used when `WebRTC` owns the hardware microphone & speaker directly.
-/// Forwards mute state to the WebRTC audio track and lets `VoiceSession` drive lifecycle cleanly.
-@MainActor
-final class PassiveVoiceAudioDriver: VoiceAudioDriver {
-    var onMuteChanged: ((Bool) -> Void)?
-    var speechPlayback: PetSpeechPlaybackSignal?
-    private var continuation: AsyncStream<VoiceAudioFrame>.Continuation?
-
-    var heardDuration: Duration { .zero }
-
-    func start(format: VoicePCMFormat) async throws -> AsyncStream<VoiceAudioFrame> {
-        let granted = await PetVoiceAudioDriver.requestMicrophoneAccess()
-        guard granted else {
-            throw VoiceError.unavailable("Microphone permission is required for Codex Realtime Voice. Grant access in System Settings → Privacy & Security → Microphone.")
-        }
-        let (stream, cont) = AsyncStream<VoiceAudioFrame>.makeStream()
-        continuation = cont
-        return stream
-    }
-
-    func play(_ frame: VoiceAudioFrame) throws {}
-
-    func flush() { speechPlayback?.reset() }
-
-    func setCaptureEnabled(_ enabled: Bool) {
-        speechPlayback?.setSuppressed(!enabled)
-        onMuteChanged?(!enabled)
-    }
-
-    func stop() {
-        speechPlayback?.reset()
-        continuation?.finish()
-        continuation = nil
     }
 }
 

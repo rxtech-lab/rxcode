@@ -17,7 +17,7 @@ extension AgentRuntimeInstaller.Runtime: Identifiable {
 // MARK: - Agent Runtime Install Sheet
 
 /// Lets the user pick a published version and shows download progress while
-/// npm installs it into RxCode's managed prefix.
+/// RxCode installs the selected runtime.
 struct AgentRuntimeInstallSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -185,11 +185,6 @@ struct AgentRuntimeInstallSheet: View {
         defer { isLoadingVersions = false }
         do {
             availableVersions = try await AgentVersionCatalog.shared.versions(for: runtime)
-            if let initialVersion, availableVersions.contains(initialVersion) {
-                selectedVersion = initialVersion
-            } else if selectedVersion == "latest", let installedVersion, availableVersions.contains(installedVersion) {
-                selectedVersion = installedVersion
-            }
         } catch is CancellationError {
             return
         } catch {

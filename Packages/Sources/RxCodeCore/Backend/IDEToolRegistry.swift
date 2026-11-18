@@ -371,6 +371,7 @@ public enum IDEToolRegistry {
             inputSchema: .object([
                 "type": .string("object"),
                 "properties": .object([
+                    "scope": .object(["type": .string("string"), "enum": .array([.string("global"), .string("project"), .string("pet")])]),
                     "query": .object([
                         "type": .string("string"),
                         "description": .string("Natural-language search query."),
@@ -397,7 +398,7 @@ public enum IDEToolRegistry {
                     "content": .object(["type": .string("string")]),
                     "project_id": .object([
                         "type": .string("string"),
-                        "description": .string("Optional project UUID. Ignored when scope is global."),
+                        "description": .string("Optional project UUID. Used only for project scope."),
                     ]),
                     "kind": .object([
                         "type": .string("string"),
@@ -405,7 +406,7 @@ public enum IDEToolRegistry {
                     ]),
                     "scope": .object([
                         "type": .string("string"),
-                        "enum": .array([.string("project"), .string("global")]),
+                        "enum": .array([.string("project"), .string("global"), .string("pet")]),
                     ]),
                 ]),
                 "required": .array([.string("content")]),
@@ -422,7 +423,7 @@ public enum IDEToolRegistry {
                     "content": .object(["type": .string("string")]),
                     "project_id": .object([
                         "type": .string("string"),
-                        "description": .string("Optional project UUID. Ignored when scope is global."),
+                        "description": .string("Optional project UUID. Used only for project scope."),
                     ]),
                     "kind": .object([
                         "type": .string("string"),
@@ -430,7 +431,7 @@ public enum IDEToolRegistry {
                     ]),
                     "scope": .object([
                         "type": .string("string"),
-                        "enum": .array([.string("project"), .string("global")]),
+                        "enum": .array([.string("project"), .string("global"), .string("pet")]),
                     ]),
                 ]),
                 "required": .array([.string("id"), .string("content")]),

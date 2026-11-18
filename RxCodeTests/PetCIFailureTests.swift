@@ -32,7 +32,7 @@ struct PetCIFailureTests {
         pet.transientStatusResetTask?.cancel()
     }
 
-    @Test("CI pet notifications preserve run details and respect mute and proactive mode")
+    @Test("CI pet notifications preserve run details and respect proactive mode with a muted microphone")
     @MainActor
     func ciFailureNotificationSettings() async throws {
         let app = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
@@ -49,6 +49,7 @@ struct PetCIFailureTests {
             config.proactiveMode = mode
             config.save(to: defaults)
             let pet = PetController(defaults: defaults)
+            pet.announcementTask = Task {}
             _ = await PetCompanionHook(pet: pet).onCIFailed(payload, controller: hookController)
             if mode == .off {
                 #expect(pet.petState.bubble == nil)
@@ -58,8 +59,9 @@ struct PetCIFailureTests {
                 #expect(bubble.action == .openURL(try #require(URL(string: url))))
                 #expect(pet.petState.mood == .concerned)
             }
-            #expect(pet.queuedProactiveSpeech.isEmpty)
-            #expect(pet.announcementTask == nil)
+            #expect(pet.queuedProactiveSpeech == (mode == .voiceAndBubble ? [payload.spokenSummary] : []))
+            pet.announcementTask?.cancel()
+            pet.announcementTask = nil
             pet.bubbleDismissTask?.cancel()
             pet.transientStatusResetTask?.cancel()
         }

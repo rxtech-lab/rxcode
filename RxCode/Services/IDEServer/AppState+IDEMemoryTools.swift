@@ -4,25 +4,28 @@ import RxCodeCore
 extension AppState {
     @MainActor
     func handleMemorySearch(arguments: JSONValue) async throws -> JSONValue {
+        guard memoryEnabled else { throw IDEToolError.handlerFailed("Memory is disabled in Settings → General → Memory.") }
         guard let query = arguments["query"]?.stringValue, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw IDEToolError.invalidArguments("missing 'query'")
         }
         let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
-        let requestedLimit = Int(arguments["limit"]?.numberValue ?? 20)
-        let limit = max(1, min(requestedLimit, 100))
-        let hits = await searchMemoryItems(query: query, projectId: projectId, limit: limit)
+        let limit = Int(min(100, max(1, arguments["limit"]?.numberValue ?? 20)))
+        let scope = arguments["scope"]?.stringValue
+        guard scope == nil || scope == "global" || scope == "project" || scope == "pet" else { throw IDEToolError.invalidArguments("scope must be global, project, or pet.") }
+        let hits = await searchMemoryItems(query: query, projectId: projectId, limit: limit, scope: scope)
         return jsonTextResult(.array(hits.map { memoryJSON(item: $0.item, score: $0.score) }))
     }
 
     @MainActor
-    func handleMemoryAdd(arguments: JSONValue) async throws -> JSONValue {
+    func handleMemoryAdd(arguments: JSONValue, defaultScope: String = "project") async throws -> JSONValue {
         guard memoryEnabled else {
             throw IDEToolError.handlerFailed("Memory is disabled. Turn on Enable Memory in RxCode Settings → General → Memory, then retry.")
         }
         guard let content = arguments["content"]?.stringValue, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw IDEToolError.invalidArguments("missing 'content'")
         }
-        let scope = arguments["scope"]?.stringValue ?? "project"
+        let scope = arguments["scope"]?.stringValue ?? defaultScope
+        guard scope == "global" || scope == "project" || scope == "pet" else { throw IDEToolError.invalidArguments("scope must be global, project, or pet.") }
         let kind = arguments["kind"]?.stringValue ?? "fact"
         let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
         guard let item = await addMemoryItem(
@@ -31,7 +34,7 @@ extension AppState {
             kind: kind,
             scope: scope
         ) else {
-            throw IDEToolError.handlerFailed("Memory could not be embedded or stored.")
+            throw IDEToolError.handlerFailed("Memory could not be stored.")
         }
         return jsonTextResult(memoryJSON(item: item, score: nil))
     }
@@ -47,13 +50,16 @@ extension AppState {
         guard let content = arguments["content"]?.stringValue, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw IDEToolError.invalidArguments("missing 'content'")
         }
-        let scope = arguments["scope"]?.stringValue ?? "project"
-        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+        let previous = await allMemoryItems().first { $0.id == id }
+        guard let previous else { throw IDEToolError.invalidArguments("No memory with id \(id).") }
+        let scope = arguments["scope"]?.stringValue ?? previous.scope
+        guard scope == "global" || scope == "project" || scope == "pet" else { throw IDEToolError.invalidArguments("scope must be global, project, or pet.") }
+        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue) ?? previous.projectId
         guard let item = await updateMemoryItem(
             id: id,
             content: content,
             projectId: projectId,
-            kind: arguments["kind"]?.stringValue ?? "fact",
+            kind: arguments["kind"]?.stringValue ?? previous.kind,
             scope: scope
         ) else {
             throw IDEToolError.handlerFailed("Memory \(id) could not be updated.")

@@ -74,11 +74,14 @@ nonisolated enum PetAudioDevices {
 
     /// Points an AUHAL I/O unit (an `AVAudioEngine` input or output node) at the chosen device.
     /// A `nil` or disconnected UID leaves the unit on the system default device.
-    @discardableResult
-    static func route(_ audioUnit: AudioUnit?, toDeviceUID uid: String?, direction: Direction) -> Bool {
-        guard let audioUnit, let uid, !uid.isEmpty,
-              var deviceID = deviceID(forUID: uid),
-              channelCount(of: deviceID, direction: direction) > 0 else { return false }
+    static func route(_ audioUnit: AudioUnit?, toDeviceUID uid: String?, direction: Direction) throws {
+        guard let uid, !uid.isEmpty, var deviceID = deviceID(forUID: uid) else { return }
+        let deviceName = direction == .input ? "microphone" : "speaker"
+        guard let audioUnit, channelCount(of: deviceID, direction: direction) > 0 else {
+            throw NSError(domain: "PetAudioDevices", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "The selected \(deviceName) is unavailable."
+            ])
+        }
         let status = AudioUnitSetProperty(
             audioUnit,
             kAudioOutputUnitProperty_CurrentDevice,
@@ -87,7 +90,11 @@ nonisolated enum PetAudioDevices {
             &deviceID,
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
-        return status == noErr
+        guard status == noErr else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
+                NSLocalizedDescriptionKey: "Could not use the selected \(deviceName) (Core Audio error \(status))."
+            ])
+        }
     }
 
     private static func stringProperty(_ selector: AudioObjectPropertySelector, of id: AudioObjectID) -> String? {

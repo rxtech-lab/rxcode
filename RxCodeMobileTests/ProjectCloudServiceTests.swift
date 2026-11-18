@@ -109,3 +109,85 @@ final class ProjectCloudServiceTests: XCTestCase {
         }
     }
 }
+
+extension ProjectCloudServiceTests {
+    func testFailedPageRetriesOriginalCheckpointAndExpiredCursorReloads() async throws {
+        let account = UUID().uuidString
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CloudURLProtocol.self]
+        let api = ProjectCloudService(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud.test")!,
+                                      accountID: { account }) { _ in "token" }
+        let full = #"{"tasks":[{"id":"1"}],"stories":[],"checkpoint":"A"}"#
+        let first = #"{"tasks":[],"stories":[],"deletedTaskIds":["1"],"deletedStoryIds":[],"checkpoint":"B","nextCursor":"p2"}"#
+        let last = #"{"tasks":[{"id":"2"}],"stories":[],"deletedTaskIds":[],"deletedStoryIds":[],"checkpoint":"B"}"#
+        var responses = [(nil as String?, 200, full), ("since=A", 200, first), ("since=A&cursor=p2", 503, "{}"),
+                         ("since=A", 200, first), ("since=A&cursor=p2", 200, last), ("since=B", 410, "{}"), (nil, 200, full)]
+        CloudURLProtocol.handler = { request in
+            guard !responses.isEmpty else { throw URLError(.badURL) }
+            let (query, status, body) = responses.removeFirst()
+            XCTAssertEqual(request.url?.query, query)
+            return (status, body)
+        }
+        _ = try await api.board(projectId: "project")
+        do {
+            _ = try await api.board(projectId: "project")
+            XCTFail("Expected page failure")
+        } catch AutopilotService.ServiceError.apiError(503, _) {}
+        let retried = try await api.board(projectId: "project")
+        XCTAssertEqual(retried.tasks.map(\.id), ["2"])
+        let reset = try await api.board(projectId: "project")
+        XCTAssertEqual(reset.tasks.map(\.id), ["1"])
+        XCTAssertTrue(responses.isEmpty)
+    }
+}
+
+extension ProjectCloudServiceTests {
+    func testActivityCheckpointResumesFromDiskAndRemovesEnvelope() async throws {
+        let account = UUID().uuidString
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CloudURLProtocol.self]
+        func client() -> ProjectCloudService {
+            ProjectCloudService(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud.test")!,
+                                accountID: { account }) { _ in "token" }
+        }
+        let device = DeviceIdentity(privateKey: .init())
+        let activity = CloudTaskActivity(projectID: "project", taskID: "task", updatedAt: Date(),
+            sourceProjectID: UUID(), sourceTaskID: UUID(), senderPublicKey: device.publicKeyHex,
+            sessionID: nil, runs: [], connections: [], attentionReason: "private")
+        let envelope = try EncryptedTaskActivity.seal(activity, identity: device, recipientKeys: [device.publicKeyHex])
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(envelope))
+        let data = try JSONSerialization.data(withJSONObject: ["items": [["taskId": "task", "envelope": json]], "checkpoint": "a"])
+        let full = try XCTUnwrap(String(data: data, encoding: .utf8))
+        CloudURLProtocol.handler = { _ in (200, full) }
+        let initial = try await client().taskActivity(projectId: "project", recipient: device.publicKeyHex)
+        XCTAssertEqual(initial.map(\.taskId), ["task"])
+        CloudURLProtocol.handler = { request in
+            XCTAssertTrue(request.url!.query!.contains("since=a"))
+            return (200, #"{"checkpoint":"b","items":[],"deletedTaskIds":["task"]}"#)
+        }
+        let removed = try await client().taskActivity(projectId: "project", recipient: device.publicKeyHex)
+        XCTAssertTrue(removed.isEmpty)
+        CloudURLProtocol.handler = { request in
+            XCTAssertFalse(request.url!.query!.contains("since="))
+            return (200, #"{"items":[]}"#)
+        }
+        _ = try await client().taskActivity(projectId: "project", recipient: "another-recipient")
+    }
+
+    func testSavedViewRevisionAvoidsRepeatRead() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CloudURLProtocol.self]
+        let api = ProjectCloudService(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud.test")!,
+                                      accountID: { "view-test" }) { _ in "token" }
+        var reads = 0
+        CloudURLProtocol.handler = { _ in
+            reads += 1
+            return (200, #"{"revision":4,"views":[]}"#)
+        }
+        _ = try await api.savedViews(projectId: "project", revision: 4)
+        _ = try await api.savedViews(projectId: "project", revision: 4)
+        XCTAssertEqual(reads, 1)
+        _ = try await api.savedViews(projectId: "project")
+        XCTAssertEqual(reads, 2)
+    }
+}

@@ -376,51 +376,79 @@ public enum CloudText {
 // MARK: - Remote rows
 
 /// A story as Autopilot returns it.
-public struct CloudRemoteStory: Identifiable, Decodable, Sendable, Hashable {
+public struct CloudRemoteStory: Identifiable, Codable, Sendable, Hashable {
     public let id: String
     public let fields: CloudStoryFields
+    public let createdAt: Date?
     public let updatedAt: Date?
 
     public init(id: String, fields: CloudStoryFields, updatedAt: Date? = nil) {
         self.id = id
         self.fields = fields
+        self.createdAt = nil
         self.updatedAt = updatedAt
     }
 
-    private enum CodingKeys: String, CodingKey { case id, updatedAt }
+    private enum CodingKeys: String, CodingKey { case id, createdAt, updatedAt }
+
+    public func encode(to encoder: Encoder) throws {
+        try fields.encode(to: encoder)
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(createdAt.map { $0.timeIntervalSince1970 * 1000 }, forKey: .createdAt)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(updatedAt.map { $0.timeIntervalSince1970 * 1000 }, forKey: .updatedAt)
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
+        createdAt = CloudDate.decode(c, forKey: .createdAt)
         updatedAt = CloudDate.decode(c, forKey: .updatedAt)
         fields = try CloudStoryFields(from: decoder)
     }
 }
 
 /// A task as Autopilot returns it.
-public struct CloudRemoteTask: Identifiable, Decodable, Sendable, Hashable {
+public struct CloudRemoteTask: Identifiable, Codable, Sendable, Hashable {
     public let id: String
     public let fields: CloudTaskFields
+    public let createdAt: Date?
     public let updatedAt: Date?
 
     public init(id: String, fields: CloudTaskFields, updatedAt: Date? = nil) {
         self.id = id
         self.fields = fields
+        self.createdAt = nil
         self.updatedAt = updatedAt
     }
 
-    private enum CodingKeys: String, CodingKey { case id, updatedAt }
+    private enum CodingKeys: String, CodingKey { case id, createdAt, updatedAt }
+
+    public func encode(to encoder: Encoder) throws {
+        try fields.encode(to: encoder)
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(createdAt.map { $0.timeIntervalSince1970 * 1000 }, forKey: .createdAt)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(updatedAt.map { $0.timeIntervalSince1970 * 1000 }, forKey: .updatedAt)
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
+        createdAt = CloudDate.decode(c, forKey: .createdAt)
         updatedAt = CloudDate.decode(c, forKey: .updatedAt)
         fields = try CloudTaskFields(from: decoder)
     }
 }
 
 /// `GET /api/v1/docs/repositories/{id}/tasks`.
-public struct CloudRemoteBoard: Decodable, Sendable {
+public struct CloudRemoteBoard: Codable, Sendable {
+    public var matchesPreviousSnapshot = false
+    private enum CodingKeys: String, CodingKey {
+        case checkpoint, savedViewsRevision, members, role, currentUserId, stories, tasks
+    }
+    public var checkpoint: String?
+    public var savedViewsRevision: Int?
     public var members: [CardAssignee]?
     public var role: String?
     public var currentUserId: String?
@@ -700,5 +728,61 @@ public struct CloudDevice: Codable, Identifiable, Sendable, Hashable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         lastSeenAt = CloudDate.decode(c, forKey: .lastSeenAt)
+    }
+}
+
+/// Applies one authorized snapshot page. Callers commit only after the last page.
+public enum CloudBoardPage {
+    private struct Changes: Decodable {
+        let nextCursor: String?
+        let deletedTaskIds: [String]?
+        let deletedStoryIds: [String]?
+    }
+
+    public static func apply(_ data: Data, to previous: CloudRemoteBoard?) throws -> (CloudRemoteBoard, String?) {
+        let decoder = JSONDecoder()
+        var page = try decoder.decode(CloudRemoteBoard.self, from: data)
+        let changes = try decoder.decode(Changes.self, from: data)
+        if changes.deletedTaskIds == nil && changes.deletedStoryIds == nil {
+            // A server downgrade can return its legacy snapshot to a delta query.
+            guard changes.nextCursor == nil, previous == nil || page.checkpoint == nil else {
+                throw URLError(.cannotParseResponse)
+            }
+            return (page, nil)
+        }
+        guard let previous, let checkpoint = page.checkpoint, !checkpoint.isEmpty,
+              let tasks = changes.deletedTaskIds, let stories = changes.deletedStoryIds else {
+            throw URLError(.cannotParseResponse)
+        }
+        page.tasks = tasks.isEmpty && page.tasks.isEmpty ? previous.tasks : merge(previous.tasks, page.tasks, deleting: Set(tasks)).sorted {
+            ($0.fields.sortIndex, $0.createdAt ?? .distantPast) < ($1.fields.sortIndex, $1.createdAt ?? .distantPast)
+        }
+        page.stories = stories.isEmpty && page.stories.isEmpty ? previous.stories : merge(previous.stories, page.stories, deleting: Set(stories)).sorted {
+            ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast)
+        }
+        return (page, changes.nextCursor)
+    }
+
+    private static func merge<Row: Identifiable>(_ previous: [Row], _ updates: [Row], deleting ids: Set<Row.ID>) -> [Row] {
+        var changed = Dictionary(updates.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        var rows = previous.compactMap { row in ids.contains(row.id) ? nil : changed.removeValue(forKey: row.id) ?? row }
+        for row in updates where !ids.contains(row.id) {
+            if let added = changed.removeValue(forKey: row.id) { rows.append(added) }
+        }
+        return rows
+    }
+}
+
+public enum CloudFieldPatch {
+    public static func encode<Fields: Encodable>(_ fields: Fields, previous: Fields?) throws -> Data {
+        let encoded = try JSONEncoder().encode(fields)
+        guard let previous,
+              let current = try JSONSerialization.jsonObject(with: encoded) as? [String: NSObject],
+              let base = try JSONSerialization.jsonObject(with: JSONEncoder().encode(previous)) as? [String: NSObject]
+        else { return encoded }
+        var changed = current.filter { base[$0.key] != $0.value }
+        // Without an explicit position, changing columns appends on the server.
+        if changed["status"] != nil { changed["sortIndex"] = current["sortIndex"] }
+        return try JSONSerialization.data(withJSONObject: changed)
     }
 }

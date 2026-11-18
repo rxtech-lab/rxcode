@@ -34,12 +34,13 @@ final class PetController {
     var configuration: PetConfiguration {
         didSet {
             guard configuration != oldValue else { return }
-            configuration.save()
+            configuration.save(to: configurationDefaults)
             handleConfigurationChange(from: oldValue, to: configuration)
         }
     }
 
     let looks: PetLookStore
+    @ObservationIgnored private let configurationDefaults: UserDefaults
     var character: PetCharacter { looks.selected.character }
     var petState = PetState()
 
@@ -50,15 +51,21 @@ final class PetController {
     }
 
     var chatTranscript: [ChatEntry] = []
+    var displayedHistory: PetVoiceHistoryStore.Archive?
+    var textHistoryID: UUID?
     var isSendingText = false
     @ObservationIgnored var voiceTextReplyBaseline: Set<UUID>?
     @ObservationIgnored var announcedPermissionEventIDs: [String] = []
+    @ObservationIgnored var announcedCompletionEventIDs: [String] = []
     @ObservationIgnored var notificationLocalizationTask: Task<Void, Never>?
     @ObservationIgnored private var textResumeSessionID: String?
     @ObservationIgnored private var textConversationID = UUID()
     @ObservationIgnored private var localVoiceWarmupTask: Task<Void, Never>?
 
     var voiceSession: VoiceSession?
+    @ObservationIgnored let voiceHistoryStore: PetVoiceHistoryStore
+    @ObservationIgnored var voiceHistoryBinding: PetVoiceHistoryBinding?
+    @ObservationIgnored var realtimeNotifications: PetRealtimeVoiceNotifications?
     var activeVoiceMode: PetVoiceModeKind?
     var livePartialUserText: String = ""
     var isLocalUserSpeaking = false
@@ -86,7 +93,7 @@ final class PetController {
     var settingsTab: PetSettingsView.SettingsTab = .generalAgent
     var isMuted: Bool { configuration.isMuted ?? false }
     @ObservationIgnored var voiceStartGeneration = UUID()
-    @ObservationIgnored var speechPermissionGeneration = UUID()
+    @ObservationIgnored var voiceStopTask: Task<Void, Never>?
     @ObservationIgnored weak var voiceDraftPreview: PetVoiceDraftPreview?
 
     var activeSheet: PetSheetDestination?
@@ -106,6 +113,7 @@ final class PetController {
             self.refreshPetState()
         }
         speaker.onFailure = { [weak self] message in
+            self?.speechFailureCount += 1
             self?.alertErrorMessage = message
         }
         return speaker
@@ -176,12 +184,18 @@ final class PetController {
     @ObservationIgnored var queuedProactiveSpeech: [String] = []
     @ObservationIgnored var announcementTask: Task<Void, Never>?
     @ObservationIgnored var announcementGeneration = UUID()
+    @ObservationIgnored var announcementRetryAfter: Date?
+    @ObservationIgnored var scheduledReportDeliveries: [UUID: (text: String, speechID: UUID?, acknowledge: @MainActor () async -> Void)] = [:]
+    @ObservationIgnored var queuedSpeechIDs: [UUID] = []
+    @ObservationIgnored var speechFailureCount = 0
     @ObservationIgnored var lastInteractionAt: Date = .now
     @ObservationIgnored var lastObservedConfirmationIDs: Set<UUID> = []
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, historyStore: PetVoiceHistoryStore? = nil) {
+        self.configurationDefaults = defaults
         self.configuration = PetConfiguration.load(from: defaults)
         self.looks = PetLookStore(defaults: defaults)
+        self.voiceHistoryStore = historyStore ?? PetVoiceHistoryStore(directory: PetVoiceHistoryStore.defaultDirectory)
     }
 
     var appState: AppState? {
@@ -211,6 +225,7 @@ final class PetController {
     func bind(to workspaceManager: WorkspaceManager) {
         self.workspaceManager = workspaceManager
         guard !AppSupport.isTestProcess && !AppSupport.isScreenshotCapture else { return }
+        music.refreshConnectionInBackground()
         if configuration.isEnabled {
             panelController.show()
             prepareLocalVoiceIfNeeded()
@@ -224,19 +239,10 @@ final class PetController {
 
     private func handleConfigurationChange(from old: PetConfiguration, to new: PetConfiguration) {
         if old.isMuted != new.isMuted {
-            if isMuted {
-                voiceStartGeneration = UUID()
-                speechPermissionGeneration = UUID()
-                queuedProactiveSpeech.removeAll()
-                announcementGeneration = UUID()
-                announcementTask?.cancel()
-                announcementTask = nil
-                voiceConnectingSounds.update(isRunning: false, didFinish: false)
-                voiceConnectedSound?.stop()
-                voiceSession?.setMuted(true)
-                interruptSpeaking()
-                Task { await stopVoice(drainAnnouncements: false) }
-            }
+            // Mute only capture. Interrupting or stopping would discard the current reply
+            // and conversation transport, including local recognition/agent state.
+            voiceSession?.setMuted(isMuted)
+            if isMuted { voiceSession?.meters.input = 0 }
         }
         refreshToolSounds()
         if old.isEnabled != new.isEnabled || old.localTTSModelID != new.localTTSModelID
@@ -246,6 +252,7 @@ final class PetController {
         if old.isEnabled != new.isEnabled {
             if new.isEnabled {
                 if !AppSupport.isTestProcess && !AppSupport.isScreenshotCapture {
+                    music.refreshConnectionInBackground()
                     panelController.show()
                     startBackgroundMonitorIfNeeded()
                 }
@@ -259,10 +266,19 @@ final class PetController {
             panelController.updatePanelLayout()
         }
         if isVoiceActive && (old.voiceMode != new.voiceMode
-            || old.conversationLanguageIdentifier != new.conversationLanguageIdentifier
-            || old.microphoneDeviceUID != new.microphoneDeviceUID
-            || old.speakerDeviceUID != new.speakerDeviceUID) {
+            || old.conversationLanguageIdentifier != new.conversationLanguageIdentifier) {
             Task { await restartVoiceSession() }
+        } else if old.microphoneDeviceUID != new.microphoneDeviceUID || old.speakerDeviceUID != new.speakerDeviceUID {
+            Task {
+                do {
+                    try await currentHardwareAudioDriver?.selectDevices(
+                        input: configuration.microphoneDeviceUID, output: configuration.speakerDeviceUID
+                    )
+                } catch is CancellationError {
+                } catch {
+                    alertErrorMessage = error.localizedDescription
+                }
+            }
         }
         if old.customAgent != new.customAgent || old.pinnedProjectId != new.pinnedProjectId
             || old.conversationLanguageIdentifier != new.conversationLanguageIdentifier {
@@ -401,7 +417,7 @@ final class PetController {
     }
 
     func startVoice(mode overrideMode: PetVoiceModeKind? = nil) async {
-        guard !isMuted, !AppSupport.isTestProcess else { return }
+        guard !AppSupport.isTestProcess else { return }
         let generation = UUID()
         voiceStartGeneration = generation
         lastInteractionAt = .now
@@ -410,8 +426,8 @@ final class PetController {
         }
         let targetMode = configuration.voiceMode
         if targetMode == .localPipeline { prepareLocalVoiceIfNeeded() }
-        await stopVoice(drainAnnouncements: false)
-        guard !isMuted, voiceStartGeneration == generation else { return }
+        await stopVoice(drainAnnouncements: false, invalidatePendingStart: false)
+        guard voiceStartGeneration == generation else { return }
         standaloneSpeaker.stop()
 
         if !configuration.isEnabled {
@@ -419,7 +435,7 @@ final class PetController {
         }
 
         actionStatusOverlayMessage = "Connecting \(targetMode.shortTitle)…"
-        voiceConnectingSounds.update(isRunning: targetMode == .codexRealtime, didFinish: false)
+        voiceConnectingSounds.update(isRunning: targetMode == .codexRealtime, didFinish: false, outputDeviceUID: configuration.speakerDeviceUID)
         activeToolDescription = nil
         livePartialUserText = ""
         isLocalUserSpeaking = false
@@ -427,15 +443,16 @@ final class PetController {
         petState.mood = .focused
 
         do {
-            let session = try await buildVoiceSession(for: targetMode)
-            guard !isMuted, voiceStartGeneration == generation else {
+            let session = try await buildVoiceSession(for: targetMode, generation: generation)
+            guard voiceStartGeneration == generation else {
                 await session.stop()
                 return
             }
             self.voiceSession = session
             self.activeVoiceMode = targetMode
+            session.setMuted(isMuted)
             try await session.start()
-            guard !isMuted, voiceStartGeneration == generation else {
+            guard voiceStartGeneration == generation else {
                 if self.voiceSession === session {
                     await stopVoice(drainAnnouncements: false)
                 } else {
@@ -449,10 +466,11 @@ final class PetController {
                 playVoiceConnectedSound()
             }
             startVoiceStateSyncLoop(for: session)
+            announcementRetryAfter = nil
             startAnnouncementDeliveryIfNeeded()
             refreshPetState()
         } catch {
-            guard !isMuted, voiceStartGeneration == generation else { return }
+            guard voiceStartGeneration == generation else { return }
             voiceConnectingSounds.update(isRunning: false, didFinish: false)
             actionStatusOverlayMessage = nil
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -476,7 +494,18 @@ final class PetController {
         await startVoice(mode: configuration.voiceMode)
     }
 
-    func stopVoice(drainAnnouncements: Bool = true) async {
+    func stopVoice(drainAnnouncements: Bool = true, invalidatePendingStart: Bool = true) async {
+        if invalidatePendingStart { voiceStartGeneration = UUID() }
+        // Disable capture before any disk or transport await; preserve the user's mute preference.
+        voiceSession?.setMuted(true)
+        if let voiceStopTask { await voiceStopTask.value; return }
+        let task = Task { await self.finishStoppingVoice(drainAnnouncements: drainAnnouncements) }
+        voiceStopTask = task
+        await task.value
+        voiceStopTask = nil
+    }
+
+    private func finishStoppingVoice(drainAnnouncements: Bool) async {
         voiceConnectingSounds.update(isRunning: false, didFinish: false)
         screenCapture.cancel()
         desktopActions.cancel()
@@ -497,10 +526,15 @@ final class PetController {
         actionStatusOverlayMessage = nil
         currentHardwareAudioDriver = nil
 
-        if let session = voiceSession {
-            voiceSession = nil
-            activeVoiceMode = nil
+        let session = voiceSession
+        let binding = voiceHistoryBinding
+        voiceSession = nil
+        activeVoiceMode = nil
+        voiceHistoryBinding = nil
+        realtimeNotifications = nil
+        if let session {
             await session.stop()
+            if let binding { await persistVoiceHistory(for: session, binding: binding) }
         }
         if let pipelineKey = activePipelineSessionKey, let ideMCP = appState?.ideMCPServer {
             activePipelineSessionKey = nil
@@ -548,9 +582,29 @@ final class PetController {
         }
         guard let appState else { return }
         isSendingText = true
+        let scope = voiceHistoryScope(in: appState)
+        if let voiceStopTask { await voiceStopTask.value }
+        let archive: PetVoiceHistoryStore.Archive
+        do {
+            archive = try await voiceHistoryStore.archive(scope: scope)
+        } catch {
+            isSendingText = false
+            alertErrorMessage = error.localizedDescription
+            return
+        }
+        guard self.appState === appState, scope == voiceHistoryScope(in: appState) else {
+            isSendingText = false
+            return
+        }
+        if textHistoryID != archive.id {
+            textHistoryID = archive.id
+            textResumeSessionID = nil
+            textConversationID = UUID()
+        }
         let conversationID = textConversationID
         let sessionKey = "pet-chat-\(conversationID.uuidString.lowercased())"
-        chatTranscript.append(ChatEntry(isUser: true, text: trimmed))
+        let user = ChatEntry(isUser: true, text: trimmed)
+        chatTranscript = [user]
         let reply = ChatEntry(isUser: false, text: "")
         chatTranscript.append(reply)
         defer {
@@ -559,8 +613,13 @@ final class PetController {
             Task { await appState.ideMCPServer.release(sessionKey: sessionKey) }
         }
         do {
+            let saved = try await voiceHistoryStore.append(scope: scope, conversationID: archive.id, turns: [
+                .init(id: user.id, sessionID: conversationID, isUser: true, text: trimmed, receivedAt: .now)
+            ])
+            showHistory(saved)
+            guard self.appState === appState, scope == voiceHistoryScope(in: appState) else { return }
             let setup = try await prepareCustomAgentTurn(
-                userText: trimmed,
+                userText: trimmed, priorConversation: archive.context,
                 resumeSessionID: textResumeSessionID, sessionKeyOverride: sessionKey
             )
             for await event in setup.client.send(setup.sendRequest) {
@@ -573,7 +632,16 @@ final class PetController {
                     if let index = chatTranscript.firstIndex(where: { $0.id == reply.id }) {
                         chatTranscript[index].text += delta
                     }
-                case .toolCallStarted, .toolCallResult, .turnEnded:
+                case .turnEnded(let result):
+                    handlePetToolEvent(event)
+                    if !result.isError, !result.isBackgroundFollowUp,
+                       let entry = chatTranscript.first(where: { $0.id == reply.id }) {
+                        let saved = try await voiceHistoryStore.append(scope: scope, conversationID: archive.id, turns: [
+                            .init(id: reply.id, sessionID: conversationID, isUser: false, text: entry.text, receivedAt: .now)
+                        ])
+                        showHistory(saved)
+                    }
+                case .toolCallStarted, .toolCallResult:
                     handlePetToolEvent(event)
                 case .failed(let error):
                     alertErrorMessage = error.localizedDescription
@@ -605,13 +673,11 @@ final class PetController {
         status: PetStatus,
         action: PetQuickAction?
     ) {
-        guard configuration.isEnabled, isVoiceActive || configuration.proactiveMode != .off else { return }
+        guard configuration.isEnabled, configuration.proactiveMode != .off else { return }
         guard !configuration.conversationLanguageInstruction.isEmpty, appState != nil else {
             presentProactiveEvent(title: title, spokenText: spokenText, mood: mood, status: status, action: action)
             return
         }
-        let speechGeneration = speechPermissionGeneration
-        let allowsSpeech = !isMuted
         // Serialize translations so slower completions cannot reorder notifications.
         let previous = notificationLocalizationTask
         notificationLocalizationTask = Task { @MainActor [weak self] in
@@ -629,8 +695,7 @@ final class PetController {
             } while !Task.isCancelled && language != self.configuration.conversationLanguageIdentifier
             guard !Task.isCancelled else { return }
             self.presentProactiveEvent(
-                title: localized.title, spokenText: localized.text, mood: mood, status: status, action: action,
-                allowsSpeech: allowsSpeech && self.speechPermissionGeneration == speechGeneration
+                title: localized.title, spokenText: localized.text, mood: mood, status: status, action: action
             )
         }
     }
@@ -639,7 +704,7 @@ final class PetController {
         title: String?, spokenText: String, mood: PetMood, status: PetStatus, action: PetQuickAction?,
         allowsSpeech: Bool = true
     ) {
-        guard configuration.isEnabled, isVoiceActive || configuration.proactiveMode != .off else { return }
+        guard configuration.isEnabled, configuration.proactiveMode != .off else { return }
         lastInteractionAt = .now
         petState.mood = mood
         petState.status = status
@@ -655,7 +720,7 @@ final class PetController {
         )
         scheduleTransientMoodReset(after: 7.0)
 
-        guard allowsSpeech, isVoiceActive || configuration.proactiveMode == .voiceAndBubble else { return }
+        guard allowsSpeech, configuration.proactiveMode == .voiceAndBubble else { return }
         speakProactivelyOrQueue(spokenText)
     }
 
@@ -668,8 +733,6 @@ final class PetController {
         petState.status = .thinking
         petState.mood = .focused
 
-        let speechGeneration = speechPermissionGeneration
-        let allowsSpeech = speakAloud && !isMuted
         let report = await PetDailyReportService.generate(for: appState)
         latestDailyReport = report
         isGeneratingDailyReport = false
@@ -691,7 +754,7 @@ final class PetController {
         if openSheet {
             openCompanionWindow(sheet: .dailyReport)
         }
-        if allowsSpeech, speechPermissionGeneration == speechGeneration {
+        if speakAloud {
             speakProactivelyOrQueue(report.spokenSummary)
         }
     }
@@ -701,10 +764,8 @@ final class PetController {
     }
 
     func previewVoiceSample(_ sampleText: String = "Hi there! I am RxBuddy, your RxCode voice companion.") {
-        guard !isMuted else { return }
         Task {
             await stopVoice(drainAnnouncements: false)
-            guard !isMuted else { return }
             standaloneSpeaker.speak(text: sampleText, synthesizer: localSynthesizer)
         }
     }

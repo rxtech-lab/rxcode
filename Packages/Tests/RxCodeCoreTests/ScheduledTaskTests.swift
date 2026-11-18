@@ -5,6 +5,23 @@ import Testing
 @Suite("Scheduled tasks")
 struct ScheduledTaskTests {
 
+    @Test("Pet reminders persist without projects and legacy progress records keep their behavior")
+    func petScheduleKinds() throws {
+        var reminder = ScheduledTask(name: "Break", prompt: "Take a break.", cronExpression: "")
+        reminder.petScheduleKind = .reminder
+        reminder.dueAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let restored = try JSONDecoder().decode(ScheduledTask.self, from: JSONEncoder().encode(reminder))
+        #expect(restored.projectId == nil && restored.resolvedPetScheduleKind == .reminder)
+        #expect(restored.isPetSchedule && !restored.isPetProgressCheck)
+        let legacy = """
+        {"id":"\(UUID().uuidString)","projectId":"\(UUID().uuidString)","reportsPetProgress":true}
+        """
+        let progress = try JSONDecoder().decode(ScheduledTask.self, from: Data(legacy.utf8))
+        #expect(progress.petScheduleKind == nil && progress.isPetProgressCheck && progress.projectId != nil)
+        let ordinary = try JSONDecoder().decode(ScheduledTask.self, from: Data("{\"id\":\"\(UUID().uuidString)\"}".utf8))
+        #expect(!ordinary.isPetSchedule && ordinary.projectId == nil)
+    }
+
     @Test("A task's model survives a round trip")
     func agentRoundTrips() throws {
         let task = ScheduledTask(

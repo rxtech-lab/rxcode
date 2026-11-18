@@ -201,3 +201,64 @@ struct ProjectCloudSyncTests {
         #expect(decoded.cloudSync?.localTaskId(forRemote: "r") == taskId)
     }
 }
+
+extension ProjectCloudSyncTests {
+    @Test func deltaPagesAndLegacyFallback() throws {
+        let full = Data(#"{"checkpoint":"a","tasks":[{"id":"1"},{"id":"2"}],"stories":[]}"#.utf8)
+        let (baseline, _) = try CloudBoardPage.apply(full, to: nil)
+        let first = Data(#"{"checkpoint":"b","nextCursor":"p2","tasks":[{"id":"2","title":"edited"}],"deletedTaskIds":["1"],"stories":[],"deletedStoryIds":[]}"#.utf8)
+        let (updated, cursor) = try CloudBoardPage.apply(first, to: baseline)
+        #expect(cursor == "p2")
+        #expect(updated.tasks.map(\.fields.title) == ["edited"])
+        #expect(baseline.tasks.count == 2)
+        let unchanged = Data(#"{"checkpoint":"b","tasks":[],"deletedTaskIds":[],"stories":[],"deletedStoryIds":[]}"#.utf8)
+        let (final, next) = try CloudBoardPage.apply(unchanged, to: updated)
+        #expect(next == nil)
+        #expect(final.tasks == updated.tasks)
+        let legacy = Data(#"{"tasks":[],"stories":[]}"#.utf8)
+        #expect(try CloudBoardPage.apply(legacy, to: final).0.tasks.isEmpty)
+        #expect(throws: URLError.self) { try CloudBoardPage.apply(first, to: nil) }
+    }
+
+    @Test func changedFieldsAndPayloadComparison() throws {
+        let old = CloudTaskFields(title: "Task", details: String(repeating: "x", count: 4096), priority: "high")
+        var edit = old
+        edit.priority = nil
+        let patch = try CloudFieldPatch.encode(edit, previous: old)
+        let json = try #require(JSONSerialization.jsonObject(with: patch) as? [String: NSNull])
+        #expect(Set(json.keys) == ["priority"])
+        let full = try CloudFieldPatch.encode(edit, previous: nil)
+        #expect(patch.count < full.count / 100)
+        let unchanged = try CloudFieldPatch.encode(old, previous: old)
+        #expect(unchanged.count == 2)
+        print("Synthetic task PATCH: full", full.count, "bytes, sparse", patch.count, "bytes")
+    }
+}
+
+extension ProjectCloudSyncTests {
+    @Test func unchangedBoardTransferFixture() throws {
+        let tasks = (0..<200).map { ["id": String($0), "details": String(repeating: "x", count: 4096)] }
+        let full = try JSONSerialization.data(withJSONObject: ["tasks": tasks, "stories": [], "checkpoint": "a"])
+        let change = Data(#"{"tasks":[],"stories":[],"checkpoint":"a","deletedTaskIds":[],"deletedStoryIds":[]}"#.utf8)
+        let board = try CloudBoardPage.apply(full, to: nil).0
+        let restored = try JSONDecoder().decode(CloudRemoteBoard.self, from: JSONEncoder().encode(board))
+        let unchanged = try CloudBoardPage.apply(change, to: restored).0
+        #expect(unchanged.tasks == board.tasks)
+        print("Synthetic unchanged board GET: full", full.count, "bytes, delta", change.count, "bytes")
+    }
+
+    @Test func deltaMoveRetainsRequestedPosition() throws {
+        let previous = CloudTaskFields(title: "moving", status: "backlog", sortIndex: 12)
+        var moved = previous
+        moved.status = "done"
+        let data = try CloudFieldPatch.encode(moved, previous: previous)
+        let patch = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(patch["sortIndex"] as? Double == 12)
+        let baseline = CloudRemoteBoard(tasks: [
+            CloudRemoteTask(id: "a", fields: previous),
+            CloudRemoteTask(id: "b", fields: CloudTaskFields(title: "other", sortIndex: 20))
+        ])
+        let delta = Data(#"{"tasks":[{"id":"b","sortIndex":3}],"stories":[],"checkpoint":"b","deletedTaskIds":[],"deletedStoryIds":[]}"#.utf8)
+        #expect(try CloudBoardPage.apply(delta, to: baseline).0.tasks.map(\.id) == ["b", "a"])
+    }
+}

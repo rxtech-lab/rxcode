@@ -50,6 +50,10 @@ extension AppState {
         sessionKey: String
     ) async throws -> JSONValue {
         switch name {
+        case "ide__pet_schedule":
+            return try await handlePetSchedule(arguments: arguments, sessionKey: sessionKey)
+        case "ide__pet_voice_history":
+            return try await handlePetVoiceHistory(arguments: arguments, sessionKey: sessionKey)
         case "ide__skill_get":
             let skillName = arguments["name"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !skillName.isEmpty else { throw IDEToolError.invalidArguments("Pass an RxCode skill name.") }
@@ -120,7 +124,14 @@ extension AppState {
         case "ide__memory_search":
             return try await handleMemorySearch(arguments: arguments)
         case "ide__memory_add":
-            return try await handleMemoryAdd(arguments: arguments)
+            return try await handleMemoryAdd(arguments: arguments, defaultScope: sessionKey.hasPrefix("pet-") ? "pet" : "project")
+        case "ide__memory_list":
+            guard memoryEnabled else { throw IDEToolError.handlerFailed("Memory is disabled in Settings → General → Memory.") }
+            let scope = arguments["scope"]?.stringValue ?? "global"
+            guard scope == "global" || scope == "project" || scope == "pet" else { throw IDEToolError.invalidArguments("scope must be global, project, or pet.") }
+            let projectID = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+            let items = await allMemoryItems().filter { $0.scope == scope && (scope != "project" || $0.projectId == projectID) }.prefix(100)
+            return jsonTextResult(.array(items.map { .object(["id": .string($0.id), "scope": .string($0.scope), "kind": .string($0.kind), "content": .string($0.content)]) }))
         case "ide__memory_update":
             return try await handleMemoryUpdate(arguments: arguments)
         case "ide__memory_delete":
@@ -629,6 +640,34 @@ extension AppState {
             "seven_day_resets_at": usage.sevenDayResetsAt.map { .string(ISO8601DateFormatter().string(from: $0)) } ?? .null,
         ]))
     }
+
+
+    func handlePetVoiceHistory(arguments: JSONValue, sessionKey: String, pet: PetController = .shared) async throws -> JSONValue {
+        let scope = pet.voiceHistoryBinding.flatMap { $0.runtimeSessionKey == sessionKey ? $0.scope : nil }
+            ?? pet.voiceHistoryScope(in: self)
+        let archive = try await pet.voiceHistoryStore.archive(scope: scope)
+        let requestedID = arguments["conversation_id"]?.stringValue
+        if let requestedID, UUID(uuidString: requestedID) != archive.id {
+            throw PetVoiceHistoryStore.StoreError.wrongConversation
+        }
+        let action = arguments["action"]?.stringValue ?? "read"
+        if action == "clear" {
+            let approved = await requestAgentConfirmation(
+                ConfirmationTool.Request(title: "Clear Pet Conversation History?",
+                    message: "Delete saved typed chats, voice transcripts, and the continuity summary for this workspace/project? The active call can still remember prior context until you hang up.",
+                    confirmLabel: "Clear History", cancelLabel: "Cancel"), sessionKey: sessionKey)
+            guard approved else { return textResult("Voice history was not cleared.") }
+            try await pet.voiceHistoryStore.clear(scope: scope, conversationID: archive.id)
+            await pet.loadDisplayedHistory()
+            return textResult("Saved voice history and continuity summary were cleared. The current call's model context is unchanged until hangup.")
+        }
+        guard action == "read" else { throw IDEToolError.invalidArguments("action must be read or clear.") }
+        let page = try await pet.voiceHistoryStore.page(scope: scope, conversationID: archive.id,
+            cursor: arguments["cursor"]?.stringValue, limit: Int(min(50, max(1, arguments["limit"]?.numberValue ?? 20))))
+        let data = try JSONEncoder().encode(page)
+        return textResult(String(decoding: data, as: UTF8.self))
+    }
+
 
     // MARK: - Formatting helpers
 

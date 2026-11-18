@@ -309,6 +309,71 @@ private final class TestPetMusicPlayer: PetMusicPlaying {
 }
 
 struct PetInteractionTests {
+    @Test("Startup restores an authorized account without prompting, enabling, or playing")
+    @MainActor
+    func musicStartupRestoration() async throws {
+        let controller = PetController()
+        let player = TestPetMusicPlayer()
+        // Start idle so the assertion below proves startup never begins playback.
+        player.isPlaying = false
+        let checks = Mutex(0)
+        let music = PetMusic(controller: controller, player: player,
+            currentAuthorizationStatus: { .authorized }, requestAuthorization: {
+                Issue.record("Startup must not request authorization"); return false
+            }, checkConnection: { checks.withLock { $0 += 1 }; return true })
+        await music.refreshConnection()
+        #expect(music.isLinked && music.canPlayCatalogContent == true)
+        #expect(!music.enabled && !music.ownsQueue && !music.showsPlayer)
+        #expect(player.stopCount == 0 && !player.isPlaying)
+        #expect(checks.withLock { $0 } == 1)
+        _ = await music.off()
+        await music.refreshConnection()
+        #expect(music.isLinked && !music.enabled)
+    }
+
+    @Test("Concurrent account checks coalesce; transient errors recover without Link")
+    @MainActor
+    func musicRefreshSingleFlight() async {
+        let controller = PetController()
+        let checks = Mutex(0)
+        let music = PetMusic(controller: controller, player: TestPetMusicPlayer(),
+            currentAuthorizationStatus: { .authorized }, requestAuthorization: {
+                Issue.record("Refresh must not prompt"); return false
+            }, checkConnection: {
+                let attempt = checks.withLock { $0 += 1; return $0 }
+                try await Task.sleep(for: .milliseconds(40))
+                if attempt == 1 { throw URLError(.notConnectedToInternet) }
+                return false
+            })
+        async let first: Void = music.refreshConnection()
+        async let second: Void = music.refreshConnection()
+        _ = await (first, second)
+        #expect(checks.withLock { $0 } == 1)
+        #expect(!music.isLinked && music.canPlayCatalogContent == nil)
+        #expect(music.authorizationStatus == .authorized && music.connectionError != nil)
+        await music.refreshConnection()
+        #expect(music.isLinked && music.canPlayCatalogContent == false)
+        #expect(music.connectionError == nil && !music.isCheckingConnection)
+    }
+
+    @Test("Revocation during an account check cannot restore stale linked state")
+    @MainActor
+    func musicRefreshRevocation() async {
+        let controller = PetController()
+        let authorization = Mutex<MusicAuthorization.Status>(.authorized)
+        let music = PetMusic(controller: controller, player: TestPetMusicPlayer(),
+            currentAuthorizationStatus: { authorization.withLock { $0 } },
+            requestAuthorization: { Issue.record("Must not prompt"); return false },
+            checkConnection: { try? await Task.sleep(for: .milliseconds(40)); return true })
+        let pending = Task { await music.refreshConnection() }
+        await Task.yield()
+        authorization.withLock { $0 = .denied }
+        await music.refreshConnection()
+        await pending.value
+        #expect(!music.isLinked && music.canPlayCatalogContent == nil)
+        #expect(music.authorizationStatus == .denied && !music.isCheckingConnection)
+    }
+
     @Test("Linking verifies account access without enabling the pet player")
     @MainActor
     func musicLinking() async throws {

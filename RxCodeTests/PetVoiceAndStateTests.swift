@@ -21,9 +21,9 @@ struct PetVoiceAndStateTests {
         #expect(restored.isMuted == true)
     }
 
-    @Test("Muted pets discard notification speech and block voice previews and calls")
+    @Test("Microphone mute preserves speech notifications")
     @MainActor
-    func mutedPetRemainsSilent() async throws {
+    func microphoneMuteKeepsNotificationSpeech() throws {
         let suite = "PetMuteTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -31,18 +31,12 @@ struct PetVoiceAndStateTests {
         config.isMuted = true
         config.save(to: defaults)
         let controller = PetController(defaults: defaults)
+        // Hold delivery to observe the queue without touching real audio hardware.
+        controller.announcementTask = Task {}
+        defer { controller.announcementTask?.cancel() }
         controller.speakProactivelyOrQueue("A task has finished")
-        controller.previewVoiceSample("Preview")
-        let preview = PetVoiceDraftPreview()
-        preview.play(configuration: config, controller: controller)
-        #expect(!preview.isPlaying)
-        #expect(preview.errorMessage == "Unmute the pet to preview a voice.")
-        await controller.startVoice()
         #expect(controller.isMuted)
-        #expect(controller.queuedProactiveSpeech.isEmpty)
-        #expect(controller.announcementTask == nil)
-        #expect(controller.voiceSession == nil)
-        #expect(!controller.isStandaloneSpeaking)
+        #expect(controller.queuedProactiveSpeech == ["A task has finished"])
     }
 
     @Test("Pet settings and voice management target a dedicated window")

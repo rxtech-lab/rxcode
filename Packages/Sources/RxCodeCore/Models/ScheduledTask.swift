@@ -1,14 +1,14 @@
 import Foundation
 
-/// A prompt that runs in a project periodically on a cron schedule. Listed in
-/// the sidebar's "Scheduled" route and persisted app-wide.
+/// A recurring agent prompt, pet reminder, or project progress check. `dueAt` makes a
+/// task one-off; cron recurs. Listed in Scheduled and persisted by the existing store.
 public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
     public var id: UUID
-    /// The project each run's agent works in. `nil` runs it outside any
-    /// project, in the general Chat.
+    /// The project an agent or progress check works in. Reminders always use `nil`.
+    /// An ordinary agent task with `nil` runs in general Chat.
     public var projectId: UUID?
     public var name: String
-    /// The prompt sent to the agent on each run.
+    /// An agent prompt, reminder text to deliver, or progress-check context, according to kind.
     public var prompt: String
     /// A five-field cron expression or macro; see `CronExpression`.
     public var cronExpression: String
@@ -22,6 +22,24 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
     public var createdAt: Date
     public var updatedAt: Date
     public var lastRunAt: Date?
+    /// A one-off instant replaces cron. Its timezone is retained for display/editing.
+    public var dueAt: Date? = nil
+    public var timeZoneIdentifier: String? = nil
+    /// Direct, factual project observation rather than dispatching an agent to do work.
+    public var reportsPetProgress: Bool? = nil
+    /// Explicit pet behavior. Missing on legacy records; `reportsPetProgress` retains its meaning.
+    public var petScheduleKind: PetScheduleKind? = nil
+    public var resolvedPetScheduleKind: PetScheduleKind? {
+        petScheduleKind ?? (reportsPetProgress == true ? .progress : nil)
+    }
+    public var isPetSchedule: Bool { resolvedPetScheduleKind != nil }
+    public var isPetProgressCheck: Bool { resolvedPetScheduleKind == .progress }
+
+    /// Claimed before execution and persisted; a restart never silently reruns a claimed check.
+    public var claimedAt: Date? = nil
+    /// Durable notification outbox; cleared only after the pet acknowledges delivery.
+    public var pendingPetReport: String? = nil
+    public var petReportDeliveredAt: Date? = nil
 
     public init(
         id: UUID = UUID(),
@@ -51,6 +69,7 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, projectId, name, prompt, cronExpression, isEnabled, agent, notification, createdAt, updatedAt, lastRunAt
+        case dueAt, timeZoneIdentifier, reportsPetProgress, petScheduleKind, claimedAt, pendingPetReport, petReportDeliveredAt
     }
 
     /// Tolerates missing optional keys so records written by older or newer
@@ -68,6 +87,13 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
         createdAt = (try? c.decodeIfPresent(Date.self, forKey: .createdAt)) ?? .now
         updatedAt = (try? c.decodeIfPresent(Date.self, forKey: .updatedAt)) ?? createdAt
         lastRunAt = try? c.decodeIfPresent(Date.self, forKey: .lastRunAt)
+        dueAt = try? c.decodeIfPresent(Date.self, forKey: .dueAt)
+        timeZoneIdentifier = try? c.decodeIfPresent(String.self, forKey: .timeZoneIdentifier)
+        reportsPetProgress = try? c.decodeIfPresent(Bool.self, forKey: .reportsPetProgress)
+        petScheduleKind = try? c.decodeIfPresent(PetScheduleKind.self, forKey: .petScheduleKind)
+        claimedAt = try? c.decodeIfPresent(Date.self, forKey: .claimedAt)
+        pendingPetReport = try? c.decodeIfPresent(String.self, forKey: .pendingPetReport)
+        petReportDeliveredAt = try? c.decodeIfPresent(Date.self, forKey: .petReportDeliveredAt)
     }
 
     /// The parsed schedule, or `nil` when `cronExpression` is invalid.
@@ -75,9 +101,13 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
         try? CronExpression(cronExpression)
     }
 
-    /// When the schedule next fires after `date`, regardless of `isEnabled`.
+    /// Pending one-offs return their due instant even if overdue, for launch/wake catch-up.
+    /// Recurring schedules return their next fire after `date`, regardless of `isEnabled`.
     public func nextRunDate(after date: Date = .now, calendar: Calendar = .current) -> Date? {
-        schedule?.nextDate(after: date, calendar: calendar)
+        if let dueAt { return claimedAt == nil && lastRunAt == nil ? dueAt : nil }
+        var calendar = calendar
+        if let id = timeZoneIdentifier, let zone = TimeZone(identifier: id) { calendar.timeZone = zone }
+        return schedule?.nextDate(after: date, calendar: calendar)
     }
 
     /// The prompt a run sends: `prompt`, plus how to handle notifications.
@@ -149,4 +179,10 @@ public struct CronPreset: Identifiable, Sendable {
         CronPreset(title: "Every Monday at 9:00", expression: "0 9 * * 1"),
         CronPreset(title: "First day of the month at 9:00", expression: "0 9 1 * *"),
     ]
+}
+
+/// Pet reminders deliver their saved text; progress checks read an explicitly selected project.
+public enum PetScheduleKind: String, Codable, Sendable, Hashable {
+    case reminder
+    case progress
 }

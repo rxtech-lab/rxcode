@@ -12,6 +12,7 @@ struct PetSettingsView: View {
     @State private var microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)
     @State private var isRequestingMicrophone = false
     @State private var audioDevices = PetAudioDeviceCatalog()
+    @State private var audioTest: PetAudioTest?
     private var selectedTab: SettingsTab {
         get { controller.settingsTab }
         nonmutating set { controller.settingsTab = newValue }
@@ -97,6 +98,9 @@ struct PetSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)
             if selectedTab == .music { Task { await controller.music.refreshConnection() } }
+        }
+        .sheet(item: $audioTest) { test in
+            PetAudioTestSheet(test: test, configuration: controller.configuration)
         }
         .sheet(isPresented: $isEditingAppleVoice) {
             PetAppleVoiceSheet(controller: controller)
@@ -206,6 +210,9 @@ struct PetSettingsView: View {
             Button("Open Music") { openMusicApp() }
         case .authorized where music.isLinked:
             EmptyView()
+        case .authorized:
+            Button("Retry Account Check") { music.refreshConnectionInBackground() }
+                .disabled(music.isCheckingConnection)
         default:
             Button("Link") { linkAppleMusic() }
                 .buttonStyle(.borderedProminent)
@@ -239,7 +246,9 @@ struct PetSettingsView: View {
         case .restricted: return "Access restricted on this Mac"
         case .authorized where music.isLinked:
             return music.canPlayCatalogContent == false ? "Linked · Subscription required for playback" : "Linked · Ready to play"
-        case .authorized: return music.errorMessage == nil ? "Authorized · Not verified" : "Couldn't connect"
+        case .authorized:
+            if music.isCheckingConnection { return "Authorized · Checking account…" }
+            return music.connectionError ?? "Authorized · Account not verified"
         default: return "Not linked"
         }
     }
@@ -336,16 +345,14 @@ struct PetSettingsView: View {
                 selection: $controller.configuration.speakerDeviceUID,
                 devices: audioDevices.outputs
             )
+            HStack {
+                Button("Test Microphone…") { audioTest = .microphone }
+                Button("Test Speaker…") { audioTest = .speaker }
+            }
         } header: {
             Text("Audio Devices")
         } footer: {
-            if controller.configuration.voiceMode == .codexRealtime,
-               controller.configuration.codexTransport == .webRTC,
-               controller.configuration.usesCustomAudioDevices {
-                Text("Codex Realtime over WebRTC always uses the system default microphone and speaker. The devices chosen here apply to the Local Pipeline, the WebSocket transport, and pet announcements.")
-            } else {
-                Text("System Default follows the devices chosen in System Settings → Sound. A disconnected device falls back to the system default until it is reconnected.")
-            }
+            Text("System Default follows System Settings → Sound. You can change devices during a call.")
         }
     }
 

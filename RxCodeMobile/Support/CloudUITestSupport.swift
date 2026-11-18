@@ -56,13 +56,23 @@ final class CloudUITestProtocol: URLProtocol, @unchecked Sendable {
                     data.append(contentsOf: bytes.prefix(count))
                 }
             }
-            var row = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-            row["id"] = request.httpMethod == "POST" ? UUID().uuidString : request.url!.lastPathComponent
-            if path.contains("/stories") {
-                Self.stories.removeAll { $0["id"] as? String == row["id"] as? String }
+            let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            let id = request.httpMethod == "POST" ? UUID().uuidString : request.url!.lastPathComponent
+            let isStory = path.contains("/stories")
+            // PATCH bodies carry only changed fields; merge them like the real API instead of
+            // replacing the stored row (which would drop the title and other unchanged fields).
+            var row: [String: Any] = [:]
+            if request.httpMethod == "PATCH",
+               let existing = (isStory ? Self.stories : Self.tasks).first(where: { $0["id"] as? String == id }) {
+                row = existing
+            }
+            row.merge(body) { _, new in new }
+            row["id"] = id
+            if isStory {
+                Self.stories.removeAll { $0["id"] as? String == id }
                 Self.stories.append(row)
             } else {
-                Self.tasks.removeAll { $0["id"] as? String == row["id"] as? String }
+                Self.tasks.removeAll { $0["id"] as? String == id }
                 Self.tasks.append(row)
             }
             object = row

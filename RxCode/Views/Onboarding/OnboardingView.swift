@@ -63,15 +63,6 @@ struct OnboardingView: View {
         slides[selectedIndex]
     }
 
-    private var canContinue: Bool {
-        switch currentSlide.visual {
-        case .cliSetup:
-            return claudeInstalled || codexInstalled
-        default:
-            return true
-        }
-    }
-
     var body: some View {
         GeometryReader { proxy in
             let contentWidth = min(proxy.size.width - 72, 820)
@@ -201,8 +192,6 @@ struct OnboardingView: View {
                     circularNavigationButton(systemImage: isLastSlide ? "checkmark" : "chevron.right") {
                         advance()
                     }
-                    .disabled(!canContinue)
-                    .opacity(canContinue ? 1 : 0.38)
                 }
                 .padding(20)
             }
@@ -239,9 +228,7 @@ struct OnboardingView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
-            .background(canContinue ? ClaudeTheme.accent : ClaudeTheme.textTertiary, in: Capsule())
-            .shadow(color: ClaudeTheme.accent.opacity(canContinue ? 0.24 : 0), radius: 12, y: 6)
-            .disabled(!canContinue)
+            .background(ClaudeTheme.accent, in: Capsule())
             .padding(.bottom, 34)
         }
     }
@@ -351,8 +338,7 @@ struct OnboardingView: View {
         }
     }
 
-    private func advance(skipping: Bool = false) {
-        guard skipping || canContinue else { return }
+    private func advance() {
 
         if isLastSlide {
             completeOnboarding()
@@ -576,10 +562,10 @@ struct OnboardingSlide: Identifiable {
         ),
         OnboardingSlide(
             id: "cli",
-            title: "Connect at least one agent CLI",
-            subtitle: "RxCode runs Claude Code or Codex locally. Install one of them to start your first project.",
+            title: "Set up Claude Code or Codex",
+            subtitle: "Download an agent now or add one later in Settings.",
             visual: .cliSetup,
-            canSkip: false
+            canSkip: true
         ),
         OnboardingSlide(
             id: "acp",

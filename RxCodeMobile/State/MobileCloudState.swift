@@ -147,9 +147,9 @@ final class MobileCloudState {
         boards[projectID] = board
     }
 
-    func savedViews(_ projectID: String) async throws -> CloudSavedViews? {
+    func savedViews(_ projectID: String, revision: Int? = nil) async throws -> CloudSavedViews? {
         let current = generation
-        let result = try await service.savedViews(projectId: projectID)
+        let result = try await service.savedViews(projectId: projectID, revision: revision)
         try checkSession(current)
         return result
     }
@@ -191,7 +191,9 @@ final class MobileCloudState {
         let current = generation
         let task: CloudRemoteTask
         if let id {
-            task = try await service.updateTask(projectId: projectID, taskId: id, fields: fields)
+            let previous = boards[projectID]?.tasks.first { $0.id == id }
+            if let previous, previous.fields == fields { return previous }
+            task = try await service.updateTask(projectId: projectID, taskId: id, fields: fields, previous: previous?.fields)
         } else {
             task = try await service.createTask(projectId: projectID, fields: fields)
         }
@@ -208,7 +210,9 @@ final class MobileCloudState {
         let current = generation
         let story: CloudRemoteStory
         if let id {
-            story = try await service.updateStory(projectId: projectID, storyId: id, fields: fields)
+            let previous = boards[projectID]?.stories.first { $0.id == id }
+            if let previous, previous.fields == fields { return previous }
+            story = try await service.updateStory(projectId: projectID, storyId: id, fields: fields, previous: previous?.fields)
         } else {
             story = try await service.createStory(projectId: projectID, fields: fields)
         }

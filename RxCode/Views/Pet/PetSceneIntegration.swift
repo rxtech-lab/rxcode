@@ -104,9 +104,8 @@ struct PetCommands: Commands {
                 controller.toggleVoice()
             }
             .keyboardShortcut("v", modifiers: [.command, .option])
-            .disabled(controller.isMuted)
 
-            Button(controller.isMuted ? "Unmute Pet" : "Mute Pet") {
+            Button(controller.isMuted ? "Unmute Microphone" : "Mute Microphone") {
                 controller.toggleMute()
             }
 

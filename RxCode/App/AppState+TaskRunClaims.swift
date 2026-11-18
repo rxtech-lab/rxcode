@@ -132,7 +132,7 @@ extension AppState {
             if let local = self.task(id: task.id) {
                 fields.status = taskBoard(for: task.projectId).cloudStatus(for: local.status)
             }
-            let written = try await projectCloud.updateTask(projectId: cloudId, taskId: remoteId, fields: fields)
+            let written = try await projectCloud.updateTask(projectId: cloudId, taskId: remoteId, fields: fields, previous: remote.fields)
             recordClaim(me, for: task, base: written.fields)
 
             try await Task.sleep(for: Self.taskClaimSettleDelay)

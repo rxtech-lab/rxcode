@@ -8,6 +8,10 @@ import SwiftUI
 extension AppState {
     // MARK: - Memory
 
+    func ensureMemoryStarted() async {
+        await memoryService.start(threadStore: threadStore, keepsGlobalRows: activeWorkspace.isPersonal)
+    }
+
     func configureMemoryMCPServer(enabled: Bool, port: Int, exposedTools: Set<MCPServerTool>) async {
         await core.memoryMCPServer.setHandler(self)
         do {
@@ -25,23 +29,27 @@ extension AppState {
     }
 
     func allMemoryItems() async -> [MemoryItem] {
-        await memoryService.allMemories()
+        await ensureMemoryStarted()
+        return await memoryService.allMemories()
     }
 
-    func searchMemoryItems(query: String, projectId: UUID? = nil, limit: Int = 50) async -> [MemoryService.Hit] {
-        await memoryService.search(query, projectId: projectId, limit: limit)
+    func searchMemoryItems(query: String, projectId: UUID? = nil, limit: Int = 50, scope: String? = nil, includePet: Bool = false) async -> [MemoryService.Hit] {
+        await ensureMemoryStarted()
+        return await memoryService.search(query, projectId: projectId, limit: limit, scope: scope, includePet: includePet)
     }
 
     @discardableResult
     func addMemoryItem(content: String, projectId: UUID?, kind: String = "fact", scope: String = "project") async -> MemoryItem? {
         guard memoryEnabled else { return nil }
+        await ensureMemoryStarted()
+        let scope = normalizedMemoryScope(scope)
         let item = await memoryService.addMemory(
             content: content,
-            projectId: scope == "global" ? nil : projectId,
+            projectId: scope == "project" ? projectId : nil,
             sessionId: nil,
             sourceMessageId: nil,
             kind: normalizedMemoryKind(kind),
-            scope: normalizedMemoryScope(scope)
+            scope: scope
         )
         if item != nil { memoryRevision &+= 1 }
         return item
@@ -50,25 +58,29 @@ extension AppState {
     @discardableResult
     func updateMemoryItem(id: String, content: String, projectId: UUID?, kind: String, scope: String) async -> MemoryItem? {
         guard memoryEnabled else { return nil }
+        await ensureMemoryStarted()
+        let scope = normalizedMemoryScope(scope)
         let item = await memoryService.updateMemory(
             id: id,
             content: content,
-            projectId: scope == "global" ? nil : projectId,
+            projectId: scope == "project" ? projectId : nil,
             sessionId: nil,
             sourceMessageId: nil,
             kind: normalizedMemoryKind(kind),
-            scope: normalizedMemoryScope(scope)
+            scope: scope
         )
         if item != nil { memoryRevision &+= 1 }
         return item
     }
 
     func deleteMemoryItem(id: String) async {
+        await ensureMemoryStarted()
         await memoryService.deleteMemory(id: id)
         memoryRevision &+= 1
     }
 
     func deleteAllMemoryItems(projectId: UUID? = nil) async {
+        await ensureMemoryStarted()
         await memoryService.deleteAll(projectId: projectId)
         memoryRevision &+= 1
     }
@@ -160,7 +172,7 @@ extension AppState {
                 if let best = existing.first, best.score > 0.94 { continue }
                 if await memoryService.addMemory(
                     content: content,
-                    projectId: scope == "global" ? nil : projectId,
+                    projectId: scope == "project" ? projectId : nil,
                     sessionId: sessionId,
                     sourceMessageId: sourceMessageId,
                     kind: normalizedMemoryKind(operation.kind),
@@ -176,7 +188,7 @@ extension AppState {
                 if await memoryService.updateMemory(
                     id: id,
                     content: content,
-                    projectId: scope == "global" ? nil : projectId,
+                    projectId: scope == "project" ? projectId : nil,
                     sessionId: sessionId,
                     sourceMessageId: sourceMessageId,
                     kind: normalizedMemoryKind(operation.kind),
@@ -254,7 +266,11 @@ extension AppState {
     }
 
     func normalizedMemoryScope(_ value: String?) -> String {
-        value?.lowercased() == "global" ? "global" : "project"
+        switch value?.lowercased() {
+        case "global": "global"
+        case "pet": "pet"
+        default: "project"
+        }
     }
 
     // MARK: - Agent Backends

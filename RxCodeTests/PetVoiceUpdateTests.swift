@@ -8,6 +8,329 @@ import Testing
 import RxCodeCore
 
 struct PetVoiceUpdateTests {
+    @Test("Hangup closes capture immediately and a fast reopen waits for the prior transcript flush")
+    @MainActor
+    func hangupAndFastReopen() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "PetFastReopen-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "PetFastReopenDefaults-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var config = PetConfiguration()
+        config.isMuted = false
+        config.save(to: defaults)
+        let store = PetVoiceHistoryStore(directory: root)
+        let pet = PetController(defaults: defaults, historyStore: store)
+        let app = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+        let scope = pet.voiceHistoryScope(in: app)
+        let archive = try await store.archive(scope: scope)
+        let typedSession = UUID()
+        try await store.append(scope: scope, conversationID: archive.id, turns: [
+            .init(id: UUID(), sessionID: typedSession, isUser: true, text: "Remember the blue cover.", receivedAt: .now)
+        ])
+        let initialContext = try await pet.prepareVoiceHistory(in: app).context
+        #expect(initialContext.contains("blue cover"))
+        let connection = PetUpdateTestConnection()
+        let audio = PetUpdateTestAudio()
+        let session = VoiceSession(engine: PetUpdateTestEngine(connection: connection), audio: audio)
+        pet.voiceSession = session
+        pet.activeVoiceMode = .localPipeline
+        try await session.start()
+        await connection.emit(.userTranscript(itemID: "final", text: "Keep API-42 pending until verification.", isFinal: true))
+        try await waitFor { !session.transcript.isEmpty }
+        let (closeGate, releaseClose) = AsyncStream<Void>.makeStream()
+        await connection.holdClose(closeGate)
+        let stopping = Task { await pet.stopVoice(drainAnnouncements: false) }
+        try await waitFor { await connection.closeCount == 1 }
+        #expect(!audio.captureEnabled)
+        #expect(!pet.isMuted)
+        var didPrepare = false
+        let reopening = Task {
+            let context = try await pet.prepareVoiceHistory(in: app).context
+            didPrepare = true
+            return context
+        }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(!didPrepare)
+        releaseClose.yield(())
+        releaseClose.finish()
+        await stopping.value
+        let context = try await reopening.value
+        #expect(context.contains("API-42"))
+        let reopened = try await PetVoiceHistoryStore(directory: root).archive(scope: scope)
+        #expect(reopened.turns.map(\.text) == ["Remember the blue cover.", "Keep API-42 pending until verification."])
+        #expect(Set(reopened.turns.map(\.sessionID)).count == 2)
+        #expect(pet.voiceHistoryBinding?.conversationID == archive.id)
+        #expect(pet.voiceSession == nil)
+        let binding = pet.voiceHistoryBinding
+        do {
+            _ = try await pet.prepareVoiceHistory(in: app, generation: UUID())
+            Issue.record("An obsolete start must not replace a newer conversation binding")
+        } catch is CancellationError {}
+        #expect(pet.voiceHistoryBinding === binding)
+    }
+
+    @Test("Cancelling one submitted report cannot retire a newer report with identical text")
+    @MainActor
+    func reportQueueUsesStableIDs() async throws {
+        let suite = "PetReportIDs-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var config = PetConfiguration()
+        config.isEnabled = true
+        config.proactiveMode = .voiceAndBubble
+        config.save(to: defaults)
+        let pet = PetController(defaults: defaults)
+        let connection = PetUpdateTestConnection()
+        let session = VoiceSession(engine: PetUpdateTestEngine(connection: connection), audio: PetUpdateTestAudio())
+        pet.voiceSession = session
+        pet.activeVoiceMode = .codexRealtime
+        await bindRealtimeNotifications(pet: pet, connection: connection)
+        try await session.start()
+        let first = UUID(), second = UUID()
+        var firstDelivered = 0, secondDelivered = 0
+        pet.deliverScheduledReport(id: first, title: "First", text: "Two tasks remain pending.") { firstDelivered += 1 }
+        try await waitFor { await connection.messages.count == 1 }
+        pet.deliverScheduledReport(id: second, title: "Second", text: "Two tasks remain pending.") { secondDelivered += 1 }
+        pet.cancelScheduledReport(id: first)
+        await connection.finishReply()
+        try await waitFor { await connection.messages.count == 2 }
+        #expect(firstDelivered == 0 && secondDelivered == 0)
+        await connection.finishReply()
+        try await waitFor { secondDelivered == 1 }
+        #expect(firstDelivered == 0)
+        #expect(pet.queuedProactiveSpeech.isEmpty)
+        await pet.stopVoice(drainAnnouncements: false)
+        pet.bubbleDismissTask?.cancel()
+    }
+
+    @Test("Received completed turns survive a disconnect and manual hangup without replaying partial text")
+    @MainActor
+    func completedHistoryOnDisconnect() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "PetDisconnectHistory-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PetVoiceHistoryStore(directory: root)
+        let archive = try await store.archive(scope: "workspace-project")
+        let pet = PetController(historyStore: store)
+        pet.voiceHistoryBinding = PetVoiceHistoryBinding(scope: archive.scope, conversationID: archive.id)
+        let connection = PetUpdateTestConnection()
+        let session = VoiceSession(engine: PetUpdateTestEngine(connection: connection), audio: PetUpdateTestAudio())
+        pet.voiceSession = session
+        pet.activeVoiceMode = .codexRealtime
+        try await session.start()
+        pet.startVoiceStateSyncLoop(for: session)
+        await connection.emit(.userTranscript(itemID: "user", text: "Keep API-42 pending.", isFinal: true))
+        try await session.send(text: "Request")
+        await connection.finishReply()
+        await connection.emit(.assistantText(itemID: "partial", delta: "unfinished draft"))
+        await connection.emit(.closed(reason: "test drop"))
+        try await waitFor { session.lifecycle == .stopped }
+        try await waitFor { (try? await store.archive(scope: archive.scope).turns.count) == 2 }
+        await pet.stopVoice(drainAnnouncements: false)
+        let reopened = try await PetVoiceHistoryStore(directory: root).archive(scope: archive.scope)
+        #expect(reopened.turns.count == 2)
+        #expect(!reopened.turns.contains { $0.text.contains("unfinished draft") })
+        #expect(reopened.context.contains("API-42"))
+        pet.bubbleDismissTask?.cancel()
+    }
+
+    @Test("Scheduled reports wait for an active realtime reply and remain audible with a muted microphone")
+    @MainActor
+    func scheduledReportDuringRealtimeReply() async throws {
+        for transport in [CodexRealtimeTransportPreference.webRTC, .websocket] {
+            let suite = "PetScheduledVoice-\(UUID().uuidString)"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            var config = PetConfiguration()
+            config.isEnabled = true
+            config.proactiveMode = .voiceAndBubble
+            config.codexTransport = transport
+            config.isMuted = true
+            config.save(to: defaults)
+            let pet = PetController(defaults: defaults)
+            let connection = PetUpdateTestConnection()
+            let session = VoiceSession(engine: PetUpdateTestEngine(connection: connection), audio: PetUpdateTestAudio())
+            pet.voiceSession = session
+            pet.activeVoiceMode = .codexRealtime
+            await bindRealtimeNotifications(pet: pet, connection: connection)
+            session.setMuted(true)
+            try await session.start()
+            let channel = try #require(pet.realtimeNotifications)
+            channel.responseStarted()
+            var delivered = 0
+            let id = UUID()
+            pet.deliverScheduledReport(id: id, title: "Progress", text: "The project has two pending tasks.") { delivered += 1 }
+            pet.deliverScheduledReport(id: id, title: "Progress", text: "The project has two pending tasks.") { delivered += 1 }
+            try await Task.sleep(for: .milliseconds(150))
+            #expect(await connection.messages.isEmpty)
+            channel.responseFinished()
+            try await waitFor { await connection.messages.count == 1 }
+            #expect(delivered == 0)
+            #expect(session.isMuted && pet.voiceSession === session)
+            #expect(!pet.isStandaloneSpeaking)
+            await connection.finishReply()
+            // Acknowledgement happens at completion, so immediate hangup cannot requeue it.
+            try await waitFor { delivered == 1 }
+            await pet.stopVoice(drainAnnouncements: false)
+            #expect(pet.queuedProactiveSpeech.isEmpty)
+            #expect(await connection.messages.count == 1)
+            pet.bubbleDismissTask?.cancel()
+        }
+    }
+
+    @Test("A due projectless reminder uses the ongoing realtime call and waits behind its reply")
+    @MainActor
+    func dueReminderDuringRealtimeCall() async throws {
+        for transport in [CodexRealtimeTransportPreference.webRTC, .websocket] {
+            let suite = "PetDueReminder-\(UUID().uuidString)"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            var config = PetConfiguration()
+            config.isEnabled = true; config.proactiveMode = .voiceAndBubble
+            config.codexTransport = transport; config.isMuted = true
+            config.save(to: defaults)
+            let pet = PetController(defaults: defaults)
+            let connection = PetUpdateTestConnection()
+            let session = VoiceSession(engine: PetUpdateTestEngine(connection: connection), audio: PetUpdateTestAudio())
+            pet.voiceSession = session
+            pet.activeVoiceMode = .codexRealtime
+            await bindRealtimeNotifications(pet: pet, connection: connection)
+            session.setMuted(true)
+            try await session.start()
+            let channel = try #require(pet.realtimeNotifications)
+            channel.responseStarted()
+            let app = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+            app.scheduledPetReportReceiver = pet
+            var reminder = ScheduledTask(name: "Stretch", prompt: "Take a stretch break.", cronExpression: "")
+            reminder.petScheduleKind = .reminder
+            reminder.dueAt = .now.addingTimeInterval(-1)
+            app.scheduledTasks = [reminder]
+            app.runDueScheduledTasks(since: .now, now: .now)
+            try await waitFor { app.scheduledTasks[0].pendingPetReport != nil }
+            try await Task.sleep(for: .milliseconds(150))
+            #expect(await connection.messages.isEmpty)
+            channel.responseFinished()
+            try await waitFor { await connection.messages.count == 1 }
+            let sent = await connection.messages
+            #expect(sent[0].contains(reminder.prompt))
+            #expect(pet.petState.bubble?.text == reminder.prompt)
+            #expect(pet.voiceSession === session && session.isMuted && !pet.isStandaloneSpeaking)
+            #expect(app.taskBoards.isEmpty && app.sessionStates.isEmpty)
+            await connection.finishReply()
+            try await waitFor { app.scheduledTasks[0].petReportDeliveredAt != nil }
+            app.runDueScheduledTasks(since: .now, now: .now.addingTimeInterval(60))
+            #expect(await connection.messages.count == 1)
+            await pet.stopVoice(drainAnnouncements: false)
+            pet.bubbleDismissTask?.cancel()
+        }
+    }
+
+    @Test("Microphone mute keeps the same voice connection, transcript and assistant playback")
+    @MainActor
+    func microphoneMutePreservesConversation() async throws {
+        for mode in [PetVoiceModeKind.codexRealtime, .localPipeline] {
+            let suite = "PetMicrophoneMuteTests-\(UUID().uuidString)"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            var config = PetConfiguration()
+            config.isMuted = false
+            config.save(to: defaults)
+            let pet = PetController(defaults: defaults)
+            let connection = PetUpdateTestConnection()
+            let audio = PetUpdateTestAudio()
+            let session = VoiceSession(engine: PetUpdateTestEngine(connection: connection), audio: audio)
+            pet.voiceSession = session
+            pet.activeVoiceMode = mode
+            if mode == .codexRealtime { await bindRealtimeNotifications(pet: pet, connection: connection) }
+            try await session.start()
+            let frame = try VoiceAudioFrame(data: Data([1, 0]), format: .init())
+            audio.emit(frame)
+            try await waitFor { await connection.audioFrames == 1 }
+            try await session.send(text: "Remember this conversation.")
+            try await waitFor { !session.transcript.isEmpty }
+            let transcriptIDs = session.transcript.map(\.id)
+            let startGeneration = pet.voiceStartGeneration
+
+            pet.toggleMute()
+            #expect(pet.isMuted && session.isMuted)
+            #expect(!audio.captureEnabled)
+            #expect(pet.voiceStartGeneration == startGeneration)
+            audio.emit(frame) // Simulate a frame already queued at the instant of mute.
+            await connection.emit(.assistantAudio(itemID: "reply", frame))
+            try await waitFor { audio.playCount == 1 }
+            try await Task.sleep(for: .milliseconds(100))
+            #expect(await connection.audioFrames == 1)
+            #expect(pet.voiceSession === session)
+            #expect(pet.activeVoiceMode == mode)
+            #expect(session.lifecycle == .active)
+            #expect(session.transcript.prefix(transcriptIDs.count).map(\.id) == transcriptIDs)
+            #expect(await connection.closeCount == 0)
+            #expect(await connection.interruptCount == 0)
+            #expect(audio.flushCount == 0 && audio.stopCount == 0)
+
+            pet.toggleMute()
+            #expect(!session.isMuted && audio.captureEnabled)
+            audio.emit(frame)
+            try await waitFor { await connection.audioFrames == 2 }
+            await connection.emit(.assistantAudio(itemID: "reply", frame))
+            try await waitFor { audio.playCount == 2 }
+            #expect(audio.startCount == 1)
+            #expect(await connection.connectCount == 1)
+            #expect(pet.voiceSession === session)
+            await session.stop()
+            pet.voiceSession = nil
+        }
+    }
+
+    @Test("Muting during voice connection does not cancel startup or reopen the microphone")
+    @MainActor
+    func muteWhileConnecting() async throws {
+        let connection = PetUpdateTestConnection()
+        let audio = PetUpdateTestAudio()
+        let (gate, release) = AsyncStream<Void>.makeStream()
+        let session = VoiceSession(engine: PetUpdateTestEngine(connection: connection, connectGate: gate), audio: audio)
+        let suite = "PetConnectingMuteTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let pet = PetController(defaults: defaults)
+        pet.configuration.isMuted = false
+        pet.voiceSession = session
+        let starting = Task { try await session.start() }
+        try await waitFor { session.lifecycle == .connecting }
+        pet.toggleMute()
+        release.yield(())
+        release.finish()
+        try await starting.value
+        #expect(session.lifecycle == .active && session.isMuted)
+        #expect(!audio.captureEnabled)
+        #expect(pet.voiceSession === session)
+        pet.toggleMute()
+        #expect(audio.captureEnabled)
+        #expect(await connection.connectCount == 1)
+        #expect(await connection.closeCount == 0)
+        await session.stop()
+        pet.voiceSession = nil
+    }
+
+    @Test("Capture gates preserve assistant speech and replay mute to late WebRTC bindings")
+    @MainActor
+    func captureGatesDoNotMutePlayback() {
+        let signal = PetSpeechPlaybackSignal()
+        let hardware = PetVoiceAudioDriver()
+        hardware.speechPlayback = signal
+        signal.updateRemoteLevel(0.7)
+        hardware.setCaptureEnabled(false)
+        #expect(signal.isActive)
+        var mutedStates: [Bool] = []
+        hardware.captureDidChange = { mutedStates.append(!$0) }
+        #expect(mutedStates == [true])
+        hardware.setCaptureEnabled(true)
+        hardware.setCaptureEnabled(false)
+        #expect(mutedStates == [true, false, true])
+        #expect(signal.isActive)
+        #expect(signal.envelope.level() == 0.7)
+    }
+
     @Test("Missing voice models report synthesis failure without opening audio hardware")
     @MainActor
     func missingModelDoesNotPrepareAudio() async throws {
@@ -47,7 +370,7 @@ struct PetVoiceUpdateTests {
         #expect(!controller.isVoiceActive)
         controller.speakProactivelyOrQueue("The background task finished.")
         try await waitFor { controller.announcementTask == nil }
-        #expect(controller.queuedProactiveSpeech.isEmpty)
+        #expect(controller.queuedProactiveSpeech == ["The background task finished."])
         #expect(!controller.isStandaloneSpeaking)
         #expect(controller.alertErrorMessage?.contains("selected voice model is not installed") == true)
         await controller.localSynthesizer.shutdown()
@@ -62,6 +385,7 @@ struct PetVoiceUpdateTests {
             let controller = PetController()
             controller.voiceSession = session
             controller.activeVoiceMode = mode
+            if mode == .codexRealtime { await bindRealtimeNotifications(pet: controller, connection: connection) }
             try await session.start()
             controller.speakProactivelyOrQueue("First task finished.")
             try await waitFor { await connection.messages.count == 1 }
@@ -92,6 +416,7 @@ struct PetVoiceUpdateTests {
             let pet = PetController()
             pet.voiceSession = session
             pet.activeVoiceMode = mode
+            if mode == .codexRealtime { await bindRealtimeNotifications(pet: pet, connection: connection) }
             try await session.start()
             session.meters.input = 0.2
             pet.speakProactivelyOrQueue("Task finished before transcription.")
@@ -155,7 +480,7 @@ struct PetVoiceUpdateTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         var configuration = PetConfiguration()
         configuration.isEnabled = true
-        configuration.proactiveMode = .off
+        configuration.proactiveMode = .voiceAndBubble
         configuration.save(to: defaults)
         let pet = PetController(defaults: defaults)
         let connection = PetUpdateTestConnection()
@@ -168,7 +493,13 @@ struct PetVoiceUpdateTests {
         let hookController = AppStateHookController(app: app)
         let project = Project(name: "RxCode", path: "/tmp/rxcode", gitHubRepo: nil)
         let raw = "Finished migration. Exact details retained for the active voice assistant."
-        _ = await hook.afterSessionEnd(SessionEndPayload(project: project, sessionKey: "worker", sessionId: "worker", reason: .completed, turnDidError: false, lastAssistantText: raw, hasQueuedFollowups: false), controller: hookController)
+        let completion = SessionEndPayload(project: project, sessionKey: "worker", sessionId: "worker", reason: .completed,
+            turnDidError: false, lastAssistantText: raw, hasQueuedFollowups: false, deliveryID: "same-completed-turn")
+        _ = await hook.afterSessionEnd(completion, controller: hookController)
+        _ = await hook.afterSessionEnd(completion, controller: hookController)
+        _ = await hook.afterSessionEnd(SessionEndPayload(project: project, sessionKey: "worker", sessionId: "worker",
+            reason: .completed, turnDidError: false, lastAssistantText: "An intermediate turn", hasQueuedFollowups: true,
+            deliveryID: "queued-follow-up"), controller: hookController)
         #expect(pet.queuedProactiveSpeech.count == 1)
         #expect(pet.queuedProactiveSpeech[0].contains(raw))
         let own = PermissionAskPayload(toolUseId: "own", toolName: "Confirm action", sessionId: "pet-voice-1", projectId: project.id, projectName: project.name)
@@ -222,6 +553,15 @@ struct PetVoiceUpdateTests {
         }
         #expect(PetCodexRealtimeEngine.ideToolApprovalOverrides.contains("mcp_servers.rxcode-ide.tools.ide__send_to_thread.approval_mode=\"approve\""))
         #expect(PetCodexRealtimeEngine.ideToolApprovalOverrides.allSatisfy { $0.hasPrefix("mcp_servers.rxcode-ide.") })
+    }
+
+    @MainActor
+    private func bindRealtimeNotifications(pet: PetController, connection: PetUpdateTestConnection) async {
+        let channel = PetRealtimeVoiceNotifications()
+        channel.bind { text in try await connection.send(text: text) }
+        channel.connected()
+        pet.realtimeNotifications = channel
+        await connection.bindNotifications(channel)
     }
 
     @MainActor
@@ -279,10 +619,15 @@ nonisolated private final class UnexpectedPetSpeechOutput: PetSpeechOutput {
 
 private struct PetUpdateTestEngine: VoiceEngine {
     let connection: PetUpdateTestConnection
+    var connectGate: AsyncStream<Void>? = nil
     var displayName: String { "Test" }
     var capabilities: VoiceEngineCapabilities { .init() }
     func readiness() async -> VoiceEngineReadiness { .ready }
-    func connect(_ config: VoiceSessionConfig) async throws -> any VoiceConnection { connection }
+    func connect(_ config: VoiceSessionConfig) async throws -> any VoiceConnection {
+        await connection.recordConnect()
+        if let connectGate { for await _ in connectGate { break } }
+        return connection
+    }
 }
 
 private actor PetUpdateTestConnection: VoiceConnection {
@@ -291,33 +636,56 @@ private actor PetUpdateTestConnection: VoiceConnection {
     private let output: AsyncStream<VoiceEngineEvent>.Continuation
     private(set) var messages: [String] = []
     private var replyID = ""
+    private var notifications: PetRealtimeVoiceNotifications?
+    private var closeGate: AsyncStream<Void>?
+    func holdClose(_ gate: AsyncStream<Void>) { closeGate = gate }
+    func bindNotifications(_ value: PetRealtimeVoiceNotifications) { notifications = value }
+    private(set) var audioFrames = 0
+    private(set) var connectCount = 0
+    private(set) var closeCount = 0
+    private(set) var interruptCount = 0
+    func recordConnect() { connectCount += 1 }
 
     init() { (events, output) = AsyncStream.makeStream() }
-    func send(audio: VoiceAudioFrame) async throws {}
+    func send(audio: VoiceAudioFrame) async throws { audioFrames += 1 }
     func send(text: String) async throws {
         messages.append(text)
         replyID = UUID().uuidString
         // Deliberately leave the reply unfinished until the test permits the next update.
         output.yield(.assistantText(itemID: replyID, delta: "Here is the update."))
     }
-    func finishReply() { output.yield(.assistantDone(itemID: replyID)) }
+    func finishReply() async {
+        output.yield(.assistantDone(itemID: replyID))
+        await notifications?.responseFinished()
+    }
     func emit(_ event: VoiceEngineEvent) { output.yield(event) }
-    func interrupt(_ interruption: VoiceInterruption) async throws {}
+    func interrupt(_ interruption: VoiceInterruption) async throws { interruptCount += 1 }
     func submitToolResult(callID: String, result: AgentToolResult) async throws {}
-    func close() async { output.finish() }
+    func close() async {
+        closeCount += 1
+        if let closeGate { for await _ in closeGate { break } }
+        output.finish()
+    }
 }
 
 @MainActor
 private final class PetUpdateTestAudio: VoiceAudioDriver {
     var heardDuration: Duration { .zero }
+    private(set) var captureEnabled = false
+    private(set) var startCount = 0
+    private(set) var playCount = 0
+    private(set) var stopCount = 0
+    private(set) var flushCount = 0
+    func emit(_ frame: VoiceAudioFrame) { output?.yield(frame) }
     private var output: AsyncStream<VoiceAudioFrame>.Continuation?
     func start(format: VoicePCMFormat) async throws -> AsyncStream<VoiceAudioFrame> {
+        startCount += 1
         let (stream, continuation) = AsyncStream<VoiceAudioFrame>.makeStream()
         output = continuation
         return stream
     }
-    func play(_ frame: VoiceAudioFrame) throws {}
-    func flush() {}
-    func setCaptureEnabled(_ enabled: Bool) {}
-    func stop() { output?.finish() }
+    func play(_ frame: VoiceAudioFrame) throws { playCount += 1 }
+    func flush() { flushCount += 1 }
+    func setCaptureEnabled(_ enabled: Bool) { captureEnabled = enabled }
+    func stop() { stopCount += 1; output?.finish() }
 }

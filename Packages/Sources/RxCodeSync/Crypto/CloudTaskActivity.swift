@@ -127,5 +127,7 @@ public struct CloudTaskActivityRecord: Codable, Sendable {
 
 public struct CloudTaskActivityPage: Codable, Sendable {
     public let items: [CloudTaskActivityRecord]
+    public var checkpoint: String? = nil
+    public var deletedTaskIds: [String]? = nil
     public let nextCursor: String?
 }

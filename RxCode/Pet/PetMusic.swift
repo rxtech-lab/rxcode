@@ -53,6 +53,10 @@ final class PetMusic {
     @ObservationIgnored private let checkConnection: @Sendable () async throws -> Bool
     @ObservationIgnored private var observations: [AnyCancellable] = []
     @ObservationIgnored private var operation: Task<JSONValue, Error>?
+    @ObservationIgnored private var connectionCheck: Task<Void, Never>?
+    @ObservationIgnored private var connectionRevision = UUID()
+    var isCheckingConnection = false
+    var connectionError: String?
     private var generation = UUID()
     private var songs: [String: Song] = [:]
     var isLinked = false
@@ -99,17 +103,59 @@ final class PetMusic {
         self.player = player ?? PetNativeMusicPlayer()
         self.volumeController = volumeController ?? PetDeviceMusicVolume()
         observations = self.player.observe { [weak self] in self?.synchronize() }
+        observations.append(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in Task { @MainActor in await self?.refreshConnection() } })
     }
 
+    /// Refreshing never requests authorization, changes the Off preference, or starts playback.
+    /// All lifecycle, settings and tool callers join the same account check.
     func refreshConnection() async {
         authorizationStatus = currentAuthorizationStatus()
         guard authorizationStatus == .authorized else {
+            connectionRevision = UUID()
+            connectionCheck?.cancel()
+            connectionCheck = nil
+            isCheckingConnection = false
             isLinked = false
             canPlayCatalogContent = nil
+            connectionError = nil
             return
         }
-        guard !isBusy, !isTurningOff else { return }
-        _ = try? await handle(.object(["action": .string("connect")]))
+        if let connectionCheck { await connectionCheck.value; return }
+        let revision = UUID()
+        connectionRevision = revision
+        isCheckingConnection = true
+        connectionError = nil
+        // An old subscription result is not evidence of current account availability.
+        isLinked = false
+        canPlayCatalogContent = nil
+        let check = checkConnection
+        let task = Task { [weak self] in
+            do {
+                let playable = try await check()
+                guard let self, self.connectionRevision == revision else { return }
+                self.authorizationStatus = self.currentAuthorizationStatus()
+                self.isLinked = self.authorizationStatus == .authorized
+                self.canPlayCatalogContent = self.isLinked ? playable : nil
+            } catch {
+                guard let self, self.connectionRevision == revision else { return }
+                self.authorizationStatus = self.currentAuthorizationStatus()
+                self.isLinked = false
+                self.canPlayCatalogContent = nil
+                if self.authorizationStatus == .authorized {
+                    self.connectionError = "Account availability could not be verified. " + Self.describe(error)
+                }
+            }
+            guard let self, self.connectionRevision == revision else { return }
+            self.isCheckingConnection = false
+            self.connectionCheck = nil
+        }
+        connectionCheck = task
+        await task.value
+    }
+
+    func refreshConnectionInBackground() {
+        Task { [weak self] in await self?.refreshConnection() }
     }
 
     func synchronize() {
@@ -154,8 +200,7 @@ final class PetMusic {
         if action == "off" { return await off() }
         if action == "status" {
             refreshVolume()
-            authorizationStatus = currentAuthorizationStatus()
-            if authorizationStatus != .authorized { isLinked = false; canPlayCatalogContent = nil }
+            await refreshConnection()
             synchronize()
             return result()
         }
@@ -265,12 +310,11 @@ final class PetMusic {
         }
         if action == "connect" {
             try Task.checkCancellation()
-            guard generation == token else { throw CancellationError() }
-            let playable = try await checkConnection()
+            await refreshConnection()
             try Task.checkCancellation()
             guard generation == token else { throw CancellationError() }
-            isLinked = true
-            canPlayCatalogContent = playable
+            if let connectionError { throw IDEToolError.handlerFailed(connectionError) }
+            guard isLinked else { throw IDEToolError.handlerFailed("Apple Music authorization changed while checking the account.") }
             return result()
         }
         try check(token)
@@ -315,7 +359,6 @@ final class PetMusic {
         }
         try check(token)
         player.queue(song)
-        observations = player.observe { [weak self] in self?.synchronize() }
         ownsQueue = true
         try await player.play()
         try check(token)
@@ -363,6 +406,6 @@ final class PetMusic {
     private func result() -> JSONValue {
         refreshVolume()
         return .object(["content": .array([.object(["type": .string("text"), "text": .string("Apple Music linked=\(isLinked), catalog_playback=\(canPlayCatalogContent.map(String.init) ?? "unknown"), pet music enabled=\(enabled), player_state=\(playbackState), title=\(title), artist=\(artist). Playback state is read from MusicKit; this does not verify audible output.")])]),
-                 "isError": .bool(false), "structuredContent": .object(["linked": .bool(isLinked), "can_play_catalog": canPlayCatalogContent.map(JSONValue.bool) ?? .null, "enabled": .bool(enabled), "playing": .bool(isPlaying), "state": .string(playbackState), "title": .string(title), "owns_queue": .bool(ownsQueue), "volume_scope": .string("default_output_device"), "volume": volume.level.map(JSONValue.number) ?? .null, "volume_settable": .bool(volume.canSet), "muted": volume.muted.map(JSONValue.bool) ?? .null, "output_device": .string(volume.deviceName)])])
+                 "isError": .bool(false), "structuredContent": .object(["checking_account": .bool(isCheckingConnection), "account_error": connectionError.map(JSONValue.string) ?? .null, "linked": .bool(isLinked), "can_play_catalog": canPlayCatalogContent.map(JSONValue.bool) ?? .null, "enabled": .bool(enabled), "playing": .bool(isPlaying), "state": .string(playbackState), "title": .string(title), "owns_queue": .bool(ownsQueue), "volume_scope": .string("default_output_device"), "volume": volume.level.map(JSONValue.number) ?? .null, "volume_settable": .bool(volume.canSet), "muted": volume.muted.map(JSONValue.bool) ?? .null, "output_device": .string(volume.deviceName)])])
     }
 }

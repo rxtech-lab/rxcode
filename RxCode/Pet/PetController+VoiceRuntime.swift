@@ -9,40 +9,54 @@ import RxCodeCore
 // MARK: - Voice Engine Construction, State Sync & Background Monitor
 
 extension PetController {
-    func buildVoiceSession(for mode: PetVoiceModeKind) async throws -> VoiceSession {
+    func buildVoiceSession(for mode: PetVoiceModeKind, generation: UUID? = nil) async throws -> VoiceSession {
         guard let appState else {
             throw VoiceError.unavailable("No active RxCode workspace is open.")
         }
 
         let targetProject = resolveTargetProject(in: appState)
-        let instructions = Self.buildVoiceSystemInstructions(appState: appState, targetProject: targetProject, configuration: configuration)
+        var instructions = Self.buildVoiceSystemInstructions(appState: appState, targetProject: targetProject, configuration: configuration)
+        let memoryContext = await petMemoryContext(in: appState)
+        instructions += "\n\n" + memoryContext
+        try checkVoiceStartGeneration(generation)
+        let history = try await prepareVoiceHistory(in: appState, generation: generation)
+        instructions += "\n\n" + history.context
 
         switch mode {
         case .codexRealtime:
-            let useWebRTC = configuration.codexTransport == .webRTC
-            let passiveAudio = PassiveVoiceAudioDriver()
-            passiveAudio.speechPlayback = speechPlayback
-            let hwAudio = useWebRTC ? nil : PetVoiceAudioDriver(
+            let realtimeContext = Self.buildRealtimeVoiceContext(
+                configuration: configuration, memory: memoryContext, history: history
+            )
+            let notifications = PetRealtimeVoiceNotifications()
+            realtimeNotifications = notifications
+            let transport = configuration.codexTransport
+            let useWebRTC = transport == .webRTC
+            let realtimeDevice = useWebRTC ? PetRTCDevice() : nil
+            let hwAudio = PetVoiceAudioDriver(
                 suppressesCaptureDuringPlayback: false,
                 inputDeviceUID: configuration.microphoneDeviceUID,
                 outputDeviceUID: configuration.speakerDeviceUID
             )
 
+            hwAudio.realtimeDevice = realtimeDevice
             var sessionRef: VoiceSession?
-            let engine = PetCodexRealtimeEngine(
+            let historyBinding = voiceHistoryBinding
+            var engine = PetCodexRealtimeEngine(
                 prepareLaunch: { [weak self, weak appState] in
                     guard let self, let appState else { throw VoiceError.invalidState }
-                    return try await self.prepareCodexRealtimeLaunch(appState: appState, project: targetProject)
+                    var launch = try await self.prepareCodexRealtimeLaunch(appState: appState, project: targetProject, transport: transport, historyBinding: historyBinding)
+                    launch.realtimeContext = realtimeContext
+                    return launch
                 },
                 releaseIDEMCP: { [weak appState] sessionKey in
                     await appState?.ideMCPServer.release(sessionKey: sessionKey)
                 },
                 onLevels: { [weak self] input, output in
                     Task { @MainActor [weak self] in
-                        sessionRef?.meters.input = input
+                        sessionRef?.meters.input = sessionRef?.isMuted == false ? input : 0
                         sessionRef?.meters.output = output
                         if useWebRTC, let self {
-                            if sessionRef?.lifecycle == .active, sessionRef?.isMuted == false {
+                            if sessionRef?.lifecycle == .active {
                                 self.speechPlayback.updateRemoteLevel(output)
                             } else { self.speechPlayback.reset() }
                         }
@@ -57,12 +71,17 @@ extension PetController {
                 bindWebRTCMuteHandler: { [weak self] muteSetter in
                     Task { @MainActor [weak self] in
                         self?.realtimeToolCueMute = muteSetter
-                        passiveAudio.onMuteChanged = { muted in
-                            muteSetter(muted)
+                        hwAudio.captureDidChange = { enabled in
+                            muteSetter(!enabled)
                         }
                     }
-                }
+                },
+                notifications: notifications
             )
+
+            if let realtimeDevice {
+                engine.makePeer = { CodexRealtimePeer(device: realtimeDevice, onStateChange: $0) }
+            }
 
             switch await engine.readiness() {
             case .ready:
@@ -71,19 +90,20 @@ extension PetController {
                 throw VoiceError.unavailable(msg)
             }
 
-            let driver: any VoiceAudioDriver = hwAudio.map { $0 as any VoiceAudioDriver } ?? passiveAudio
+            try checkVoiceStartGeneration(generation)
             let session = VoiceSession(
                 engine: engine,
-                audio: driver,
+                audio: hwAudio,
                 config: VoiceSessionConfig(instructions: instructions)
             )
-            hwAudio?.meters = session.meters
-            hwAudio?.speechPlayback = speechPlayback
+            hwAudio.meters = session.meters
+            hwAudio.speechPlayback = speechPlayback
             sessionRef = session
             currentHardwareAudioDriver = hwAudio
             return session
 
         case .localPipeline:
+            await customAgentResponder.resetConversation()
             let hwAudio = PetVoiceAudioDriver(
                 suppressesCaptureDuringPlayback: true,
                 inputDeviceUID: configuration.microphoneDeviceUID,
@@ -106,6 +126,7 @@ extension PetController {
                 throw VoiceError.unavailable(msg)
             }
 
+            try checkVoiceStartGeneration(generation)
             let session = VoiceSession(
                 engine: engine,
                 audio: hwAudio,
@@ -120,9 +141,12 @@ extension PetController {
 
     func prepareCodexRealtimeLaunch(
         appState: AppState,
-        project: Project?
+        project: Project?,
+        transport: CodexRealtimeTransportPreference,
+        historyBinding: PetVoiceHistoryBinding? = nil
     ) async throws -> PetCodexRealtimeEngine.LaunchParameters {
         let sessionKey = "pet-codex-realtime-\(UUID().uuidString.lowercased())"
+        historyBinding?.runtimeSessionKey = sessionKey
         let cwdPath = project?.path ?? FileManager.default.homeDirectoryForCurrentUser.path
         let idePort = await appState.ideMCPServer.allocate(
             sessionKey: sessionKey,
@@ -138,7 +162,7 @@ extension PetController {
             + PetCodexRealtimeEngine.ideToolApprovalOverrides
         return PetCodexRealtimeEngine.LaunchParameters(
             workingDirectory: URL(fileURLWithPath: cwdPath),
-            transportPreference: configuration.codexTransport,
+            transportPreference: transport,
             voice: configuration.resolvedCodexVoice.rawValue,
             model: configuration.codexRealtimeModel.isEmpty ? nil : configuration.codexRealtimeModel,
             configOverrides: bareOverrides,
@@ -170,6 +194,7 @@ extension PetController {
 
     func prepareCustomAgentTurn(
         userText: String,
+        priorConversation: String = "",
         resumeSessionID: String?,
         sessionKeyOverride: String? = nil,
         contextOverride: String? = nil,
@@ -248,6 +273,21 @@ extension PetController {
             )
         }
 
+        var context = contextOverride ?? Self.buildVoiceSystemInstructions(
+            appState: appState, targetProject: targetProject, configuration: configuration
+        )
+        var priorContext = priorConversation
+        if sessionKey.hasPrefix("pet-voice-"), let binding = voiceHistoryBinding {
+            binding.runtimeSessionKey = sessionKey
+            let archive = try await voiceHistoryStore.archive(scope: binding.scope)
+            if archive.id == binding.conversationID { priorContext = archive.context }
+        }
+        if !priorContext.isEmpty { context += "\n\n" + priorContext }
+        let memory = await petMemoryContext(in: appState, query: userText)
+        if !memory.isEmpty { context += "\n\n" + memory }
+        if sessionKey.hasPrefix("pet-chat-") {
+            context += "\nThis is a typed conversation. Use Markdown when it helps explain your response."
+        }
         let request = AgentSendRequest(
             turnID: UUID(),
             threadID: SDKAgentBackend.threadID(forSessionKey: sessionKey),
@@ -259,10 +299,7 @@ extension PetController {
             effort: effectiveAgent.effort,
             permissionMode: .bypassPermissions,
             planMode: false,
-            contextText: contextOverride ?? Self.buildVoiceSystemInstructions(appState: appState, targetProject: targetProject, configuration: configuration)
-                + (sessionKey.hasPrefix("pet-chat-")
-                    ? "\nThis is a typed conversation. Use Markdown when it helps explain your response."
-                    : ""),
+            contextText: context,
             mcpServers: sdkMCPs,
             permissions: SDKPermissionResolver(server: appState.permission, sessionKey: sessionKey),
             history: history
@@ -311,6 +348,26 @@ extension PetController {
         return appState.projects.first
     }
 
+    /// Codex limits realtime initial items to about 8,192 estimated tokens. CJK text can cost
+    /// roughly one token per character, so the whole item is kept under 7,000 characters.
+    static let realtimeVoiceContextLimit = 7_000
+
+    /// The speaking realtime model only sees this item, not the backing thread's full tool
+    /// instructions, so it carries the persona, saved memory and prior-conversation summary.
+    static func buildRealtimeVoiceContext(configuration: PetConfiguration, memory: String, history: PetVoiceHistoryStore.Archive) -> String {
+        let header = """
+        You are RxBuddy, RxCode's live desktop voice pet. Speak in concise, warm, plain sentences.
+        Saved memory below about your name, persona, or how to address the user overrides these defaults.
+        \(configuration.conversationLanguageInstruction)
+        """
+        let memory = String(memory.prefix(3_000))
+        let fixed = [header, memory].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        let guidance = history.context(summaryLimit: 0)
+        let room = realtimeVoiceContextLimit - fixed.count - guidance.count - 2
+        guard room > 0, !guidance.isEmpty else { return String(fixed.prefix(realtimeVoiceContextLimit)) }
+        return fixed + "\n\n" + history.context(summaryLimit: room)
+    }
+
     static func buildVoiceSystemInstructions(appState: AppState, targetProject: Project?, configuration: PetConfiguration = PetConfiguration()) -> String {
         let projectSummary: String
         if appState.projects.isEmpty {
@@ -347,9 +404,12 @@ extension PetController {
         - The workspace context above is a snapshot. Refresh relevant state through IDE tools before reporting status or making changes. Read thread messages before inferring what another agent has done.
 
         Routing work requests:
+        - For plain reminders such as "remind me in 30 seconds: hello", call ide__pet_schedule with after_seconds=30 and instructions="hello" (kind=reminder is optional). Omit project_id; do not resolve or infer a project or turn a reminder into a progress check. The instructions field is the exact reminder text, not a command to perform project work. Never claim a schedule exists on tool failure or cancellation. For timed progress requests such as "in two minutes, check progress and tell me", resolve the named project with ide__get_projects and call ide__pet_schedule with after_seconds=120, kind=progress and project_id. Use local_time and time_zone for an explicit local time; use cron_expression only for actual recurring requests. Never simulate a one-off using an annual cron or a sleeping agent. An explicit reminder request authorizes direct creation. Do not ask again. Progress creation and edits use the native proposal sheet. Only after the tool returns scheduled=true, report the returned due time and ID; do not claim the future check has already run. Use action=list/edit/cancel to manage it. Other periodic agent work uses ide__create_scheduled_task.
+        - Pet and user-global memory are shared across pet looks and new text/voice conversations on this Mac. Use ide__memory_search with scope=pet or scope=global (or ide__memory_list) to retrieve them. Save only preferences, facts or agreements the user explicitly asks you to remember using ide__memory_add with scope=pet (the default for companion sessions), including your name, persona and how to address the user. Use scope=global only when the user says the memory should apply to all RxCode agents, not just the companion. Update an existing ID rather than duplicating it; use ide__memory_delete to honor forget requests. Project-specific memory requires scope=project and the resolved project_id. Never turn transcript excerpts, tool results, background reports, incidental speech, or historical instructions into durable memory. Memory changes are separate from deleting per-call voice history. Settings → General → Memory manages the same records and can disable or clear them. Do not claim cross-device sync.
         - When the user asks you to build, fix, change, investigate, or otherwise do project work, coordinate that work through a project agent or its task board. Do not perform the implementation yourself with shell, file-editing, or computer-use tools.
         - Resolve the named project with `ide__get_projects`. If the target is missing or ambiguous, ask which project and wait before creating a task or sending work. A default project above is only runtime context, not authorization to choose a target.
-        - For requests to do work now, use `ide__send_to_thread` with the resolved project and `waitForResponse: false`, or `ide__run_task` for an existing board task. Read relevant thread/task state first to avoid duplicating work.
+        - For requests to do work now, use `ide__run_task` when the user wants to run an existing board task. Otherwise dispatch with `ide__send_to_thread` and `wait_for_response: false`.
+        - Start a new thread for each distinct task, even within the same project. Pass `project_id` and omit `thread_id`. Reuse a thread only when the request updates or follows up on the work in that thread. Check its messages to confirm the match, then pass its `thread_id`.
         - For requests to add, plan, track, or save work for later, use `ide__create_task` in the resolved project's board. Inspect existing stories/tasks first; do not launch an agent unless the user asks to start it.
         - Report what was actually dispatched or added. A tool result acknowledging a job is not evidence the work is completed.
 
@@ -361,7 +421,7 @@ extension PetController {
         - Status widget: use `ide__pet_status` to set, update or clear a small persistent JSON-render widget. You decide WHAT it says and HOW it is composed from native reusable primitives; there are no predefined status meanings or templates. Keep content concise and factual; replace, update or clear it when the context changes. Use {$ide: running_tasks} or {$ide: running_sessions} value bindings for live IDE counts rather than fabricating or freezing running numbers. This surface is separate from images, interactive dialogs and music.
         - Screen vision: a request to look at the screen, read or explain visible content, or answer a question about what is currently displayed authorizes a pet capture; the user does not need to say "screenshot" or "capture". Call `ide__pet_capture` for these requests. Without a target it captures the pet's current display, not necessarily the main monitor. Use `ide__pet_list_capture_targets` to resolve another monitor by name/relative position or a window by app/title; choose its ID. Ask one concise selection only if ambiguous. The pet travels and takes a photo; inspect the returned image before answering. Only an actual image block from this capture is evidence of what is currently on screen. If isError is true, image_available is false, or no image block is returned, say that capture failed and you cannot see the screen. Never invent visual details or substitute an earlier image, conversation, memory, or tool-completion status. Never capture proactively or continuously. Routine requested photos need no extra confirmation. If macOS access is denied, direct the user to System Settings → Privacy & Security → Screen & System Audio Recording; if already enabled, explain quitting and reopening the same app copy before retrying. If the selected model cannot inspect images, say so and ask the user to choose a vision-capable model.
         1. Manage works & tasks: inspect or mutate stories, tasks, task statuses, running jobs, and scheduled tasks using `ide__get_projects`, `ide__get_stories`, `ide__create_story`, `ide__get_tasks`, `ide__create_task`, `ide__update_task`, `ide__delete_task`, `ide__run_task`, `ide__get_task_status`, `ide__create_scheduled_task`, and `ide__get_running_jobs`.
-        2. Manage & message threads: inspect threads with `ide__get_threads` and `ide__get_thread_messages`, or start/message coding threads across any project using `ide__send_to_thread` (pass `waitForResponse: false` when kicking off longer coding jobs so you stay responsive in voice, or `true` for quick questions).
+        2. Manage & message threads: inspect threads with `ide__get_threads` and `ide__get_thread_messages`, or start/message coding threads across any project using `ide__send_to_thread` (pass `wait_for_response: false` when kicking off longer coding jobs so you stay responsive in voice, or `true` for quick questions).
         3. Show UI: when the user asks to show status, tasks, metrics or a dashboard, call `ide__show_ui` with a concise read-only summary in a content-sized inline card below the speech caption (`pet_presentation: "bubble"`, or omit it). Keep the speech caption visible above the UI. Prefer this inline card over a dedicated popover. Keep only essential information in at most five short visible rows, with no scrolling, interaction or collapse support. Summarize and simplify first; do not add controls or complex components that would force a popover. Reserve `pet_presentation: "popover"` for explicitly requested expanded views, indispensable detail that cannot fit, or required interaction such as a requested form.
         4. Confirmations: whenever user confirmation is needed (especially before deleting tasks, resetting work, or destructive operations), ALWAYS call `ide__show_confirmation` and wait for the user's decision.
         5. Briefings & Memory: read/publish briefings via `ide__briefing_*` and recall/store preferences via `ide__memory_*`.
@@ -375,23 +435,21 @@ extension PetController {
         if actionStatusOverlayMessage == "Connecting \(PetVoiceModeKind.codexRealtime.shortTitle)…" {
             actionStatusOverlayMessage = nil
         }
-        guard !isMuted, configuration.isEnabled, let session = voiceSession, !AppSupport.isTestProcess else {
+        guard configuration.isEnabled, let session = voiceSession, !AppSupport.isTestProcess else {
             logger.debug("Skipping voice connected sound: pet disabled or no active voice session")
             return
         }
-        // Hardware-audio modes (WebSocket realtime, local pipeline): play through the voice
-        // engine's own cue player so the chime isn't swallowed by the capture session.
         if let driver = currentHardwareAudioDriver, driver.playConnectedCue() {
             logger.info("Played voice connected cue through voice audio engine")
             return
         }
-        // WebRTC owns the audio device. Its device module (re)configures input/output right as
-        // the peer connects, which drops a system sound fired at that instant — wait briefly.
+        // The connected event can arrive before the hardware graph starts.
         Task { @MainActor [weak self, weak session] in
             try? await Task.sleep(for: .milliseconds(350))
             guard let self, let session, self.voiceSession === session, self.configuration.isEnabled else { return }
             self.voiceConnectedSound?.stop()
-            let sound = NSSound(named: NSSound.Name("Hero")) ?? NSSound(named: NSSound.Name("Tink"))
+            let sound = NSSound(named: "Hero")?.copy() as? NSSound
+            sound?.playbackDeviceIdentifier = self.configuration.speakerDeviceUID
             sound?.volume = 0.6
             self.voiceConnectedSound = sound
             let started = sound?.play() ?? false
@@ -404,6 +462,7 @@ extension PetController {
         stateSyncTask = Task { @MainActor [weak self, weak session] in
             var lastTranscriptText = ""
             while !Task.isCancelled, let self, let session, self.voiceSession === session {
+                await self.persistVoiceHistory(for: session)
                 if self.currentHardwareAudioDriver != nil {
                     session.meters.output = self.speechPlayback.envelope.level()
                 }
@@ -437,6 +496,9 @@ extension PetController {
                 }
 
                 try? await Task.sleep(for: .milliseconds(100))
+            }
+            if let self, let session, self.voiceSession === session {
+                await self.persistVoiceHistory(for: session)
             }
             self?.refreshPetState()
         }
@@ -522,15 +584,36 @@ extension PetController {
         panelController.updatePanelLayout()
     }
 
-    func speakProactivelyOrQueue(_ text: String) {
-        guard !isMuted, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    @discardableResult
+    func speakProactivelyOrQueue(_ text: String) -> UUID? {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        normalizeSpeechQueueIDs()
+        let id = UUID()
         queuedProactiveSpeech.append(text)
+        queuedSpeechIDs.append(id)
         startAnnouncementDeliveryIfNeeded()
+        return id
+    }
+
+    func normalizeSpeechQueueIDs() {
+        if queuedSpeechIDs.count != queuedProactiveSpeech.count {
+            queuedSpeechIDs = queuedProactiveSpeech.map { _ in UUID() }
+        }
+    }
+
+    func removeQueuedSpeech(ids: [UUID]) {
+        normalizeSpeechQueueIDs()
+        for id in ids {
+            guard let index = queuedSpeechIDs.firstIndex(of: id) else { continue }
+            queuedSpeechIDs.remove(at: index)
+            queuedProactiveSpeech.remove(at: index)
+        }
     }
 
     /// Keep background updates in order without replacing a report already playing.
     func startAnnouncementDeliveryIfNeeded() {
-        guard !isMuted, announcementTask == nil, !queuedProactiveSpeech.isEmpty else { return }
+        guard announcementTask == nil, !queuedProactiveSpeech.isEmpty else { return }
+        guard announcementRetryAfter.map({ $0 <= Date.now }) ?? true else { return }
         let generation = UUID()
         announcementGeneration = generation
         announcementTask = Task { @MainActor [weak self] in
@@ -538,11 +621,15 @@ extension PetController {
             defer {
                 if self.announcementGeneration == generation { self.announcementTask = nil }
             }
-            while !Task.isCancelled, !self.isMuted, !self.queuedProactiveSpeech.isEmpty {
+            var quietSince: ContinuousClock.Instant?
+            while !Task.isCancelled, !self.queuedProactiveSpeech.isEmpty {
                 if let session = self.voiceSession, self.isVoiceActive {
                     // Both voice modes own notification responses. A busy conversation keeps
                     // updates queued; it must never fall back to a separate agent or speaker.
-                    guard session.lifecycle == .active, session.activity == .listening,
+                    let realtime = self.activeVoiceMode == .codexRealtime ? self.realtimeNotifications : nil
+                    let canRespond = self.activeVoiceMode == .codexRealtime
+                        ? realtime?.canSend == true : session.activity == .listening
+                    guard session.lifecycle == .active, canRespond,
                           !self.isAwaitingVoiceTextReply(in: session),
                           !self.isLocalUserSpeaking, self.livePartialUserText.isEmpty,
                           session.meters.input < 0.04,
@@ -550,39 +637,84 @@ extension PetController {
                           self.activeToolDescription == nil, !self.isStandaloneSpeaking,
                           self.currentHardwareAudioDriver?.hasPendingPlayback != true,
                           session.meters.output < 0.01 else {
+                        quietSince = nil
+                        try? await Task.sleep(for: .milliseconds(100))
+                        continue
+                    }
+                    if quietSince == nil { quietSince = .now }
+                    guard quietSince!.duration(to: .now) >= .milliseconds(300) else {
                         try? await Task.sleep(for: .milliseconds(100))
                         continue
                     }
                     let updates = self.queuedProactiveSpeech
+                    self.normalizeSpeechQueueIDs()
+                    let speechIDs = self.queuedSpeechIDs
                     let previousEntries = Set(session.transcript.map(\.id))
+                    let previousReplies = realtime?.completedReplies ?? 0
+                    let receipt = PetRealtimeVoiceNotifications.Receipt()
                     do {
-                        try await session.send(text: Self.voiceUpdatePrompt(updates, languageInstruction: self.configuration.conversationLanguageInstruction))
+                        let prompt = Self.voiceUpdatePrompt(updates, languageInstruction: self.configuration.conversationLanguageInstruction)
+                        if let realtime {
+                            try await realtime.send(prompt) { [weak self, weak session] in
+                                guard let self, let session, self.voiceSession === session,
+                                      self.announcementGeneration == generation, !receipt.acknowledged else { return }
+                                receipt.acknowledged = true
+                                self.removeQueuedSpeech(ids: speechIDs)
+                                Task { await self.acknowledgeScheduledReports(speechIDs: speechIDs) }
+                            }
+                        } else {
+                            try await session.send(text: prompt)
+                        }
                         guard !Task.isCancelled, self.announcementGeneration == generation else { return }
-                        self.queuedProactiveSpeech.removeFirst(updates.count)
                     } catch {
                         guard !Task.isCancelled else { return }
-                        self.alertErrorMessage = "Could not deliver the update to the voice agent: \(error.localizedDescription)"
+                        // An RPC error can be ambiguous. Do not automatically resend possibly
+                        // accepted speech; retain it until the user restarts the call to retry.
+                        self.announcementRetryAfter = .distantFuture
+                        self.alertErrorMessage = "Could not deliver the update to the voice agent: \(error.localizedDescription). The update remains queued; restart voice chat to retry."
                         return
                     }
                     // Sending returns before the agent starts responding. Wait for its completed
                     // reply so a second background event cannot cancel the first pipeline turn.
-                    while !Task.isCancelled, self.voiceSession === session,
-                          session.lifecycle == .active,
-                          !session.transcript.contains(where: {
+                    @MainActor func receivedReply() -> Bool {
+                        if let realtime { return realtime.completedReplies > previousReplies }
+                        return session.transcript.contains(where: {
                               !previousEntries.contains($0.id) && !$0.isUser && $0.isFinal
-                          }) {
+                        })
+                    }
+                    while !Task.isCancelled, self.voiceSession === session,
+                          session.lifecycle == .active, !receivedReply() {
                         try? await Task.sleep(for: .milliseconds(100))
                     }
+                    guard !Task.isCancelled, self.announcementGeneration == generation else { return }
+                    guard receivedReply() else { return } // Keep unacknowledged updates queued after a drop.
+                    if !receipt.acknowledged {
+                        self.removeQueuedSpeech(ids: speechIDs)
+                        await self.acknowledgeScheduledReports(speechIDs: speechIDs)
+                    }
+                    quietSince = nil
                 } else {
+                    // A dropped call does not authorize overlapping fallback playback.
+                    guard self.voiceSession == nil else { return }
                     if self.isStandaloneSpeaking {
                         try? await Task.sleep(for: .milliseconds(100))
                         continue
                     }
-                    let text = self.queuedProactiveSpeech.removeFirst()
+                    let text = self.queuedProactiveSpeech[0]
+                    self.normalizeSpeechQueueIDs()
+                    let speechID = self.queuedSpeechIDs[0]
+                    let failures = self.speechFailureCount
                     self.standaloneSpeaker.speak(text: text, synthesizer: self.localSynthesizer)
                     while !Task.isCancelled, self.isStandaloneSpeaking {
                         try? await Task.sleep(for: .milliseconds(100))
                     }
+                    guard !Task.isCancelled, self.announcementGeneration == generation else { return }
+                    guard self.speechFailureCount == failures else {
+                        self.announcementRetryAfter = Date.now.addingTimeInterval(30)
+                        return
+                    }
+                    self.removeQueuedSpeech(ids: [speechID])
+                    await self.acknowledgeScheduledReports(speechIDs: [speechID])
                 }
             }
         }

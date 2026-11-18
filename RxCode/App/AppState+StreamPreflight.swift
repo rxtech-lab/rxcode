@@ -293,7 +293,7 @@ extension AppState {
             resolvedModel: resolvedModel,
             // The single guard for every send path — foreground, queued,
             // cross-project and MCP-driven turns all funnel through here.
-            resolvedEffort: await sanitizedEffort(effort, for: agentProvider),
+            resolvedEffort: await sanitizedEffort(effort, for: agentProvider, model: resolvedModel),
             resolvedSendMode: resolvedSendMode,
             earlyStream: earlyStream,
             // Unrendered, for backends that build their own config. The

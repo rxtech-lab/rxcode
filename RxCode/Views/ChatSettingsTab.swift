@@ -359,7 +359,7 @@ struct ChatSettingsTab: View {
 
             Picker("", selection: $appState.selectedEffort) {
                 Text("Auto").tag("auto")
-                ForEach(AppState.availableEfforts, id: \.self) { effort in
+                ForEach(appState.availableEfforts, id: \.self) { effort in
                     Text(effortDisplayName(effort)).tag(effort)
                 }
             }

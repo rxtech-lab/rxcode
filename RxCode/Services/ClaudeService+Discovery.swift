@@ -336,6 +336,7 @@ extension ClaudeCodeServer {
 
         try proc.run()
 
+        let output = Task.detached { pipe.fileHandleForReading.readDataToEndOfFile() }
         // Wait for process exit asynchronously instead of blocking
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             proc.terminationHandler = { _ in
@@ -343,7 +344,7 @@ extension ClaudeCodeServer {
             }
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let data = await output.value
         return String(data: data, encoding: .utf8) ?? ""
     }
 }

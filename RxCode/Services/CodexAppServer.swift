@@ -47,6 +47,7 @@ actor CodexAppServer {
         subsystem: Bundle.main.bundleIdentifier ?? "com.claudework",
         category: "CodexAppServer"
     )
+    private(set) var modelReasoningLevels: [String: [ReasoningLevel]] = [:]
     var running: [UUID: RunningProcess] = [:]
     /// Thread + turn id for each stream whose turn is currently accepting
     /// steering input. Present between `turn/started` and `turn/completed`;
@@ -280,17 +281,40 @@ extension CodexAppServer: AgentBackend {
 
     /// What `model_reasoning_effort` accepts — a different set from Claude's,
     /// which is why the picker asks the backend instead of using one list.
-    func availableReasoningLevels() async -> [ReasoningLevel] { .codexEfforts }
+    func availableReasoningLevels() async -> [ReasoningLevel] {
+        guard let binary = await findCodexBinary(),
+              let output = try? await runShellCommand(binary, arguments: ["debug", "models"]),
+              let catalog = Self.decodeJSONValue(output) else { return [] }
+        let entries = Self.reasoningLevels(fromCatalog: catalog)
+        modelReasoningLevels = Dictionary(entries, uniquingKeysWith: { first, _ in first })
+        var seen = Set<String>()
+        return entries.flatMap { $0.1 }.filter { seen.insert($0.id).inserted }
+    }
+
+    static func reasoningLevels(fromCatalog catalog: JSONValue) -> [(String, [ReasoningLevel])] {
+        var entries: [(String, [ReasoningLevel])] = []
+        for model in catalog.objectValue?["models"]?.arrayValue ?? [] {
+            guard let fields = model.objectValue, fields["visibility"]?.stringValue != "hidden",
+                  let modelID = fields["slug"]?.stringValue else { continue }
+            var levels: [ReasoningLevel] = []
+            var seen = Set<String>()
+            for option in fields["supported_reasoning_levels"]?.arrayValue ?? [] {
+                guard let value = option.objectValue, let id = value["effort"]?.stringValue,
+                      !id.isEmpty, seen.insert(id).inserted else { continue }
+                levels.append(ReasoningLevel(id: id, displayName: id.capitalized,
+                                             levelDescription: value["description"]?.stringValue))
+            }
+            entries.append((modelID, levels))
+        }
+        return entries
+    }
 
     /// Codex takes its reasoning effort as a config override rather than a
     /// flag. Nil (the picker's "Auto") emits nothing, leaving whatever the
     /// user's `~/.codex/config.toml` sets.
     ///
-    /// Unknown values are dropped rather than passed through: codex rejects the
-    /// whole config on a bad enum, so forwarding a stale `max` from a thread
-    /// that used to run on Claude would fail the turn outright.
     static func effortOverrides(_ effort: String?) -> [String] {
-        guard let effort, [ReasoningLevel].codexEfforts.contains(where: { $0.id == effort }) else {
+        guard let effort, !effort.isEmpty, effort.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
             return []
         }
         return ["-c", "model_reasoning_effort=\"\(effort)\""]

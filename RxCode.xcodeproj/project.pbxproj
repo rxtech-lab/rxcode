@@ -113,6 +113,7 @@
 		DFA9E5070000000000000001 /* AppStateSteeringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E5060000000000000001 /* AppStateSteeringTests.swift */; };
 		DFA9E5090000000000000001 /* ReasoningLevelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E5080000000000000001 /* ReasoningLevelTests.swift */; };
 		DFA9E50B0000000000000001 /* EffortSanitizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */; };
+		DFA9E50D0000000000000001 /* ProjectEffortTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E50C0000000000000001 /* ProjectEffortTests.swift */; };
 		DFAA00012FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA00022FCD34B3002D9562 /* JSONSchema */; };
 		DFAA01102FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA01112FCD34B3002D9562 /* JSONSchema */; };
 		DFAAC0013071000100A1E94D /* PetScreenCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFAAC0023071000100A1E94D /* PetScreenCaptureTests.swift */; };
@@ -305,6 +306,7 @@
 		DFA9E5060000000000000001 /* AppStateSteeringTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateSteeringTests.swift; sourceTree = "<group>"; };
 		DFA9E5080000000000000001 /* ReasoningLevelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReasoningLevelTests.swift; sourceTree = "<group>"; };
 		DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EffortSanitizationTests.swift; sourceTree = "<group>"; };
+		DFA9E50C0000000000000001 /* ProjectEffortTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProjectEffortTests.swift; sourceTree = "<group>"; };
 		DFAAC0023071000100A1E94D /* PetScreenCaptureTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PetScreenCaptureTests.swift; sourceTree = "<group>"; };
 		DFAAC0043071000100A1E94D /* PetVoicePresetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PetVoicePresetsTests.swift; sourceTree = "<group>"; };
 		DFAAD0023071000100A1E94D /* PetSpeechPlaybackTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PetSpeechPlaybackTests.swift; sourceTree = "<group>"; };
@@ -597,6 +599,7 @@
 				DFA9E5080000000000000001 /* ReasoningLevelTests.swift */,
 				C0DE70C00000000000000001 /* CodexTokenUsageTests.swift */,
 				DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */,
+				DFA9E50C0000000000000001 /* ProjectEffortTests.swift */,
 				5C3333332FCB400000000007 /* ThreadStoreReaderTests.swift */,
 				5C4444442FCE100000000001 /* GeneratedTextSanitizerTests.swift */,
 				E62000002FCB000100000001 /* MemoryIntentTests.swift */,
@@ -1210,6 +1213,7 @@
 				DFA9E5090000000000000001 /* ReasoningLevelTests.swift in Sources */,
 				C0DE70C00000000000000002 /* CodexTokenUsageTests.swift in Sources */,
 				DFA9E50B0000000000000001 /* EffortSanitizationTests.swift in Sources */,
+				DFA9E50D0000000000000001 /* ProjectEffortTests.swift in Sources */,
 				5C3333332FCB400000000008 /* ThreadStoreReaderTests.swift in Sources */,
 				5C4444442FCE100000000002 /* GeneratedTextSanitizerTests.swift in Sources */,
 				E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */,

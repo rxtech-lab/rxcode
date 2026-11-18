@@ -114,7 +114,7 @@ struct ThreadDiffBanner: View {
     /// Mirrors `ThisThreadFileRow`: computes thread-isolated `+/-` stats via
     /// `DiffComputation.threadEditStat`, isolating hunks when external
     /// interleaving occurred.
-    private static func computeStat(_ summaries: [FileEditSummary]) async -> (added: Int, removed: Int) {
+    static func computeStat(_ summaries: [FileEditSummary]) async -> (added: Int, removed: Int) {
         await Task.detached(priority: .utility) {
             var added = 0
             var removed = 0

@@ -40,7 +40,7 @@ struct ChatToolbarControls: View {
     /// every provider — Claude's `--effort` and Codex's `model_reasoning_effort`
     /// do not take the same values.
     private var reasoningLevels: [ReasoningLevel] {
-        appState.reasoningLevels(for: effectiveProvider)
+        appState.reasoningLevels(for: effectiveProvider, model: effectiveModel)
     }
 
     /// The provider's levels as picker rows. The one-line rationale rides along
@@ -73,7 +73,7 @@ struct ChatToolbarControls: View {
     /// Names what clearing the pick falls back to, rather than calling it
     /// "Auto".
     private var effortDefaultRowTitle: String {
-        appState.defaultEffortTitle(for: effectiveProvider)
+        appState.defaultEffortTitle(for: effectiveProvider, model: effectiveModel)
     }
     var effectiveModel: String { appState.effectiveModelSelection(in: windowState).model }
     var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
@@ -172,7 +172,7 @@ struct ChatToolbarControls: View {
                 .accessibilityIdentifier("effort-menu")
             }
         }
-        .task(id: effectiveProvider) {
+        .task(id: "\(effectiveProvider.rawValue):\(effectiveModel)") {
             await appState.loadReasoningLevels(for: effectiveProvider)
             appState.reconcileSessionEffort(in: windowState, provider: effectiveProvider)
         }

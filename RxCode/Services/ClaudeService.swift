@@ -160,9 +160,22 @@ extension ClaudeCodeServer: AgentBackend {
     /// so another user frame is always writable in principle.
     nonisolated var supportsSteering: Bool { true }
 
-    /// What `--effort` accepts. Static rather than discovered — the CLI has no
-    /// query for it, and these five are the documented set.
-    func availableReasoningLevels() async -> [ReasoningLevel] { .claudeCodeEfforts }
+    /// Read the choices advertised by the installed CLI.
+    func availableReasoningLevels() async -> [ReasoningLevel] {
+        guard let binary = await findClaudeBinary(),
+              let help = try? await runShellCommand(binary, arguments: ["--help"]) else { return [] }
+        return Self.reasoningLevels(fromHelp: help)
+    }
+
+    static func reasoningLevels(fromHelp help: String) -> [ReasoningLevel] {
+        guard let option = help.range(of: "--effort <level>") else { return [] }
+        let lines = help[option.upperBound...].components(separatedBy: .newlines)
+        let description = lines.prefix { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("-") }.joined(separator: " ")
+        guard let range = description.range(of: #"\([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*\)"#, options: .regularExpression) else { return [] }
+        return .levels(description[range].dropFirst().dropLast().split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        })
+    }
 
     func send(_ request: BackendSendRequest) -> AsyncStream<StreamEvent> {
         send(

@@ -397,6 +397,12 @@
         }
       }
     },
+    "%@ · Closed" : {
+
+    },
+    "%@ · Merged" : {
+
+    },
     "%@ · No download required" : {
 
     },
@@ -1080,6 +1086,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 项进行中"
+          }
+        }
+      }
+    },
+    "%lld lines added, %lld lines removed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld lines added, %2$lld lines removed"
           }
         }
       }
@@ -19201,6 +19217,9 @@
         }
       }
     },
+    "Opens on GitHub" : {
+
+    },
     "Optional" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20607,6 +20626,12 @@
       }
     },
     "Publishing Swift filters (step 4 of 5)" : {
+
+    },
+    "Pull request" : {
+
+    },
+    "Pull request #%lld" : {
 
     },
     "Push" : {
@@ -28028,6 +28053,9 @@
           }
         }
       }
+    },
+    "Thread has file changes" : {
+
     },
     "Thread menu" : {
       "localizations" : {

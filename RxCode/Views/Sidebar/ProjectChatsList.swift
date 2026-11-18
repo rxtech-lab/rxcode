@@ -313,7 +313,8 @@ struct ProjectChatsList: View {
             showLabelChip: showLabelChip,
             reviewDisclosure: reviewDisclosure,
             reviewPassed: appState.reviewPassedBySession[sessionId],
-            canCommitFiles: appState.threadHasFileChanges(sessionId: sessionId)
+            hasFileChanges: appState.threadHasDiffPreview(sessionId: sessionId),
+            pullRequest: appState.pullRequest(forThread: summary, in: project)
         )
     }
 }

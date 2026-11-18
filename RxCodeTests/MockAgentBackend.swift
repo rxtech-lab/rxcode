@@ -142,8 +142,8 @@ actor MockAgentBackend: AgentBackend {
     /// rejected and turn those assertions vacuous.
     func availableReasoningLevels() async -> [ReasoningLevel] {
         switch provider {
-        case .claudeCode: return .claudeCodeEfforts
-        case .codex: return .codexEfforts
+        case .claudeCode: return .levels(["low", "medium", "high", "xhigh", "max"])
+        case .codex: return .levels(["minimal", "low", "medium", "high"])
         default: return []
         }
     }

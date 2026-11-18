@@ -1,6 +1,12 @@
 import Foundation
 import SwiftData
+import RxCodeChatKit
 import RxCodeCore
+
+nonisolated enum ThreadFileEditPresence: Sendable {
+    case planOnly
+    case previewable
+}
 
 // MARK: - Thread File Edits & Detected Shell Changes
 
@@ -9,12 +15,15 @@ extension ThreadStore {
 
     // MARK: - Thread File Edits
 
-    func fetchFileEdits(sessionId: String) -> [ThreadFileEdit] {
-        let descriptor = FetchDescriptor<ThreadFileEdit>(
+    nonisolated static func fileEditsDescriptor(sessionId: String) -> FetchDescriptor<ThreadFileEdit> {
+        FetchDescriptor<ThreadFileEdit>(
             predicate: #Predicate { $0.sessionId == sessionId },
             sortBy: [SortDescriptor(\.firstEditedAt, order: .forward)]
         )
-        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func fetchFileEdits(sessionId: String) -> [ThreadFileEdit] {
+        (try? context.fetch(Self.fileEditsDescriptor(sessionId: sessionId))) ?? []
     }
 
     /// Number of distinct files this session recorded edits to. There is one row
@@ -27,12 +36,16 @@ extension ThreadStore {
         return (try? context.fetchCount(descriptor)) ?? 0
     }
 
-    /// Every session id that recorded at least one file edit, in a single query.
-    func sessionIdsWithFileEdits() -> Set<String> {
+    /// Reads the fields that determine sidebar badges and commit availability.
+    static nonisolated func fileEditPresence(in context: ModelContext) -> [String: ThreadFileEditPresence] {
         var descriptor = FetchDescriptor<ThreadFileEdit>()
-        descriptor.propertiesToFetch = [\ThreadFileEdit.sessionId]
+        descriptor.propertiesToFetch = [\.sessionId, \.path]
         let rows = (try? context.fetch(descriptor)) ?? []
-        return Set(rows.map(\.sessionId))
+        return rows.reduce(into: [:]) { index, row in
+            let sessionId = row.sessionId
+            guard index[sessionId] != .previewable else { return }
+            index[sessionId] = PlanLogic.isPlanFilePath(row.path) ? .planOnly : .previewable
+        }
     }
 
     /// Edited-file count for every session, in a single query.
@@ -60,6 +73,7 @@ extension ThreadStore {
     /// When `stepBeforeContent` is supplied and differs from the previously recorded
     /// `modifiedContent`, another thread or external editor modified the file in
     /// between turns, so `hasExternalInterleaving` is marked true to isolate hunks.
+    @discardableResult
     func appendFileEdit(
         sessionId: String,
         path: String,
@@ -70,8 +84,8 @@ extension ThreadStore {
         stepBeforeContent: String? = nil,
         isDeleted: Bool = false,
         isAmbiguous: Bool = false
-    ) {
-        guard !hunks.isEmpty || isDeleted else { return }
+    ) -> Bool {
+        guard !hunks.isEmpty || isDeleted else { return false }
         let name = (path as NSString).lastPathComponent
         if let existing = fetchFileEdit(sessionId: sessionId, path: path) {
             if let prevModified = existing.modifiedContent,
@@ -104,6 +118,7 @@ extension ThreadStore {
             ))
         }
         save()
+        return true
     }
 
     func renameFileEdits(from oldId: String, to newId: String) {

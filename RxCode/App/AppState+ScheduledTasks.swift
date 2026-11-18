@@ -174,7 +174,7 @@ extension AppState {
         if let effort = agent.effort, !effort.isEmpty {
             let provider = effectiveModelSelection(in: window).provider
             await loadReasoningLevels(for: provider)
-            setSessionEffort(await sanitizedEffort(effort, for: provider), in: window)
+            updateSessionEffort(await sanitizedEffort(effort, for: provider), in: window)
         }
         if let mode = agent.permissionMode {
             setSessionPermissionMode(mode, in: window)

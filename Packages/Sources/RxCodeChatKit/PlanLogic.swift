@@ -39,7 +39,7 @@ public enum PlanLogic {
     /// `.../.claude/plans/` (or `.../claude/plans/`) directory. These plan
     /// documents are planning scaffolding, not real project edits, so the
     /// thread changes list excludes them.
-    public static func isPlanFilePath(_ path: String) -> Bool {
+    nonisolated public static func isPlanFilePath(_ path: String) -> Bool {
         guard path.hasSuffix(".md") else { return false }
         return path.contains("/.claude/plans/") || path.contains("/claude/plans/")
     }

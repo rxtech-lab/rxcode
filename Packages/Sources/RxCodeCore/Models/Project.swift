@@ -13,6 +13,7 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
     public var lastSessionId: String?
     public var lastAgentProvider: AgentProvider?
     public var lastModel: String?
+    public var lastEffort: String?
     /// Additional instructions sent with turns in this project.
     public var customPrompt: String? = nil
     /// The Autopilot project this project's task board syncs with. `nil`
@@ -27,6 +28,7 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
         lastSessionId: String? = nil,
         lastAgentProvider: AgentProvider? = nil,
         lastModel: String? = nil,
+        lastEffort: String? = nil,
         cloudId: String? = nil
     ) {
         self.id = id
@@ -36,6 +38,7 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
         self.lastSessionId = lastSessionId
         self.lastAgentProvider = lastAgentProvider
         self.lastModel = lastModel
+        self.lastEffort = lastEffort
         self.cloudId = cloudId
     }
 

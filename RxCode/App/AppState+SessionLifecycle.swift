@@ -21,7 +21,7 @@ extension AppState {
         window.currentSessionId = nil
         window.sessionAgentProvider = nil
         window.sessionModel = nil
-        window.sessionEffort = nil
+        window.sessionEffort = rememberedProjectEffort(in: window)
         window.sessionPermissionMode = nil
         window.sessionPlanMode = false
         window.pendingWorktreePath = nil
@@ -236,18 +236,34 @@ extension AppState {
         guard summary.projectId != Project.globalChatID,
               summary.threadLabel != Self.manualCodeReviewLabel else { return }
 
-        let previousSummary = threadStore.threadSummaryItem(sessionId: sessionId)?.summary
+        let branchPath = summary.worktreePath ?? cwd
+        let observedBranch = if let worktreeBranch = summary.worktreeBranch {
+            worktreeBranch
+        } else {
+            await GitHelper.currentBranch(at: branchPath)
+        }
+        let storedSummary = threadStore.threadSummaryItem(sessionId: sessionId)
+        let title = summary.title.isEmpty ? ChatSession.defaultTitle : summary.title
+
+        // Keep the branch association even when summarization is unavailable.
+        if let observedBranch, observedBranch != storedSummary?.branch {
+            threadStore.upsertThreadSummaryTitle(
+                sessionId: sessionId,
+                projectId: projectId,
+                branch: observedBranch,
+                title: title
+            )
+            threadSummaryRevision &+= 1
+        }
+
         guard let threadSummary = await generateThreadSummary(
-            previousSummary: previousSummary,
+            previousSummary: storedSummary?.summary,
             userMessage: userMessage,
             finalResponse: finalResponse,
             summary: summary
         ) else { return }
 
-        let branchPath = summary.worktreePath ?? cwd
-        let currentBranch = await GitHelper.currentBranch(at: branchPath)
-        let branch = summary.worktreeBranch ?? currentBranch ?? "unknown"
-        let title = summary.title.isEmpty ? ChatSession.defaultTitle : summary.title
+        let branch = observedBranch ?? storedSummary?.branch ?? "unknown"
 
         threadStore.upsertThreadSummary(
             sessionId: sessionId,

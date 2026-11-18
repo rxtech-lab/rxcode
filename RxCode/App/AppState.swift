@@ -241,18 +241,11 @@ final class AppState: IDEToolHandling {
         didSet { scheduleDesktopWidgetUpdate() }
     }
 
-    /// Bumped each time a thread file-edit row is appended in SwiftData. The
-    /// "This thread" inspector reads this so SwiftUI observation re-runs the
-    /// `threadFileEdits(in:)` fetch after a new Edit/Write tool call lands.
-    var threadFileEditsRevision: Int = 0 {
-        didSet { refreshThreadFileEditIndex() }
-    }
+    /// Invalidates visible file-change views after recorded edits change.
+    var threadFileEditsRevision = 0
 
-    /// Session ids known to have recorded file edits. Kept in sync with
-    /// `threadFileEditsRevision` so `threadHasFileChanges(sessionId:)` — called
-    /// once per sidebar row per view update — is a pure in-memory lookup instead
-    /// of a SwiftData count query.
-    var sessionIdsWithFileEdits: Set<String> = []
+    /// Keeps file-change and commit indicators in memory for sidebar rows.
+    var threadFileEditPresence: [String: ThreadFileEditPresence] = [:]
 
     /// Bumped each time a todo snapshot row is upserted in SwiftData (MCP
     /// `ide__set_todos`, Codex `.todoSnapshot` events, in-message TodoWrite
@@ -546,11 +539,13 @@ final class AppState: IDEToolHandling {
     /// `AppState+CIStatus.swift`. Held in memory only.
     var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
 
-    /// Latest CI/PR status keyed by `owner/repo#branch` (lowercased), covering
-    /// every branch shown on briefing cards — not just current branches. Drives
-    /// the per-card PR / merge status and the Create PR button. Refreshed by the
-    /// same poller. Held in memory only.
+    /// Latest CI/PR status keyed by `owner/repo#branch`, covering current
+    /// branches and branches from briefings and project chats.
     var ciStatusByBranchKey: [String: ProjectCIStatus] = [:]
+
+    /// Recorded branch by session ID, so thread rows can find their PR without
+    /// querying Git or SwiftData during rendering.
+    var ciBranchBySessionId: [String: String] = [:]
 
     /// Bumped after every CI refresh so views observing CI status recompute,
     /// mirroring the `branchBriefingRevision` pattern.
@@ -1133,6 +1128,7 @@ final class AppState: IDEToolHandling {
     /// What each provider's backend reported for `availableReasoningLevels()`.
     /// A property of the agent binary rather than of any thread, so it is
     /// fetched once per provider and read by the composer's effort picker.
+    var codexLevelsByModel: [String: [ReasoningLevel]] = [:]
     var reasoningLevelsByProvider: [AgentProvider: [ReasoningLevel]] = [:]
     let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()

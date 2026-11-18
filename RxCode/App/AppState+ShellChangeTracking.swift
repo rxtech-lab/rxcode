@@ -166,7 +166,7 @@ extension AppState {
                 }
                 #endif
                 let resolvedKey = self.resolveCurrentSessionId(initialKey)
-                self.threadStore.appendFileEdit(
+                guard self.threadStore.appendFileEdit(
                     sessionId: resolvedKey,
                     path: pathLocal,
                     hunks: hunksLocal,
@@ -174,8 +174,8 @@ extension AppState {
                     originalContent: snapshot,
                     modifiedContent: modified,
                     stepBeforeContent: stepSnapshot
-                )
-                self.threadFileEditsRevision &+= 1
+                ) else { return }
+                self.recordThreadFileEdits(sessionId: resolvedKey, paths: [pathLocal])
                 self.broadcastMobileFileEditsChanged(sessionID: resolvedKey)
             }
             registerPendingShellDetectionTask(task, id: taskId, sessionKey: sessionKey)
@@ -225,8 +225,9 @@ extension AppState {
             guard !visibleEdits.isEmpty else { return }
 
             let resolvedKey = self.resolveCurrentSessionId(initialKey)
+            var persistedPaths: [String] = []
             for edit in visibleEdits {
-                self.threadStore.appendFileEdit(
+                let persisted = self.threadStore.appendFileEdit(
                     sessionId: resolvedKey,
                     path: edit.path,
                     hunks: edit.hunks,
@@ -237,6 +238,9 @@ extension AppState {
                     isDeleted: edit.kind == .deleted,
                     isAmbiguous: edit.chatChange.isAmbiguous
                 )
+                if persisted {
+                    persistedPaths.append(edit.path)
+                }
             }
 
             let chatChanges = visibleEdits.map(\.chatChange)
@@ -261,7 +265,7 @@ extension AppState {
                     break
                 }
             }
-            self.threadFileEditsRevision &+= 1
+            self.recordThreadFileEdits(sessionId: resolvedKey, paths: persistedPaths)
             self.broadcastMobileFileEditsChanged(sessionID: resolvedKey)
         }
         registerPendingShellDetectionTask(task, id: taskId, sessionKey: sessionKey)

@@ -9,8 +9,9 @@ extension AppState {
     /// for a provider with no reasoning control — the picker reads both the
     /// same way and hides itself, which is the right thing to show while the
     /// answer is still in flight.
-    func reasoningLevels(for provider: AgentProvider) -> [ReasoningLevel] {
-        reasoningLevelsByProvider[provider] ?? []
+    func reasoningLevels(for provider: AgentProvider, model: String? = nil) -> [ReasoningLevel] {
+        if provider == .codex, let model, let levels = codexLevelsByModel[model] { return levels }
+        return reasoningLevelsByProvider[provider] ?? []
     }
 
     /// Ask a provider's backend what it accepts, and cache it.
@@ -21,30 +22,19 @@ extension AppState {
     func loadReasoningLevels(for provider: AgentProvider) async {
         guard reasoningLevelsByProvider[provider] == nil else { return }
         let levels = await backend(for: provider).availableReasoningLevels()
-        reasoningLevelsByProvider[provider] = levels
+        if provider == .codex, agentBackendOverrides[provider] == nil {
+            codexLevelsByModel = await codex.modelReasoningLevels
+        }
+        if !levels.isEmpty || (provider != .codex && provider != .claudeCode) {
+            reasoningLevelsByProvider[provider] = levels
+        }
     }
 
     /// The effort to actually send to `provider`, or `nil` if it wouldn't take it.
-    ///
-    /// The single guard for every send path. It has to exist because effort is
-    /// chosen in places that don't know the provider — the global Settings
-    /// default spans all of them, and a session carries its pick across a
-    /// provider switch — so by the time a value reaches a backend it may be a
-    /// level that agent rejects. Claude would launch with `--effort minimal`;
-    /// codex would fail its whole config on `max`.
-    ///
-    /// Unlike `reconcileSessionEffort(in:provider:)`, this awaits the level
-    /// list rather than skipping when the cache is cold: a send cannot be
-    /// deferred, and guessing here is what the guard exists to prevent. An
-    /// agent with no reasoning control at all (ACP) yields `nil`.
-    ///
-    /// Dropping rather than substituting is deliberate — `nil` means "the
-    /// agent's own default", which is the honest reading of a level this agent
-    /// doesn't have.
-    func sanitizedEffort(_ effort: String?, for provider: AgentProvider) async -> String? {
+    func sanitizedEffort(_ effort: String?, for provider: AgentProvider, model: String? = nil) async -> String? {
         guard let effort else { return nil }
         await loadReasoningLevels(for: provider)
-        guard reasoningLevels(for: provider).contains(where: { $0.id == effort }) else {
+        guard reasoningLevels(for: provider, model: model).contains(where: { $0.id == effort }) else {
             logger.info("[Effort] dropped \(effort, privacy: .public) — \(provider.rawValue, privacy: .public) does not accept it")
             return nil
         }
@@ -52,18 +42,35 @@ extension AppState {
     }
 
     /// Drop a session's effort when it isn't a level the provider accepts.
-    ///
-    /// Switching Claude → Codex used to leave `xhigh` or `max` selected, and
-    /// the picker would keep showing it even though Codex rejects both. Falling
-    /// back to Auto is the honest reading of "the level you picked doesn't
-    /// exist here" — it is what an unset effort already means.
     func reconcileSessionEffort(in window: WindowState, provider: AgentProvider) {
         guard let effort = window.sessionEffort else { return }
-        let levels = reasoningLevels(for: provider)
+        let levels = reasoningLevels(for: provider, model: effectiveModelSelection(in: window).model)
         // An empty list means the answer hasn't arrived yet (or the provider has
         // no control at all). Neither is grounds for discarding the user's pick.
         guard !levels.isEmpty, !levels.contains(where: { $0.id == effort }) else { return }
-        setSessionEffort(nil, in: window)
+        updateSessionEffort(nil, in: window)
+    }
+
+    func rememberedProjectEffort(in window: WindowState) -> String? {
+        guard let projectId = window.selectedProject?.id,
+              let effort = projects.first(where: { $0.id == projectId })?.lastEffort else { return nil }
+        let selection = effectiveModelSelection(in: window)
+        let levels = reasoningLevels(for: selection.provider, model: selection.model)
+        return levels.isEmpty || levels.contains(where: { $0.id == effort }) ? effort : nil
+    }
+
+    func rememberProjectEffort(_ effort: String?, projectId: UUID?) {
+        guard let projectId,
+              let index = projects.firstIndex(where: { $0.id == projectId }),
+              projects[index].lastEffort != effort else { return }
+        projects[index].lastEffort = effort
+        Task {
+            do {
+                try await persistence.saveProjects(projects)
+            } catch {
+                logger.error("Failed to save project effort selection: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Names what clearing a session's effort actually falls back to.
@@ -76,9 +83,9 @@ extension AppState {
     ///
     /// A Settings level the provider doesn't accept is reported as the agent
     /// default, because that is what `sanitizedEffort(_:for:)` will do with it.
-    func defaultEffortTitle(for provider: AgentProvider) -> String {
+    func defaultEffortTitle(for provider: AgentProvider, model: String? = nil) -> String {
         guard selectedEffort != "auto",
-              let level = reasoningLevels(for: provider).first(where: { $0.id == selectedEffort })
+              let level = reasoningLevels(for: provider, model: model).first(where: { $0.id == selectedEffort })
         else { return "Agent default" }
         return "Settings (\(level.displayName))"
     }

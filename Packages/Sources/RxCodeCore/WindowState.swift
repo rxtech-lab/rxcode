@@ -384,7 +384,7 @@ public final class WindowState {
     /// sessions and resumes route to the correct runtime.
     public var sessionAgentProvider: AgentProvider?
     /// Per-session effort override. When set, passed as --effort to the CLI.
-    /// Cleared when a new chat is started or a different session is selected.
+    /// New chats inherit the project's last choice.
     public var sessionEffort: String?
     /// Per-session permission mode override. When set, overrides the global permissionMode.
     /// Cleared when a new chat is started or a different session is selected.

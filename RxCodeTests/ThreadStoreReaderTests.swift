@@ -81,12 +81,26 @@ final class ThreadStoreReaderTests: XCTestCase {
 
         XCTAssertEqual(snapshot.summaries.map(\.id), store.loadAllSummaries().map(\.id))
         XCTAssertEqual(snapshot.reviewVerdicts, store.loadReviewVerdicts())
-        XCTAssertEqual(snapshot.sessionIdsWithFileEdits, store.sessionIdsWithFileEdits())
+        XCTAssertEqual(snapshot.fileEditPresence, ThreadStore.fileEditPresence(in: store.context))
         XCTAssertEqual(snapshot.todoProgress, store.loadTodoProgressBySession())
         XCTAssertEqual(
             snapshot.queues.mapValues { $0.map(\.text) },
             store.loadAllQueues().mapValues { $0.map(\.text) }
         )
+    }
+
+    func testDiffPreviewLoadsOnlyTheRequestedThreadsProjectFiles() async {
+        let store = makeStore()
+        let hunks = [PreviewFile.EditHunk(oldString: "before", newString: "after")]
+        store.appendFileEdit(sessionId: "session-a", path: "/tmp/file.swift", hunks: hunks, containsWrite: false)
+        store.appendFileEdit(sessionId: "session-a", path: "/tmp/.claude/plans/plan.md", hunks: hunks, containsWrite: true)
+        store.appendFileEdit(sessionId: "session-b", path: "/tmp/other.swift", hunks: hunks, containsWrite: false)
+
+        let reader = ThreadStoreReader(container: store.container)
+        let edits = await reader.loadThreadDiffPreview(sessionId: "session-a")
+
+        XCTAssertEqual(edits.map(\.path), ["/tmp/file.swift"])
+        XCTAssertEqual(edits.first?.hunks, hunks)
     }
 
     /// The sidebar list is the one index the launch path publishes before the
@@ -115,7 +129,7 @@ final class ThreadStoreReaderTests: XCTestCase {
 
         XCTAssertTrue(snapshot.summaries.isEmpty)
         XCTAssertTrue(snapshot.reviewVerdicts.isEmpty)
-        XCTAssertTrue(snapshot.sessionIdsWithFileEdits.isEmpty)
+        XCTAssertTrue(snapshot.fileEditPresence.isEmpty)
         XCTAssertTrue(snapshot.todoProgress.isEmpty)
         XCTAssertTrue(snapshot.queues.isEmpty)
     }

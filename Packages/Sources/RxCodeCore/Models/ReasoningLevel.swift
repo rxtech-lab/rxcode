@@ -2,11 +2,6 @@ import Foundation
 
 /// One selectable thinking/reasoning level for an agent.
 ///
-/// The picker used to offer one hardcoded list to every provider, which was
-/// only ever correct for Claude — Codex has no `xhigh` or `max`, and offering
-/// them meant the menu showed levels the agent would reject. Each backend now
-/// reports its own vocabulary instead.
-///
 /// `id` is the wire value, passed through to the agent verbatim: `--effort` for
 /// Claude Code, `model_reasoning_effort` for Codex.
 ///
@@ -28,60 +23,6 @@ public struct ReasoningLevel: Sendable, Hashable, Identifiable, Codable {
 }
 
 public extension [ReasoningLevel] {
-
-    /// What `claude --effort` accepts.
-    static let claudeCodeEfforts: [ReasoningLevel] = [
-        ReasoningLevel(
-            id: "low",
-            displayName: "Low",
-            levelDescription: "Fastest and cheapest. Mechanical edits and small questions."
-        ),
-        ReasoningLevel(
-            id: "medium",
-            displayName: "Medium",
-            levelDescription: "Everyday work where quality is holding up fine."
-        ),
-        ReasoningLevel(
-            id: "high",
-            displayName: "High",
-            levelDescription: "Intelligence-sensitive work. A good quality/cost balance."
-        ),
-        ReasoningLevel(
-            id: "xhigh",
-            displayName: "Extra High",
-            levelDescription: "Best for most coding and agentic tasks."
-        ),
-        ReasoningLevel(
-            id: "max",
-            displayName: "Max",
-            levelDescription: "When correctness matters more than cost."
-        ),
-    ]
-
-    /// What Codex's `model_reasoning_effort` accepts. Note the absence of
-    /// `xhigh` and `max` — those are Claude's, and Codex rejects them.
-    static let codexEfforts: [ReasoningLevel] = [
-        ReasoningLevel(
-            id: "minimal",
-            displayName: "Minimal",
-            levelDescription: "Barely reasons. Lowest latency."
-        ),
-        ReasoningLevel(
-            id: "low",
-            displayName: "Low",
-            levelDescription: "Quick passes over small, well-specified changes."
-        ),
-        ReasoningLevel(
-            id: "medium",
-            displayName: "Medium",
-            levelDescription: "The default. Balanced for everyday work."
-        ),
-        ReasoningLevel(
-            id: "high",
-            displayName: "High",
-            levelDescription: "Hard problems worth the extra latency."
-        ),
-    ]
 
     /// Titlecases each wire value. For a provider that reports its levels as
     /// bare strings and whose names read well as-is.

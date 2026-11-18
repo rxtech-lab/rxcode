@@ -2,6 +2,12 @@ import Foundation
 import RxCodeCore
 import os
 
+struct ThreadPullRequest: Equatable {
+    let url: URL
+    let number: Int?
+    let state: PRState?
+}
+
 extension AppState {
 
     /// How often the CI poller refreshes GitHub Actions status for open projects.
@@ -54,6 +60,28 @@ extension AppState {
             }
     }
 
+    func pullRequest(forThread summary: ChatSession.Summary, in project: Project) -> ThreadPullRequest? {
+        guard isSignedIn, summary.projectId == project.id,
+              let branch = summary.worktreeBranch ?? ciBranchBySessionId[summary.id]
+                ?? summary.parentThreadId.flatMap({ ciBranchBySessionId[$0] }),
+              let slug = project.gitHubRepo else { return nil }
+        let parts = slug.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let status = ciStatusByBranchKey[Self.ciKey(owner: parts[0], repo: parts[1], branch: branch)],
+              status.found else { return nil }
+
+        let reportedURL = status.prUrl.flatMap(URL.init(string:))
+        let url: URL? = if let reportedURL, reportedURL.scheme == "https", reportedURL.host != nil {
+            reportedURL
+        } else if let number = status.prNumber, number > 0 {
+            URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(number)")
+        } else {
+            nil
+        }
+        guard let url else { return nil }
+        return ThreadPullRequest(url: url, number: status.prNumber, state: status.pullRequestState)
+    }
+
     // MARK: - Refresh
 
     /// One poll cycle: resolve each GitHub project's current branch, batch-query
@@ -86,6 +114,22 @@ extension AppState {
             guard let slug = repoByProject[item.projectId] else { continue }
             let key = Self.ciKey(owner: slug.owner, repo: slug.repo, branch: item.branch)
             queriesByKey[key] = CIStatusQuery(owner: slug.owner, repo: slug.repo, branch: item.branch)
+        }
+
+        // A thread can track a branch before it gets a briefing, and the PR
+        // can outlive both a checkout and a deleted worktree or remote branch.
+        let summarizedBranches = repoByProject.isEmpty ? [:] : await threadStoreReader.loadSummarizedThreadBranches()
+        var threadBranches: [String: String] = [:]
+        for summary in allSessionSummaries {
+            guard let slug = repoByProject[summary.projectId],
+                  let branch = summary.worktreeBranch ?? summarizedBranches[summary.id],
+                  !branch.isEmpty, branch != "unknown" else { continue }
+            threadBranches[summary.id] = branch
+            let key = Self.ciKey(owner: slug.owner, repo: slug.repo, branch: branch)
+            queriesByKey[key] = CIStatusQuery(owner: slug.owner, repo: slug.repo, branch: branch)
+        }
+        if ciBranchBySessionId != threadBranches {
+            ciBranchBySessionId = threadBranches
         }
 
         guard !queriesByKey.isEmpty else {

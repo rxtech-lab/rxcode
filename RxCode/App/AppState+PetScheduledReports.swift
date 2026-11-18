@@ -61,13 +61,15 @@ extension AppState {
             try await persistence.saveScheduledTaskRuns(scheduledTaskRuns)
             deliverPendingPetReports()
         } catch {
+            // Surface the failure before any suspension so observers of the failed run always
+            // see the alert alongside it.
+            (scheduledPetReportReceiver ?? .shared).alertErrorMessage = "Could not persist the scheduled check or report: \(error.localizedDescription)"
+            logger.error("Could not persist scheduled pet check: \(error.localizedDescription)")
             if scheduledTasks.first(where: { $0.id == task.id })?.lastRunAt == nil {
                 scheduledTaskRuns.insert(ScheduledTaskRun(taskId: task.id, projectId: task.projectId, status: .failed,
                     finishedAt: .now, errorMessage: "Could not save the scheduler claim. No reminder or progress check was executed."), at: 0)
                 try? await persistence.saveScheduledTaskRuns(scheduledTaskRuns)
             }
-            (scheduledPetReportReceiver ?? .shared).alertErrorMessage = "Could not persist the scheduled check or report: \(error.localizedDescription)"
-            logger.error("Could not persist scheduled pet check: \(error.localizedDescription)")
         }
     }
 

@@ -314,6 +314,8 @@ struct PetInteractionTests {
     func musicStartupRestoration() async throws {
         let controller = PetController()
         let player = TestPetMusicPlayer()
+        // Start idle so the assertion below proves startup never begins playback.
+        player.isPlaying = false
         let checks = Mutex(0)
         let music = PetMusic(controller: controller, player: player,
             currentAuthorizationStatus: { .authorized }, requestAuthorization: {

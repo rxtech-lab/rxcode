@@ -99,6 +99,9 @@ struct PetScheduledReportTests {
         app.runDueScheduledTasks(since: .now, now: .now)
         #expect(!app.scheduledTasks[0].isEnabled)
         try await waitFor { app.scheduledTasks[0].pendingPetReport != nil }
+        // The outbox and run history are saved after the in-memory update; wait for durability
+        // before reading persistence or relaunching from it.
+        try await waitForPersistedReport(in: persistence)
         #expect(app.scheduledTaskRuns.filter { $0.taskId == task.id }.count == 1)
         #expect(app.scheduledTasks[0].pendingPetReport?.contains("ProgressTest") == true)
         #expect(app.scheduledTasks[0].pendingPetReport?.contains("No project action was dispatched") == true)
@@ -233,6 +236,9 @@ struct PetScheduledReportTests {
         app.runDueScheduledTasks(since: .now, now: .now)
         app.runDueScheduledTasks(since: .now, now: .now)
         try await waitFor { app.scheduledTasks[0].pendingPetReport != nil }
+        // The outbox and run history are saved after the in-memory update; wait for durability
+        // before reading persistence or relaunching from it.
+        try await waitForPersistedReport(in: persistence)
         #expect(app.scheduledTasks[0].pendingPetReport == task.prompt)
         #expect(app.scheduledTaskRuns.count == 1 && app.scheduledTaskRuns[0].status == .succeeded)
         #expect(app.taskBoards.isEmpty && app.sessionStates.isEmpty)
@@ -271,6 +277,18 @@ struct PetScheduledReportTests {
             throw NSError(domain: "PetReminderTest", code: 1)
         }
         return text
+    }
+
+    @MainActor
+    private func waitForPersistedReport(in persistence: MockAppStatePersistence) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+        while ContinuousClock.now < deadline {
+            let report = await persistence.loadScheduledTasks().first?.pendingPetReport
+            let runs = await persistence.loadScheduledTaskRuns()
+            if report != nil, runs.count == 1 { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        Issue.record("The scheduled report outbox and run were not persisted")
     }
 
     @MainActor

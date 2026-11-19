@@ -1,4 +1,5 @@
 import Foundation
+import RxCodeChatKit
 import RxCodeCore
 
 /// Errors surfaced while starting a manual commit turn from a project, briefing,
@@ -25,26 +26,45 @@ extension AppState {
 
     // MARK: - Commit affordance gating
 
-    /// Whether the thread-level "Commit Files" action should be offered: hidden
-    /// when the thread recorded no file edits.
-    ///
-    /// Answered from `sessionIdsWithFileEdits`, not from a per-call SwiftData
-    /// query: the sidebar asks this for every visible thread on every view-graph
-    /// update, and a count query there put synchronous SQLite reads on the main
-    /// thread at display-link rate.
+    /// Whether the thread-level "Commit Files" action should be offered.
     func threadHasFileChanges(sessionId: String) -> Bool {
-        sessionIdsWithFileEdits.contains(sessionId)
+        threadFileEditPresence[sessionId] != nil
     }
 
-    /// Reload the file-edit index from SwiftData. Driven by `threadFileEditsRevision`,
-    /// so every existing bump site keeps the index fresh without also having to
-    /// remember to refresh it.
-    func refreshThreadFileEditIndex() {
-        let ids = threadStore.sessionIdsWithFileEdits()
-        // Assigning an equal value still fires observation, and this runs on every
-        // recorded edit — only publish when the answer actually changed.
-        guard ids != sessionIdsWithFileEdits else { return }
-        sessionIdsWithFileEdits = ids
+    func threadHasDiffPreview(sessionId: String) -> Bool {
+        threadFileEditPresence[sessionId] == .previewable
+    }
+
+    func recordThreadFileEdits(sessionId: String, paths: [String]) {
+        guard !paths.isEmpty else { return }
+        let previous = threadFileEditPresence[sessionId]
+        if previous != .previewable {
+            let includesProjectFile = paths.contains { !PlanLogic.isPlanFilePath($0) }
+            let presence: ThreadFileEditPresence = includesProjectFile ? .previewable : .planOnly
+            if previous != presence {
+                threadFileEditPresence[sessionId] = presence
+            }
+        }
+        threadFileEditsRevision &+= 1
+    }
+
+    func renameThreadFileEdits(from oldId: String, to newId: String) {
+        guard oldId != newId, let previous = threadFileEditPresence.removeValue(forKey: oldId) else { return }
+        if threadFileEditPresence[newId] != .previewable {
+            threadFileEditPresence[newId] = previous
+        }
+        threadFileEditsRevision &+= 1
+    }
+
+    func removeThreadFileEditsFromIndex(_ ids: Set<String>) {
+        var removed = false
+        for id in ids where threadFileEditPresence[id] != nil {
+            threadFileEditPresence.removeValue(forKey: id)
+            removed = true
+        }
+        if removed {
+            threadFileEditsRevision &+= 1
+        }
     }
 
     /// Whether the project-level "Commit All Changes" action should be offered.

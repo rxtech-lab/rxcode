@@ -512,7 +512,7 @@ extension AppState {
             autoArchiveEnabled: autoArchiveEnabled,
             archiveRetentionDays: archiveRetentionDays,
             autoPreviewSettings: autoPreviewSettings,
-            availableEfforts: ["auto"] + Self.availableEfforts,
+            availableEfforts: ["auto"] + availableEfforts,
             availableModels: models,
             modelSections: sections,
             availableSummarizationProviders: SummarizationProvider.availableCases.map {
@@ -566,7 +566,7 @@ extension AppState {
         if let clientId = update.selectedACPClientId {
             selectedACPClientId = clientId
         }
-        if let effort = update.selectedEffort, effort == "auto" || Self.availableEfforts.contains(effort) {
+        if let effort = update.selectedEffort, effort == "auto" || availableEfforts.contains(effort) {
             selectedEffort = effort
         }
         if let mode = update.permissionMode {

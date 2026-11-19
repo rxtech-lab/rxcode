@@ -44,44 +44,15 @@ extension WorkspaceChangeTracker {
         return true
     }
 
-    func filterOutGitIgnored(paths: Set<String>) async -> Set<String> {
-        guard let gitRoot = gitRepoRoot, !paths.isEmpty else { return paths }
+    func gitIgnoredPaths(in paths: Set<String>, at gitRoot: String) async -> Set<String>? {
+        guard !paths.isEmpty else { return [] }
 
-        var uncached: [String] = []
-        for path in paths where gitIgnoreCache[path] == nil && ledger[path] == nil {
-            uncached.append(path)
-        }
-
-        if !uncached.isEmpty {
-            let ignored = await runGitCheckIgnore(paths: uncached, gitRoot: gitRoot)
-            for path in uncached {
-                gitIgnoreCache[path] = ignored.contains(path)
-            }
-        }
-
-        return paths.filter { path in
-            if ledger[path] != nil { return true }
-            return gitIgnoreCache[path] != true
-        }
-    }
-
-    private func runGitCheckIgnore(paths: [String], gitRoot: String) async -> Set<String> {
-        // Writing stdin synchronously on the actor and reading stdout only after
-        // exit deadlocked once git's output filled the pipe: git blocked on
-        // write, the actor blocked on the stdin write, and every later tracker
-        // call (including `streamDidStart`) hung forever. `GitHelper.execute`
-        // feeds stdin and drains stdout/stderr concurrently, off the actor.
         let payload = Data((paths.joined(separator: "\0") + "\0").utf8)
-        guard let output = await GitHelper.execute(["check-ignore", "-z", "--stdin"], at: gitRoot, input: payload) else {
-            return []
+        guard let output = await GitHelper.execute(["check-ignore", "-z", "--stdin"], at: gitRoot, input: payload),
+              output.status == 0 || output.status == 1 else {
+            return nil
         }
-        let outData = output.stdout
-        guard let outString = String(data: outData, encoding: .utf8), !outString.isEmpty else {
-            return []
-        }
-        let matched = outString
-            .split(separator: "\0", omittingEmptySubsequences: true)
-            .map { URL(fileURLWithPath: String($0)).resolvingSymlinksInPath().standardizedFileURL.path }
+        let matched = String(decoding: output.stdout, as: UTF8.self).split(separator: "\0").map(String.init)
         return Set(matched)
     }
 

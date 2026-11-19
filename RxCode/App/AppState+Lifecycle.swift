@@ -34,6 +34,10 @@ extension AppState {
             .filter { !PlanLogic.isPlanFilePath($0.path) }
     }
 
+    func loadThreadDiffPreview(sessionId: String) async -> [FileEditSummary] {
+        await threadStoreReader.loadThreadDiffPreview(sessionId: resolveCurrentSessionId(sessionId))
+    }
+
     func isStreaming(in window: WindowState) -> Bool {
         streamState(in: window).isStreaming
     }
@@ -198,7 +202,7 @@ extension AppState {
         let snapshot = await threadStoreReader.loadStartupSnapshot()
         allSessionSummaries = snapshot.summaries
         reviewPassedBySession = snapshot.reviewVerdicts
-        sessionIdsWithFileEdits = snapshot.sessionIdsWithFileEdits
+        threadFileEditPresence = snapshot.fileEditPresence
         todoProgressBySession = snapshot.todoProgress
         persistedQueues = snapshot.queues
 
@@ -369,6 +373,10 @@ extension AppState {
     }
 
     func refreshAgentInstallations() async {
+        for provider in [AgentProvider.claudeCode, .codex] {
+            reasoningLevelsByProvider.removeValue(forKey: provider)
+            await loadReasoningLevels(for: provider)
+        }
         let claudeBinary = await claude.findClaudeBinary()
         claudeBinaryPath = claudeBinary
         claudeInstalled = claudeBinary != nil

@@ -28,8 +28,14 @@ final class ThreadStoreSidebarIndexTests: XCTestCase {
         TodoItem(id: id, content: content, activeForm: content, status: status)
     }
 
-    func testSessionIdsWithFileEditsReturnsEverySessionThatRecordedAnEdit() {
+    func testFileEditPresenceDistinguishesPlanOnlySessions() {
         let store = makeStore()
+        store.appendFileEdit(
+            sessionId: "session-a",
+            path: "/tmp/.claude/plans/plan.md",
+            hunks: [hunk()],
+            containsWrite: true
+        )
         store.appendFileEdit(
             sessionId: "session-a",
             path: "/tmp/one.swift",
@@ -47,20 +53,20 @@ final class ThreadStoreSidebarIndexTests: XCTestCase {
         )
         store.appendFileEdit(
             sessionId: "session-b",
-            path: "/tmp/three.swift",
+            path: "/tmp/.claude/plans/other.md",
             hunks: [hunk()],
             containsWrite: false
         )
 
-        let ids = store.sessionIdsWithFileEdits()
+        let presence = ThreadStore.fileEditPresence(in: store.context)
 
-        XCTAssertEqual(ids, ["session-a", "session-b"])
+        XCTAssertEqual(presence, ["session-a": .previewable, "session-b": .planOnly])
     }
 
-    /// The loader fetches only `sessionId` for performance. Guard against that
+    /// The loader fetches only session IDs and paths for performance. Guard against that
     /// partial fetch silently yielding nothing, which would hide "Commit Files"
     /// on every thread rather than fail loudly.
-    func testSessionIdsWithFileEditsIsNotEmptiedByThePartialPropertyFetch() {
+    func testFileEditPresenceSurvivesThePartialPropertyFetch() {
         let store = makeStore()
         store.appendFileEdit(
             sessionId: "session-only",
@@ -71,12 +77,13 @@ final class ThreadStoreSidebarIndexTests: XCTestCase {
             modifiedContent: String(repeating: "y", count: 4096)
         )
 
-        XCTAssertEqual(store.sessionIdsWithFileEdits(), ["session-only"])
+        XCTAssertEqual(ThreadStore.fileEditPresence(in: store.context), ["session-only": .previewable])
         XCTAssertEqual(store.fileEditCount(sessionId: "session-only"), 1)
     }
 
-    func testSessionIdsWithFileEditsIsEmptyWithoutAnyEdits() {
-        XCTAssertTrue(makeStore().sessionIdsWithFileEdits().isEmpty)
+    func testFileEditPresenceIsEmptyWithoutAnyEdits() {
+        let store = makeStore()
+        XCTAssertTrue(ThreadStore.fileEditPresence(in: store.context).isEmpty)
     }
 
     func testLoadTodoProgressBySessionMirrorsPerSessionSnapshots() {

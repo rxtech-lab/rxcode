@@ -235,11 +235,12 @@ extension CodexAppServer {
         // seconds of an agent CLI starting up.
         let exited = Self.terminationSignal(for: process)
         try process.run()
+        let output = Task.detached { stdout.fileHandleForReading.readDataToEndOfFile() }
+        let errors = Task.detached { stderr.fileHandleForReading.readDataToEndOfFile() }
         await exited.value
-
-        let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let out = String(decoding: await output.value, as: UTF8.self)
         if process.terminationStatus != 0 {
-            let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let err = String(decoding: await errors.value, as: UTF8.self)
             throw CodexError.versionCheckFailed(err.isEmpty ? out : err)
         }
         return out

@@ -124,8 +124,12 @@ extension AppState {
                 // including valid ones.
                 let provider = effectiveModelSelection(in: window).provider
                 await loadReasoningLevels(for: provider)
-                let levels = reasoningLevels(for: provider)
-                setSessionEffort(levels.contains { $0.id == arg } ? arg : nil, in: window)
+                let levels = reasoningLevels(for: provider, model: effectiveModelSelection(in: window).model)
+                if arg == "auto" || levels.contains(where: { $0.id == arg }) {
+                    setSessionEffort(arg == "auto" ? nil : arg, in: window)
+                } else {
+                    updateSessionEffort(nil, in: window)
+                }
             } else {
                 window.showEffortPicker = true
             }

@@ -1,4 +1,5 @@
 import Foundation
+import RxCodeChatKit
 import RxCodeCore
 import SwiftData
 import os
@@ -10,7 +11,7 @@ import os
 nonisolated struct ThreadStartupSnapshot: Sendable {
     var summaries: [ChatSession.Summary] = []
     var reviewVerdicts: [String: Bool] = [:]
-    var sessionIdsWithFileEdits: Set<String> = []
+    var fileEditPresence: [String: ThreadFileEditPresence] = [:]
     var todoProgress: [String: ChatTodoProgress] = [:]
     var queues: [String: [QueuedMessage]] = [:]
 }
@@ -62,7 +63,7 @@ nonisolated struct ThreadStoreReader: Sendable {
             ThreadStartupSnapshot(
                 summaries: Self.summaries(in: context),
                 reviewVerdicts: Self.reviewVerdicts(in: context),
-                sessionIdsWithFileEdits: Self.sessionIdsWithFileEdits(in: context),
+                fileEditPresence: ThreadStore.fileEditPresence(in: context),
                 todoProgress: Self.todoProgress(in: context),
                 queues: Self.queues(in: context)
             )
@@ -73,6 +74,30 @@ nonisolated struct ThreadStoreReader: Sendable {
     /// refreshed (e.g. after a launch-time prune removed orphan rows).
     func loadSummaries() async -> [ChatSession.Summary] {
         await read { Self.summaries(in: $0) }
+    }
+
+    /// Load and decode one thread's visible edits for the sidebar preview.
+    func loadThreadDiffPreview(sessionId: String) async -> [FileEditSummary] {
+        await read { context in
+            let descriptor = ThreadStore.fileEditsDescriptor(sessionId: sessionId)
+            let rows = (try? context.fetch(descriptor)) ?? []
+            return rows.filter { !PlanLogic.isPlanFilePath($0.path) }.map { $0.toSummary() }
+        }
+    }
+
+    /// Branch associations from briefing metadata without loading summary text.
+    func loadSummarizedThreadBranches() async -> [String: String] {
+        await read { context in
+            var descriptor = FetchDescriptor<ThreadSummaryRecord>()
+            descriptor.propertiesToFetch = [\.sessionId, \.branch]
+            do {
+                let rows = try context.fetch(descriptor)
+                return Dictionary(uniqueKeysWithValues: rows.map { ($0.sessionId, $0.branch) })
+            } catch {
+                Self.logger.error("Thread branch fetch failed: \(error.localizedDescription)")
+                return [:]
+            }
+        }
     }
 
     /// Every persisted embedding chunk, as values. This is the largest read in
@@ -122,15 +147,6 @@ nonisolated struct ThreadStoreReader: Sendable {
             if let cli = row.cliSessionId { map[cli] = passed }
         }
         return map
-    }
-
-    /// Only `sessionId` is fetched — the rows also carry original/updated file
-    /// contents, which are by far the largest thing in the store.
-    private static func sessionIdsWithFileEdits(in context: ModelContext) -> Set<String> {
-        var descriptor = FetchDescriptor<ThreadFileEdit>()
-        descriptor.propertiesToFetch = [\.sessionId]
-        let rows = (try? context.fetch(descriptor)) ?? []
-        return Set(rows.map(\.sessionId))
     }
 
     /// Counts only, never `itemsData` — the sidebar's progress ring needs

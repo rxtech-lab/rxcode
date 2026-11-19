@@ -307,6 +307,7 @@ extension AppState {
                             allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == sid }
                             allSessionSummaries.insert(replacement.summary, at: 0)
                             threadStore.renameId(from: expectedPlaceholder, to: sid)
+                            renameThreadFileEdits(from: expectedPlaceholder, to: sid)
                             threadStore.upsert(replacement.summary, cliSessionId: sid)
                             window.removePendingPlaceholder(expectedPlaceholder)
                         } else {
@@ -314,6 +315,7 @@ extension AppState {
                                 window.removePendingPlaceholder(expectedPlaceholder)
                                 allSessionSummaries.removeAll { $0.id == expectedPlaceholder }
                                 threadStore.delete(id: expectedPlaceholder)
+                                removeThreadFileEditsFromIndex([expectedPlaceholder])
                             }
 
                             // A retry reuses the same pending session key (oldKey) with a new streamId,
@@ -323,6 +325,7 @@ extension AppState {
                             if oldKey != expectedPlaceholder, window.pendingPlaceholderIds.contains(oldKey) {
                                 allSessionSummaries.removeAll { $0.id == oldKey }
                                 threadStore.delete(id: oldKey)
+                                removeThreadFileEditsFromIndex([oldKey])
                                 window.removePendingPlaceholder(oldKey)
                             }
 
@@ -367,6 +370,7 @@ extension AppState {
                                         allSessionSummaries.removeAll { $0.id == to }
                                         allSessionSummaries.insert(renamed, at: 0)
                                         threadStore.renameId(from: from, to: to)
+                                        renameThreadFileEdits(from: from, to: to)
                                         threadStore.upsert(renamed, cliSessionId: to)
                                     }
                                 case .insertNew(let id, let title):
@@ -654,10 +658,12 @@ extension AppState {
                                 allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == resultEvent.sessionId }
                                 allSessionSummaries.insert(replacement.summary, at: 0)
                                 threadStore.renameId(from: expectedPlaceholder, to: resultEvent.sessionId)
+                                renameThreadFileEdits(from: expectedPlaceholder, to: resultEvent.sessionId)
                                 threadStore.upsert(replacement.summary, cliSessionId: resultEvent.sessionId)
                             } else {
                                 allSessionSummaries.removeAll { $0.id == expectedPlaceholder }
                                 threadStore.delete(id: expectedPlaceholder)
+                                removeThreadFileEditsFromIndex([expectedPlaceholder])
                             }
                             window.removePendingPlaceholder(expectedPlaceholder)
                         }

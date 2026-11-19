@@ -146,6 +146,7 @@ extension AppState {
             threadStore.delete(id: id)
             sessionStates.removeValue(forKey: id)
         }
+        removeThreadFileEditsFromIndex(staleIds)
         let snapshotIds = staleIds
         Task.detached(priority: .utility) { [searchService] in
             for id in snapshotIds { await searchService.removeThread(id: id) }
@@ -457,6 +458,7 @@ extension AppState {
         }
         allSessionSummaries.removeAll { $0.id == session.id }
         threadStore.delete(id: session.id)
+        removeThreadFileEditsFromIndex([session.id])
         let deletedId = session.id
         Task.detached(priority: .utility) { [searchService] in await searchService.removeThread(id: deletedId) }
         sessionStates.removeValue(forKey: session.id)
@@ -520,6 +522,7 @@ extension AppState {
         for id in ids {
             sessionStates.removeValue(forKey: id)
         }
+        removeThreadFileEditsFromIndex(ids)
     }
 
     func selectSession(id: String, inChatTab: Bool = false, in window: WindowState) {

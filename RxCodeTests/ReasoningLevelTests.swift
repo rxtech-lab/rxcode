@@ -5,10 +5,6 @@ import XCTest
 /// Covers the thinking-level vocabulary now that it comes from the provider
 /// rather than one hardcoded list.
 ///
-/// The bug this replaces: the composer offered `low/medium/high/xhigh/max` for
-/// every agent. Those are Claude's. Codex accepts `minimal/low/medium/high` and
-/// rejects the other two, so the menu was showing a Codex user two levels that
-/// could not work and hiding one that could.
 @MainActor
 final class ReasoningLevelTests: XCTestCase {
 
@@ -23,6 +19,8 @@ final class ReasoningLevelTests: XCTestCase {
         UserDefaults.standard.set("claudeCode", forKey: "selectedAgentProvider")
         appState = AppState(startBackgroundServices: false)
         appState.selectedAgentProvider = .claudeCode
+        appState.agentBackendOverrides[.codex] = MockAgentBackend(provider: .codex)
+        appState.agentBackendOverrides[.claudeCode] = MockAgentBackend(provider: .claudeCode)
         window = WindowState()
     }
 
@@ -40,23 +38,21 @@ final class ReasoningLevelTests: XCTestCase {
 
     // MARK: - Vocabularies
 
-    func testClaudeAndCodexDoNotShareALevelSet() {
-        let claude = [ReasoningLevel].claudeCodeEfforts.map(\.id)
-        let codex = [ReasoningLevel].codexEfforts.map(\.id)
-
-        XCTAssertEqual(claude, ["low", "medium", "high", "xhigh", "max"])
-        XCTAssertEqual(codex, ["minimal", "low", "medium", "high"])
-        XCTAssertFalse(codex.contains("xhigh"), "xhigh is Claude's; codex rejects it")
-        XCTAssertFalse(codex.contains("max"), "max is Claude's; codex rejects it")
-        XCTAssertFalse(claude.contains("minimal"), "minimal is Codex's")
+    func testClientReportedLevels() throws {
+        let help = "--effort <level>  Effort level\n    (low, future)\n  --other <value>"
+        XCTAssertEqual(ClaudeService.reasoningLevels(fromHelp: help).map(\.id), ["low", "future"])
+        let json = #"{"models":[{"slug":"model","supported_reasoning_levels":[{"effort":"new","description":"Client description"}]}]}"#
+        let catalog = try XCTUnwrap(CodexAppServer.decodeJSONValue(json))
+        XCTAssertEqual(CodexAppServer.reasoningLevels(fromCatalog: catalog).first?.1,
+                       [ReasoningLevel(id: "new", displayName: "New", levelDescription: "Client description")])
     }
 
-    func testBackendsReportTheirOwnLevels() async {
-        let claude = await appState.backend(for: .claudeCode).availableReasoningLevels()
-        let codex = await appState.backend(for: .codex).availableReasoningLevels()
-
-        XCTAssertEqual(claude.map(\.id), [ReasoningLevel].claudeCodeEfforts.map(\.id))
-        XCTAssertEqual(codex.map(\.id), [ReasoningLevel].codexEfforts.map(\.id))
+    func testCodexEffortIsValidatedForTheSelectedModel() async {
+        appState.codexLevelsByModel = ["first": .levels(["high", "ultra"]), "second": .levels(["high"])]
+        let accepted = await appState.sanitizedEffort("ultra", for: .codex, model: "first")
+        let rejected = await appState.sanitizedEffort("ultra", for: .codex, model: "second")
+        XCTAssertEqual(accepted, "ultra")
+        XCTAssertNil(rejected)
     }
 
     /// ACP has no standard reasoning control, and an empty list is what makes
@@ -68,8 +64,10 @@ final class ReasoningLevelTests: XCTestCase {
 
     /// The Settings default is picked before any provider is known, so it is
     /// the only place the union belongs — and it must actually be the union.
-    func testGlobalDefaultListIsTheUnionWithoutDuplicates() {
-        let union = AppState.availableEfforts
+    func testGlobalDefaultListIsTheUnionWithoutDuplicates() async {
+        await appState.loadReasoningLevels(for: .codex)
+        await appState.loadReasoningLevels(for: .claudeCode)
+        let union = appState.availableEfforts
         XCTAssertEqual(union, ["minimal", "low", "medium", "high", "xhigh", "max"])
         XCTAssertEqual(Set(union).count, union.count, "No duplicates across the two vocabularies")
     }
@@ -135,11 +133,7 @@ final class ReasoningLevelTests: XCTestCase {
         XCTAssertTrue(CodexAppServer.effortOverrides(nil).isEmpty)
     }
 
-    /// codex rejects the whole config on a bad enum value, so a stale Claude
-    /// level must be dropped rather than forwarded — otherwise the turn fails
-    /// outright instead of just ignoring the setting.
-    func testCodexDropsALevelItDoesNotAccept() {
-        XCTAssertTrue(CodexAppServer.effortOverrides("max").isEmpty)
-        XCTAssertTrue(CodexAppServer.effortOverrides("xhigh").isEmpty)
+    func testCodexForwardsNewlyReportedLevel() {
+        XCTAssertEqual(CodexAppServer.effortOverrides("ultra"), ["-c", "model_reasoning_effort=\"ultra\""])
     }
 }

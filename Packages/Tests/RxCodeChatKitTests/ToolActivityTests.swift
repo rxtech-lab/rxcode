@@ -142,9 +142,8 @@ struct ToolActivityTests {
 
     @Test func streamingResponseCombinesCompletedAndActiveTools() throws {
         let bridge = ChatBridge()
-        let completed = ChatMessage(role: .assistant, blocks: [
-            .toolCall(ToolCall(id: "bash", name: "Bash", result: "Done"))
-        ])
+        var bash = ToolCall(id: "bash", name: "Bash", result: "Done")
+        var completed = ChatMessage(role: .assistant, blocks: [.toolCall(bash)])
         var active = ChatMessage(role: .assistant, blocks: (0..<12).map {
             .toolCall(ToolCall(id: "reasoning-\($0)", name: "reasoning"))
         }, isStreaming: true)
@@ -157,6 +156,18 @@ struct ToolActivityTests {
         let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
         #expect(labels.contains("13 tool calls"))
         #expect(!labels.contains("1 tool call"))
+        #expect(!labels.contains("1 file changed"))
+
+        // Detection can finish after the tool result, while the group is still live.
+        bash.setDetectedShellFileChanges([
+            DetectedShellFileChange(path: "/repo/Example.swift", kind: .created, addedLines: 3, removedLines: 0, diff: "")
+        ])
+        completed.blocks = [.toolCall(bash)]
+        bridge.messages[1] = completed
+        let updatedLabels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
+        #expect(updatedLabels.contains("13 tool calls"))
+        #expect(updatedLabels.contains("1 file changed"))
+        #expect(updatedLabels.contains("+3"))
 
         // A narration message must still separate tool runs in the active response.
         let narration = ChatMessage(role: .assistant, content: "Checking the result")
@@ -264,6 +275,34 @@ struct ToolActivityTests {
         #expect(labels.contains("Search"))
         #expect(labels.contains("3 tool calls · 1 running · 1 succeeded · 1 failed"))
         #expect(!labels.contains("Read"))
+    }
+
+    @Test func groupChangeCountsCombineShellAndStructuredEdits() throws {
+        var shell = ToolCall(id: "shell", name: "Bash", result: "Done")
+        shell.setDetectedShellFileChanges([
+            DetectedShellFileChange(path: "/repo/A.swift", kind: .modified, addedLines: 2, removedLines: 1, diff: "")
+        ])
+        let edit = ToolCall(id: "edit", name: "Edit", input: [
+            "file_path": "/repo/A.swift", "old_string": "old", "new_string": "new\n\n",
+        ], result: "Done")
+        let patch = ToolCall(id: "patch", name: "Edit", input: [
+            "changes": [
+                ["path": "/repo/B.swift", "diff": "@@ -1,1 +1,1 @@\n-old\n+\n"],
+                ["path": "/repo/C.swift", "diff": "first\nsecond\n"],
+            ],
+        ], result: "")
+        let pending = ToolCall(id: "pending", name: "Write", input: [
+            "file_path": "/repo/Pending.swift", "content": "pending",
+        ])
+        let failed = ToolCall(id: "failed", name: "Write", input: [
+            "file_path": "/repo/Failed.swift", "content": "failed",
+        ], result: "Permission denied", isError: true)
+
+        let view = ToolActivityGroupView(tools: [shell, edit, patch, pending, failed], isStreaming: true)
+        let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
+        #expect(labels.contains("3 files changed"))
+        #expect(labels.contains("+7"))
+        #expect(labels.contains("−3"))
     }
 
     @Test func toolNamesAndArgumentsBecomeReadableLabels() {

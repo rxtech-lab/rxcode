@@ -123,8 +123,14 @@ extension AppState {
         return false
     }
 
-    /// Sets the effort for the current session and persists it in the session state.
+    /// Applies a user pick to the current session and to future chats in this project.
     func setSessionEffort(_ effort: String?, in window: WindowState) {
+        updateSessionEffort(effort, in: window)
+        rememberProjectEffort(effort, projectId: window.selectedProject?.id)
+    }
+
+    /// Applies a session-only effort for model compatibility or automated runs.
+    func updateSessionEffort(_ effort: String?, in window: WindowState) {
         window.sessionEffort = effort
         let key = window.currentSessionId ?? window.newSessionKey
         updateState(key) { $0.effort = effort }
@@ -294,11 +300,11 @@ extension AppState {
     /// provider is known. Anything scoped to a thread asks that thread's
     /// backend via `reasoningLevels(for:)` — Claude and Codex do not accept the
     /// same values, so the union is wrong for both individually.
-    static let availableEfforts: [String] = {
-        let ordered = [ReasoningLevel].codexEfforts + [ReasoningLevel].claudeCodeEfforts
+    var availableEfforts: [String] {
+        let ordered = reasoningLevels(for: .codex) + reasoningLevels(for: .claudeCode)
         var seen: Set<String> = []
         return ordered.map(\.id).filter { seen.insert($0).inserted }
-    }()
+    }
 
     static func permissionModeDescription(_ mode: PermissionMode) -> String {
         let key: String

@@ -41,13 +41,14 @@ struct ShellDetectedChangesViewTests {
     }
 
     #if os(macOS)
-    @Test("Collapsed desktop tool group folds detected shell changes with its tool calls")
-    func collapsedDesktopGroupHidesDetectedShellChanges() throws {
+    @Test("Collapsed desktop tool group shows change counts while folding file details")
+    func collapsedDesktopGroupSummarizesDetectedShellChanges() throws {
         var scriptTool = ToolCall(
             id: "exec-1",
             name: "exec_command",
             input: ["cmd": .array([.string("bash"), .string("-lc"), .string("sed -i '' 's/a/b/' App.swift")])],
-            result: "done"
+            result: "Command exited after editing the file",
+            isError: true
         )
         scriptTool.setDetectedShellFileChanges([
             DetectedShellFileChange(
@@ -75,7 +76,9 @@ struct ShellDetectedChangesViewTests {
         #expect(!labels.contains("App.swift"))
         #expect(!labels.contains("Concurrent"))
         #expect(labels.contains("2 tool calls"))
-
+        #expect(labels.contains("1 file changed"))
+        #expect(labels.contains("+1"))
+        #expect(labels.contains("−1"))
     }
     #endif
 
@@ -106,7 +109,9 @@ struct ShellDetectedChangesViewTests {
         #expect(inspectedGroup.findAll(ShellDetectedChangesView.self).isEmpty)
         #expect(!groupLabels.contains("OldFile.swift"))
         #expect(!groupLabels.contains("Deleted"))
-        #expect(!groupLabels.contains("−4"))
+        #expect(groupLabels.contains("1 file changed"))
+        #expect(groupLabels.contains("−4"))
+        #expect(!groupLabels.contains("+0"))
 
         let detailView = ToolActivityDetailView(tool: tool, isStreaming: false)
         let detailLabels = try detailView.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }

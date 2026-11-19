@@ -212,6 +212,18 @@
         }
       }
     },
+    "%lld files" : {
+
+    },
+    "%lld files changed" : {
+
+    },
+    "%lld lines added" : {
+
+    },
+    "%lld lines removed" : {
+
+    },
     "%lld messages queued" : {
       "localizations" : {
         "ko" : {
@@ -383,6 +395,12 @@
           }
         }
       }
+    },
+    "1 file" : {
+
+    },
+    "1 file changed" : {
+
     },
     "1 tool call" : {
 

@@ -125,7 +125,7 @@ struct EffortPickerSheet: View {
 
     /// This thread's provider's levels, not the union — the same list the
     /// composer's picker shows. 0 = Auto (nil), 1...n = the provider's levels.
-    private var levels: [ReasoningLevel] { appState.reasoningLevels(for: provider) }
+    private var levels: [ReasoningLevel] { appState.reasoningLevels(for: provider, model: appState.effectiveModelSelection(in: windowState).model) }
 
     private var items: [String?] { [nil] + levels.map { Optional($0.id) } }
 
@@ -135,7 +135,7 @@ struct EffortPickerSheet: View {
         // The clearing row names what it falls back to, the same way the
         // composer's menu does — "Auto" read as "the agent decides", which is
         // not what an unpinned session sends.
-        guard let effort else { return appState.defaultEffortTitle(for: provider) }
+        guard let effort else { return appState.defaultEffortTitle(for: provider, model: appState.effectiveModelSelection(in: windowState).model) }
         return levels.first { $0.id == effort }?.displayName ?? effortDisplayName(effort)
     }
 

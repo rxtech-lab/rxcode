@@ -432,6 +432,62 @@ struct WorkspaceChangeTrackerTests {
         await tracker.streamDidEnd(streamId: streamId)
     }
 
+    @Test("Shell diffs follow current Git ignore rules for files already seen in the turn")
+    func shellDiffsFollowCurrentGitIgnoreRules() async throws {
+        let repoURL = try makeTemporaryGitRepo()
+        defer { try? FileManager.default.removeItem(at: repoURL) }
+
+        try runShell("""
+        set -e
+        mkdir Exports
+        printf '%s\\n' '*.generated' > .gitignore
+        printf '%s\\n' '!scratch.generated' > Exports/.gitignore
+        printf 'tracked baseline\\n' > Exports/tracked.generated
+        printf 'tracked baseline\\n' > Exports/removed.generated
+        printf 'tracked baseline\\n' > Exports/kept-on-disk.generated
+        git add .gitignore Exports/.gitignore
+        git add -f Exports/tracked.generated Exports/removed.generated Exports/kept-on-disk.generated
+        git -c commit.gpgsign=false commit -m 'seed ignore rules'
+        """, cwd: repoURL.path)
+
+        let canonicalRoot = repoURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let tracker = WorkspaceChangeTracker(preferredRootPath: repoURL.path, canonicalRootPath: canonicalRoot)
+        let streamID = UUID()
+        await tracker.streamDidStart(streamId: streamID, sessionKey: "ignore", cwd: repoURL.path)
+
+        let firstCommand = """
+        printf 'visible initially\\n' > Exports/scratch.generated
+        printf 'ignored initially\\n' > Exports/keep.generated
+        ln -s keep.generated Exports/keep-link.txt
+        """
+        await tracker.upsertShellSpan(streamId: streamID, sessionKey: "ignore", toolUseId: "first", command: firstCommand)
+        try runShell(firstCommand, cwd: repoURL.path)
+        // Git status omits this path. Queue its filesystem event explicitly.
+        await tracker.ingestFSEventPaths([canonicalRoot + "/Exports/keep.generated"])
+        let firstEdits = await tracker.endShellSpan(streamId: streamID, sessionKey: "ignore", toolUseId: "first")
+        #expect(firstEdits.map { URL(fileURLWithPath: $0.path).lastPathComponent } == ["scratch.generated"])
+
+        let secondCommand = """
+        set -e
+        printf '%s\\n' '!keep.generated' > Exports/.gitignore
+        printf 'ignored now\\n' > Exports/scratch.generated
+        printf 'visible now\\n' > Exports/keep.generated
+        printf 'tracked edit\\n' > Exports/tracked.generated
+        git rm Exports/removed.generated
+        git rm --cached Exports/kept-on-disk.generated
+        printf 'ignored after untracking\\n' > Exports/kept-on-disk.generated
+        """
+        await tracker.upsertShellSpan(streamId: streamID, sessionKey: "ignore", toolUseId: "second", command: secondCommand)
+        try runShell(secondCommand, cwd: repoURL.path)
+        await tracker.ingestFSEventPaths([canonicalRoot + "/Exports/kept-on-disk.generated"])
+        let secondEdits = await tracker.endShellSpan(streamId: streamID, sessionKey: "ignore", toolUseId: "second")
+        #expect(Set(secondEdits.map { URL(fileURLWithPath: $0.path).lastPathComponent }) == [
+            ".gitignore", "keep.generated", "removed.generated", "tracked.generated",
+        ])
+        #expect(secondEdits.first { $0.path.hasSuffix("/removed.generated") }?.kind == .deleted)
+        await tracker.streamDidEnd(streamId: streamID)
+    }
+
     @Test("Delayed upsertShellSpan after endShellSpan does not create zombie span that steals later Codex script edits")
     func delayedUpsertAfterEndDoesNotCreateZombieSpan() async throws {
         let repoURL = try makeTemporaryGitRepo()

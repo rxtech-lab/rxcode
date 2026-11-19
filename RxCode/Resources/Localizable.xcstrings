@@ -397,7 +397,16 @@
         }
       }
     },
+    "%@ · Closed" : {
+
+    },
+    "%@ · Merged" : {
+
+    },
     "%@ · No download required" : {
+
+    },
+    "%@ · Open" : {
 
     },
     "%@ · share of %@" : {
@@ -1080,6 +1089,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 项进行中"
+          }
+        }
+      }
+    },
+    "%lld lines added, %lld lines removed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld lines added, %2$lld lines removed"
           }
         }
       }
@@ -5188,6 +5207,9 @@
         }
       }
     },
+    "Change task model" : {
+
+    },
     "Changes appear here as you edit. Click the card to preview its details." : {
 
     },
@@ -7470,6 +7492,9 @@
           }
         }
       }
+    },
+    "Couldn’t Update Task Model" : {
+
     },
     "Counts as done" : {
       "localizations" : {
@@ -19201,6 +19226,9 @@
         }
       }
     },
+    "Opens on GitHub" : {
+
+    },
     "Optional" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20607,6 +20635,12 @@
       }
     },
     "Publishing Swift filters (step 4 of 5)" : {
+
+    },
+    "Pull request" : {
+
+    },
+    "Pull request #%lld" : {
 
     },
     "Push" : {
@@ -26612,6 +26646,9 @@
         }
       }
     },
+    "Task model updated" : {
+
+    },
     "Task not found on desktop." : {
       "localizations" : {
         "zh-Hans" : {
@@ -27478,6 +27515,9 @@
         }
       }
     },
+    "The task changed or is starting a run. Try again in a moment." : {
+
+    },
     "The task moved to %@." : {
       "localizations" : {
         "zh-Hans" : {
@@ -28028,6 +28068,9 @@
           }
         }
       }
+    },
+    "Thread has file changes" : {
+
     },
     "Thread menu" : {
       "localizations" : {
@@ -28762,6 +28805,9 @@
 
     },
     "Updating integration…" : {
+
+    },
+    "Updating task model…" : {
 
     },
     "Upload" : {

@@ -146,13 +146,37 @@ struct ProjectChatRow: View {
     /// Latest code-review verdict for this thread: `true` passed, `false` found
     /// issues, `nil` not reviewed (no icon shown).
     var reviewPassed: Bool? = nil
-    /// Whether to offer "Commit Files" — hidden when the thread recorded no file
-    /// edits (nothing to commit).
-    var canCommitFiles: Bool = true
+    var hasFileChanges = false
+    var pullRequest: ThreadPullRequest? = nil
 
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
+    /// Last loaded `+/−` totals, kept between hovers so the readout shows at once.
+    @State private var changeTotals: ThreadChangeTotals?
+
+    /// Width of the fade that blends a long title into the hover change stats.
+    private static let changeStatsFadeWidth: CGFloat = 16
+
+    private var showsChangeStats: Bool { isHovered && hasFileChanges && changeTotals != nil }
+
+    /// `nil` unless the pointer is on a row with file changes, so idle rows never
+    /// read — or re-render on — `threadFileEditsRevision`, which ticks on every edit.
+    private var changeTotalsLoadID: Int? {
+        guard isHovered, hasFileChanges else { return nil }
+        return appState.threadFileEditsRevision
+    }
+
+    private var rowFill: Color {
+        if isCurrent { return ClaudeTheme.accentSubtle }
+        return isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.45) : .clear
+    }
+
+    /// The row's fill over the sidebar background: what the row looks like on screen.
+    private var rowSurface: some View {
+        ClaudeTheme.sidebarBackground.overlay(rowFill)
+    }
 
     /// True when this row *is* a `[Code Review]` thread (manual or hook-spawned).
     /// Such threads hide the "Code Review" / "Commit Files" actions since you
@@ -198,7 +222,7 @@ struct ProjectChatRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             if let disclosure = reviewDisclosure {
                 reviewDisclosureControl(disclosure)
             }
@@ -207,78 +231,46 @@ struct ProjectChatRow: View {
                 statusIndicator
             }
 
-            Text(displayTitle)
-                .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
-                .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            AttentionBadge(attention: appState.threadAttention(sessionKey: summary.id, in: windowState))
-
-            if let taskCompletionChip {
-                Text(taskCompletionChip.text)
-                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
-                    .foregroundStyle(taskCompletionChip.color)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(taskCompletionChip.color.opacity(0.14), in: Capsule())
-                    .fixedSize()
+            if let pullRequest {
+                pullRequestLink(pullRequest)
             }
 
-            Spacer(minLength: 4)
+            // The title takes every point the accessories don't use, so it only
+            // truncates against what is actually on screen.
+            HStack(spacing: 6) {
+                Text(displayTitle)
+                    .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
+                    .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-            if let linkedTask {
-                Image(systemName: "link")
-                    .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .help("Linked task: \(linkedTask.title)")
-                    .accessibilityLabel("Linked task: \(linkedTask.title)")
-            } else if isCreatingTask {
-                ProgressView()
-                    .controlSize(.mini)
-                    .help("Creating task from chat")
+                titleDetails
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            if taskCompletionChip == nil, showLabelChip, let label = summary.threadLabel, !label.isEmpty {
-                Text(label)
-                    .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.accent)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(ClaudeTheme.accentSubtle, in: Capsule())
-                    .fixedSize()
-            }
-
-            if let reviewPassed {
-                reviewVerdictIcon(passed: reviewPassed)
-            }
-
-            if summary.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: ClaudeTheme.size(9)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-
-            if case .streaming = status {
-                CompactSessionProgressView(progress: todoProgress)
-                    .frame(width: 28, alignment: .trailing)
-            } else {
-                Text(Self.compactElapsedTime(since: summary.updatedAt))
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .monospacedDigit()
-                    .frame(width: 28, alignment: .trailing)
+            HStack(spacing: 6) { trailingDetails }
+                .fixedSize()
+                .padding(.leading, 2)
+                .opacity(showsChangeStats ? 0 : 1)
+                .accessibilityHidden(showsChangeStats)
+        }
+        // Drawn over the row instead of laid out in it: no width is reserved at
+        // rest, and the title keeps its width and truncation while hovered.
+        .overlay(alignment: .trailing) {
+            if showsChangeStats, let changeTotals {
+                changeStatsCover(changeTotals)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
         }
+        // Fade in on hover; snap back on exit, together with the hover fill.
+        .animation(reduceMotion || !showsChangeStats ? nil : .easeInOut(duration: 0.16), value: showsChangeStats)
         .padding(.leading, 18 + CGFloat(indentLevel) * 18)
-        .padding(.trailing, 14)
+        .padding(.trailing, 10)
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .fill(
-                    isCurrent ? ClaudeTheme.accentSubtle :
-                        (isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.45) : Color.clear)
-                )
+                .fill(rowFill)
         )
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
@@ -286,51 +278,192 @@ struct ProjectChatRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .task(id: changeTotalsLoadID) { await loadChangeTotals() }
         .help(taskCompletionChip.map { "\(displayTitle) — \($0.text)" } ?? displayTitle)
         .onTapGesture { onSelect() }
-        .contextMenu {
-            if linkedTask != nil {
-                Button(action: onOpenTask) {
-                    Label("Jump to Task", systemImage: "link")
+        .contextMenu { rowMenu }
+    }
+
+    /// The hover change stats on an opaque copy of the row's surface. They cover
+    /// the trailing accessories, and the tail of a long title behind a short fade.
+    private func changeStatsCover(_ totals: ThreadChangeTotals) -> some View {
+        HStack(spacing: 0) {
+            rowSurface
+                .mask {
+                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
                 }
+                .frame(width: Self.changeStatsFadeWidth)
+
+            ProjectThreadChangesPreview(totals: totals)
+                .padding(.leading, 2)
+                .frame(maxHeight: .infinity)
+                .background(rowSurface)
+        }
+    }
+
+    /// Loads the thread's line totals while the pointer is on the row, and again
+    /// whenever its file edits change during the hover.
+    private func loadChangeTotals() async {
+        guard isHovered, hasFileChanges else { return }
+        let edits = await appState.loadThreadDiffPreview(sessionId: summary.id)
+        guard !Task.isCancelled else { return }
+        let stat = await ThreadDiffBanner.computeStat(edits)
+        guard !Task.isCancelled else { return }
+        let totals = ThreadChangeTotals(added: stat.added, removed: stat.removed)
+        guard totals != changeTotals else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
+            changeTotals = totals
+        }
+    }
+
+    @ViewBuilder
+    private var titleDetails: some View {
+        AttentionBadge(attention: appState.threadAttention(sessionKey: summary.id, in: windowState))
+
+        if let taskCompletionChip {
+            Text(taskCompletionChip.text)
+                .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+                .foregroundStyle(taskCompletionChip.color)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(taskCompletionChip.color.opacity(0.14), in: Capsule())
+                .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private var trailingDetails: some View {
+        if let linkedTask {
+            Image(systemName: "link")
+                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .help("Linked task: \(linkedTask.title)")
+                .accessibilityLabel("Linked task: \(linkedTask.title)")
+        } else if isCreatingTask {
+            ProgressView()
+                .controlSize(.mini)
+                .help("Creating task from chat")
+        }
+
+        if taskCompletionChip == nil, showLabelChip, let label = summary.threadLabel, !label.isEmpty {
+            Text(label)
+                .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.accent)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(ClaudeTheme.accentSubtle, in: Capsule())
+                .fixedSize()
+        }
+
+        if let reviewPassed {
+            reviewVerdictIcon(passed: reviewPassed)
+        }
+
+        if summary.isPinned {
+            Image(systemName: "pin.fill")
+                .font(.system(size: ClaudeTheme.size(9)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+
+        if hasFileChanges {
+            Image(systemName: "plusminus.circle")
+                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .accessibilityLabel("Thread has file changes")
+        }
+
+        // Keep the change icon in the same column beside elapsed times and progress.
+        Group {
+            if case .streaming = status {
+                CompactSessionProgressView(progress: todoProgress)
             } else {
-                Button(action: onCreateTask) {
-                    Label("Create Task from Chat with AI", systemImage: "sparkles")
-                }
-                .disabled(isCreatingTask)
-            }
-            Divider()
-            Button { onRename() } label: {
-                Label("Rename", systemImage: "pencil")
-            }
-            Button { onTogglePin() } label: {
-                if summary.isPinned {
-                    Label("Unpin", systemImage: "pin.slash")
-                } else {
-                    Label("Pin", systemImage: "pin")
-                }
-            }
-            Button { onToggleArchive() } label: {
-                if summary.isArchived {
-                    Label("Unarchive", systemImage: "tray.and.arrow.up")
-                } else {
-                    Label("Archive", systemImage: "archivebox")
-                }
-            }
-            // Code review / commit / autopilot actions now come from hooks as
-            // serializable MenuItems (gated for review threads and file changes
-            // inside the hooks). The handler dispatches taps locally on desktop.
-            let items = hookMenuItems()
-            if !items.isEmpty {
-                Divider()
-                MenuItemsView(items)
-                    .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
-            }
-            Divider()
-            Button(role: .destructive) { onDelete() } label: {
-                Label("Delete", systemImage: "trash")
+                Text(Self.compactElapsedTime(since: summary.updatedAt))
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
         }
+        .frame(width: ClaudeTheme.size(11) * 2.5, alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private var rowMenu: some View {
+        if linkedTask != nil {
+            Button(action: onOpenTask) {
+                Label("Jump to Task", systemImage: "link")
+            }
+        } else {
+            Button(action: onCreateTask) {
+                Label("Create Task from Chat with AI", systemImage: "sparkles")
+            }
+            .disabled(isCreatingTask)
+        }
+        Divider()
+        Button { onRename() } label: {
+            Label("Rename", systemImage: "pencil")
+        }
+        Button { onTogglePin() } label: {
+            if summary.isPinned {
+                Label("Unpin", systemImage: "pin.slash")
+            } else {
+                Label("Pin", systemImage: "pin")
+            }
+        }
+        Button { onToggleArchive() } label: {
+            if summary.isArchived {
+                Label("Unarchive", systemImage: "tray.and.arrow.up")
+            } else {
+                Label("Archive", systemImage: "archivebox")
+            }
+        }
+        // Code review / commit / autopilot actions now come from hooks as
+        // serializable MenuItems (gated for review threads and file changes
+        // inside the hooks). The handler dispatches taps locally on desktop.
+        let items = hookMenuItems()
+        if !items.isEmpty {
+            Divider()
+            MenuItemsView(items)
+                .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
+        }
+        Divider()
+        Button(role: .destructive) { onDelete() } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+
+    private func pullRequestLink(_ pullRequest: ThreadPullRequest) -> some View {
+        let isMerged = pullRequest.state == .merged
+        let title = pullRequest.number.map { String(localized: "Pull request #\($0)") }
+            ?? String(localized: "Pull request")
+        let label: String
+        let color: Color
+        switch pullRequest.state {
+        case .merged:
+            label = String(localized: "\(title) · Merged")
+            color = .purple
+        case .open:
+            label = String(localized: "\(title) · Open")
+            color = .green
+        case .closed:
+            label = String(localized: "\(title) · Closed")
+            color = .red
+        case nil:
+            label = title
+            color = ClaudeTheme.textSecondary
+        }
+        return Link(destination: pullRequest.url) {
+            Image(systemName: isMerged ? "arrow.triangle.merge" : "arrow.triangle.pull")
+                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
+        .accessibilityHint("Opens on GitHub")
     }
 
     @ViewBuilder

@@ -132,10 +132,13 @@ struct ChatTransientToolSummaryView: View {
                     Text(tools.count == 1 ? "1 tool call" : "\(tools.count) tool calls")
                         .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                     Image(systemName: "chevron.down")
                         .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    ToolGroupFileChangesView(tools: tools)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 6)

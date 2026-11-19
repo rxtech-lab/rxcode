@@ -107,9 +107,7 @@ final class CrossProjectSendConcurrencyTests: XCTestCase {
     // MARK: - Concurrent-stream progress (the original freeze)
 
     /// While project A's stream is paused mid-turn, a second `sendCrossProject`
-    /// for project B must still make progress and complete. Pre-fix this would
-    /// hang for the full duration of A's pause, because `awaitStreamCompletion`'s
-    /// 100 ms MainActor poll starved B's for-await.
+    /// for project B must still make progress and complete.
     func testSecondCrossProjectSendCompletesWhileFirstIsPausedMidStream() async throws {
         let projectA = makeProject("alpha")
         let projectB = makeProject("beta")
@@ -118,68 +116,57 @@ final class CrossProjectSendConcurrencyTests: XCTestCase {
         let sidA = "sid-A-\(UUID().uuidString)"
         let sidB = "sid-B-\(UUID().uuidString)"
 
-        // A: emit init, then pause 3s, then finish. Long enough that any
-        // accidental serialization between streams shows up as a B timeout.
+        // Hold A's result until B completes, even if the runner is slow.
+        let (firstResultGate, releaseFirstResult) = AsyncStream<Void>.makeStream()
+        defer { releaseFirstResult.finish() }
         await mockBackend.enqueueScript(
             [
-                .systemInit(sessionId: sidA, delay: 0.05),
-                .assistantText("A starting", delay: 0.05),
-                .result(sessionId: sidA, delay: 3.0),
+                .systemInit(sessionId: sidA),
+                .assistantText("A starting"),
+                .result(sessionId: sidA, sideEffect: {
+                    var iterator = firstResultGate.makeAsyncIterator()
+                    _ = await iterator.next()
+                }),
             ],
             forCwd: projectA.path
         )
 
-        // B: completes quickly — total roughly 150 ms.
         await mockBackend.enqueueScript(
             [
-                .systemInit(sessionId: sidB, delay: 0.05),
-                .assistantText("B done", delay: 0.05),
-                .result(sessionId: sidB, delay: 0.05),
+                .systemInit(sessionId: sidB),
+                .assistantText("B done"),
+                .result(sessionId: sidB),
             ],
             forCwd: projectB.path
         )
 
-        // Kick off A in the background (don't await — A intentionally pauses).
-        let aState = appState!
-        let sendATask = Task { @MainActor in
-            _ = try? await aState.sendCrossProject(
-                projectId: projectA.id,
-                threadId: nil,
-                prompt: "long-running",
-                agentProvider: .claudeCode,
-                waitForResponse: false,
-                timeoutSeconds: 30
-            )
-        }
-
-        // Wait briefly so A has entered its stream + emitted its first event.
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertTrue(
-            appState.sessionStates.values.contains(where: { $0.isStreaming }),
-            "A's stream should be active before launching B"
+        let resultA = try await appState.sendCrossProject(
+            projectId: projectA.id,
+            threadId: nil,
+            prompt: "long-running",
+            agentProvider: .claudeCode,
+            waitForResponse: false,
+            timeoutSeconds: 15
         )
+        XCTAssertEqual(resultA.threadId, sidA)
+        let firstStreamTask = try XCTUnwrap(appState.sessionStates[sidA]?.streamTask)
 
-        // Now send to B. It must complete fast even though A is paused.
-        let bStart = Date()
         let resultB = try await appState.sendCrossProject(
             projectId: projectB.id,
             threadId: nil,
             prompt: "should-not-be-blocked",
             agentProvider: .claudeCode,
             waitForResponse: true,
-            timeoutSeconds: 5
+            timeoutSeconds: 15
         )
-        let bElapsed = Date().timeIntervalSince(bStart)
 
         XCTAssertTrue(resultB.done, "B must complete while A is paused (got error: \(resultB.error ?? "nil"))")
         XCTAssertEqual(resultB.threadId, sidB)
-        XCTAssertLessThan(
-            bElapsed, 2.0,
-            "B took \(bElapsed)s — should be ~0.15s if not serialized behind A's 3s pause"
-        )
+        XCTAssertEqual(resultB.assistantText, "B done")
+        XCTAssertTrue(appState.sessionStates[sidA]?.isStreaming == true, "A should still be streaming when B finishes")
 
-        // Let A finish so the test tears down cleanly.
-        _ = await sendATask.value
+        releaseFirstResult.finish()
+        await firstStreamTask.value
     }
 
     // MARK: - Event-driven completion handoff

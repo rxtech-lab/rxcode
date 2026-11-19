@@ -317,11 +317,11 @@ struct TaskFormSheet: View {
         // Effort levels are provider-dependent and fetched at runtime, so reload
         // them whenever the picked provider changes and drop an effort the new
         // provider doesn't accept.
-        .task(id: task.agent.provider) {
+        .task(id: "\(task.agent.provider?.rawValue ?? ""):\(task.agent.model ?? "")") {
             let provider = task.agent.provider ?? appState.selectedAgentProvider
             await appState.loadReasoningLevels(for: provider)
             if let effort = task.agent.effort {
-                task.agent.effort = await appState.sanitizedEffort(effort, for: provider)
+                task.agent.effort = await appState.sanitizedEffort(effort, for: provider, model: task.agent.model)
             }
         }
         .fileImporter(
@@ -751,12 +751,12 @@ struct TaskFormSheet: View {
     @ViewBuilder
     var effortPicker: some View {
         let provider = task.agent.provider ?? appState.selectedAgentProvider
-        let levels = appState.reasoningLevels(for: provider)
+        let levels = appState.reasoningLevels(for: provider, model: task.agent.model)
         // ACP clients expose no reasoning levels, so the picker hides itself
         // rather than showing an empty menu.
         if !levels.isEmpty {
             Picker("Thinking Level", selection: $task.agent.effort) {
-                Text(appState.defaultEffortTitle(for: provider)).tag(String?.none)
+                Text(appState.defaultEffortTitle(for: provider, model: task.agent.model)).tag(String?.none)
                 ForEach(levels) { level in
                     Text(level.displayName).tag(String?.some(level.id))
                 }

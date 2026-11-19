@@ -701,6 +701,8 @@ private struct TaskViewDragPreview: View {
 /// the keyword filter, beside a full-height story panel on the trailing edge. Stories stay out of the columns so they
 /// never read as tasks.
 struct TaskBoardLayoutView: View {
+    @Environment(AppState.self) private var appState
+
     let projectId: UUID
     let board: TaskBoard
     let view: TaskSavedView
@@ -727,6 +729,9 @@ struct TaskBoardLayoutView: View {
     /// cards through the environment; see `TaskBoardHoverState`.
     @State private var hoverState = TaskBoardHoverState()
     @State private var collapsedStoryIds = Set<UUID>()
+    @State private var updatingModelTaskIds: Set<UUID> = []
+    @State private var modelUpdate: UUID?
+    @State private var showsModelUpdateError = false
 
     private static func completedStoryIds(in rollups: [UUID: StoryRollup]) -> Set<UUID> {
         Set(rollups.compactMap { id, rollup in
@@ -810,6 +815,8 @@ struct TaskBoardLayoutView: View {
                                 view: view,
                                 storyRollups: rollups,
                                 onOpen: onOpen,
+                                updatingModelTaskIds: updatingModelTaskIds,
+                                onSelectModel: updateModel,
                                 onAddTask: { onAddTask(column.id, $0) },
                                 onAddStory: onAddStory,
                                 onHide: columns.count > 1 ? { onHideStatus(column.id) } : nil,
@@ -864,8 +871,46 @@ struct TaskBoardLayoutView: View {
         }
         .taskBoardAnimation(value: columnStories.isEmpty)
         .environment(hoverState)
+        .overlay(alignment: .top) {
+            if !updatingModelTaskIds.isEmpty || modelUpdate != nil {
+                Group {
+                    if updatingModelTaskIds.isEmpty {
+                        Label("Task model updated", systemImage: "checkmark.circle.fill")
+                    } else {
+                        ProgressView("Updating task model…")
+                    }
+                }
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding()
+                .allowsHitTesting(false)
+            }
+        }
+        .task(id: modelUpdate) {
+            guard modelUpdate != nil else { return }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            modelUpdate = nil
+        }
+        .alert("Couldn’t Update Task Model", isPresented: $showsModelUpdateError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The task changed or is starting a run. Try again in a moment.")
+        }
         .onChange(of: completedStoryIds) { _, completed in
             collapsedStoryIds.formIntersection(completed)
+        }
+    }
+
+    private func updateModel(_ model: AgentModel?, for taskId: UUID) {
+        guard updatingModelTaskIds.insert(taskId).inserted else { return }
+        Task {
+            let updated = await appState.updateTaskModel(model, for: taskId)
+            updatingModelTaskIds.remove(taskId)
+            if updated {
+                modelUpdate = UUID()
+            } else {
+                showsModelUpdateError = true
+            }
         }
     }
 }

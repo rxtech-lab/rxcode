@@ -406,6 +406,9 @@
     "%@ · No download required" : {
 
     },
+    "%@ · Open" : {
+
+    },
     "%@ · share of %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5204,6 +5207,9 @@
         }
       }
     },
+    "Change task model" : {
+
+    },
     "Changes appear here as you edit. Click the card to preview its details." : {
 
     },
@@ -7486,6 +7492,9 @@
           }
         }
       }
+    },
+    "Couldn’t Update Task Model" : {
+
     },
     "Counts as done" : {
       "localizations" : {
@@ -26637,6 +26646,9 @@
         }
       }
     },
+    "Task model updated" : {
+
+    },
     "Task not found on desktop." : {
       "localizations" : {
         "zh-Hans" : {
@@ -27502,6 +27514,9 @@
           }
         }
       }
+    },
+    "The task changed or is starting a run. Try again in a moment." : {
+
     },
     "The task moved to %@." : {
       "localizations" : {
@@ -28790,6 +28805,9 @@
 
     },
     "Updating integration…" : {
+
+    },
+    "Updating task model…" : {
 
     },
     "Upload" : {

@@ -9,6 +9,17 @@ public struct PreviewFile: Identifiable, Sendable {
             self.oldString = oldString
             self.newString = newString
         }
+
+        /// Counts the lines on each side of the reported replacement.
+        public var lineCounts: (added: Int, removed: Int) {
+            (Self.lineCount(newString), Self.lineCount(oldString))
+        }
+
+        static func lineCount(_ text: String) -> Int {
+            let newlines = text.utf8.count(where: { $0 == 0x0A })
+            let hasUnterminatedLine = !text.isEmpty && text.utf8.last != 0x0A
+            return newlines + (hasUnterminatedLine ? 1 : 0)
+        }
     }
 
     /// How `FileDiffView` should fetch the diff when `editHunks` is empty.

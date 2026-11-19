@@ -38,9 +38,9 @@ struct ToolCallFileChangeTests {
         +++ b/example.swift
         @@ -1,3 +1,3 @@
          keep
-        -old line 1
+        --- old line 1
         -old line 2
-        +new line 1
+        +++ new line 1
         +new line 2
          keep
         """
@@ -61,7 +61,8 @@ struct ToolCallFileChangeTests {
         let diffs = call.fileChangeDiffs
         #expect(diffs.count == 1)
         let hunk = diffs[0].hunk
-        #expect(hunk.oldString == "old line 1\nold line 2")
-        #expect(hunk.newString == "new line 1\nnew line 2")
+        #expect(hunk.oldString == "-- old line 1\nold line 2")
+        #expect(hunk.newString == "++ new line 1\nnew line 2")
+        #expect(diffs[0].lineCounts == (added: 2, removed: 2))
     }
 }

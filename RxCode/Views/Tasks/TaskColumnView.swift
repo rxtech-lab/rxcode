@@ -17,6 +17,8 @@ struct TaskColumnView: View {
     /// Every story's progress and column, computed once for the whole board.
     let storyRollups: [UUID: StoryRollup]
     let onOpen: (TaskBoardSheet) -> Void
+    let updatingModelTaskIds: Set<UUID>
+    let onSelectModel: (AgentModel?, UUID) -> Void
     /// A new task starts in this column; a story has no column of its own.
     let onAddTask: (TaskCreationMode) -> Void
     let onAddStory: (TaskCreationMode) -> Void
@@ -68,7 +70,9 @@ struct TaskColumnView: View {
                 TaskCardView(
                     task: task,
                     board: board,
-                    storyRollup: task.storyId.flatMap { storyRollups[$0] }
+                    storyRollup: task.storyId.flatMap { storyRollups[$0] },
+                    isUpdatingModel: updatingModelTaskIds.contains(task.id),
+                    onSelectModel: { onSelectModel($0, task.id) }
                 ) {
                     onOpen(.task(task))
                 }
@@ -87,7 +91,9 @@ struct TaskColumnView: View {
                         task: task,
                         board: board,
                         storyRollup: task.storyId.flatMap { storyRollups[$0] },
-                        queuePosition: (board.tasks(in: status).filter(\.isQueued).firstIndex { $0.id == task.id } ?? offset) + 1
+                        queuePosition: (board.tasks(in: status).filter(\.isQueued).firstIndex { $0.id == task.id } ?? offset) + 1,
+                        isUpdatingModel: updatingModelTaskIds.contains(task.id),
+                        onSelectModel: { onSelectModel($0, task.id) }
                     ) {
                         onOpen(.task(task))
                     }

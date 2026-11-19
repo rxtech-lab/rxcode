@@ -359,6 +359,12 @@ struct ProjectChatRow: View {
             reviewVerdictIcon(passed: reviewPassed)
         }
 
+        if summary.isPinned {
+            Image(systemName: "pin.fill")
+                .font(.system(size: ClaudeTheme.size(9)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+
         if hasFileChanges {
             Image(systemName: "plusminus.circle")
                 .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
@@ -366,20 +372,20 @@ struct ProjectChatRow: View {
                 .accessibilityLabel("Thread has file changes")
         }
 
-        if summary.isPinned {
-            Image(systemName: "pin.fill")
-                .font(.system(size: ClaudeTheme.size(9)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
+        // Keep the change icon in the same column beside elapsed times and progress.
+        Group {
+            if case .streaming = status {
+                CompactSessionProgressView(progress: todoProgress)
+            } else {
+                Text(Self.compactElapsedTime(since: summary.updatedAt))
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
-
-        if case .streaming = status {
-            CompactSessionProgressView(progress: todoProgress)
-        } else {
-            Text(Self.compactElapsedTime(since: summary.updatedAt))
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .monospacedDigit()
-        }
+        .frame(width: ClaudeTheme.size(11) * 2.5, alignment: .trailing)
     }
 
     @ViewBuilder
@@ -432,15 +438,25 @@ struct ProjectChatRow: View {
         let title = pullRequest.number.map { String(localized: "Pull request #\($0)") }
             ?? String(localized: "Pull request")
         let label: String
+        let color: Color
         switch pullRequest.state {
-        case .merged: label = String(localized: "\(title) · Merged")
-        case .closed: label = String(localized: "\(title) · Closed")
-        case .open, nil: label = title
+        case .merged:
+            label = String(localized: "\(title) · Merged")
+            color = .purple
+        case .open:
+            label = String(localized: "\(title) · Open")
+            color = .green
+        case .closed:
+            label = String(localized: "\(title) · Closed")
+            color = .red
+        case nil:
+            label = title
+            color = ClaudeTheme.textSecondary
         }
         return Link(destination: pullRequest.url) {
             Image(systemName: isMerged ? "arrow.triangle.merge" : "arrow.triangle.pull")
                 .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                .foregroundStyle(isMerged ? Color.purple : ClaudeTheme.textSecondary)
+                .foregroundStyle(color)
                 .frame(width: 16, height: 16)
                 .contentShape(Rectangle())
         }

@@ -147,7 +147,6 @@ public actor WorkspaceChangeTracker {
     private var isInitialized = false
     var gitRepoRoot: String?
     var ledger: [String: LedgerEntry] = [:]
-    var gitIgnoreCache: [String: Bool] = [:]
 
     var activeStreams: [UUID: StreamRegistration] = [:]
     /// Keyed by `spanKey(streamId:toolUseId:)`.
@@ -403,24 +402,13 @@ public actor WorkspaceChangeTracker {
             return []
         }
 
-        // Collect all candidate changed paths from BOTH FSEvents AND Git porcelain / mtime scan.
-        var candidatesToInspect = pendingEventPaths
-        let sweptPaths = await discoverModifiedPathsFromWorkspace()
-        candidatesToInspect.formUnion(sweptPaths)
-
-        guard !candidatesToInspect.isEmpty else { return [] }
-
-        // Filter out gitignored paths among raw FSEvents candidates.
-        let unignoredCandidates = await filterOutGitIgnored(paths: candidatesToInspect)
-        guard !unignoredCandidates.isEmpty else {
-            pendingEventPaths.subtract(candidatesToInspect)
-            return []
-        }
+        let candidates = await discoverModifiedPathsFromWorkspace()
+        guard !candidates.isEmpty else { return [] }
 
         let allCandidateSpans = [completingSpan] + Array(activeSpans.values)
         var detectedEdits: [WorkspaceDetectedEdit] = []
 
-        for canonicalPath in unignoredCandidates.sorted() {
+        for canonicalPath in candidates.sorted() {
             guard shouldTrackPathStructure(canonicalPath) else {
                 pendingEventPaths.remove(canonicalPath)
                 observedSpanIdsByPath.removeValue(forKey: canonicalPath)
@@ -539,11 +527,10 @@ public actor WorkspaceChangeTracker {
         writerStreamsByPath.removeAll()
 
         if gitRepoRoot != nil {
-            let dirtyPaths = await gitPorcelainPaths()
+            let dirtyPaths = Set(await gitPorcelainPaths().map(toCanonicalPath))
             // If a previously-dirty ledger entry is no longer dirty in `git status`,
             // drop its stale override so it falls back to clean `HEAD`/`:0:` again!
-            let dirtySet = Set(dirtyPaths)
-            for existingKey in Array(ledger.keys) where !dirtySet.contains(existingKey) {
+            for existingKey in Array(ledger.keys) where !dirtyPaths.contains(existingKey) {
                 ledger.removeValue(forKey: existingKey)
             }
             for canonicalPath in dirtyPaths where shouldTrackPathStructure(canonicalPath) {
@@ -592,8 +579,10 @@ public actor WorkspaceChangeTracker {
     // MARK: - Workspace Delta Discovery
 
     private func discoverModifiedPathsFromWorkspace() async -> Set<String> {
-        if gitRepoRoot != nil {
-            var paths = Set(await gitPorcelainPaths())
+        var paths = pendingEventPaths
+        if let gitRoot = gitRepoRoot {
+            let statusPaths = await gitPorcelainPaths()
+            paths.formUnion(statusPaths.lazy.map(toCanonicalPath).filter(isInsideWorkspace))
             // Also include any file in `ledger` that might have been restored back
             // to clean HEAD (so `git status` no longer lists it, even though it
             // changed relative to `ledger` during `git checkout -- file`!).
@@ -612,32 +601,47 @@ public actor WorkspaceChangeTracker {
                     }
                 }
             }
-            return paths
+
+            // Git status already applies ignore rules and includes staged deletions.
+            // Check other candidates against the current rules, including symlink
+            // targets and paths that already have a content baseline in the ledger.
+            let pathsToCheck = paths.subtracting(statusPaths)
+            let ignored = await gitIgnoredPaths(in: pathsToCheck, at: gitRoot)
+            // Only use Git status paths if the ignore check fails.
+            let skippedPaths = ignored ?? pathsToCheck
+            pendingEventPaths.subtract(skippedPaths)
+            for path in skippedPaths {
+                observedSpanIdsByPath.removeValue(forKey: path)
+                writerStreamsByPath.removeValue(forKey: path)
+            }
+            for path in ignored ?? [] {
+                ledger.removeValue(forKey: path)
+            }
+            return paths.subtracting(skippedPaths)
         } else {
-            var changed = Set<String>()
             let currentFiles = Set(scanNonGitTextFiles())
             for path in currentFiles {
                 guard let entry = ledger[path] else {
-                    changed.insert(path)
+                    paths.insert(path)
                     continue
                 }
                 let attrs = try? FileManager.default.attributesOfItem(atPath: path)
                 let mtime = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970
                 let size = attrs?[.size] as? Int
                 if mtime != entry.mtime || size != entry.fileSize {
-                    changed.insert(path)
+                    paths.insert(path)
                 }
             }
             for (path, entry) in ledger where entry.content != nil && !currentFiles.contains(path) {
                 if !FileManager.default.fileExists(atPath: path) {
-                    changed.insert(path)
+                    paths.insert(path)
                 }
             }
-            return changed
+            return paths
         }
     }
 
-    private func gitPorcelainPaths() async -> [String] {
+    private func gitPorcelainPaths() async -> Set<String> {
         guard let gitRoot = gitRepoRoot,
               let raw = await GitHelper.run(
                   ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", canonicalRootPath],
@@ -647,7 +651,15 @@ public actor WorkspaceChangeTracker {
         }
 
         let tokens = raw.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
-        var paths: [String] = []
+        var paths = Set<String>()
+        func insertPath(_ relativePath: String, removedFromIndex: Bool) {
+            let path = (gitRoot as NSString).appendingPathComponent(relativePath)
+            // An index removal can leave an ignored file on disk. Git gives any
+            // visible untracked replacement its own status entry.
+            if removedFromIndex, FileManager.default.fileExists(atPath: path) { return }
+            paths.insert(path)
+        }
+
         var idx = 0
         while idx < tokens.count {
             let entry = tokens[idx]
@@ -657,21 +669,13 @@ public actor WorkspaceChangeTracker {
             let x = chars[0]
             let y = chars[1]
             let relPath = String(entry.dropFirst(3))
-            let absNew = URL(fileURLWithPath: (gitRoot as NSString).appendingPathComponent(relPath))
-                .resolvingSymlinksInPath().standardizedFileURL.path
-            if isInsideWorkspace(absNew) {
-                paths.append(absNew)
-            }
+            insertPath(relPath, removedFromIndex: x == "D" && y == " ")
             // Rename or copy in porcelain `-z` has a second NUL token for the original path!
             if x == "R" || y == "R" || x == "C" || y == "C", idx < tokens.count {
                 let origRel = tokens[idx]
                 idx += 1
                 if !origRel.isEmpty {
-                    let absOrig = URL(fileURLWithPath: (gitRoot as NSString).appendingPathComponent(origRel))
-                        .resolvingSymlinksInPath().standardizedFileURL.path
-                    if isInsideWorkspace(absOrig) {
-                        paths.append(absOrig)
-                    }
+                    insertPath(origRel, removedFromIndex: x == "R")
                 }
             }
         }

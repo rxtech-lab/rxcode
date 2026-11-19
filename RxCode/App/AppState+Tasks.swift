@@ -428,6 +428,29 @@ extension AppState {
 
     // MARK: - Task CRUD
 
+    func updateTaskModel(_ model: AgentModel?, for taskId: UUID) async -> Bool {
+        guard let original = task(id: taskId), canEditCard(original) else { return false }
+        let effort: String?
+        if let model {
+            effort = await sanitizedEffort(original.agent.effort, for: model.provider, model: model.id)
+        } else {
+            effort = nil
+        }
+
+        // Re-read after loading reasoning levels to preserve other changes.
+        // Dispatch can still write a task snapshot while starting a run.
+        guard var current = task(id: taskId), canEditCard(current),
+              current.agent.provider == original.agent.provider,
+              current.agent.model == original.agent.model,
+              current.agent.effort == original.agent.effort,
+              !dispatchingTaskIds.contains(taskId) else { return false }
+        current.agent.provider = model?.provider
+        current.agent.model = model?.id
+        current.agent.effort = effort
+        upsertTask(current, defaultAssignee: false)
+        return true
+    }
+
     /// Inserts or replaces a task. New tasks land at the end of their column.
     /// Creating a task in a chat column, or editing one into it, starts its
     /// assigned agent just as moving a card there does.

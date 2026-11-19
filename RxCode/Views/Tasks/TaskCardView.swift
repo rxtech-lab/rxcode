@@ -1,3 +1,5 @@
+import AppKit
+import RxAuthSwift
 import RxCodeCore
 import SwiftUI
 
@@ -19,6 +21,8 @@ struct TaskCardView: View {
     /// 1-based place in its chat column's run queue, when the column view
     /// knows it. A queued card without one just reads "Queued".
     var queuePosition: Int? = nil
+    var isUpdatingModel = false
+    let onSelectModel: (AgentModel?) -> Void
     let onOpen: () -> Void
     @State private var pendingDeletion: TaskBoardSheet?
     @State private var showsAttentionReason = false
@@ -130,10 +134,7 @@ struct TaskCardView: View {
                 }
             }
 
-            if task.agent.isAssigned {
-                ClaudeThemeDivider()
-                TaskCardModelRow(agent: task.agent)
-            }
+            TaskCardModelRow(task: task, board: board, isUpdating: isUpdatingModel, onSelect: onSelectModel)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -513,10 +514,27 @@ private struct TaskCardStartsAfterRow: View {
 /// Model details sit below the tags, with the assigned provider at the far edge.
 private struct TaskCardModelRow: View {
     @Environment(AppState.self) private var appState
+    @State private var menuAnchor = NSView()
 
-    let agent: TaskAgentConfig
+    let task: ProjectTask
+    let board: TaskBoard
+    let isUpdating: Bool
+    let onSelect: (AgentModel?) -> Void
+
+    private var agent: TaskAgentConfig { task.agent }
 
     private var provider: AgentProvider { agent.provider ?? .claudeCode }
+
+    private var modelTitle: String {
+        agent.isAssigned ? appState.taskAgentLabel(agent) : String(localized: "Select Model")
+    }
+
+    private var selectedModelId: String? {
+        if provider == .acp, let parts = appState.acpSelectionParts(for: agent.model) {
+            return "\(parts.clientId)::\(parts.model)"
+        }
+        return agent.model
+    }
 
     private var providerLabel: String {
         guard provider == .acp,
@@ -528,19 +546,69 @@ private struct TaskCardModelRow: View {
     }
 
     var body: some View {
+        let canEdit = board.canEditCard(assigneeIds: task.assigneeIds, userID: appState.rxAuth.user?.id)
+        if agent.isAssigned || canEdit {
+            ClaudeThemeDivider()
+            if canEdit {
+                modelMenu
+            } else {
+                footerLabel
+            }
+        }
+    }
+
+    private var modelMenu: some View {
+        Button(action: showModelMenu) {
+            footerLabel
+        }
+        .buttonStyle(.plain)
+        .background(TaskModelMenuAnchor(view: menuAnchor).allowsHitTesting(false))
+        .disabled(isUpdating)
+        .pointerCursorOnHover()
+        .help("Change task model")
+        .accessibilityLabel(Text(modelTitle))
+        .accessibilityIdentifier("task-card-model-\(task.id.uuidString)")
+    }
+
+    private func showModelMenu() {
+        guard menuAnchor.window != nil else { return }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let actions = TaskModelMenuActions(onSelect: onSelect)
+        menu.addItem(actions.item(String(localized: "Unassigned"), model: nil, isSelected: !agent.isAssigned))
+        let currentModel = selectedModelId
+        for section in appState.availableAgentModelSections() {
+            menu.addItem(.separator())
+            menu.addItem(.sectionHeader(title: section.title))
+            for model in section.models {
+                let isSelected = model.provider == provider && model.id == currentModel
+                menu.addItem(actions.item(model.displayName, model: model, isSelected: isSelected))
+            }
+        }
+        let bounds = menuAnchor.bounds
+        let origin = NSPoint(x: bounds.minX, y: menuAnchor.isFlipped ? bounds.maxY : bounds.minY)
+        // AppKit's menu targets are weak and must stay alive through tracking.
+        withExtendedLifetime(actions) {
+            _ = menu.popUp(positioning: nil, at: origin, in: menuAnchor)
+        }
+    }
+
+    private var footerLabel: some View {
         HStack(spacing: 8) {
-            Text(appState.taskAgentLabel(agent))
+            Text(modelTitle)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
-            providerIcon
-                .frame(width: 14, height: 14)
-                .help(providerLabel)
-                .accessibilityLabel(providerLabel)
+            if agent.isAssigned {
+                providerIcon
+                    .frame(width: 14, height: 14)
+                    .accessibilityLabel(providerLabel)
+            }
         }
         .font(.system(size: ClaudeTheme.size(11), weight: .medium))
         .foregroundStyle(ClaudeTheme.textSecondary)
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -566,5 +634,35 @@ private struct TaskCardModelRow: View {
                 .scaledToFit()
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Gives the SwiftUI footer's native dropdown a position in the window.
+private struct TaskModelMenuAnchor: NSViewRepresentable {
+    let view: NSView
+
+    func makeNSView(context: Context) -> NSView { view }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private final class TaskModelMenuActions: NSObject {
+    private let onSelect: (AgentModel?) -> Void
+
+    init(onSelect: @escaping (AgentModel?) -> Void) {
+        self.onSelect = onSelect
+    }
+
+    func item(_ title: String, model: AgentModel?, isSelected: Bool) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(selectModel(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = model
+        item.state = isSelected ? .on : .off
+        return item
+    }
+
+    @objc private func selectModel(_ item: NSMenuItem) {
+        guard item.state != .on else { return }
+        onSelect(item.representedObject as? AgentModel)
     }
 }

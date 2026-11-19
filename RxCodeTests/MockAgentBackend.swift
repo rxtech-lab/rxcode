@@ -14,8 +14,7 @@ actor MockAgentBackend: AgentBackend {
     // MARK: - Step
 
     struct Step: Sendable {
-        /// Pause before yielding `event`. Use a long delay to simulate a
-        /// stream that's "stuck mid-turn" (the cross-project freeze case).
+        /// Pause before running the side effect and yielding `event`.
         let delay: TimeInterval
         let event: StreamEvent
         let sideEffect: (@Sendable () async throws -> Void)?
@@ -59,16 +58,25 @@ actor MockAgentBackend: AgentBackend {
             )))
         }
 
-        static func result(sessionId: String, isError: Bool = false, delay: TimeInterval = 0.01) -> Step {
-            Step(delay: delay, event: .result(ResultEvent(
-                durationMs: 10,
-                totalCostUsd: 0,
-                sessionId: sessionId,
-                isError: isError,
-                totalTurns: 1,
-                usage: nil,
-                contextWindow: nil
-            )))
+        static func result(
+            sessionId: String,
+            isError: Bool = false,
+            delay: TimeInterval = 0.01,
+            sideEffect: (@Sendable () async throws -> Void)? = nil
+        ) -> Step {
+            Step(
+                delay: delay,
+                event: .result(ResultEvent(
+                    durationMs: 10,
+                    totalCostUsd: 0,
+                    sessionId: sessionId,
+                    isError: isError,
+                    totalTurns: 1,
+                    usage: nil,
+                    contextWindow: nil
+                )),
+                sideEffect: sideEffect
+            )
         }
     }
 

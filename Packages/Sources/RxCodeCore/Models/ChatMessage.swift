@@ -307,6 +307,24 @@ public extension ToolCall {
         /// body so Codex `fileChange` calls can flow through the same
         /// `ThreadFileEdit` storage as Claude Edit/MultiEdit/Write.
         public var hunk: PreviewFile.EditHunk {
+            guard let lines = changedLines else {
+                return PreviewFile.EditHunk(oldString: "", newString: diff)
+            }
+            return PreviewFile.EditHunk(
+                oldString: lines.removed.joined(separator: "\n"),
+                newString: lines.added.joined(separator: "\n")
+            )
+        }
+
+        /// Counts patch rows directly so blank changed lines are included.
+        public var lineCounts: (added: Int, removed: Int) {
+            if let lines = changedLines {
+                return (lines.added.count, lines.removed.count)
+            }
+            return (PreviewFile.EditHunk.lineCount(diff), 0)
+        }
+
+        private var changedLines: (added: [String], removed: [String])? {
             let rawLines = diff.components(separatedBy: "\n")
             // Some agents (notably Codex on new-file creation) emit `diff` as
             // the file's plain content with no `+`/`-`/`@@` markers. Treat
@@ -315,24 +333,23 @@ public extension ToolCall {
             let hasAnyMarker = rawLines.contains {
                 $0.hasPrefix("+") || $0.hasPrefix("-") || $0.hasPrefix("@@")
             }
-            if !hasAnyMarker {
-                return PreviewFile.EditHunk(oldString: "", newString: diff)
-            }
+            guard hasAnyMarker else { return nil }
             var removed: [String] = []
             var added: [String] = []
+            var isInHunk = false
             for rawLine in rawLines {
-                if rawLine.hasPrefix("---") || rawLine.hasPrefix("+++") { continue }
-                if rawLine.hasPrefix("@@") { continue }
+                if rawLine.hasPrefix("@@") {
+                    isInHunk = true
+                    continue
+                }
+                if !isInHunk, rawLine.hasPrefix("---") || rawLine.hasPrefix("+++") { continue }
                 if rawLine.hasPrefix("-") {
                     removed.append(String(rawLine.dropFirst()))
                 } else if rawLine.hasPrefix("+") {
                     added.append(String(rawLine.dropFirst()))
                 }
             }
-            return PreviewFile.EditHunk(
-                oldString: removed.joined(separator: "\n"),
-                newString: added.joined(separator: "\n")
-            )
+            return (added, removed)
         }
     }
 

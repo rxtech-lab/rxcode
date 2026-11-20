@@ -9,32 +9,41 @@ extension AppState {
     func publishEncryptedTaskActivity(projectID: UUID, cloudID: String, sync: CloudBoardSyncState) async throws {
         let accountID = rxAuth.user?.id
         let service = MobileSyncService.shared
-        let recipients = service.pairedDevices.map(\.pubkeyHex)
+        let recipients = service.pairedDevices.map(\.pubkeyHex).sorted()
+        let recipientSignature = recipients.joined(separator: ",")
         let identity = service.identity
+        let senderKey = identity.publicKeyHex
+        let sessionIndex = taskLinkedSessionIndex()
         for task in taskBoard(for: projectID).tasks {
             guard let remoteID = sync.taskRemoteId(task.id),
                   task.sessionKey != nil || task.attentionReason != nil else { continue }
-            if task.sessionKey != nil, chatSessionId(for: task) == nil { continue }
-            let cacheKey = "cloudTaskActivity.v1.\(accountID ?? "").\(cloudID).\(remoteID).\(identity.publicKeyHex)"
+            let runID = task.sessionKey.map(resolveCurrentSessionId)
+            if let runID, !sessionIndex.contains(sessionID: runID) { continue }
+            let sourceID = task.sourceSessionKey.map(resolveCurrentSessionId)
+            let linked = sessionIndex.summaries(runID: runID, sourceID: sourceID)
+            let cacheKey = "cloudTaskActivity.v1.\(accountID ?? "").\(cloudID).\(remoteID).\(senderKey)"
             // Cheap pre-check: this runs on every 30s board poll, and building
             // the activity means fully parsing the task's transcripts. Skip the
             // parse when nothing feeding the activity has changed since the
             // last successful publish.
-            let sourceKey = "cloudTaskActivitySource.v1.\(accountID ?? "").\(cloudID).\(remoteID).\(identity.publicKeyHex)"
-            let source = await taskActivitySourceSignature(for: task, recipients: recipients)
+            let sourceKey = "cloudTaskActivitySource.v1.\(accountID ?? "").\(cloudID).\(remoteID).\(senderKey)"
+            let source = await taskActivitySourceSignature(
+                for: task, runID: runID, sourceID: sourceID, linked: linked, recipientSignature: recipientSignature
+            )
             if UserDefaults.standard.string(forKey: sourceKey) == source,
                UserDefaults.standard.string(forKey: cacheKey) != nil {
                 continue
             }
-            let messages = await taskRunMessages(for: task) ?? []
-            let connections = await mobileTaskLinkedSessions(for: task)
+            let run = linked.first { $0.id == runID }
+            let messages = if let run { await taskRunMessages(summary: run) } else { [ChatMessage]() }
+            let connections = await mobileTaskLinkedSessions(runID: runID, sourceID: sourceID, summaries: linked)
             let updatedAt = max(task.updatedAt, messages.last?.timestamp ?? task.updatedAt,
-                allSessionSummaries.filter { connections.map(\.id).contains($0.id) }.map(\.updatedAt).max() ?? task.updatedAt)
+                linked.map(\.updatedAt).max() ?? task.updatedAt)
             let activity = CloudTaskActivity(projectID: cloudID, taskID: remoteID, updatedAt: updatedAt,
-                sourceProjectID: projectID, sourceTaskID: task.id, senderPublicKey: identity.publicKeyHex, sessionID: chatSessionId(for: task),
+                sourceProjectID: projectID, sourceTaskID: task.id, senderPublicKey: senderKey, sessionID: runID,
                 runs: TaskRunTurn.turns(from: messages), connections: connections, attentionReason: task.attentionReason)
             let fingerprint = try await Task.detached {
-                try EncryptedTaskActivity.fingerprint(activity, recipients: recipients + [identity.publicKeyHex])
+                try EncryptedTaskActivity.fingerprint(activity, recipients: recipients + [senderKey])
             }.value
             guard UserDefaults.standard.string(forKey: cacheKey) != fingerprint else {
                 UserDefaults.standard.set(source, forKey: sourceKey)
@@ -43,7 +52,7 @@ extension AppState {
             let envelope = try await Task.detached {
                 try EncryptedTaskActivity.seal(activity, identity: identity, recipientKeys: recipients)
             }.value
-            guard rxAuth.user?.id == accountID, service.pairedDevices.map(\.pubkeyHex).sorted() == recipients.sorted() else { return }
+            guard rxAuth.user?.id == accountID, service.pairedDevices.map(\.pubkeyHex).sorted() == recipients else { return }
             try await projectCloud.saveTaskActivity(projectId: cloudID, taskId: remoteID, envelope: envelope)
             UserDefaults.standard.set(fingerprint, forKey: cacheKey)
             UserDefaults.standard.set(source, forKey: sourceKey)
@@ -55,22 +64,21 @@ extension AppState {
     /// in-memory message counts, and each transcript file's size and mtime.
     /// A missing transcript yields a stable "missing" entry, so threads with
     /// no jsonl aren't re-probed every poll.
-    private func taskActivitySourceSignature(for task: ProjectTask, recipients: [String]) async -> String {
-        let runID = task.sessionKey.map(resolveCurrentSessionId)
-        let sourceID = task.sourceSessionKey.map(resolveCurrentSessionId)
-        let linked = allSessionSummaries.filter { summary in
-            summary.id == runID || summary.id == sourceID ||
-                summary.parentThreadId.map { resolveCurrentSessionId($0) == runID } == true
-        }.sorted { $0.id < $1.id }
-
+    private func taskActivitySourceSignature(
+        for task: ProjectTask,
+        runID: String?,
+        sourceID: String?,
+        linked: [ChatSession.Summary],
+        recipientSignature: String
+    ) async -> String {
         var parts: [String] = [
             "t=\(task.updatedAt.timeIntervalSince1970)",
             "a=\(task.attentionReason ?? "")",
             "run=\(runID ?? "")",
             "src=\(sourceID ?? "")",
-            "r=\(recipients.sorted().joined(separator: ","))",
+            "r=\(recipientSignature)",
         ]
-        for summary in linked {
+        for summary in linked.sorted(by: { $0.id < $1.id }) {
             let live = sessionStates[summary.id]
             var part = "\(summary.id)|\(summary.updatedAt.timeIntervalSince1970)|\(summary.threadLabel ?? summary.title)"
             part += "|live=\(live?.messages.count ?? -1):\(live?.messages.last?.blocks.count ?? 0):\(live?.isStreaming == true)"

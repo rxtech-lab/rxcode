@@ -120,6 +120,18 @@ final class AutopilotService {
         return try await post(url: url, body: request)
     }
 
+    #if os(macOS)
+    func recentPullRequestRevisions() async throws -> [ThreadPullRequestRevision] {
+        struct Page: Decodable {
+            let items: [ThreadPullRequestRevision]
+        }
+        let url = baseURL.appendingPathComponent("/api/v1/pull-requests")
+            .appending(queryItems: [URLQueryItem(name: "pageSize", value: "100")])
+        let page: Page = try await get(url: url)
+        return page.items
+    }
+    #endif
+
     // MARK: - Automation settings
 
     /// `GET /api/v1/automation/schema` — the JSON Schema + ui schema describing

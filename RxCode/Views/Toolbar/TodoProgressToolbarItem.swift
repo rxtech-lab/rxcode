@@ -4,10 +4,8 @@ import RxCodeChatKit
 
 /// Toolbar pill rendering the current session's todo-style progress.
 ///
-/// Hidden until the active CLI session emits progress. Live `TodoWrite`
-/// updates come from in-memory messages; a SwiftData-backed snapshot fills in
-/// for cold opens and Codex plan updates. Tap toggles a popover listing each
-/// todo with status icon.
+/// Hidden until the active session emits progress. The most recent todo list
+/// can come from in-memory messages or a persisted update.
 struct TodoProgressToolbarItem: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
@@ -18,13 +16,11 @@ struct TodoProgressToolbarItem: View {
     }
 
     private var todos: [TodoItem]? {
-        if let live = appState.liveTodos(forSessionId: sessionKey) {
-            return live
-        }
-        // Touch the revision so SwiftUI re-runs this fetch when a new snapshot
-        // is upserted via MCP `ide__set_todos` or a Codex `.todoSnapshot` event.
         _ = appState.todoSnapshotsRevision
-        return appState.threadStore.fetchTodoSnapshot(sessionId: sessionKey)?.items
+        return TodoListSnapshot.latest(
+            transcript: appState.liveTodos(forSessionId: sessionKey),
+            recorded: appState.threadStore.fetchTodoSnapshot(sessionId: sessionKey)?.list
+        )?.items
     }
 
     var body: some View {

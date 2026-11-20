@@ -370,16 +370,24 @@ extension AppState {
     /// (the thread may never have been opened this launch). `nil` when the task
     /// has no thread to read.
     func taskRunMessages(for task: ProjectTask) async -> [ChatMessage]? {
-        guard let sessionId = chatSessionId(for: task) else { return nil }
-        let live = sessionStates[sessionId]?.messages ?? []
-        let persisted = await persistedMessages(sessionId: sessionId) ?? []
+        guard let sessionId = task.sessionKey.map(resolveCurrentSessionId),
+              let summary = allSessionSummaries.first(where: { $0.id == sessionId }) else { return nil }
+        return await taskRunMessages(summary: summary)
+    }
+
+    func taskRunMessages(summary: ChatSession.Summary) async -> [ChatMessage] {
+        let live = sessionStates[summary.id]?.messages ?? []
+        let persisted = await persistedMessages(summary: summary) ?? []
         return live.count >= persisted.count ? live : persisted
     }
 
     func persistedMessages(sessionId: String) async -> [ChatMessage]? {
-        guard let summary = allSessionSummaries.first(where: { $0.id == sessionId }),
-              let project = projects.first(where: { $0.id == summary.projectId })
-        else { return nil }
+        guard let summary = allSessionSummaries.first(where: { $0.id == sessionId }) else { return nil }
+        return await persistedMessages(summary: summary)
+    }
+
+    func persistedMessages(summary: ChatSession.Summary) async -> [ChatMessage]? {
+        guard let project = projects.first(where: { $0.id == summary.projectId }) else { return nil }
         return await persistence.loadFullSession(summary: summary, cwd: project.path)?.messages
     }
 

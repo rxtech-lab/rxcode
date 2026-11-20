@@ -5,17 +5,51 @@ import RxCodeCore
 struct ToolGroupFileChangesView: View {
     let tools: [ToolCall]
 
+    #if os(macOS)
+    @Environment(ChatBridge.self) private var chatBridge: ChatBridge?
+    @State private var ignoreResult: (query: IgnoreQuery, paths: Set<String>)?
+
+    private struct IgnoreQuery: Equatable {
+        let directory: String
+        let paths: Set<String>
+    }
+    #endif
+
     var body: some View {
-        let totals = tools.reduce(into: Totals()) { $0.include($1) }
-        let fileCount = totals.paths.count
-        if fileCount > 0 {
-            let fileLabel = fileCount == 1
-                ? Text("1 file changed", bundle: .module)
-                : Text("\(fileCount) files changed", bundle: .module)
-            let compactFileLabel = fileCount == 1
-                ? Text("1 file", bundle: .module)
-                : Text("\(fileCount) files", bundle: .module)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        #if os(macOS)
+        let workingDirectory = chatBridge?.workingDirectory
+        let changes = ToolGroupFileChanges(tools: tools, workingDirectory: workingDirectory)
+        let query = workingDirectory.map { IgnoreQuery(directory: $0, paths: changes.paths) }
+        let totals: ToolGroupFileChanges.Totals? = if query == nil {
+            changes.totals()
+        } else if let ignoreResult, ignoreResult.query == query {
+            changes.totals(excluding: ignoreResult.paths)
+        } else {
+            nil
+        }
+        labels(totals)
+            .task(id: query) {
+                guard let query, !query.paths.isEmpty else { return }
+                let paths = await GitHelper.ignoredChangePaths(query.paths, at: query.directory)
+                guard !Task.isCancelled else { return }
+                ignoreResult = (query, paths)
+            }
+        #else
+        labels(ToolGroupFileChanges(tools: tools).totals())
+        #endif
+    }
+
+    private func labels(_ totals: ToolGroupFileChanges.Totals?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if let totals, totals.fileCount > 0 {
+                let fileCount = totals.fileCount
+                let fileLabel = fileCount == 1
+                    ? Text("1 file changed", bundle: .module)
+                    : Text("\(fileCount) files changed", bundle: .module)
+                let compactFileLabel = fileCount == 1
+                    ? Text("1 file", bundle: .module)
+                    : Text("\(fileCount) files", bundle: .module)
+
                 ViewThatFits(in: .horizontal) {
                     fileLabel.fixedSize(horizontal: true, vertical: false)
                     compactFileLabel.fixedSize(horizontal: true, vertical: false)
@@ -37,48 +71,72 @@ struct ToolGroupFileChangesView: View {
                         .accessibilityLabel(Text("\(totals.removed) lines removed", bundle: .module))
                 }
             }
-            .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold, design: .monospaced))
-            .lineLimit(1)
-            .accessibilityElement(children: .combine)
+        }
+        .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold, design: .monospaced))
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct ToolGroupFileChanges {
+    typealias Totals = (fileCount: Int, added: Int, removed: Int)
+    private var countsByPath: [String: (added: Int, removed: Int)] = [:]
+
+    var paths: Set<String> { Set(countsByPath.keys) }
+
+    init(tools: [ToolCall], workingDirectory: String? = nil) {
+        for tool in tools {
+            include(tool, workingDirectory: workingDirectory)
         }
     }
 
-    private struct Totals {
-        var paths: Set<String> = []
-        var added = 0
-        var removed = 0
+    func totals(excluding ignoredPaths: Set<String> = []) -> Totals {
+        var totals: Totals = (0, 0, 0)
+        for (path, counts) in countsByPath where !ignoredPaths.contains(path) {
+            totals.fileCount += 1
+            totals.added += counts.added
+            totals.removed += counts.removed
+        }
+        return totals
+    }
 
-        mutating func include(_ tool: ToolCall) {
-            let detectedChanges = tool.detectedShellFileChanges
-            if !detectedChanges.isEmpty {
-                // A shell command can change files even if it exits with an error.
-                for change in detectedChanges {
-                    record(path: change.path, added: change.addedLines, removed: change.removedLines)
-                }
-                return
+    private mutating func include(_ tool: ToolCall, workingDirectory: String?) {
+        let directory = workingDirectory.map { root in
+            guard let toolDirectory = tool.shellWorkingDirectory else { return root }
+            return Self.absolutePath(toolDirectory, relativeTo: root)
+        }
+        let detectedChanges = tool.detectedShellFileChanges
+        if !detectedChanges.isEmpty {
+            // A shell command can change files even if it exits with an error.
+            for change in detectedChanges {
+                record(change.path, counts: (change.addedLines, change.removedLines), at: directory)
             }
-
-            guard tool.result != nil, !tool.isError else { return }
-            let hunks = tool.fileEditHunks
-            if !hunks.isEmpty, let path = tool.editedFilePath {
-                let isWrite = tool.name.lowercased() == "write"
-                for hunk in hunks where isWrite || hunk.oldString != hunk.newString {
-                    let counts = hunk.lineCounts
-                    record(path: path, added: counts.added, removed: counts.removed)
-                }
-            } else {
-                for change in tool.fileChangeDiffs {
-                    let counts = change.lineCounts
-                    record(path: change.path, added: counts.added, removed: counts.removed)
-                }
-            }
+            return
         }
 
-        private mutating func record(path: String, added: Int, removed: Int) {
-            guard !path.isEmpty else { return }
-            paths.insert(path)
-            self.added += added
-            self.removed += removed
+        guard tool.result != nil, !tool.isError else { return }
+        let hunks = tool.fileEditHunks
+        if !hunks.isEmpty, let path = tool.editedFilePath {
+            let isWrite = tool.name.lowercased() == "write"
+            for hunk in hunks where isWrite || hunk.oldString != hunk.newString {
+                record(path, counts: hunk.lineCounts, at: directory)
+            }
+        } else {
+            for change in tool.fileChangeDiffs {
+                record(change.path, counts: change.lineCounts, at: directory)
+            }
         }
+    }
+
+    private mutating func record(_ path: String, counts: (added: Int, removed: Int), at directory: String?) {
+        guard !path.isEmpty else { return }
+        let key = directory.map { Self.absolutePath(path, relativeTo: $0) } ?? path
+        countsByPath[key, default: (0, 0)].added += counts.added
+        countsByPath[key, default: (0, 0)].removed += counts.removed
+    }
+
+    private static func absolutePath(_ path: String, relativeTo directory: String) -> String {
+        let absolute = path.hasPrefix("/") ? path : (directory as NSString).appendingPathComponent(path)
+        return URL(fileURLWithPath: absolute).standardizedFileURL.path
     }
 }

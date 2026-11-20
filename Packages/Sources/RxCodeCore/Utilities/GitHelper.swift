@@ -126,6 +126,38 @@ public enum GitHelper {
         return String(data: output.stdout, encoding: .utf8)
     }
 
+    static func checkIgnoredPaths(_ paths: Set<String>, at gitRoot: String) async -> Set<String>? {
+        guard !paths.isEmpty else { return [] }
+        let payload = Data((paths.joined(separator: "\0") + "\0").utf8)
+        guard let output = await execute(["check-ignore", "-z", "--stdin"], at: gitRoot, input: payload),
+              output.status == 0 || output.status == 1 else { return nil }
+        return Set(String(decoding: output.stdout, as: UTF8.self).split(separator: "\0").map(String.init))
+    }
+
+    /// Resolves the current ignore rules for absolute change paths in this worktree.
+    public static func ignoredChangePaths(_ paths: Set<String>, at directory: String) async -> Set<String> {
+        guard !paths.isEmpty,
+              let rootOutput = await run(["rev-parse", "--show-toplevel"], at: directory) else { return [] }
+        let rootPath = rootOutput.hasSuffix("\n") ? String(rootOutput.dropLast()) : rootOutput
+        let gitRoot = URL(fileURLWithPath: rootPath).resolvingSymlinksInPath().standardizedFileURL.path
+        let prefix = gitRoot.hasSuffix("/") ? gitRoot : gitRoot + "/"
+        let byGitPath = Dictionary(grouping: paths) { path in
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            return url.deletingLastPathComponent().resolvingSymlinksInPath()
+                .appendingPathComponent(url.lastPathComponent).path
+        }
+        let candidates = Set(byGitPath.keys.filter { $0.hasPrefix(prefix) })
+        guard var ignored = await checkIgnoredPaths(candidates, at: gitRoot) else { return [] }
+
+        // An absent path removed from the index represents a tracked deletion.
+        let absent = ignored.filter { !FileManager.default.fileExists(atPath: $0) }
+        if !absent.isEmpty,
+           let deleted = await run(["diff", "--cached", "--no-renames", "--diff-filter=D", "--name-only", "-z"], at: gitRoot) {
+            ignored.subtract(deleted.split(separator: "\0").map { prefix + String($0) }.filter { absent.contains($0) })
+        }
+        return Set(ignored.flatMap { byGitPath[$0] ?? [] })
+    }
+
     public static func currentBranch(at path: String) async -> String? {
         guard let result = await run(["symbolic-ref", "--short", "HEAD"], at: path) else {
             return nil

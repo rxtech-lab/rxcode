@@ -304,18 +304,6 @@ struct ProjectTreeView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Resolve the project's current branch and start a `[Code Review]` thread
-    /// reviewing it (grounded in its briefing), then open the new thread.
-    private func startBranchCodeReview(for project: Project) {
-        Task {
-            appState.selectProject(project, in: windowState)
-            guard let branch = await GitHelper.currentBranch(at: project.path), !branch.isEmpty else { return }
-            if let threadId = try? await appState.createCodeReviewForBranch(project: project, branch: branch) {
-                appState.selectSession(id: threadId, in: windowState)
-            }
-        }
-    }
-
     // MARK: - Project List
 
     private var projectList: some View {
@@ -347,18 +335,7 @@ struct ProjectTreeView: View {
                         onNewChat: {
                             appState.selectProject(project, in: windowState)
                             appState.startNewChat(in: windowState)
-                        },
-                        onCodeReview: {
-                            startBranchCodeReview(for: project)
-                        },
-                        onCommitAll: {
-                            Task {
-                                if let threadId = try? await appState.commitAllChangesForProject(project: project) {
-                                    appState.selectSession(id: threadId, in: windowState)
-                                }
-                            }
-                        },
-                        hookMenuItems: { appState.projectContextMenuItems(for: project) }
+                        }
                     )
 
                     if expandedProjectIds.contains(project.id) {
@@ -407,31 +384,9 @@ private struct ProjectTreeRow: View {
     let onRename: () -> Void
     let onDelete: () -> Void
     let onNewChat: () -> Void
-    let onCodeReview: () -> Void
-    let onCommitAll: () -> Void
-    /// Deferred behind a closure so the hooks only run when the menu is opened,
-    /// rather than once per project row on every view-graph update.
-    let hookMenuItems: () -> [MenuItem]
-
     @State private var isHovered = false
     @State private var showLocationPopover = false
     @State private var hoverTask: Task<Void, Never>?
-    @State private var creatingPR = false
-    @State private var prError: PRErrorAlert?
-
-    private struct PRErrorAlert: Identifiable {
-        let id = UUID()
-        let message: String
-    }
-
-    /// Mirror the briefing card's gate: offer "Create PR" only for a
-    /// GitHub-linked project whose current branch has no PR yet. Reading
-    /// `ciStatusRevision` keeps the menu in sync as the CI poller updates.
-    private var canCreatePR: Bool {
-        guard project.gitHubRepo != nil else { return false }
-        let _ = appState.ciStatusRevision
-        return appState.ciStatusByProject[project.id]?.pullRequestState == nil
-    }
 
     private var displayPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -486,7 +441,7 @@ private struct ProjectTreeRow: View {
                     .padding(.vertical, 6)
                 }
 
-            AttentionBadge(attention: appState.projectAttention(projectId: project.id, in: windowState))
+            ProjectTreeAttentionBadge(projectId: project.id)
 
             Spacer(minLength: 4)
 
@@ -537,13 +492,6 @@ private struct ProjectTreeRow: View {
         .contextMenu {
             projectMenuItems
         }
-        .alert(item: $prError) { error in
-            Alert(
-                title: Text("Couldn't Create Pull Request"),
-                message: Text(error.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
     }
 
     /// Shared items for both the "More" (ellipsis) menu and the right-click
@@ -556,15 +504,7 @@ private struct ProjectTreeRow: View {
         Button { onOpenInNewWindow() } label: {
             Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
-        // Code review, commit, create PR, and the autopilot setup actions now
-        // come from hooks as serializable MenuItems (gated inside the hooks), so
-        // the desktop and mobile render the same set. Taps dispatch locally here.
-        let items = hookMenuItems()
-        if !items.isEmpty {
-            Divider()
-            MenuItemsView(items)
-                .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
-        }
+        ProjectTreeHookMenuItems(project: project)
         Divider()
         ProjectCloudMenuItems(project: project)
         Divider()
@@ -576,23 +516,30 @@ private struct ProjectTreeRow: View {
         }
     }
 
-    /// Push the current branch and open a PR for it (mirrors the briefing card's
-    /// "Create PR" button), then reveal the new PR in the browser.
-    private func startCreatePR() {
-        guard !creatingPR else { return }
-        creatingPR = true
-        appState.hookProgressStatus = "hook.pullRequest.creating"
-        Task { @MainActor in
-            defer {
-                creatingPR = false
-                appState.hookProgressStatus = nil
-            }
-            do {
-                let url = try await appState.createPullRequestForCurrentBranch(project: project)
-                NSWorkspace.shared.open(url)
-            } catch {
-                prError = PRErrorAlert(message: error.localizedDescription)
-            }
+}
+
+private struct ProjectTreeAttentionBadge: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+    let projectId: UUID
+
+    var body: some View {
+        AttentionBadge(attention: appState.projectAttention(projectId: projectId, in: windowState))
+    }
+}
+
+/// Keep hook dependencies out of the row's hover and disclosure updates.
+private struct ProjectTreeHookMenuItems: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+    let project: Project
+
+    var body: some View {
+        let items = appState.projectContextMenuItems(for: project)
+        if !items.isEmpty {
+            Divider()
+            MenuItemsView(items)
+                .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
         }
     }
 }

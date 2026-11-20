@@ -53,7 +53,7 @@ struct ChatToolbarControls: View {
 
     private var effortSelection: Binding<String?> {
         Binding(
-            get: { windowState.sessionEffort },
+            get: { appState.effectiveSessionEffort(in: windowState) },
             set: { appState.setSessionEffort($0, in: windowState) }
         )
     }
@@ -66,7 +66,7 @@ struct ChatToolbarControls: View {
     /// report, so a stale session setting still reads as itself rather than
     /// silently showing the resting label.
     private var effortLabel: String {
-        guard let effort = windowState.sessionEffort else { return String(localized: "Thinking") }
+        guard let effort = appState.effectiveSessionEffort(in: windowState) else { return String(localized: "Thinking") }
         return reasoningLevels.first { $0.id == effort }?.displayName ?? effortDisplayName(effort)
     }
 
@@ -163,7 +163,7 @@ struct ChatToolbarControls: View {
                         title: effortLabel,
                         icon: "brain",
                         isAccent: false,
-                        isActive: windowState.sessionEffort != nil
+                        isActive: appState.effectiveSessionEffort(in: windowState) != nil
                     )
                 }
                 .menuStyle(.borderlessButton)
@@ -173,8 +173,10 @@ struct ChatToolbarControls: View {
             }
         }
         .task(id: "\(effectiveProvider.rawValue):\(effectiveModel)") {
-            await appState.loadReasoningLevels(for: effectiveProvider)
-            appState.reconcileSessionEffort(in: windowState, provider: effectiveProvider)
+            let provider = effectiveProvider
+            await appState.loadReasoningLevels(for: provider)
+            guard !Task.isCancelled else { return }
+            appState.reconcileSessionEffort(in: windowState, provider: provider)
         }
         .frame(maxWidth: placement == .composer ? .infinity : nil, alignment: .leading)
     }
@@ -327,6 +329,9 @@ struct ChatDetailModifiers: ViewModifier {
                 }
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
+            .overlay {
+                ComputerUseMonitorOverlay(sessionKey: windowState.currentSessionId ?? windowState.newSessionKey)
+            }
             .overlay {
                 if let request = presentedPermissionModalRequest {
                     ZStack {

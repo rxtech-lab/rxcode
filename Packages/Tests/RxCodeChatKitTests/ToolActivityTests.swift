@@ -305,6 +305,53 @@ struct ToolActivityTests {
         #expect(labels.contains("−3"))
     }
 
+    #if os(macOS)
+    @Test func groupChangeCountsUseGitIgnoreRules() async throws {
+        let repo = FileManager.default.temporaryDirectory.appendingPathComponent("rxcode-tool-group-\(UUID())")
+        let sources = repo.appendingPathComponent("Sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        try #require(await GitHelper.run(["init", "-q"], at: repo.path) != nil)
+        try "*.generated\n!kept.generated\n".write(to: sources.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        for filename in ["tracked.generated", "removed.generated"] {
+            try "original\n".write(to: sources.appendingPathComponent(filename), atomically: true, encoding: .utf8)
+        }
+        try #require(await GitHelper.run(["add", "-f", "Sources/tracked.generated", "Sources/removed.generated"], at: repo.path) != nil)
+        try #require(await GitHelper.run([
+            "-c", "user.name=RxCode Test", "-c", "user.email=test@rxcode.local", "-c", "commit.gpgsign=false",
+            "commit", "-qm", "Seed tracked files",
+        ], at: repo.path) != nil)
+        try #require(await GitHelper.run(["rm", "-q", "Sources/removed.generated"], at: repo.path) != nil)
+
+        var shell = ToolCall(id: "shell", name: "Bash", result: "Done")
+        shell.setDetectedShellFileChanges([
+            .init(path: sources.appendingPathComponent("generated output.generated").path, kind: .created, addedLines: 50, removedLines: 0, diff: ""),
+            .init(path: sources.appendingPathComponent("tracked.generated").path, kind: .modified, addedLines: 1, removedLines: 1, diff: ""),
+            .init(path: sources.appendingPathComponent("removed.generated").path, kind: .deleted, addedLines: 0, removedLines: 1, diff: ""),
+        ])
+        let write = ToolCall(id: "write", name: "Write", input: [
+            "file_path": "write.generated", "content": "generated\n",
+        ], result: "Done")
+        let patch = ToolCall(id: "patch", name: "Edit", input: [
+            "changes": [
+                ["path": "patch.generated", "diff": "@@ -1 +1 @@\n-old\n+new\n"],
+                ["path": "./kept.generated", "diff": "new\n"],
+            ],
+        ], result: "Done")
+
+        let changes = ToolGroupFileChanges(tools: [shell, write, patch], workingDirectory: sources.path)
+        let ignored = await GitHelper.ignoredChangePaths(changes.paths, at: sources.path)
+        let totals = changes.totals(excluding: ignored)
+        #expect(ignored.map { URL(fileURLWithPath: $0).lastPathComponent }.sorted() == [
+            "generated output.generated", "patch.generated", "write.generated",
+        ])
+        #expect(totals.fileCount == 3)
+        #expect(totals.added == 2)
+        #expect(totals.removed == 2)
+    }
+    #endif
+
     @Test func toolNamesAndArgumentsBecomeReadableLabels() {
         #expect(ToolActivityPresentation.title(for: "mcp__rxcode-ide__ide__get_projects") == "Get projects")
         #expect(ToolActivityPresentation.title(for: "list_issues") == "List issues")

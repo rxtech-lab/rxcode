@@ -46,6 +46,7 @@ extension AppState {
         selectedAgentProvider = AgentProvider(rawValue: workspaceDefaults.string(for: "selectedAgentProvider") ?? "") ?? .claudeCode
         globalChatLastAgentProvider = workspaceDefaults.string(for: "globalChatLastAgentProvider").flatMap(AgentProvider.init(rawValue:))
         globalChatLastModel = workspaceDefaults.string(for: "globalChatLastModel")
+        globalChatEffortsByModel = workspaceDefaults.stringDictionary(for: "globalChatEffortsByModel")
         selectedACPClientId = workspaceDefaults.string(for: "selectedACPClientId") ?? ""
         selectedEffort = workspaceDefaults.string(for: "selectedEffort") ?? "auto"
 

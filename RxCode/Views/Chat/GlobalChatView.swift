@@ -61,6 +61,7 @@ struct GlobalChatView: View {
                     VStack(spacing: 8) {
                         AgentConfirmationBanner()
                         PermissionQueueBanner()
+                        ComputerUsePreviewBanner()
                         if windowState.selectedProject?.isGlobalChat == false {
                             ThreadDiffBanner()
                         }

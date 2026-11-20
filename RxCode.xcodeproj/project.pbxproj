@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0FA17996BACE436FBB3E324A /* PetVoiceUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1D1CF0EDE34AD69E39EE41 /* PetVoiceUpdateTests.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
+		6C87A46BCB2D45ADBC39F902 /* AppStateSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C87A46BCB2D45ADBC39F901 /* AppStateSnapshotTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
 		36596E0C1F1F03A76E8EAC44 /* TaskRunQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */; };
@@ -228,6 +229,7 @@
 
 /* Begin PBXFileReference section */
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
+		6C87A46BCB2D45ADBC39F901 /* AppStateSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateSnapshotTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		156FC5ED42A7E52FDE23F140 /* PetRealtimeTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetRealtimeTransportTests.swift; sourceTree = "<group>"; };
 		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -545,6 +547,7 @@
 				FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */,
 				E92A867810EB489390421B01 /* GlobalChatTests.swift */,
 				101010102FCB100000000001 /* AppStateTests.swift */,
+				6C87A46BCB2D45ADBC39F901 /* AppStateSnapshotTests.swift */,
 				DE1D1CF0EDE34AD69E39EE41 /* PetVoiceUpdateTests.swift */,
 				156FC5ED42A7E52FDE23F140 /* PetRealtimeTransportTests.swift */,
 				ECC9F2C90A20B826ADC8D4D1 /* PetScheduledReportTests.swift */,
@@ -1161,6 +1164,7 @@
 				8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */,
 				E92A867810EB489390421B02 /* GlobalChatTests.swift in Sources */,
 				101010102FCB100000000002 /* AppStateTests.swift in Sources */,
+				6C87A46BCB2D45ADBC39F902 /* AppStateSnapshotTests.swift in Sources */,
 				0FA17996BACE436FBB3E324A /* PetVoiceUpdateTests.swift in Sources */,
 				650C53BD226EB204E2931A1D /* PetRealtimeTransportTests.swift in Sources */,
 				FD2FD1F552CFA39FDB8C2308 /* PetScheduledReportTests.swift in Sources */,

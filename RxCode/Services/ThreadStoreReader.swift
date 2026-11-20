@@ -65,7 +65,7 @@ nonisolated struct ThreadStoreReader: Sendable {
                 reviewVerdicts: Self.reviewVerdicts(in: context),
                 fileEditPresence: ThreadStore.fileEditPresence(in: context),
                 todoProgress: Self.todoProgress(in: context),
-                queues: Self.queues(in: context)
+                queues: ThreadStore.queuesBySession(in: context)
             )
         }
     }
@@ -76,7 +76,21 @@ nonisolated struct ThreadStoreReader: Sendable {
         await read { Self.summaries(in: $0) }
     }
 
-    /// Load and decode one thread's visible edits for the sidebar preview.
+    /// The full mobile snapshot needs the persisted list, queue, and edit count
+    /// for each session. Fetch them together off the UI thread.
+    func loadMobileSessionData() async -> (
+        todos: [String: TodoListSnapshot], queues: [String: [QueuedMessage]], fileEditCounts: [String: Int]
+    ) {
+        await read { context in
+            (
+                todos: ThreadStore.todoListsBySession(in: context),
+                queues: ThreadStore.queuesBySession(in: context),
+                fileEditCounts: ThreadStore.fileEditCountsBySession(in: context)
+            )
+        }
+    }
+
+    /// Load and decode one thread's visible edits for the change views.
     func loadThreadDiffPreview(sessionId: String) async -> [FileEditSummary] {
         await read { context in
             let descriptor = ThreadStore.fileEditsDescriptor(sessionId: sessionId)
@@ -85,18 +99,36 @@ nonisolated struct ThreadStoreReader: Sendable {
         }
     }
 
-    /// Branch associations from briefing metadata without loading summary text.
-    func loadSummarizedThreadBranches() async -> [String: String] {
+    /// The toolbar badge only needs paths to exclude plan files.
+    func loadVisibleFileEditCount(sessionId: String) async -> Int {
         await read { context in
-            var descriptor = FetchDescriptor<ThreadSummaryRecord>()
-            descriptor.propertiesToFetch = [\.sessionId, \.branch]
-            do {
-                let rows = try context.fetch(descriptor)
-                return Dictionary(uniqueKeysWithValues: rows.map { ($0.sessionId, $0.branch) })
-            } catch {
-                Self.logger.error("Thread branch fetch failed: \(error.localizedDescription)")
-                return [:]
+            var descriptor = FetchDescriptor<ThreadFileEdit>(predicate: #Predicate { $0.sessionId == sessionId })
+            descriptor.propertiesToFetch = [\.path]
+            let rows = (try? context.fetch(descriptor)) ?? []
+            return rows.count { !PlanLogic.isPlanFilePath($0.path) }
+        }
+    }
+
+    /// Checkouts recorded at turn start, plus older branch observations from briefings.
+    func loadThreadBranches() async -> [String: [String]] {
+        await read { context in
+            var checkouts = FetchDescriptor<ChatThread>(predicate: #Predicate { $0.checkoutBranch != nil })
+            checkouts.propertiesToFetch = [\.id, \.checkoutBranch]
+            var summaries = FetchDescriptor<ThreadSummaryRecord>()
+            summaries.propertiesToFetch = [\.sessionId, \.branch]
+
+            var branches: [String: [String]] = [:]
+            for row in (try? context.fetch(checkouts)) ?? [] {
+                if let branch = row.checkoutBranch {
+                    branches[row.id] = [branch]
+                }
             }
+            for row in (try? context.fetch(summaries)) ?? [] {
+                guard !row.branch.isEmpty, row.branch != "unknown",
+                      branches[row.sessionId]?.contains(row.branch) != true else { continue }
+                branches[row.sessionId, default: []].append(row.branch)
+            }
+            return branches
         }
     }
 
@@ -153,27 +185,16 @@ nonisolated struct ThreadStoreReader: Sendable {
     /// numbers, not the encoded item list.
     private static func todoProgress(in context: ModelContext) -> [String: ChatTodoProgress] {
         var descriptor = FetchDescriptor<TodoSnapshot>()
-        descriptor.propertiesToFetch = [\.sessionId, \.done, \.total, \.inProgress]
+        descriptor.propertiesToFetch = [\.sessionId, \.done, \.total, \.inProgress, \.updatedAt]
         let rows = (try? context.fetch(descriptor)) ?? []
         return rows.reduce(into: [:]) { result, row in
             result[row.sessionId] = ChatTodoProgress(
                 done: row.done,
                 total: row.total,
-                inProgress: row.inProgress > 0
+                inProgress: row.inProgress > 0,
+                updatedAt: row.updatedAt
             )
         }
-    }
-
-    private static func queues(in context: ModelContext) -> [String: [QueuedMessage]] {
-        let descriptor = FetchDescriptor<QueuedMessageRecord>(
-            sortBy: [SortDescriptor(\.order, order: .forward)]
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        var grouped: [String: [QueuedMessage]] = [:]
-        for row in rows {
-            grouped[row.sessionKey, default: []].append(row.toQueuedMessage())
-        }
-        return grouped
     }
 
     private static func embeddingChunks(in context: ModelContext) -> [EmbeddingChunkSnapshot] {

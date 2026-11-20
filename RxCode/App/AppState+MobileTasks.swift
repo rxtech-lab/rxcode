@@ -26,12 +26,21 @@ extension AppState {
             board.cloudSync?.taskRemoteId(task.id).map { (task.id.uuidString, $0) }
         })
         board.cloudSync = nil
+        let taskLinks = board.tasks.map { task in
+            (id: task.id.uuidString, runID: task.sessionKey.map(resolveCurrentSessionId),
+             sourceID: task.sourceSessionKey.map(resolveCurrentSessionId))
+        }
+        let hasLinkedTasks = taskLinks.contains { $0.runID != nil || $0.sourceID != nil }
+        let sessionIndex = hasLinkedTasks ? taskLinkedSessionIndex() : nil
         var sessionIDs: [String: String] = [:]
         var linkedSessions: [String: [MobileTaskLinkedSession]] = [:]
-        for task in board.tasks {
-            linkedSessions[task.id.uuidString] = await mobileTaskLinkedSessions(for: task)
-            if let sessionId = chatSessionId(for: task) {
-                sessionIDs[task.id.uuidString] = sessionId
+        for (id, runID, sourceID) in taskLinks {
+            let summaries = sessionIndex?.summaries(runID: runID, sourceID: sourceID) ?? []
+            linkedSessions[id] = await mobileTaskLinkedSessions(
+                runID: runID, sourceID: sourceID, summaries: summaries
+            )
+            if let runID, sessionIndex?.contains(sessionID: runID) == true {
+                sessionIDs[id] = runID
             }
         }
         let taskIDs = Set(board.tasks.map(\.id))
@@ -46,22 +55,22 @@ extension AppState {
         )
     }
 
-    func mobileTaskLinkedSessions(for task: ProjectTask) async -> [MobileTaskLinkedSession] {
+    func taskLinkedSessionIndex() -> TaskLinkedSessionIndex {
+        TaskLinkedSessionIndex(summaries: allSessionSummaries, resolveSessionID: resolveCurrentSessionId)
+    }
+
+    func mobileTaskLinkedSessions(
+        runID: String?,
+        sourceID: String?,
+        summaries: [ChatSession.Summary]
+    ) async -> [MobileTaskLinkedSession] {
         var links: [MobileTaskLinkedSession] = []
-        let runID = task.sessionKey.map(resolveCurrentSessionId)
-        let sourceID = task.sourceSessionKey.map(resolveCurrentSessionId)
-        let summaries = allSessionSummaries.filter { summary in
-            summary.id == runID || summary.id == sourceID ||
-                summary.parentThreadId.map { resolveCurrentSessionId($0) == runID } == true
-        }.sorted { $0.updatedAt < $1.updatedAt }
         for summary in summaries {
             let kind: MobileTaskLinkedSession.Kind = summary.id == runID ? .run
                 : (summary.id == sourceID ? .source : .review)
             var feedback: String?
             if kind == .review {
-                let live = sessionStates[summary.id]?.messages ?? []
-                let persisted = await persistedMessages(sessionId: summary.id) ?? []
-                let messages = live.count >= persisted.count ? live : persisted
+                let messages = await taskRunMessages(summary: summary)
                 feedback = messages.last(where: {
                     $0.role == .assistant && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 })?.content
@@ -322,6 +331,43 @@ extension AppState {
             runs: runs
         )
         await MobileSyncService.shared.send(.taskBoardResult(result), toHex: hex)
+    }
+}
+
+/// One pass over session history for all linked-session lookups in a board snapshot.
+struct TaskLinkedSessionIndex {
+    private let summaries: [ChatSession.Summary]
+    private var positionsByID: [String: [Int]] = [:]
+    private var positionsByParentID: [String: [Int]] = [:]
+
+    init(summaries: [ChatSession.Summary], resolveSessionID: (String) -> String) {
+        self.summaries = summaries
+        for (position, summary) in summaries.enumerated() {
+            positionsByID[summary.id, default: []].append(position)
+            if let parentID = summary.parentThreadId {
+                positionsByParentID[resolveSessionID(parentID), default: []].append(position)
+            }
+        }
+    }
+
+    func contains(sessionID: String) -> Bool {
+        positionsByID[sessionID] != nil
+    }
+
+    func summaries(runID: String?, sourceID: String?) -> [ChatSession.Summary] {
+        var positions: Set<Int> = []
+        if let runID {
+            positions.formUnion(positionsByID[runID] ?? [])
+            positions.formUnion(positionsByParentID[runID] ?? [])
+        }
+        if let sourceID {
+            positions.formUnion(positionsByID[sourceID] ?? [])
+        }
+        return positions.sorted { left, right in
+            let leftDate = summaries[left].updatedAt
+            let rightDate = summaries[right].updatedAt
+            return leftDate == rightDate ? left < right : leftDate < rightDate
+        }.map { summaries[$0] }
     }
 }
 

@@ -9,6 +9,7 @@ public enum StreamEvent: Sendable {
     case result(ResultEvent)
     case rateLimitEvent(RateLimitInfo)
     case todoSnapshot(TodoSnapshotEvent)
+    case computerUseWindows([ComputerUseMonitorWindow])
     case acpModelsDiscovered(ACPModelsDiscoveredEvent)
 
     // MARK: Incremental blocks

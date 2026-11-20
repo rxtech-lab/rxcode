@@ -8,34 +8,46 @@ import RxCodeChatKit
 struct ThisThreadDiffView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @State private var loaded: (sessionId: String, summaries: [FileEditSummary])?
 
-    private var summaries: [FileEditSummary] {
-        _ = appState.threadFileEditsRevision
-        return appState.threadFileEdits(in: windowState)
+    private var loadID: ThreadFileEditsLoadID {
+        appState.threadFileEditsLoadID(sessionId: windowState.currentSessionId ?? windowState.newSessionKey)
     }
 
     var body: some View {
-        let summaries = summaries
-        if summaries.isEmpty {
-            InspectorEmptyState(
-                title: "No file changes yet",
-                message: "This thread has not edited any files."
-            )
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(summaries) { summary in
-                        ThisThreadFileRow(summary: summary)
+        let key = loadID
+        Group {
+            if let loaded, loaded.sessionId == key.sessionId {
+                if loaded.summaries.isEmpty {
+                    InspectorEmptyState(
+                        title: "No file changes yet",
+                        message: "This thread has not edited any files."
+                    )
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            ForEach(loaded.summaries) { summary in
+                                ThisThreadFileRow(summary: summary)
+                            }
+                        }
+                        .padding(12)
+                    }
+                    .onAppear {
+                        AnalyticsService.shared.log(.diffViewOpened, parameters: [
+                            "surface": "this_thread",
+                            "file_count": loaded.summaries.count,
+                        ])
                     }
                 }
-                .padding(12)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .onAppear {
-                AnalyticsService.shared.log(.diffViewOpened, parameters: [
-                    "surface": "this_thread",
-                    "file_count": summaries.count,
-                ])
-            }
+        }
+        .task(id: key) {
+            let summaries = await appState.loadThreadDiffPreview(key)
+            guard !Task.isCancelled, loadID == key else { return }
+            loaded = (key.sessionId, summaries)
         }
     }
 }

@@ -357,6 +357,7 @@ struct MainView: View {
                         VStack(spacing: 8) {
                             AgentConfirmationBanner()
                             PermissionQueueBanner()
+                            ComputerUsePreviewBanner()
                             ThreadDiffBanner()
                             HookBannerHost(surface: .newProject, position: .aboveInputBox)
                         }

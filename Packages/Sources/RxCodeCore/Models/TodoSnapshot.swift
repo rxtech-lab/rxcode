@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Persisted snapshot of the latest todo-style progress for a chat session.
-/// One row per session id; updated from Claude `TodoWrite` or Codex plan events.
+/// One row per session id, updated by native progress events and the IDE todo tool.
 @Model
 public final class TodoSnapshot {
     @Attribute(.unique) public var sessionId: String
@@ -31,5 +31,9 @@ public final class TodoSnapshot {
 
     public var items: [TodoItem] {
         (try? JSONDecoder().decode([TodoItem].self, from: itemsData)) ?? []
+    }
+
+    public var list: TodoListSnapshot {
+        TodoListSnapshot(items: items, updatedAt: updatedAt)
     }
 }

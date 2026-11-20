@@ -9,6 +9,50 @@ import SwiftUI
 extension AppState {
     // MARK: - Project Management
 
+    /// Loads projects and saves any duplicate removal or effort migration.
+    func loadDeduplicatedProjects() async -> [Project] {
+        let loaded = await persistence.loadProjects()
+        var seenPaths = Set<String>()
+        var updated = loaded.filter { seenPaths.insert($0.path).inserted }
+        for index in updated.indices {
+            let project = updated[index]
+            guard let effort = project.lastEffort else { continue }
+            // The old value had no model of its own. Use the last recorded
+            // selection, or the workspace default if none was recorded.
+            let key = if let provider = project.lastAgentProvider, let model = project.lastModel {
+                AgentModel.key(for: model, provider: provider)
+            } else {
+                AgentModel.key(for: selectedModel, provider: selectedAgentProvider)
+            }
+            var efforts = project.effortsByModel ?? [:]
+            if efforts[key] == nil { efforts[key] = effort }
+            updated[index].effortsByModel = efforts
+            updated[index].lastEffort = nil
+        }
+        if updated != loaded {
+            do {
+                try await persistence.saveProjects(updated)
+            } catch {
+                logger.error("Failed to save updated projects: \(error.localizedDescription)")
+            }
+        }
+        return updated
+    }
+
+    func saveProjectChatPreferences() {
+        let previous = projectChatPreferencesSaveTask
+        previous?.cancel()
+        projectChatPreferencesSaveTask = Task { [weak self] in
+            await previous?.value
+            guard let self, !Task.isCancelled else { return }
+            do {
+                try await persistence.saveProjects(projects)
+            } catch {
+                logger.error("Failed to save project chat preferences: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Add a local project. Fires `onRepositoryAdded` unless `suppressHookEvent`
     /// is set (the clone path fires `onRepositoryCloned` instead, to avoid a
     /// double event). Returns the project (existing one if the path was already
@@ -206,7 +250,7 @@ extension AppState {
             if var state = sessionStates[session.id] {
                 if state.model == nil { state.model = session.model }
                 if state.agentProvider == nil { state.agentProvider = session.agentProvider }
-                if state.effort == nil { state.effort = session.effort }
+                state.effort = state.effort(fallingBackTo: session.effort)
                 if state.permissionMode == nil { state.permissionMode = session.permissionMode }
                 state.isLoadingFromDisk = true
                 sessionStates[session.id] = state
@@ -229,7 +273,7 @@ extension AppState {
         window.currentSessionId = session.id
         window.sessionAgentProvider = sessionStates[session.id]?.agentProvider ?? session.agentProvider
         window.sessionModel = sessionStates[session.id]?.model ?? session.model
-        window.sessionEffort = sessionStates[session.id]?.effort ?? session.effort
+        window.sessionEffort = sessionStates[session.id]?.effort(fallingBackTo: session.effort)
         window.sessionPermissionMode = sessionStates[session.id]?.permissionMode ?? session.permissionMode
         window.sessionPlanMode = sessionStates[session.id]?.planMode ?? false
         window.inputText = window.draftTexts[session.id] ?? ""

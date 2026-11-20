@@ -268,6 +268,10 @@ extension CodexAppServer {
             || statusLower == "failed"
             || statusLower == "declined"
         continuation.yield(.user(UserMessage(toolUseId: id, content: output, isError: isError)))
+        if !isError {
+            let windows = ComputerUseMonitorWindow.observed(in: item)
+            if !windows.isEmpty { continuation.yield(.computerUseWindows(windows)) }
+        }
     }
 
     /// Synthesize a Claude-shaped `ExitPlanMode` tool call so `PlanCardView` can render

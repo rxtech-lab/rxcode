@@ -87,7 +87,7 @@ extension AppState {
         let fullPrompt = buildPromptWithAttachments(prompt, attachments: resolvedAttachments)
 
         await sendPrompt(fullPrompt, displayText: prompt, attachments: resolvedAttachments,
-                         tempFilePaths: tempFilePaths, in: window)
+                         tempFilePaths: tempFilePaths, useProjectEffortForNewChat: true, in: window)
     }
 
     /// Slash commands handled natively. Returns true if handled.
@@ -114,21 +114,23 @@ extension AppState {
         case "effort":
             if parts.count > 1 {
                 let arg = String(parts[1]).trimmingCharacters(in: .whitespaces).lowercased()
-                // Validated against this thread's provider, so `/effort max`
-                // on a Codex thread resets to Auto rather than setting a
-                // level codex rejects.
-                //
-                // Awaited rather than read straight from the cache: this can
-                // run before any picker has warmed it, and an unloaded
-                // provider reports no levels — which would reject every level,
-                // including valid ones.
-                let provider = effectiveModelSelection(in: window).provider
-                await loadReasoningLevels(for: provider)
-                let levels = reasoningLevels(for: provider, model: effectiveModelSelection(in: window).model)
-                if arg == "auto" || levels.contains(where: { $0.id == arg }) {
-                    setSessionEffort(arg == "auto" ? nil : arg, in: window)
+                if arg == "auto" {
+                    setSessionEffort(nil, in: window)
                 } else {
-                    updateSessionEffort(nil, in: window)
+                    let selection = effectiveModelSelection(in: window)
+                    let projectId = window.selectedProject?.id
+                    let sessionId = window.currentSessionId
+                    // This command can run before the picker has loaded levels.
+                    await loadReasoningLevels(for: selection.provider)
+                    guard window.selectedProject?.id == projectId,
+                          window.currentSessionId == sessionId,
+                          effectiveModelSelection(in: window) == selection else { return true }
+                    let levels = reasoningLevels(for: selection.provider, model: selection.model)
+                    if levels.contains(where: { $0.id == arg }) {
+                        setSessionEffort(arg, in: window)
+                    } else {
+                        updateSessionEffort(nil, in: window)
+                    }
                 }
             } else {
                 window.showEffortPicker = true
@@ -154,7 +156,7 @@ extension AppState {
         if isInteractive {
             await sendInteractiveCommand(trimmed, in: window)
         } else {
-            await sendPrompt(trimmed, in: window)
+            await sendPrompt(trimmed, useProjectEffortForNewChat: true, in: window)
         }
     }
 
@@ -253,6 +255,7 @@ extension AppState {
         isStopHookReprompt: Bool = false,
         debugLogPrefix: String? = nil,
         includeIDEMCP: Bool = true,
+        useProjectEffortForNewChat: Bool = false,
         in window: WindowState
     ) async -> UUID? {
         let resumeKey = window.currentSessionId ?? window.newSessionKey
@@ -272,18 +275,31 @@ extension AppState {
         if let debugLogPrefix {
             streamDebugLogPrefixes[streamId] = debugLogPrefix
         }
-        let isNewSession = window.currentSessionId == nil
-        let isPending = window.currentSessionId.map { window.pendingPlaceholderIds.contains($0) } ?? false
+        let existingSessionId = window.currentSessionId
+        let isNewSession = existingSessionId == nil
+        let selection = effectiveModelSelection(in: window)
+        let existingState = existingSessionId.flatMap { sessionStates[$0] }
+        // Capture the model and effort together before preparing the turn.
+        let effectiveProvider = existingState?.agentProvider ?? selection.provider
+        let effectiveModel = existingState?.model ?? selection.model
+        let sessionEffort = if let state = existingState {
+            state.effort(fallingBackTo: window.sessionEffort)
+        } else if useProjectEffortForNewChat {
+            effectiveSessionEffort(in: window)
+        } else {
+            window.sessionEffort
+        }
+        let turnEffort = sessionEffort ?? (selectedEffort == "auto" ? nil : selectedEffort)
+        let isPending = existingSessionId.map { window.pendingPlaceholderIds.contains($0) } ?? false
         // Resolve the resume id per provider: a thread that ran under Claude and
         // is now switched to Codex must NOT hand Codex the Claude session id.
         // The switched provider resumes its own recorded native id, or starts a
         // fresh native session when it has never run on this thread.
         let cliSessionId: String?
-        if isNewSession || isPending {
-            cliSessionId = nil
+        if let existingSessionId, !isPending {
+            cliSessionId = resumeSessionId(for: effectiveProvider, threadId: existingSessionId)
         } else {
-            let resumeProvider = effectiveModelSelection(in: window).provider
-            cliSessionId = resumeSessionId(for: resumeProvider, threadId: window.currentSessionId!)
+            cliSessionId = nil
         }
         if let debugLogPrefix {
             logger.info("\(debugLogPrefix, privacy: .public) phase=sendPrompt stream=\(streamId) isNewSession=\(isNewSession, privacy: .public) isPending=\(isPending, privacy: .public) cliSession=\(cliSessionId ?? "<new>", privacy: .public)")
@@ -293,19 +309,16 @@ extension AppState {
             let tempId = "pending-\(streamId.uuidString)"
             window.currentSessionId = tempId
             window.insertPendingPlaceholder(tempId)
-            let snapSelection = effectiveModelSelection(in: window)
-            let snapProvider = snapSelection.provider
-            let snapModel = snapSelection.model
-            window.sessionAgentProvider = snapProvider
-            window.sessionModel = snapModel
-            let snapEffort = window.sessionEffort
+            window.sessionAgentProvider = effectiveProvider
+            window.sessionModel = effectiveModel
+            window.sessionEffort = sessionEffort
             let snapPermission = window.sessionPermissionMode
             let pendingWorktreePath = window.pendingWorktreePath
             let pendingWorktreeBranch = window.pendingWorktreeBranch
             updateState(tempId) { state in
-                state.agentProvider = snapProvider
-                state.model = snapModel
-                state.effort = snapEffort
+                state.agentProvider = effectiveProvider
+                state.model = effectiveModel
+                state.setEffort(sessionEffort)
                 state.permissionMode = snapPermission
                 state.worktreePath = pendingWorktreePath
                 state.worktreeBranch = pendingWorktreeBranch
@@ -372,16 +385,14 @@ extension AppState {
         // otherwise race the insertion at line ~1168 and bail with "no summary".
         if isNewSession {
             let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
-            let selection = effectiveModelSelection(in: window)
-            let provider = selection.provider
             let placeholder = ChatSession(
                 id: sessionKey,
                 projectId: project.id,
                 title: initialTitle,
                 messages: [],
-                agentProvider: provider,
-                model: selection.model,
-                origin: provider.defaultSessionOrigin,
+                agentProvider: effectiveProvider,
+                model: effectiveModel,
+                origin: effectiveProvider.defaultSessionOrigin,
                 worktreePath: sessionStates[sessionKey]?.worktreePath,
                 worktreeBranch: sessionStates[sessionKey]?.worktreeBranch
             )
@@ -429,11 +440,8 @@ extension AppState {
         // ExitPlanMode is always exempt from auto-approve (see PermissionServer.autoApproveReason),
         // so the plan card still surfaces.
         let hookSessionMode = basePermissionMode
-        let launchAgentProvider = sessionStates[sessionKey]?.agentProvider
-            ?? window.sessionAgentProvider
-            ?? selectedAgentProvider
         var hookSettingsPath: String?
-        if launchAgentProvider == .claudeCode, !cliPermissionMode.skipsHookPipeline {
+        if effectiveProvider == .claudeCode, !cliPermissionMode.skipsHookPipeline {
             do {
                 hookSettingsPath = try await permission.writeHookSettingsFile()
             } catch {
@@ -453,9 +461,6 @@ extension AppState {
         let effectiveCwd = sessionStates[sessionKey]?.worktreePath
             ?? allSessionSummaries.first(where: { $0.id == sessionKey })?.worktreePath
             ?? project.path
-        let selection = effectiveModelSelection(in: window)
-        let effectiveProvider = sessionStates[sessionKey]?.agentProvider ?? selection.provider
-        let effectiveModel = sessionStates[sessionKey]?.model ?? selection.model
         if let debugLogPrefix {
             logger.info("\(debugLogPrefix, privacy: .public) phase=sendPromptReady stream=\(streamId) sessionKey=\(sessionKey, privacy: .public) provider=\(effectiveProvider.rawValue, privacy: .public) model=\(effectiveModel, privacy: .public) cwd=\(effectiveCwd, privacy: .public)")
         }
@@ -483,7 +488,7 @@ extension AppState {
                 internalSessionKey: sessionKey,
                 agentProvider: effectiveProvider,
                 model: effectiveModel,
-                effort: window.sessionEffort ?? (self.selectedEffort == "auto" ? nil : self.selectedEffort),
+                effort: turnEffort,
                 hookSettingsPath: hookSettingsPath,
                 permissionMode: cliPermissionMode,
                 hookSessionMode: hookSessionMode,
@@ -554,6 +559,7 @@ extension AppState {
             state.activeToolInputBuffer = ""
             state.textDeltaBuffer = ""
             state.pendingToolResults.removeAll()
+            state.computerUseWindows.removeAll()
             state.lastStreamEventDate = nil
             state.liveBackgroundTaskIds.removeAll()
             state.unconsumedSteerCount = 0
@@ -782,6 +788,12 @@ extension AppState {
     func applySessionIdRedirect(from pendingKey: String, to realSessionId: String) {
         logger.info("[IDE_SEND_THREAD] session id redirect pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")
         sessionIdRedirect[pendingKey] = realSessionId
+        if let branches = ciBranchesBySessionId.removeValue(forKey: pendingKey) {
+            ciBranchesBySessionId[realSessionId] = branches
+        }
+        if let pullRequest = inferredPullRequestsBySessionId.removeValue(forKey: pendingKey) {
+            inferredPullRequestsBySessionId[realSessionId] = pullRequest
+        }
         Task { await CodingAnalyticsRecorder.shared.redirect(from: pendingKey, to: realSessionId) }
         if let waiter = sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
             logger.info("[IDE_SEND_THREAD] resuming session rename waiter pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")

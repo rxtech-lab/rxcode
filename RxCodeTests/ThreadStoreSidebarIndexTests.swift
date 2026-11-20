@@ -86,7 +86,7 @@ final class ThreadStoreSidebarIndexTests: XCTestCase {
         XCTAssertTrue(ThreadStore.fileEditPresence(in: store.context).isEmpty)
     }
 
-    func testLoadTodoProgressBySessionMirrorsPerSessionSnapshots() {
+    func testLoadTodoProgressBySessionMirrorsPerSessionSnapshots() throws {
         let store = makeStore()
         store.upsertTodoSnapshot(sessionId: "session-a", items: [
             todo(1, "done", .completed),
@@ -98,13 +98,15 @@ final class ThreadStoreSidebarIndexTests: XCTestCase {
         ])
 
         let progress = store.loadTodoProgressBySession()
+        let first = try XCTUnwrap(store.fetchTodoSnapshot(sessionId: "session-a"))
+        let second = try XCTUnwrap(store.fetchTodoSnapshot(sessionId: "session-b"))
 
-        XCTAssertEqual(progress["session-a"], ChatTodoProgress(done: 1, total: 3, inProgress: true))
-        XCTAssertEqual(progress["session-b"], ChatTodoProgress(done: 1, total: 1, inProgress: false))
+        XCTAssertEqual(progress["session-a"], ChatTodoProgress(done: 1, total: 3, inProgress: true, updatedAt: first.updatedAt))
+        XCTAssertEqual(progress["session-b"], ChatTodoProgress(done: 1, total: 1, inProgress: false, updatedAt: second.updatedAt))
         XCTAssertNil(progress["session-missing"])
     }
 
-    func testLoadTodoProgressBySessionReflectsLaterUpserts() {
+    func testLoadTodoProgressBySessionReflectsLaterUpserts() throws {
         let store = makeStore()
         store.upsertTodoSnapshot(sessionId: "session", items: [
             todo(1, "a", .pending),
@@ -115,33 +117,39 @@ final class ThreadStoreSidebarIndexTests: XCTestCase {
             todo(2, "b", .completed)
         ])
 
+        let updatedAt = try XCTUnwrap(store.fetchTodoSnapshot(sessionId: "session")?.updatedAt)
         XCTAssertEqual(
             store.loadTodoProgressBySession()["session"],
-            ChatTodoProgress(done: 2, total: 2, inProgress: false)
+            ChatTodoProgress(done: 2, total: 2, inProgress: false, updatedAt: updatedAt)
         )
     }
 
-    func testFileEditCountsBySessionMatchesPerSessionCounts() {
+    func testFileEditCountsBySessionMatchesPerSessionCounts() async {
         let store = makeStore()
         store.appendFileEdit(sessionId: "session-a", path: "/tmp/one.swift", hunks: [hunk()], containsWrite: true)
         store.appendFileEdit(sessionId: "session-a", path: "/tmp/two.swift", hunks: [hunk()], containsWrite: false)
         store.appendFileEdit(sessionId: "session-b", path: "/tmp/three.swift", hunks: [hunk()], containsWrite: false)
 
-        let counts = store.fileEditCountsBySession()
+        let snapshot = await ThreadStoreReader(container: store.container).loadMobileSessionData()
+        let counts = snapshot.fileEditCounts
 
         XCTAssertEqual(counts, ["session-a": 2, "session-b": 1])
         XCTAssertEqual(counts["session-a"], store.fileEditCount(sessionId: "session-a"))
     }
 
-    func testLoadTodoItemsBySessionSkipsEmptySnapshots() {
+    func testLoadTodoListsBySessionPreservesEmptyListsAndTimestamps() async throws {
         let store = makeStore()
         let items = [todo(1, "done", .completed), todo(2, "working", .inProgress)]
         store.upsertTodoSnapshot(sessionId: "session-a", items: items)
         store.upsertTodoSnapshot(sessionId: "session-empty", items: [])
 
-        let todos = store.loadTodoItemsBySession()
+        let snapshot = await ThreadStoreReader(container: store.container).loadMobileSessionData()
+        let todos = snapshot.todos
+        let populated = try XCTUnwrap(store.fetchTodoSnapshot(sessionId: "session-a"))
+        let empty = try XCTUnwrap(store.fetchTodoSnapshot(sessionId: "session-empty"))
 
-        XCTAssertEqual(todos["session-a"], items)
-        XCTAssertNil(todos["session-empty"])
+        XCTAssertEqual(todos["session-a"], TodoListSnapshot(items: items, updatedAt: populated.updatedAt))
+        XCTAssertEqual(todos["session-empty"], TodoListSnapshot(items: [], updatedAt: empty.updatedAt))
+        XCTAssertNil(todos["session-missing"])
     }
 }

@@ -6,6 +6,11 @@ import RxCodeCore
 import RxCodeSync
 import SwiftUI
 
+struct ThreadFileEditsLoadID: Hashable {
+    let sessionId: String
+    let revision: Int
+}
+
 extension AppState {
     // MARK: - Private State
 
@@ -19,23 +24,25 @@ extension AppState {
         streamState(in: window).messages
     }
 
-    /// File edits accumulated across this thread, sourced from SwiftData.
-    /// Returns an empty array for a not-yet-persisted (placeholder) session.
-    func threadFileEdits(in window: WindowState) -> [FileEditSummary] {
-        let key = window.currentSessionId ?? window.newSessionKey
-        return threadFileEdits(sessionId: key)
-    }
-
-    /// File edits for a specific thread, including a task run opened while
-    /// another chat is selected in the window.
-    func threadFileEdits(sessionId: String) -> [FileEditSummary] {
-        threadStore.fetchFileEdits(sessionId: resolveCurrentSessionId(sessionId))
-            .map { $0.toSummary() }
-            .filter { !PlanLogic.isPlanFilePath($0.path) }
+    func threadFileEditsLoadID(sessionId: String) -> ThreadFileEditsLoadID {
+        ThreadFileEditsLoadID(sessionId: resolveCurrentSessionId(sessionId), revision: threadFileEditsRevision)
     }
 
     func loadThreadDiffPreview(sessionId: String) async -> [FileEditSummary] {
-        await threadStoreReader.loadThreadDiffPreview(sessionId: resolveCurrentSessionId(sessionId))
+        await loadThreadDiffPreview(threadFileEditsLoadID(sessionId: sessionId))
+    }
+
+    func loadThreadDiffPreview(_ loadID: ThreadFileEditsLoadID) async -> [FileEditSummary] {
+        if let inFlight = threadDiffLoads[loadID] {
+            return await inFlight.value
+        }
+        // The banner and inspector can request the same snapshot concurrently.
+        let read = Task { [threadStoreReader] in
+            await threadStoreReader.loadThreadDiffPreview(sessionId: loadID.sessionId)
+        }
+        threadDiffLoads[loadID] = read
+        defer { threadDiffLoads.removeValue(forKey: loadID) }
+        return await read.value
     }
 
     func isStreaming(in window: WindowState) -> Bool {
@@ -123,19 +130,15 @@ extension AppState {
     func todoProgress(forSessionId id: String) -> ChatTodoProgress? {
         // Live todos are extracted off the hot path into `sessionActivity`
         // instead of rescanning the whole transcript per row per render.
-        if let todos = liveTodos(forSessionId: id) {
-            return ChatTodoProgress(todos: todos)
-        }
-
         // Read the persisted fallback from the in-memory index rather than
         // fetching per call: the sidebar asks this for every visible thread on
         // every view-graph update, where a SwiftData fetch would land on the
         // main thread at display-link rate.
-        guard let snapshot = todoProgressBySession[id], snapshot.total > 0 else {
-            return nil
+        let recorded = todoProgressBySession[id]
+        if let live = liveTodos(forSessionId: id), live.updatedAt > (recorded?.updatedAt ?? .distantPast) {
+            return live.items.isEmpty ? nil : ChatTodoProgress(snapshot: live)
         }
-
-        return snapshot
+        return recorded.flatMap { $0.total > 0 ? $0 : nil }
     }
 
     /// Reload the todo-snapshot index from SwiftData. Driven by
@@ -359,17 +362,6 @@ extension AppState {
         autoArchiveExpiredSessionsIfNeeded()
         await autoDeleteExpiredSessionsIfNeeded()
         purgeStaleBranchBriefingsIfNeeded()
-    }
-
-    /// Projects as persisted, minus duplicate paths (rewriting the file when a
-    /// duplicate is dropped).
-    private func loadDeduplicatedProjects() async -> [Project] {
-        let loaded = await persistence.loadProjects()
-        var seenPaths = Set<String>()
-        let deduplicated = loaded.filter { seenPaths.insert($0.path).inserted }
-        guard deduplicated.count != loaded.count else { return loaded }
-        try? await persistence.saveProjects(deduplicated)
-        return deduplicated
     }
 
     func refreshAgentInstallations() async {
@@ -739,6 +731,10 @@ extension AppState {
                     self.logger.info("[Bridge.observe] push sid=\(window.currentSessionId ?? "<nil>", privacy: .public) messages \(bridge.messages.count)→\(state.messages.count) loading \(bridge.isLoadingFromDisk)→\(state.isLoadingFromDisk) streaming=\(state.isStreaming)")
                 }
                 bridge.messages = state.messages
+                let workingDirectory = (state.isStreaming ? state.activeStreamCwd : nil) ?? effectiveCwd(in: window)
+                if bridge.workingDirectory != workingDirectory {
+                    bridge.workingDirectory = workingDirectory
+                }
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
                 bridge.isLoadingFromDisk = state.isLoadingFromDisk

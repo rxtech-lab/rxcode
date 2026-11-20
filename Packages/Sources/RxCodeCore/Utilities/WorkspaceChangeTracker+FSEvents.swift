@@ -44,18 +44,6 @@ extension WorkspaceChangeTracker {
         return true
     }
 
-    func gitIgnoredPaths(in paths: Set<String>, at gitRoot: String) async -> Set<String>? {
-        guard !paths.isEmpty else { return [] }
-
-        let payload = Data((paths.joined(separator: "\0") + "\0").utf8)
-        guard let output = await GitHelper.execute(["check-ignore", "-z", "--stdin"], at: gitRoot, input: payload),
-              output.status == 0 || output.status == 1 else {
-            return nil
-        }
-        let matched = String(decoding: output.stdout, as: UTF8.self).split(separator: "\0").map(String.init)
-        return Set(matched)
-    }
-
     func readDiskFileState(at canonicalPath: String) -> DiskFileState {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: canonicalPath, isDirectory: &isDir) else {

@@ -233,6 +233,12 @@ public final class WindowState {
     /// the banner's tap action, cleared by the modal's close button / Esc / decision.
     public var presentedPermissionId: String?
 
+    // MARK: - Computer Use Preview
+
+    /// When true, the floating computer-use preview is collapsed into the banner
+    /// above the chat input. Cleared when there is nothing left to preview.
+    public var isComputerUsePreviewMinimized = false
+
     // MARK: - AskUserQuestion Response Handler
 
     /// Invoked by the question sheet when the user submits answers for an
@@ -383,8 +389,8 @@ public final class WindowState {
     /// Per-session agent provider override. Kept with `sessionModel` so new
     /// sessions and resumes route to the correct runtime.
     public var sessionAgentProvider: AgentProvider?
-    /// Per-session effort override. When set, passed as --effort to the CLI.
-    /// New chats inherit the project's last choice.
+    /// Effort pinned to this session. Desktop drafts look up the project's
+    /// saved level for their current model until the first turn starts.
     public var sessionEffort: String?
     /// Per-session permission mode override. When set, overrides the global permissionMode.
     /// Cleared when a new chat is started or a different session is selected.

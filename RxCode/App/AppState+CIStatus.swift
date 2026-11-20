@@ -2,10 +2,24 @@ import Foundation
 import RxCodeCore
 import os
 
-struct ThreadPullRequest: Equatable {
+nonisolated struct ThreadPullRequest: Equatable, Sendable {
     let url: URL
     let number: Int?
     let state: PRState?
+
+    init?(repository: String, number: Int?, state: PRState?, reportedURL: String?) {
+        if let reportedURL = reportedURL.flatMap(URL.init(string:)),
+           reportedURL.scheme == "https", reportedURL.host != nil {
+            url = reportedURL
+        } else if let number, number > 0,
+                  let fallback = URL(string: "https://github.com/\(repository)/pull/\(number)") {
+            url = fallback
+        } else {
+            return nil
+        }
+        self.number = number
+        self.state = state
+    }
 }
 
 extension AppState {
@@ -26,6 +40,7 @@ extension AppState {
         ciStatusPollerTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refreshCIStatusOnce()
+                await self?.refreshInferredThreadPullRequests()
                 let interval = AppState.ciStatusPollInterval
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             }
@@ -61,25 +76,41 @@ extension AppState {
     }
 
     func pullRequest(forThread summary: ChatSession.Summary, in project: Project) -> ThreadPullRequest? {
-        guard isSignedIn, summary.projectId == project.id,
-              let branch = summary.worktreeBranch ?? ciBranchBySessionId[summary.id]
-                ?? summary.parentThreadId.flatMap({ ciBranchBySessionId[$0] }),
-              let slug = project.gitHubRepo else { return nil }
-        let parts = slug.split(separator: "/", maxSplits: 1).map(String.init)
-        guard parts.count == 2,
-              let status = ciStatusByBranchKey[Self.ciKey(owner: parts[0], repo: parts[1], branch: branch)],
-              status.found else { return nil }
+        guard isSignedIn, summary.projectId == project.id, let repository = project.gitHubRepo else { return nil }
+        return pullRequestForRecordedBranch(summary, repository: repository) ?? inferredPullRequestsBySessionId[summary.id]
+    }
 
-        let reportedURL = status.prUrl.flatMap(URL.init(string:))
-        let url: URL? = if let reportedURL, reportedURL.scheme == "https", reportedURL.host != nil {
-            reportedURL
-        } else if let number = status.prNumber, number > 0 {
-            URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(number)")
-        } else {
-            nil
+    private func pullRequestForRecordedBranch(
+        _ summary: ChatSession.Summary,
+        repository: String
+    ) -> ThreadPullRequest? {
+        let branches = summary.worktreeBranch.map { [$0] }
+            ?? ciBranchesBySessionId[summary.id]
+            ?? summary.parentThreadId.flatMap { ciBranchesBySessionId[$0] }
+            ?? []
+        for branch in branches {
+            let key = "\(repository.lowercased())#\(branch)"
+            guard let status = ciStatusByBranchKey[key], status.found,
+                  let pullRequest = ThreadPullRequest(
+                    repository: repository,
+                    number: status.prNumber,
+                    state: status.pullRequestState,
+                    reportedURL: status.prUrl
+                  ) else { continue }
+            return pullRequest
         }
-        guard let url else { return nil }
-        return ThreadPullRequest(url: url, number: status.prNumber, state: status.pullRequestState)
+        return nil
+    }
+
+    func recordThreadCheckout(sessionId: String, projectId: UUID, cwd: String, streamId: UUID) async {
+        guard projectId != Project.globalChatID,
+              sessionStates[sessionId]?.worktreeBranch == nil,
+              let branch = await GitHelper.currentBranch(at: cwd),
+              !Task.isCancelled, sessionStates[sessionId]?.activeStreamId == streamId else { return }
+        threadStore.setCheckoutBranch(sessionId: sessionId, branch: branch)
+        if ciBranchesBySessionId[sessionId]?.first != branch {
+            ciBranchesBySessionId[sessionId] = [branch]
+        }
     }
 
     // MARK: - Refresh
@@ -118,18 +149,24 @@ extension AppState {
 
         // A thread can track a branch before it gets a briefing, and the PR
         // can outlive both a checkout and a deleted worktree or remote branch.
-        let summarizedBranches = repoByProject.isEmpty ? [:] : await threadStoreReader.loadSummarizedThreadBranches()
-        var threadBranches: [String: String] = [:]
+        let previousBranches = ciBranchesBySessionId
+        let storedBranches = repoByProject.isEmpty ? [:] : await threadStoreReader.loadThreadBranches()
+        var threadBranches: [String: [String]] = [:]
         for summary in allSessionSummaries {
-            guard let slug = repoByProject[summary.projectId],
-                  let branch = summary.worktreeBranch ?? summarizedBranches[summary.id],
-                  !branch.isEmpty, branch != "unknown" else { continue }
-            threadBranches[summary.id] = branch
-            let key = Self.ciKey(owner: slug.owner, repo: slug.repo, branch: branch)
-            queriesByKey[key] = CIStatusQuery(owner: slug.owner, repo: slug.repo, branch: branch)
+            guard let slug = repoByProject[summary.projectId] else { continue }
+            // A turn can record its checkout while the background reader is running.
+            let liveBranches = ciBranchesBySessionId[summary.id]
+            let branches = summary.worktreeBranch.map { [$0] }
+                ?? (liveBranches == previousBranches[summary.id] ? storedBranches[summary.id] : liveBranches)
+            guard let branches else { continue }
+            threadBranches[summary.id] = branches
+            for branch in branches {
+                let key = Self.ciKey(owner: slug.owner, repo: slug.repo, branch: branch)
+                queriesByKey[key] = CIStatusQuery(owner: slug.owner, repo: slug.repo, branch: branch)
+            }
         }
-        if ciBranchBySessionId != threadBranches {
-            ciBranchBySessionId = threadBranches
+        if ciBranchesBySessionId != threadBranches {
+            ciBranchesBySessionId = threadBranches
         }
 
         guard !queriesByKey.isEmpty else {
@@ -172,6 +209,38 @@ extension AppState {
             ciStatusByProject = next
             ciStatusByBranchKey = byKey
             ciStatusRevision &+= 1
+        }
+    }
+
+    /// Recover links for threads whose edits were picked up by a PR on another branch.
+    private func refreshInferredThreadPullRequests() async {
+        guard isSignedIn, !Task.isCancelled else { return }
+        let projects = projects
+        let repositories = Dictionary(uniqueKeysWithValues: projects.compactMap { project in
+            project.gitHubRepo.map { (project.id, $0) }
+        })
+        let unmatched = allSessionSummaries.filter {
+            guard let repository = repositories[$0.projectId], threadHasDiffPreview(sessionId: $0.id) else { return false }
+            return pullRequestForRecordedBranch($0, repository: repository) == nil
+        }
+        guard !unmatched.isEmpty else {
+            if !inferredPullRequestsBySessionId.isEmpty { inferredPullRequestsBySessionId = [:] }
+            return
+        }
+        do {
+            let revisions = try await autopilot.recentPullRequestRevisions()
+            let matches = await threadPullRequestMatcher.match(
+                revisions,
+                to: unmatched,
+                in: projects,
+                reader: threadStoreReader
+            )
+            guard !Task.isCancelled, isSignedIn, matches != inferredPullRequestsBySessionId else { return }
+            inferredPullRequestsBySessionId = matches
+        } catch {
+            if !Task.isCancelled {
+                logger.error("Thread pull request lookup failed: \(error.localizedDescription)")
+            }
         }
     }
 

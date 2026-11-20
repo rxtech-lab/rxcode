@@ -49,7 +49,7 @@ extension ThreadStore {
     }
 
     /// Edited-file count for every session, in a single query.
-    func fileEditCountsBySession() -> [String: Int] {
+    static nonisolated func fileEditCountsBySession(in context: ModelContext) -> [String: Int] {
         var descriptor = FetchDescriptor<ThreadFileEdit>()
         descriptor.propertiesToFetch = [\ThreadFileEdit.sessionId]
         let rows = (try? context.fetch(descriptor)) ?? []

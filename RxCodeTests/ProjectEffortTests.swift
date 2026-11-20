@@ -7,72 +7,221 @@ final class ProjectEffortTests: XCTestCase {
     private var persistence: MockAppStatePersistence!
     private var appState: AppState!
     private var window: WindowState!
-    private var selectedProjectId: String?
+    private var workspaceDefaults: WorkspaceDefaults!
 
     override func setUp() async throws {
-        selectedProjectId = UserDefaults.standard.string(forKey: "selectedProjectId")
+        workspaceDefaults = WorkspaceDefaults(workspaceID: UUID().uuidString)
         persistence = MockAppStatePersistence()
-        appState = AppState(persistence: persistence, startBackgroundServices: false)
+        appState = makeAppState()
+        appState.selectedAgentProvider = .codex
+        appState.selectedModel = "gpt-5.4"
+        appState.codexLevelsByModel = [
+            "gpt-5.4": .levels(["low", "medium", "high", "xhigh"]),
+            "gpt-5.4-mini": .levels(["low", "medium", "high"]),
+        ]
         window = WindowState()
     }
 
     override func tearDown() async throws {
-        UserDefaults.standard.set(selectedProjectId, forKey: "selectedProjectId")
+        await appState.projectChatPreferencesSaveTask?.value
+        for key in UserDefaults.standard.dictionaryRepresentation().keys
+            where key.hasPrefix(workspaceDefaults.key("")) {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
         window = nil
         appState = nil
         persistence = nil
     }
 
-    func testEffortSelectionIsRememberedPerProject() async throws {
+    func testEffortSelectionIsRememberedPerProjectAndModel() async throws {
         let first = makeProject("First")
         let second = makeProject("Second")
         appState.projects = [first, second]
 
         appState.selectProject(first, in: window)
         appState.setSessionEffort("high", in: window)
+        appState.setSessionModel("gpt-5.4-mini", provider: .codex, in: window)
+        XCTAssertNil(effort, "A model starts with Default even if it supports the previous model's level")
+        appState.setSessionEffort("low", in: window)
+        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
+        XCTAssertEqual(effort, "high")
+
         appState.selectProject(second, in: window)
-        XCTAssertNil(window.sessionEffort)
+        XCTAssertNil(effort)
         appState.setSessionEffort("medium", in: window)
         appState.selectProject(first, in: window)
-        XCTAssertEqual(window.sessionEffort, "high")
+        XCTAssertEqual(effort, "high")
+        appState.setSessionModel("gpt-5.4-mini", provider: .codex, in: window)
+        appState.startNewChat(in: window)
+        XCTAssertEqual(effort, "low")
 
-        try await Task.sleep(for: .milliseconds(50))
+        await appState.projectChatPreferencesSaveTask?.value
         let saved = await persistence.loadProjects()
-        XCTAssertEqual(saved.map(\.lastEffort), ["high", "medium"])
         let data = try JSONEncoder().encode(saved)
-        let reopened = AppState(persistence: persistence, startBackgroundServices: false)
+        let reopened = makeAppState()
         reopened.projects = try JSONDecoder().decode([Project].self, from: data)
         let reopenedWindow = WindowState()
+        reopened.selectProject(try XCTUnwrap(reopened.projects.first), in: reopenedWindow)
+        XCTAssertEqual(reopened.effectiveSessionEffort(in: reopenedWindow), "low")
+        reopened.setSessionModel("gpt-5.4", provider: .codex, in: reopenedWindow)
+        XCTAssertEqual(reopened.effectiveSessionEffort(in: reopenedWindow), "high")
         reopened.selectProject(try XCTUnwrap(reopened.projects.last), in: reopenedWindow)
-        XCTAssertEqual(reopenedWindow.sessionEffort, "medium")
-
-        appState.setSessionEffort(nil, in: window)
-        appState.startNewChat(in: window)
-        XCTAssertNil(window.sessionEffort)
-        XCTAssertEqual(appState.projects.map(\.lastEffort), [nil, "medium"])
+        XCTAssertEqual(reopened.effectiveSessionEffort(in: reopenedWindow), "medium")
+        await reopened.projectChatPreferencesSaveTask?.value
     }
 
-    func testIncompatibleModelDoesNotEraseRememberedProjectEffort() {
+    func testDefaultClearsOnlyTheCurrentModelsSelection() async {
         let project = makeProject("Project")
         appState.projects = [project]
-        window.selectedProject = project
-        appState.codexLevelsByModel = ["gpt-5.4": .levels(["high", "xhigh"]), "gpt-5.4-mini": .levels(["high"])]
-
-        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
-        appState.setSessionEffort("xhigh", in: window)
+        appState.selectProject(project, in: window)
+        appState.setSessionEffort("high", in: window)
         appState.setSessionModel("gpt-5.4-mini", provider: .codex, in: window)
-        appState.reconcileSessionEffort(in: window, provider: .codex)
-        XCTAssertNil(window.sessionEffort)
-        XCTAssertEqual(appState.projects.first?.lastEffort, "xhigh")
+        appState.setSessionEffort("low", in: window)
 
+        let handled = await appState.handleNativeSlashCommand("/effort auto", in: window)
+        XCTAssertTrue(handled)
+        XCTAssertNil(effort)
         appState.startNewChat(in: window)
-        XCTAssertNil(window.sessionEffort)
+        XCTAssertNil(effort)
         appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
+        XCTAssertEqual(effort, "high")
+    }
+
+    func testUnavailableLevelIsRetainedForItsModel() {
+        let project = makeProject("Project")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        appState.setSessionEffort("xhigh", in: window)
+
+        appState.codexLevelsByModel["gpt-5.4"] = .levels(["high"])
+        XCTAssertNil(effort)
+        appState.codexLevelsByModel["gpt-5.4"] = .levels(["high", "xhigh"])
+        XCTAssertEqual(effort, "xhigh")
+    }
+
+    func testIdenticalModelIDsHaveSeparatePreferencesAcrossProviders() {
+        let project = makeProject("Project")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        appState.setSessionEffort("high", in: window)
+
+        appState.setSessionModel("gpt-5.4", provider: .claudeCode, in: window)
+        XCTAssertNil(effort)
+        appState.setSessionEffort("low", in: window)
+        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
+        XCTAssertEqual(effort, "high")
+        appState.setSessionModel("gpt-5.4", provider: .claudeCode, in: window)
+        XCTAssertEqual(effort, "low")
+    }
+
+    func testModelSwitchInExistingChatPersistsDefaultInsteadOfThePreviousLevel() async throws {
+        let project = makeProject("Project")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        appState.setSessionEffort("high", in: window)
+        let messages = [ChatMessage(role: .user, content: "Previous prompt")]
+        let session = ChatSession(
+            id: UUID().uuidString, projectId: project.id, title: "Existing chat", messages: messages,
+            agentProvider: .codex, model: "gpt-5.4", effort: "medium", origin: .codexAppServer
+        )
+        appState.allSessionSummaries = [session.summary]
+        appState.switchToSession(session, messages: messages, in: window)
+        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
+        XCTAssertEqual(effort, "medium")
+
+        appState.setSessionModel("gpt-5.4-mini", provider: .codex, in: window)
+        appState.switchToSession(session, messages: messages, in: window)
+        XCTAssertNil(effort)
+        await appState.saveCurrentSession(in: window)
+        let savedSessions = await persistence.savedSessions()
+        let saved = try XCTUnwrap(savedSessions.last?.session)
+        XCTAssertEqual(saved.model, "gpt-5.4-mini")
+        XCTAssertNil(saved.effort)
+        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
+        XCTAssertEqual(effort, "high")
+    }
+
+    func testLegacyProjectEffortIsMigratedToOneModel() async throws {
+        let recorded = Project(name: "Recorded", path: "/tmp/recorded",
+                               lastAgentProvider: .codex, lastModel: "gpt-5.4-mini", lastEffort: "low")
+        let implicit = Project(name: "Implicit", path: "/tmp/implicit", lastEffort: "high")
+        let legacy = try JSONDecoder().decode([Project].self, from: JSONEncoder().encode([recorded, implicit]))
+        try await persistence.saveProjects(legacy)
+        appState.projects = await appState.loadDeduplicatedProjects()
+        let migrated = await persistence.loadProjects()
+        XCTAssertEqual(migrated.count, 2)
+        XCTAssertTrue(migrated.allSatisfy { $0.lastEffort == nil })
+
+        appState.selectProject(recorded, in: window)
+        XCTAssertEqual(effort, "low")
+        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
+        XCTAssertNil(effort)
+        appState.selectProject(implicit, in: window)
+        XCTAssertEqual(effort, "high")
+        appState.selectedModel = "gpt-5.4-mini"
+        XCTAssertNil(effort)
+        appState.selectedModel = "gpt-5.4"
+        XCTAssertEqual(effort, "high")
+    }
+
+    func testComposerSendsRememberedLevelOrSettingsDefaultForItsModel() async throws {
+        let project = makeProject("Project")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        appState.selectedEffort = "medium"
+        appState.memoryEnabled = false
+        let backend = MockAgentBackend(provider: .codex)
+        appState.agentBackendOverrides[.codex] = backend
+
+        let handled = await appState.handleNativeSlashCommand("/effort high", in: window)
+        XCTAssertTrue(handled)
+        try await sendMessage("Use remembered effort")
         appState.startNewChat(in: window)
-        XCTAssertEqual(window.sessionEffort, "xhigh")
+        appState.setSessionModel("gpt-5.4-mini", provider: .codex, in: window)
+        try await sendMessage("Use Settings effort")
+
+        let requests = await backend.receivedRequests
+        XCTAssertEqual(requests.map(\.model), ["gpt-5.4", "gpt-5.4-mini"])
+        XCTAssertEqual(requests.map(\.effort), ["high", "medium"])
+    }
+
+    func testGlobalChatKeepsItsOwnModelPreferencesAcrossLaunches() {
+        let project = makeProject("Project")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        appState.setSessionEffort("high", in: window)
+        appState.openGlobalChat(in: window)
+        XCTAssertNil(effort)
+        appState.setSessionEffort("low", in: window)
+
+        let reopened = makeAppState()
+        let reopenedWindow = WindowState()
+        reopened.openGlobalChat(in: reopenedWindow)
+        XCTAssertEqual(reopened.effectiveSessionEffort(in: reopenedWindow), "low")
+        appState.selectProject(project, in: window)
+        XCTAssertEqual(effort, "high")
+    }
+
+    private var effort: String? { appState.effectiveSessionEffort(in: window) }
+
+    private func makeAppState() -> AppState {
+        let state = AppState(persistence: persistence, startBackgroundServices: false)
+        state.workspaceDefaults = workspaceDefaults
+        state.loadWorkspaceSettings()
+        return state
     }
 
     private func makeProject(_ name: String) -> Project {
         Project(name: name, path: "/tmp/\(name.lowercased())")
+    }
+
+    private func sendMessage(_ text: String) async throws {
+        window.inputText = text
+        await appState.send(in: window)
+        let sessionId = try XCTUnwrap(window.currentSessionId)
+        let streamId = try XCTUnwrap(appState.stateForSession(sessionId).activeStreamId)
+        let completion = await appState.awaitStreamCompletion(streamId: streamId, timeout: 10, acceptsPartial: false)
+        XCTAssertNotNil(completion)
+        XCTAssertNil(completion?.error)
     }
 }

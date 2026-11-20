@@ -760,7 +760,7 @@ extension AppState {
         updateState(summary.id) { state in
             if state.agentProvider == nil { state.agentProvider = summary.agentProvider }
             if state.model == nil { state.model = summary.model }
-            if state.effort == nil { state.effort = summary.effort }
+            state.effort = state.effort(fallingBackTo: summary.effort)
             if state.permissionMode == nil { state.permissionMode = summary.permissionMode }
             if state.worktreePath == nil { state.worktreePath = summary.worktreePath }
             if state.worktreeBranch == nil { state.worktreeBranch = summary.worktreeBranch }

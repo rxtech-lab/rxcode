@@ -31,6 +31,8 @@ public final class ChatThread {
     public var permissionModeRaw: String?
     public var worktreePath: String?
     public var worktreeBranch: String?
+    /// Branch of the checkout used for the latest turn in a regular project chat.
+    public var checkoutBranch: String? = nil
 
     public var isArchived: Bool = false
     public var archivedAt: Date?

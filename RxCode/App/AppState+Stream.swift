@@ -489,6 +489,7 @@ extension AppState {
             state.activeToolInputBuffer = ""
             state.textDeltaBuffer = ""
             state.pendingToolResults.removeAll()
+            state.computerUseWindows.removeAll()
             state.lastStreamEventDate = nil
             state.liveBackgroundTaskIds.removeAll()
             state.unconsumedSteerCount = 0

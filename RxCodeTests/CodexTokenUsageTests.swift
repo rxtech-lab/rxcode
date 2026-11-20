@@ -75,6 +75,101 @@ final class CodexTokenUsageTests: XCTestCase {
         XCTAssertNil(sanitized["aggregatedOutput"])
     }
 
+    func testBundledComputerUseEmitsWindowsFromAccessibilityState() async {
+        // Real Codex output puts app instructions before the header.
+        let item = computerUseItem(surface: [
+            "kind": .string("computerUse"),
+            "app": .object(["kind": .string("appId"), "appId": .string("com.google.Chrome")]),
+        ], content: [
+            .object(["type": .string("text"), "text": .string("<app_specific_instructions>\n## Browser Computer Use\n</app_specific_instructions>\nWindow: \"Who's using Chrome?\", App: Google Chrome.\n0 standard window")]),
+        ])
+        var unrelated = item
+        unrelated.removeValue(forKey: "pluginId")
+        var failed = item
+        failed["status"] = .string("failed")
+
+        let (events, continuation) = AsyncStream<StreamEvent>.makeStream()
+        let server = CodexAppServer()
+        await server.emitToolCompletion(item: unrelated, continuation: continuation)
+        await server.emitToolCompletion(item: failed, continuation: continuation)
+        await server.emitToolCompletion(item: item, continuation: continuation)
+        continuation.finish()
+
+        var windows: [ComputerUseMonitorWindow] = []
+        for await event in events {
+            if case .computerUseWindows(let observed) = event { windows += observed }
+        }
+        XCTAssertEqual(windows.map(\.id), [.native(appID: "com.google.Chrome")])
+        XCTAssertEqual(windows.first?.title, "Who's using Chrome?")
+        XCTAssertEqual(windows.first?.appName, "Google Chrome")
+        XCTAssertEqual(windows.first?.nativeTarget, ComputerUseNativeWindowTarget(appID: "com.google.Chrome", windowTitle: "Who's using Chrome?"))
+    }
+
+    func testComputerUseDiffAndNestedResultsKeepTheKnownAppName() throws {
+        let surface: [String: JSONValue] = [
+            "kind": .string("computerUse"),
+            "app": .object(["kind": .string("appId"), "appId": .string("com.apple.dt.Xcode")]),
+        ]
+        let full = try XCTUnwrap(ComputerUseMonitorWindow.observed(in: computerUseItem(surface: surface, content: [
+            .object(["type": .string("text"), "text": .string("Window: \"RxCode\", App: Xcode.\n0 standard window")]),
+        ])).first)
+        let diff = try XCTUnwrap(ComputerUseMonitorWindow.observed(in: computerUseItem(surface: surface, content: [
+            .object(["type": .string("text"), "text": .string("The following is a diff from the previous accessibility tree for Window: \"RxCode — Build\" with ~ and + representing changed and added elements, respectively.")]),
+        ])).first)
+        let nestedJSON = #"{"content":[{"type":"text","text":"There has been no change in the accessibility tree for Window: \"RxCode — Build\"."}]}"#
+        let nested = try XCTUnwrap(ComputerUseMonitorWindow.observed(in: computerUseItem(surface: surface, content: [
+            .object(["type": .string("text"), "text": .string(nestedJSON)]),
+        ])).first)
+        let headerless = try XCTUnwrap(ComputerUseMonitorWindow.observed(in: computerUseItem(surface: surface, content: [
+            .object(["type": .string("text"), "text": .string("clicked")]),
+        ])).first)
+
+        XCTAssertEqual(diff.windowTitle, "RxCode — Build")
+        XCTAssertNil(diff.appName)
+        XCTAssertEqual(nested.windowTitle, "RxCode — Build")
+        XCTAssertNil(headerless.windowTitle)
+
+        let merged = full.updated(with: diff).updated(with: nested).updated(with: headerless)
+        XCTAssertEqual(merged.id, .native(appID: "com.apple.dt.Xcode"))
+        XCTAssertEqual(merged.title, "RxCode — Build")
+        XCTAssertEqual(merged.appName, "Xcode")
+        XCTAssertEqual(merged.windowTitle, "RxCode — Build")
+    }
+
+    func testComputerUseBrowserPreviewReadsTheInlineScreenshot() throws {
+        let pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+        let item = computerUseItem(surface: [
+            "kind": .string("browserUse"),
+            "browserId": .string("browser-1"),
+            "screenshot": .object([
+                "tabId": .string("tab-2"),
+                "pageUrl": .string("https://example.com/page"),
+                "url": .string("data:image/png;base64,\(pixel)"),
+            ]),
+        ])
+
+        let window = try XCTUnwrap(ComputerUseMonitorWindow.observed(in: item).first)
+        XCTAssertEqual(window.id, .browser(browserID: "browser-1", tabID: "tab-2"))
+        XCTAssertEqual(window.title, "example.com")
+        XCTAssertEqual(window.preview?.width, 1)
+        XCTAssertNil(window.nativeTarget)
+    }
+
+    private func computerUseItem(surface: [String: JSONValue], content: [JSONValue] = []) -> [String: JSONValue] {
+        [
+            "id": .string("tool-1"),
+            "type": .string("mcpToolCall"),
+            "server": .string("cua_repl"),
+            "tool": .string("js"),
+            "pluginId": .string("unified-computer-use@openai-bundled"),
+            "status": .string("completed"),
+            "result": .object([
+                "_meta": .object(["codex/toolSurface": .object(surface)]),
+                "content": .array(content),
+            ]),
+        ]
+    }
+
     @MainActor
     func testCodexOverlappingScriptExecutionsAcrossSplitMessagesRecordFileChanges() async throws {
         let repoURL = FileManager.default.temporaryDirectory

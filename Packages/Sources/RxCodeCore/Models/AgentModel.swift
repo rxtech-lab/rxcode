@@ -50,7 +50,11 @@ public struct AgentModel: Identifiable, Codable, Sendable, Hashable {
     public let displayName: String
     public let description: String
 
-    public var key: String { "\(provider.rawValue):\(id)" }
+    public var key: String { Self.key(for: id, provider: provider) }
+
+    public static func key(for id: String, provider: AgentProvider) -> String {
+        "\(provider.rawValue):\(id)"
+    }
 
     public init(provider: AgentProvider, id: String, displayName: String, description: String = "") {
         self.provider = provider

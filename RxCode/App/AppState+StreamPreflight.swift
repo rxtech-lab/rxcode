@@ -29,6 +29,16 @@ extension AppState {
         var ideBridgeCommand: MCPBridgeCommand?
     }
 
+    private static let todoListPromptContext = """
+    # Task progress
+
+    For large tasks with several meaningful steps, use the RxCode IDE tool `ide__set_todos` to show progress \
+    when the tool is available. Create a short list before starting the main work. Send the full `todos` array \
+    with `content` and `status` for each step. Use `pending`, `in_progress`, and `completed` to reflect actual \
+    progress. Update the list when a step changes status or the plan changes, and leave the final status visible \
+    when you finish. Skip the list for simple tasks.
+    """
+
     /// Runs the expensive, independent pre-spawn work (memory lookup,
     /// IDE-MCP port allocation, skill-context resolution,
     /// session-start hooks) concurrently, then resolves the per-backend
@@ -155,6 +165,7 @@ extension AppState {
         logPreflight("projectBriefing", detail: "contextChars=\(briefingContext.count)")
         let skillContext = bridge != nil ? await skillContextAsync : ""
         logPreflight("skillContext", detail: "chars=\(skillContext.count)")
+        let todoContext = bridge != nil && permissionMode != .plan ? Self.todoListPromptContext : ""
 
         // Session-start hooks fire once, only for a brand-new thread (no resumed
         // CLI session). Their stdout is injected into this turn's agent context
@@ -172,6 +183,9 @@ extension AppState {
             logPreflight("hooksStart", detail: "contextChars=\(hookStartContext.count)")
         }
 
+        let codexAndACPContext = [
+            todoContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
+        ]
         switch agentProvider {
         case .claudeCode:
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
@@ -197,14 +211,14 @@ extension AppState {
             let codexSkillOverrides = await codexSkillOverridesAsync
             logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
             mcpCodexOverrides += codexSkillOverrides
-            resolvedPrompt = Self.promptWithBackgroundContext(
-                [skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext],
-                prompt: resolvedPrompt
-            )
+            resolvedPrompt = Self.promptWithBackgroundContext(codexAndACPContext, prompt: resolvedPrompt)
             resolvedSendMode = registerMode
         case .localAgent:
             // The harness renders one system prompt per turn, so background
             // context goes there rather than into the user's message.
+            if localModels.model(id: resolvedModel)?.studioKind.isStudio == false {
+                appendExtraSystemPrompt(todoContext)
+            }
             appendExtraSystemPrompt(configuredPromptContext)
             appendExtraSystemPrompt(briefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
@@ -232,10 +246,7 @@ extension AppState {
                 bridgeCommand: bridge
             )
             logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
-            resolvedPrompt = Self.promptWithBackgroundContext(
-                [skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext],
-                prompt: resolvedPrompt
-            )
+            resolvedPrompt = Self.promptWithBackgroundContext(codexAndACPContext, prompt: resolvedPrompt)
             // `model` may be a composite `<clientId>::<model>` key (from the picker)
             // or a bare model id (from a per-session override).
             let split = acpSelectionParts(for: model)

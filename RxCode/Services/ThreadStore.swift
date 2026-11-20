@@ -404,6 +404,12 @@ final class ThreadStore {
         save()
     }
 
+    func setCheckoutBranch(sessionId: String, branch: String) {
+        guard let row = fetch(id: sessionId), row.checkoutBranch != branch else { return }
+        row.checkoutBranch = branch
+        save()
+    }
+
     /// Rename a thread row's id (used when AppState swaps placeholder → CLI sid in `allSessionSummaries`).
     func renameId(from oldId: String, to newId: String) {
         guard oldId != newId else { return }
@@ -416,6 +422,7 @@ final class ThreadStore {
             if existingAtNew.providerSessionIdsJSON == nil {
                 existingAtNew.providerSessionIdsJSON = row.providerSessionIdsJSON
             }
+            existingAtNew.checkoutBranch = row.checkoutBranch ?? existingAtNew.checkoutBranch
             context.delete(row)
         } else {
             row.id = newId
@@ -603,22 +610,23 @@ final class ThreadStore {
 
     func loadTodoProgressBySession() -> [String: ChatTodoProgress] {
         var descriptor = FetchDescriptor<TodoSnapshot>()
-        descriptor.propertiesToFetch = [\.sessionId, \.done, \.total, \.inProgress]
+        descriptor.propertiesToFetch = [\.sessionId, \.done, \.total, \.inProgress, \.updatedAt]
         let rows = (try? context.fetch(descriptor)) ?? []
         return rows.reduce(into: [:]) { result, row in
             result[row.sessionId] = ChatTodoProgress(
                 done: row.done,
                 total: row.total,
-                inProgress: row.inProgress > 0
+                inProgress: row.inProgress > 0,
+                updatedAt: row.updatedAt
             )
         }
     }
 
-    func loadTodoItemsBySession() -> [String: [TodoItem]] {
-        let descriptor = FetchDescriptor<TodoSnapshot>(predicate: #Predicate { $0.total > 0 })
+    nonisolated static func todoListsBySession(in context: ModelContext) -> [String: TodoListSnapshot] {
+        let descriptor = FetchDescriptor<TodoSnapshot>()
         let rows = (try? context.fetch(descriptor)) ?? []
         return rows.reduce(into: [:]) { result, row in
-            result[row.sessionId] = row.items
+            result[row.sessionId] = row.list
         }
     }
 

@@ -166,9 +166,11 @@ extension AppState {
         } else {
             logger.warning("[WebBrowserSync] snapshot has no web proxy info to mobileKey=\(String(hex.prefix(12)), privacy: .public)")
         }
+        let sessions = await mobileSessionSummaries()
+        guard !Task.isCancelled else { return }
         let payload = SnapshotPayload(
             projects: projects,
-            sessions: mobileSessionSummaries(),
+            sessions: sessions,
             branchBriefings: mobileBranchBriefings(),
             briefingDocuments: documentBriefings,
             usageDashboard: usageDashboard,
@@ -205,13 +207,9 @@ extension AppState {
         )
     }
 
-    func mobileSessionSummaries() -> [RxCodeSync.SessionSummary] {
+    func mobileSessionSummaries() async -> [RxCodeSync.SessionSummary] {
+        let persisted = await threadStoreReader.loadMobileSessionData()
         let knownProjectIds = Set(projects.map(\.id))
-        // One query per table for the whole snapshot — per-session fetches ran
-        // ~4 SQLite queries per thread on the main actor and stalled scrolling.
-        let persistedTodos = threadStore.loadTodoItemsBySession()
-        let queues = threadStore.loadAllQueues()
-        let fileEditCounts = threadStore.fileEditCountsBySession()
         return allSessionSummaries
             .filter { knownProjectIds.contains($0.projectId) }
             .sorted { lhs, rhs in
@@ -221,9 +219,9 @@ extension AppState {
             .map { summary in
                 mobileSessionSummary(
                     from: summary,
-                    todos: liveTodoItems(forSessionId: summary.id) ?? persistedTodos[summary.id],
-                    queued: queues[summary.id] ?? [],
-                    changedFileCount: fileEditCounts[summary.id] ?? 0
+                    todos: mobileTodoItems(forSessionId: summary.id, recorded: persisted.todos[summary.id]),
+                    queued: persisted.queues[summary.id] ?? [],
+                    changedFileCount: persisted.fileEditCounts[summary.id] ?? 0
                 )
             }
     }
@@ -281,22 +279,15 @@ extension AppState {
         )
     }
 
-    /// Todos from the session's in-memory transcript, when it is loaded.
-    private func liveTodoItems(forSessionId id: String) -> [TodoItem]? {
-        guard let messages = sessionStates[id]?.messages else { return nil }
-        return TodoExtractor.latest(in: messages)
+    func mobileTodoItems(forSessionId id: String) -> [TodoItem]? {
+        mobileTodoItems(forSessionId: id, recorded: threadStore.fetchTodoSnapshot(sessionId: id)?.list)
     }
 
-    func mobileTodoItems(forSessionId id: String) -> [TodoItem]? {
-        if let todos = liveTodoItems(forSessionId: id) {
-            return todos
+    private func mobileTodoItems(forSessionId id: String, recorded: TodoListSnapshot?) -> [TodoItem]? {
+        let transcript = sessionStates[id].flatMap { state in
+            TodoExtractor.latestSnapshot(in: state.messages)
         }
-
-        guard let snapshot = threadStore.fetchTodoSnapshot(sessionId: id), snapshot.total > 0 else {
-            return nil
-        }
-
-        return snapshot.items
+        return TodoListSnapshot.latest(transcript: transcript, recorded: recorded)?.items
     }
 
     func mobileAttentionKind(forSessionId id: String) -> SessionAttentionKind? {

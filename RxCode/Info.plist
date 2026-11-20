@@ -34,7 +34,7 @@
 	<key>NSAppleMusicUsageDescription</key>
 	<string>RxCode plays songs from Apple Music only when you ask the desktop pet, and displays the current song and playback controls.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>RxCode captures a screen or window only when you ask the desktop pet to look at it and answer your question.</string>
+	<string>RxCode captures windows for live previews and takes screenshots when you ask the desktop pet to look at your screen.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>RxCode uses the microphone so you can talk to the desktop pet in voice mode.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

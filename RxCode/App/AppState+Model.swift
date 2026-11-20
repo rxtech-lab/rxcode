@@ -123,17 +123,151 @@ extension AppState {
         return false
     }
 
-    /// Applies a user pick to the current session and to future chats in this project.
+    func setDefaultAgentProvider(_ provider: AgentProvider) {
+        guard provider != selectedAgentProvider else { return }
+
+        selectedAgentProvider = provider
+        if let model = availableAgentModelSections()
+            .first(where: { $0.provider == provider })?
+            .models
+            .first?
+            .id
+        {
+            selectedModel = model
+        }
+    }
+
+    func isModelAvailable(_ model: String, provider: AgentProvider) -> Bool {
+        availableAgentModelSections()
+            .flatMap(\.models)
+            .contains { $0.provider == provider && $0.id == model }
+    }
+
+    func projectDefaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String)? {
+        guard let project,
+              let provider = project.isGlobalChat ? globalChatLastAgentProvider : project.lastAgentProvider,
+              let model = project.isGlobalChat ? globalChatLastModel : project.lastModel,
+              isModelAvailable(model, provider: provider)
+        else {
+            return nil
+        }
+        return (provider, model)
+    }
+
+    func defaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String) {
+        projectDefaultModelSelection(for: project) ?? (selectedAgentProvider, selectedModel)
+    }
+
+    func fallbackModel(for provider: AgentProvider, project: Project?) -> String {
+        if let projectSelection = projectDefaultModelSelection(for: project),
+           projectSelection.provider == provider {
+            return projectSelection.model
+        }
+        if selectedAgentProvider == provider {
+            return selectedModel
+        }
+        return availableAgentModelSections()
+            .first { $0.provider == provider }?
+            .models
+            .first?
+            .id ?? selectedModel
+    }
+
+    func effectiveModelSelection(in window: WindowState) -> (provider: AgentProvider, model: String) {
+        if let provider = window.sessionAgentProvider {
+            return (provider, window.sessionModel ?? fallbackModel(for: provider, project: window.selectedProject))
+        }
+        if let model = window.sessionModel {
+            return (selectedAgentProvider, model)
+        }
+        return defaultModelSelection(for: window.selectedProject)
+    }
+
+    func rememberProjectModelSelection(_ model: String, provider: AgentProvider, in window: WindowState) {
+        if window.selectedProject?.isGlobalChat == true {
+            globalChatLastAgentProvider = provider
+            globalChatLastModel = model
+            return
+        }
+
+        guard let project = window.selectedProject,
+              let index = projects.firstIndex(where: { $0.id == project.id })
+        else {
+            return
+        }
+
+        guard projects[index].lastAgentProvider != provider || projects[index].lastModel != model else {
+            return
+        }
+
+        projects[index].lastAgentProvider = provider
+        projects[index].lastModel = model
+        window.selectedProject = projects[index]
+        saveProjectChatPreferences()
+    }
+
+    /// Sets the model for the current session and persists it in the session state.
+    func setSessionModel(_ model: String, provider: AgentProvider? = nil, in window: WindowState) {
+        let previous = effectiveModelSelection(in: window)
+        let resolvedProvider = provider ?? previous.provider
+        guard canSelectModel(model, provider: resolvedProvider, in: window) else { return }
+        let modelChanged = previous.provider != resolvedProvider || previous.model != model
+        window.sessionAgentProvider = resolvedProvider
+        window.sessionModel = model
+        if modelChanged {
+            window.sessionEffort = window.currentSessionId == nil ? nil : rememberedProjectEffort(in: window)
+        }
+        let key = window.currentSessionId ?? window.newSessionKey
+        let acpParts = resolvedProvider == .acp ? acpSelectionParts(for: model) : nil
+        if let acpParts {
+            selectedACPClientId = acpParts.clientId
+        }
+        rememberProjectModelSelection(model, provider: resolvedProvider, in: window)
+        updateState(key) { state in
+            state.agentProvider = resolvedProvider
+            state.model = model
+            if modelChanged { state.setEffort(window.sessionEffort) }
+            state.acpClientId = acpParts?.clientId
+            // Drop the cached CLI-reported name so the status line reflects the
+            // user's choice immediately; the next system event will refill it.
+            state.activeModelName = nil
+        }
+    }
+
+    /// Sets only the active client for the current session. The model is resolved to the
+    /// current default for that client when possible, otherwise the first available model.
+    func setSessionProvider(_ provider: AgentProvider, in window: WindowState) {
+        guard provider != effectiveModelSelection(in: window).provider else { return }
+
+        let fallbackModel = availableAgentModelSections()
+            .first { $0.provider == provider }?
+            .models
+            .first?
+            .id
+        let model = selectedAgentProvider == provider ? selectedModel : (fallbackModel ?? selectedModel)
+        setSessionModel(model, provider: provider, in: window)
+    }
+
+    func modelDisplayName(for model: String, provider: AgentProvider, in window: WindowState) -> String {
+        // The local agent reports its raw model id; keep the friendly label instead.
+        if provider != .localAgent, let active = activeModelName(in: window) {
+            return active
+        }
+        return modelDisplayLabel(model, provider: provider)
+    }
+
+    /// Remembers a user pick for this model and applies it to the current chat.
     func setSessionEffort(_ effort: String?, in window: WindowState) {
-        updateSessionEffort(effort, in: window)
-        rememberProjectEffort(effort, projectId: window.selectedProject?.id)
+        let remembered = rememberProjectEffort(effort, in: window)
+        // Drafts follow the preference for whichever model they resolve to.
+        updateSessionEffort(window.currentSessionId == nil && remembered ? nil : effort, in: window)
     }
 
     /// Applies a session-only effort for model compatibility or automated runs.
     func updateSessionEffort(_ effort: String?, in window: WindowState) {
         window.sessionEffort = effort
         let key = window.currentSessionId ?? window.newSessionKey
-        updateState(key) { $0.effort = effort }
+        updateState(key) { $0.setEffort(effort) }
     }
 
     static func localModelDescription(_ model: LocalModelInfo) -> String {

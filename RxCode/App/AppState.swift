@@ -6,144 +6,6 @@ import RxCodeCore
 import RxCodeSync
 import SwiftUI
 
-// MARK: - Per-Session Stream State
-
-/// Encapsulates all independent state per session.
-/// Stored in the `AppState.sessionStates` dictionary keyed by session ID.
-struct SessionStreamState {
-
-    // Messages
-    var messages: [ChatMessage] = []
-
-    /// Full `Attachment` objects (including image data, text content, etc.)
-    /// for the most recent user turn. `ChatMessage.attachmentPaths` is lossy —
-    /// it only stores name/path/type, so we keep the originals here so
-    /// `cancelStreaming` can restore them into the input bar alongside the
-    /// rolled-back user text.
-    var inFlightUserAttachments: [Attachment] = []
-
-    /// True while persisted messages are being loaded from disk into this session.
-    /// MessageListView keeps the ScrollView hidden while this is true to avoid the
-    /// empty → populated "blink" when switching to a session that isn't already in memory.
-    var isLoadingFromDisk = false
-
-    // Streaming
-    var isStreaming = false
-    var isThinking = false
-    var needsNewMessage = false // After receiving .user(tool result), the next block starts a new ChatMessage
-    var activeStreamId: UUID?
-    var streamingStartDate: Date?
-    var streamTask: Task<Void, Never>?
-    var hasUncheckedCompletion = false
-
-    /// Live background-task ids ("backend agents": background shells, subagents)
-    /// this session has spawned that have not yet reported completion. Recent
-    /// Claude Code ends the spawning turn with a `result` while these keep
-    /// running, then autonomously runs a follow-up turn when they finish. While
-    /// this set is non-empty we keep the CLI process alive and the UI "in
-    /// progress" instead of tearing the turn down on that yield `result`.
-    var liveBackgroundTaskIds: Set<String> = []
-
-    /// Steers delivered to the running Claude turn that the CLI has not yet
-    /// echoed back (`--replay-user-messages`). A steer that arrives after the
-    /// turn's last tool call is run by the CLI as a turn of its own after this
-    /// one's `result`, so while this is non-zero that `result` only yields and
-    /// the process is kept alive for the steered turn.
-    var unconsumedSteerCount = 0
-
-    /// Last time any stream event (system / assistant / tool result / etc.) arrived
-    /// for the active stream. Updated in `processStream` and polled by the
-    /// inactivity watchdog so a CLI that goes silent without exiting (broken pipe
-    /// not surfaced, MCP child wedged, etc.) gets force-cleaned instead of
-    /// leaving `isStreaming`/`activeStreamId` stuck — which would block every
-    /// subsequent send into the thread.
-    var lastStreamEventDate: Date?
-
-    // Text delta buffer (10-token grouped flush)
-    var textDeltaBuffer = ""
-    var pendingToolResults: [(toolUseId: String, content: String, isError: Bool)] = []
-    var flushTask: Task<Void, Never>?
-
-    // tool_use input streaming buffer
-    var activeToolId: String? // tool_use id currently receiving input_json_delta
-    var activeToolInputBuffer: String = "" // accumulator for input_json_delta
-
-    // Per-session overrides (persisted in memory across session switches)
-    var agentProvider: AgentProvider?
-    var model: String?
-    /// Per-provider native resume ids for this session, keyed by
-    /// `AgentProvider.rawValue`. Mirrors `ChatThread.providerSessionIds`; seeded
-    /// on session load and refreshed as each backend reports its native session
-    /// id. Lets a switched provider resume its own session (or start fresh)
-    /// instead of resuming another provider's id.
-    var providerSessionIds: [String: String] = [:]
-    /// Identifies which `ACPClientSpec` to use when `agentProvider == .acp`.
-    var acpClientId: String?
-    var effort: String?
-    var permissionMode: PermissionMode?
-    /// Per-session plan-mode toggle. When true, the CLI is launched with `--permission-mode plan`
-    /// regardless of the user-selected permission mode. Cleared on session switch.
-    var planMode: Bool = false
-    /// User decisions for `ExitPlanMode` tool calls, keyed by `toolCallId`. Sidecar
-    /// to `ToolCall.result` so the decision survives CLI-backed session reloads —
-    /// the CLI emits its own follow-up tool_result ("User has approved your plan…")
-    /// that we cannot prevent from overwriting `ToolCall.result` when the session
-    /// jsonl is parsed fresh from disk. Loaded from `ThreadStore` on session
-    /// activation, written through on every decision.
-    var planDecisionSummaries: [String: String] = [:]
-    /// Override cwd for this session: when set, CLI runs in this Git worktree path
-    /// instead of `project.path`. Persisted on `ChatSession.worktreePath`.
-    var worktreePath: String?
-    var worktreeBranch: String?
-
-    // Session statistics
-    var costUsd: Double = 0
-    var inputTokens: Int = 0
-    var outputTokens: Int = 0
-    var cacheCreationTokens: Int = 0
-    var cacheReadTokens: Int = 0
-    var durationMs: Double = 0
-    var turns: Int = 0
-    /// Per-message output-token totals for the in-flight turn, keyed by the assistant
-    /// message id. A single turn can contain several model invocations (one per tool-result
-    /// round-trip), each emitting its own `usage.output_tokens` from zero — so we track
-    /// per-id maxes and sum them to get the running turn total. Reset at stream start.
-    var currentTurnOutputTokensByMessage: [String: Int] = [:]
-    /// Fallback counter for assistant events that arrive without an `id` (defensive —
-    /// the CLI normally always populates it). Reset alongside the map.
-    var currentTurnOutputTokensUnkeyed: Int = 0
-    /// Sum of all per-message running totals — what the streaming indicator displays.
-    var currentTurnOutputTokens: Int {
-        currentTurnOutputTokensByMessage.values.reduce(0, +) + currentTurnOutputTokensUnkeyed
-    }
-
-    var lastTurnContextUsedPercentage: Double?
-    var activeModelName: String?
-
-    /// Set once the LLM title-generation task has been spawned for this session.
-    /// Prevents the early (first-text-delta) trigger and the `.result` fallback
-    /// from kicking off duplicate generations on the same session.
-    var titleGenerationTriggered: Bool = false
-
-    /// Effective workspace directory (`cwd`) of the currently running stream.
-    var activeStreamCwd: String?
-
-    /// File-content snapshots captured the first time this session's stream
-    /// sees an Edit/MultiEdit/Write tool_use for a given path. Read
-    /// synchronously at capture time (content_block_stop / assistant tool_use
-    /// arrival) so we read the pre-edit state before the CLI executes the
-    /// tool — large files used to lose the race when the read was async and
-    /// `originalContent` would end up matching `modifiedContent`. Absence of a
-    /// key means the path hasn't been touched yet in this session; the value
-    /// can still be `nil` when the read failed (e.g. file does not exist for
-    /// a new-file Write).
-    var editingFileSnapshots: [String: String?] = [:]
-
-    /// Immediate pre-step file content captured on every structured edit so
-    /// concurrent edits on the same file by another thread can be detected.
-    var latestStepSnapshots: [String: String?] = [:]
-}
-
 @Observable
 @MainActor
 final class AppState: IDEToolHandling {
@@ -165,6 +27,7 @@ final class AppState: IDEToolHandling {
         didSet { scheduleDesktopWidgetUpdate() }
     }
     @ObservationIgnored var projectPromptSaveTask: Task<Void, Never>?
+    @ObservationIgnored var projectChatPreferencesSaveTask: Task<Void, Never>?
 
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
@@ -191,7 +54,9 @@ final class AppState: IDEToolHandling {
     /// advanced by `compact_boundary`) to the current sid it was swapped to.
     /// Lets long-running async tasks (LLM title generation) resolve the current
     /// id after the swap that happens mid-stream in `processStream`.
-    var sessionIdRedirect: [String: String] = [:]
+    var sessionIdRedirect: [String: String] = [:] {
+        didSet { attentionSessionIDsByProject = nil }
+    }
 
     /// Callers waiting for `pending-<streamId>` to be replaced by the CLI's
     /// real `session_id` on the first `.system` event. The cross-project MCP
@@ -238,11 +103,17 @@ final class AppState: IDEToolHandling {
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
     var allSessionSummaries: [ChatSession.Summary] = [] {
-        didSet { scheduleDesktopWidgetUpdate() }
+        didSet {
+            attentionSessionIDsByProject = nil
+            scheduleDesktopWidgetUpdate()
+        }
     }
+
+    @ObservationIgnored var attentionSessionIDsByProject: [UUID: Set<String>]?
 
     /// Invalidates visible file-change views after recorded edits change.
     var threadFileEditsRevision = 0
+    @ObservationIgnored var threadDiffLoads: [ThreadFileEditsLoadID: Task<[FileEditSummary], Never>] = [:]
 
     /// Keeps file-change and commit indicators in memory for sidebar rows.
     var threadFileEditPresence: [String: ThreadFileEditPresence] = [:]
@@ -361,6 +232,10 @@ final class AppState: IDEToolHandling {
 
     var globalChatLastModel: String? {
         didSet { workspaceDefaults.set(globalChatLastModel, for: "globalChatLastModel") }
+    }
+
+    var globalChatEffortsByModel: [String: String] = [:] {
+        didSet { workspaceDefaults.set(globalChatEffortsByModel, for: "globalChatEffortsByModel") }
     }
 
     var claudeModels: [AgentModel] = []
@@ -543,9 +418,12 @@ final class AppState: IDEToolHandling {
     /// branches and branches from briefings and project chats.
     var ciStatusByBranchKey: [String: ProjectCIStatus] = [:]
 
-    /// Recorded branch by session ID, so thread rows can find their PR without
+    /// Recorded branches by session ID, so thread rows can find their PR without
     /// querying Git or SwiftData during rendering.
-    var ciBranchBySessionId: [String: String] = [:]
+    var ciBranchesBySessionId: [String: [String]] = [:]
+
+    var inferredPullRequestsBySessionId: [String: ThreadPullRequest] = [:]
+    @ObservationIgnored let threadPullRequestMatcher = ThreadPullRequestMatcher()
 
     /// Bumped after every CI refresh so views observing CI status recompute,
     /// mirroring the `branchBriefingRevision` pattern.
@@ -674,6 +552,12 @@ final class AppState: IDEToolHandling {
     /// Keyed by projectId; consumed once applied.
     var pendingNotificationSession: [UUID: String] = [:]
 
+    /// Ref-counted set of projectIds with at least one open dedicated project window.
+    /// Used to decide whether a notification tap should route to the main window or
+    /// hand off to an existing project window via `pendingNotificationSession`.
+    @ObservationIgnored
+    var openProjectWindowCounts: [UUID: Int] = [:]
+
     // MARK: - Menu Bar Status
 
     /// Last-fetched usage percentages for the menu-bar status popup. Updated by
@@ -702,219 +586,6 @@ final class AppState: IDEToolHandling {
     /// on session select via `hasUncheckedCompletion`.
     var uncheckedFinishedSessionCount: Int {
         sessionActivity.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
-    }
-
-    func setDefaultAgentProvider(_ provider: AgentProvider) {
-        guard provider != selectedAgentProvider else { return }
-
-        selectedAgentProvider = provider
-        if let model = availableAgentModelSections()
-            .first(where: { $0.provider == provider })?
-            .models
-            .first?
-            .id
-        {
-            selectedModel = model
-        }
-    }
-
-    /// Ref-counted set of projectIds with at least one open dedicated project window.
-    /// Used to decide whether a notification tap should route to the main window or
-    /// hand off to an existing project window via `pendingNotificationSession`.
-    @ObservationIgnored
-    var openProjectWindowCounts: [UUID: Int] = [:]
-
-    func registerOpenProjectWindow(_ projectId: UUID) {
-        openProjectWindowCounts[projectId, default: 0] += 1
-    }
-
-    func unregisterOpenProjectWindow(_ projectId: UUID) {
-        guard let count = openProjectWindowCounts[projectId] else { return }
-        if count <= 1 {
-            openProjectWindowCounts.removeValue(forKey: projectId)
-        } else {
-            openProjectWindowCounts[projectId] = count - 1
-        }
-    }
-
-    func hasOpenProjectWindow(for projectId: UUID) -> Bool {
-        (openProjectWindowCounts[projectId] ?? 0) > 0
-    }
-
-    func isModelAvailable(_ model: String, provider: AgentProvider) -> Bool {
-        availableAgentModelSections()
-            .flatMap(\.models)
-            .contains { $0.provider == provider && $0.id == model }
-    }
-
-    func projectDefaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String)? {
-        guard let project,
-              let provider = project.isGlobalChat ? globalChatLastAgentProvider : project.lastAgentProvider,
-              let model = project.isGlobalChat ? globalChatLastModel : project.lastModel,
-              isModelAvailable(model, provider: provider)
-        else {
-            return nil
-        }
-        return (provider, model)
-    }
-
-    func defaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String) {
-        projectDefaultModelSelection(for: project) ?? (selectedAgentProvider, selectedModel)
-    }
-
-    func fallbackModel(for provider: AgentProvider, project: Project?) -> String {
-        if let projectSelection = projectDefaultModelSelection(for: project),
-           projectSelection.provider == provider {
-            return projectSelection.model
-        }
-        if selectedAgentProvider == provider {
-            return selectedModel
-        }
-        return availableAgentModelSections()
-            .first { $0.provider == provider }?
-            .models
-            .first?
-            .id ?? selectedModel
-    }
-
-    func effectiveModelSelection(in window: WindowState) -> (provider: AgentProvider, model: String) {
-        if let provider = window.sessionAgentProvider {
-            return (provider, window.sessionModel ?? fallbackModel(for: provider, project: window.selectedProject))
-        }
-        if let model = window.sessionModel {
-            return (selectedAgentProvider, model)
-        }
-        return defaultModelSelection(for: window.selectedProject)
-    }
-
-    func rememberProjectModelSelection(_ model: String, provider: AgentProvider, in window: WindowState) {
-        if window.selectedProject?.isGlobalChat == true {
-            globalChatLastAgentProvider = provider
-            globalChatLastModel = model
-            return
-        }
-
-        guard let project = window.selectedProject,
-              let index = projects.firstIndex(where: { $0.id == project.id })
-        else {
-            return
-        }
-
-        guard projects[index].lastAgentProvider != provider || projects[index].lastModel != model else {
-            return
-        }
-
-        projects[index].lastAgentProvider = provider
-        projects[index].lastModel = model
-        window.selectedProject = projects[index]
-
-        Task {
-            do {
-                try await persistence.saveProjects(projects)
-            } catch {
-                logger.error("Failed to save project model selection: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    /// Routes a notification tap to the right window without spawning a new one.
-    /// Hands off to an existing project window if one is open for that project;
-    /// otherwise navigates the supplied main window in place.
-    func handleNotificationTap(projectId: UUID, sessionId: String, mainWindow: WindowState) {
-        if hasOpenProjectWindow(for: projectId) {
-            pendingNotificationSession[projectId] = sessionId
-            return
-        }
-        if mainWindow.selectedProject?.id == projectId {
-            guard mainWindow.currentSessionId != sessionId else { return }
-            mainWindow.currentSessionId = sessionId
-        } else {
-            selectSession(id: sessionId, in: mainWindow)
-        }
-    }
-
-    /// Sets the model for the current session and persists it in the session state.
-    func setSessionModel(_ model: String, provider: AgentProvider? = nil, in window: WindowState) {
-        let resolvedProvider = provider ?? window.sessionAgentProvider ?? selectedAgentProvider
-        guard canSelectModel(model, provider: resolvedProvider, in: window) else { return }
-        window.sessionAgentProvider = resolvedProvider
-        window.sessionModel = model
-        let key = window.currentSessionId ?? window.newSessionKey
-        let acpParts = resolvedProvider == .acp ? acpSelectionParts(for: model) : nil
-        if let acpParts {
-            selectedACPClientId = acpParts.clientId
-        }
-        rememberProjectModelSelection(model, provider: resolvedProvider, in: window)
-        updateState(key) { state in
-            state.agentProvider = resolvedProvider
-            state.model = model
-            state.acpClientId = acpParts?.clientId
-            // Drop the cached CLI-reported name so the status line reflects the
-            // user's choice immediately; the next system event will refill it.
-            state.activeModelName = nil
-        }
-    }
-
-    /// Sets only the active client for the current session. The model is resolved to the
-    /// current default for that client when possible, otherwise the first available model.
-    func setSessionProvider(_ provider: AgentProvider, in window: WindowState) {
-        let currentProvider = window.sessionAgentProvider ?? selectedAgentProvider
-        guard provider != currentProvider else { return }
-
-        let fallbackModel = availableAgentModelSections()
-            .first { $0.provider == provider }?
-            .models
-            .first?
-            .id
-        let model = selectedAgentProvider == provider ? selectedModel : (fallbackModel ?? selectedModel)
-        setSessionModel(model, provider: provider, in: window)
-    }
-
-    /// Sets the permission mode for the current session and persists it in the session state.
-    /// If there's a live CLI session for this window, re-register with the PermissionServer so
-    /// the new mode takes effect for the next tool call without restarting the stream.
-    func setSessionPermissionMode(_ mode: PermissionMode, in window: WindowState) {
-        window.sessionPermissionMode = mode
-        let key = window.currentSessionId ?? window.newSessionKey
-        updateState(key) { $0.permissionMode = mode }
-        reregisterPermissionMode(in: window)
-    }
-
-    /// Toggles the boolean plan-mode flag for the active session. The CLI's permission mode
-    /// is still computed from the dropdown when plan-mode is off; when on, `.plan` is forced
-    /// for the CLI invocation regardless of dropdown selection (see `send(...)`).
-    /// Triggered by Shift+Tab in the input bar and by the Plan pill chip.
-    func toggleSessionPlanMode(in window: WindowState) {
-        let key = window.currentSessionId ?? window.newSessionKey
-        let next = !(sessionStates[key]?.planMode ?? window.sessionPlanMode)
-        window.sessionPlanMode = next
-        updateState(key) { $0.planMode = next }
-        reregisterPermissionMode(in: window)
-    }
-
-    /// Tell the PermissionServer the latest effective permission mode for the live CLI session,
-    /// if any. This is what makes mid-conversation mode changes (Ask → Auto, plan toggle, etc.)
-    /// affect the very next tool call without restarting the stream.
-    func reregisterPermissionMode(in window: WindowState) {
-        guard let sid = window.currentSessionId,
-              let projectPath = window.selectedProject?.path else { return }
-        // Use the dropdown value (ignore plan toggle) so an explicit Auto choice
-        // continues to auto-approve hook-matched tools while plan mode is on.
-        // The plan toggle only affects the CLI `--permission-mode` flag, not the
-        // hook auto-approve policy. ExitPlanMode is always exempt from auto-approve
-        // (see PermissionServer.autoApproveReason).
-        let hookSessionMode = window.sessionPermissionMode ?? permissionMode
-        Task { [permission] in
-            await permission.registerSession(sid: sid, projectKey: projectPath, mode: hookSessionMode)
-        }
-    }
-
-    func modelDisplayName(for model: String, provider: AgentProvider, in window: WindowState) -> String {
-        // The local agent reports its raw model id; keep the friendly label instead.
-        if provider != .localAgent, let active = activeModelName(in: window) {
-            return active
-        }
-        return modelDisplayLabel(model, provider: provider)
     }
 
     // MARK: - Permissions

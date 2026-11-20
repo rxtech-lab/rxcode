@@ -213,7 +213,7 @@ extension AppState {
                 state.messages = self.messagesWithPersistedHookCard(cleaned, sessionId: sessionId)
                 state.planDecisionSummaries = self.threadStore.loadPlanDecisions(sessionId: sessionId)
                 if state.model == nil { state.model = full.model }
-                if state.effort == nil { state.effort = full.effort }
+                state.effort = state.effort(fallingBackTo: full.effort)
                 if state.permissionMode == nil { state.permissionMode = full.permissionMode }
                 self.logger.info("[LoadMessages] applied sid=\(sessionId, privacy: .public) messages=\(state.messages.count) planDecisions=\(state.planDecisionSummaries.count)")
             }
@@ -249,8 +249,11 @@ extension AppState {
         let sessionAgentProvider = sessionStates[sessionId]?.agentProvider
             ?? summary?.agentProvider
             ?? selectedAgentProvider
-        let sessionEffort = sessionStates[sessionId]?.effort
-            ?? summary?.effort
+        let sessionEffort = if let state = sessionStates[sessionId] {
+            state.effort(fallingBackTo: summary?.effort)
+        } else {
+            summary?.effort
+        }
         let sessionPermissionMode = sessionStates[sessionId]?.permissionMode
             ?? summary?.permissionMode
         var origin = summary?.origin
@@ -535,6 +538,8 @@ extension AppState {
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
         let projectSelection = defaultModelSelection(for: projects.first { $0.id == projectId })
         let agentProvider = sessionStates[sessionKey]?.agentProvider ?? projectSelection.provider
+        let model = sessionStates[sessionKey]?.model ?? projectSelection.model
+        let effort = sessionStates[sessionKey]?.effort ?? (selectedEffort == "auto" ? nil : selectedEffort)
         var hookSettingsPath: String?
         if agentProvider == .claudeCode, !currentPermissionMode.skipsHookPipeline {
             do { hookSettingsPath = try await permission.writeHookSettingsFile() }
@@ -543,8 +548,6 @@ extension AppState {
 
         await permission.registerSession(sid: sessionKey, projectKey: cwd, mode: currentPermissionMode)
 
-        let model = sessionStates[sessionKey]?.model ?? projectSelection.model
-        let effort = sessionStates[sessionKey]?.effort ?? (selectedEffort == "auto" ? nil : selectedEffort)
         let acpSelection = agentProvider == .acp ? acpSelectionParts(for: model) : nil
         await CodingAnalyticsRecorder.shared.begin(
             threadID: sessionKey, projectID: projectId, turnID: streamId, prompt: displayText,

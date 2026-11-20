@@ -22,6 +22,25 @@ public struct TodoItem: Identifiable, Sendable, Equatable, Codable {
     }
 }
 
+/// A todo list and the time it was last updated. An empty list clears progress.
+public struct TodoListSnapshot: Sendable, Equatable {
+    public let items: [TodoItem]
+    public let updatedAt: Date
+
+    public init(items: [TodoItem], updatedAt: Date) {
+        self.items = items
+        self.updatedAt = updatedAt
+    }
+
+    public static func latest(transcript: Self?, recorded: Self?) -> Self? {
+        guard let recorded else { return transcript }
+        if let transcript, transcript.updatedAt > recorded.updatedAt {
+            return transcript
+        }
+        return recorded
+    }
+}
+
 // MARK: - Todo Extractor
 
 public enum TodoExtractor {
@@ -32,17 +51,22 @@ public enum TodoExtractor {
     /// has not finished streaming. Returns an empty array if the call exists
     /// but contains no todos.
     public static func latest(in messages: [ChatMessage]) -> [TodoItem]? {
+        latestSnapshot(in: messages)?.items
+    }
+
+    public static func latestSnapshot(in messages: [ChatMessage]) -> TodoListSnapshot? {
         for message in messages.reversed() {
             for block in message.blocks.reversed() {
                 guard let toolCall = block.toolCall,
-                      toolCall.name.lowercased() == "todowrite" else { continue }
-                return parse(input: toolCall.input)
+                      toolCall.name.lowercased() == "todowrite",
+                      toolCall.input["todos"]?.arrayValue != nil else { continue }
+                return TodoListSnapshot(items: parse(input: toolCall.input), updatedAt: message.timestamp)
             }
         }
         // Newer Claude Code drives its task list through the incremental
         // `TaskCreate` / `TaskUpdate` tools instead of `TodoWrite`. Fall back to
         // reconstructing the list from those when no `TodoWrite` is present.
-        return fromTaskTools(in: messages)
+        return taskToolSnapshot(in: messages)
     }
 
     /// Reconstruct a todo list from the newer Claude Code task tools
@@ -58,6 +82,10 @@ public enum TodoExtractor {
     /// Returns `nil` when the transcript contains no task tool calls, so callers
     /// can distinguish "no task list" from "an empty task list".
     public static func fromTaskTools(in messages: [ChatMessage]) -> [TodoItem]? {
+        taskToolSnapshot(in: messages)?.items
+    }
+
+    private static func taskToolSnapshot(in messages: [ChatMessage]) -> TodoListSnapshot? {
         struct Task {
             var subject: String
             var activeForm: String
@@ -65,7 +93,7 @@ public enum TodoExtractor {
         }
         var order: [Int] = []
         var tasks: [Int: Task] = [:]
-        var sawAny = false
+        var updatedAt: Date?
 
         for message in messages {
             for block in message.blocks {
@@ -75,7 +103,7 @@ public enum TodoExtractor {
                     // The id is only known once the tool result lands; skip
                     // until then (the task surfaces on the next render).
                     guard let id = parseCreatedTaskId(fromResult: toolCall.result) else { continue }
-                    sawAny = true
+                    updatedAt = message.timestamp
                     let subject = toolCall.input["subject"]?.stringValue ?? ""
                     let activeForm = toolCall.input["activeForm"]?.stringValue ?? subject
                     if tasks[id] == nil { order.append(id) }
@@ -88,12 +116,12 @@ public enum TodoExtractor {
                     if rawStatus == "deleted" {
                         if tasks.removeValue(forKey: id) != nil {
                             order.removeAll { $0 == id }
-                            sawAny = true
+                            updatedAt = message.timestamp
                         }
                         continue
                     }
                     guard var task = tasks[id] else { continue }
-                    sawAny = true
+                    updatedAt = message.timestamp
                     if let rawStatus, let status = TodoItem.Status(rawValue: rawStatus) {
                         task.status = status
                     }
@@ -107,11 +135,12 @@ public enum TodoExtractor {
             }
         }
 
-        guard sawAny else { return nil }
-        return order.compactMap { id in
+        guard let updatedAt else { return nil }
+        let items = order.compactMap { id -> TodoItem? in
             guard let task = tasks[id] else { return nil }
             return TodoItem(id: id, content: task.subject, activeForm: task.activeForm, status: task.status)
         }
+        return TodoListSnapshot(items: items, updatedAt: updatedAt)
     }
 
     /// Pull the assigned task id out of a `TaskCreate` result string such as

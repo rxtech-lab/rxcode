@@ -218,4 +218,12 @@ struct WorkspaceDefaults: Sendable {
     nonisolated func set(_ value: [String], for raw: String) {
         UserDefaults.standard.set(value, forKey: key(raw))
     }
+
+    nonisolated func stringDictionary(for raw: String) -> [String: String] {
+        UserDefaults.standard.dictionary(forKey: key(raw)) as? [String: String] ?? [:]
+    }
+
+    nonisolated func set(_ value: [String: String], for raw: String) {
+        UserDefaults.standard.set(value, forKey: key(raw))
+    }
 }

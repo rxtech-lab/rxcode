@@ -12,6 +12,8 @@ public final class ChatBridge {
     // MARK: - Streaming State (pushed by AppState)
 
     public var messages: [ChatMessage] = []
+    /// The active thread's checkout, used to resolve relative edit paths in chat.
+    public var workingDirectory: String?
     public var isStreaming: Bool = false
     public var isThinking: Bool = false
     /// True while persisted messages are being loaded from disk for the current session.

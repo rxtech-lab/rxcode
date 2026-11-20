@@ -51,26 +51,39 @@ extension AppState {
         updateSessionEffort(nil, in: window)
     }
 
+    func effectiveSessionEffort(in window: WindowState) -> String? {
+        if let effort = window.sessionEffort { return effort }
+        return window.currentSessionId == nil ? rememberedProjectEffort(in: window) : nil
+    }
+
     func rememberedProjectEffort(in window: WindowState) -> String? {
-        guard let projectId = window.selectedProject?.id,
-              let effort = projects.first(where: { $0.id == projectId })?.lastEffort else { return nil }
+        guard let project = window.selectedProject else { return nil }
         let selection = effectiveModelSelection(in: window)
+        let key = AgentModel.key(for: selection.model, provider: selection.provider)
+        let efforts = project.isGlobalChat
+            ? globalChatEffortsByModel
+            : projects.first(where: { $0.id == project.id })?.effortsByModel
+        guard let effort = efforts?[key] else { return nil }
         let levels = reasoningLevels(for: selection.provider, model: selection.model)
         return levels.isEmpty || levels.contains(where: { $0.id == effort }) ? effort : nil
     }
 
-    func rememberProjectEffort(_ effort: String?, projectId: UUID?) {
-        guard let projectId,
-              let index = projects.firstIndex(where: { $0.id == projectId }),
-              projects[index].lastEffort != effort else { return }
-        projects[index].lastEffort = effort
-        Task {
-            do {
-                try await persistence.saveProjects(projects)
-            } catch {
-                logger.error("Failed to save project effort selection: \(error.localizedDescription)")
-            }
+    func rememberProjectEffort(_ effort: String?, in window: WindowState) -> Bool {
+        guard let project = window.selectedProject else { return false }
+        let selection = effectiveModelSelection(in: window)
+        let key = AgentModel.key(for: selection.model, provider: selection.provider)
+        if project.isGlobalChat {
+            if globalChatEffortsByModel[key] != effort { globalChatEffortsByModel[key] = effort }
+            return true
         }
+
+        guard let index = projects.firstIndex(where: { $0.id == project.id }) else { return false }
+        var efforts = projects[index].effortsByModel ?? [:]
+        guard efforts[key] != effort else { return true }
+        efforts[key] = effort
+        projects[index].effortsByModel = efforts.isEmpty ? nil : efforts
+        saveProjectChatPreferences()
+        return true
     }
 
     /// Names what clearing a session's effort actually falls back to.

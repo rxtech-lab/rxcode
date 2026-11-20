@@ -11,32 +11,43 @@ struct ThreadDiffBanner: View {
     var isCompact = false
     var onOpen: (() -> Void)? = nil
     @State private var isHovered: Bool = false
-    @State private var stat: (added: Int, removed: Int) = (0, 0)
+    @State private var changes: LoadedChanges?
 
-    private var summaries: [FileEditSummary] {
-        _ = appState.threadFileEditsRevision
-        if let sessionId {
-            return appState.threadFileEdits(sessionId: sessionId)
-        }
-        return appState.threadFileEdits(in: windowState)
+    private struct LoadedChanges {
+        let sessionId: String
+        let fileCount: Int
+        var stat: (added: Int, removed: Int) = (0, 0)
     }
 
-    private var statKey: String {
-        "\(sessionId ?? windowState.currentSessionId ?? windowState.newSessionKey)-\(appState.threadFileEditsRevision)"
+    private var loadID: ThreadFileEditsLoadID {
+        appState.threadFileEditsLoadID(sessionId: sessionId ?? windowState.currentSessionId ?? windowState.newSessionKey)
     }
 
     var body: some View {
-        let summaries = summaries
-        if !summaries.isEmpty || isCompact {
-            content(fileCount: summaries.count)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .task(id: statKey) {
-                    stat = await Self.computeStat(summaries)
-                }
+        let key = loadID
+        let visibleChanges = changes?.sessionId == key.sessionId ? changes : nil
+        Group {
+            if let visibleChanges, visibleChanges.fileCount > 0 || isCompact {
+                content(fileCount: visibleChanges.fileCount, stat: visibleChanges.stat)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .task(id: key) {
+            let summaries = await appState.loadThreadDiffPreview(key)
+            guard !Task.isCancelled, loadID == key else { return }
+            changes = LoadedChanges(
+                sessionId: key.sessionId,
+                fileCount: summaries.count,
+                stat: visibleChanges?.stat ?? (0, 0)
+            )
+            guard !summaries.isEmpty else { return }
+            let stat = await Self.computeStat(summaries)
+            guard !Task.isCancelled, loadID == key else { return }
+            changes?.stat = stat
         }
     }
 
-    private func content(fileCount: Int) -> some View {
+    private func content(fileCount: Int, stat: (added: Int, removed: Int)) -> some View {
         let fileText = fileCount == 0 ? String(localized: "No changes")
             : fileCount == 1 ? "1 file changed" : "\(fileCount) files changed"
         return Button(action: open) {

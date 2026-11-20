@@ -190,6 +190,7 @@ private struct GeneralRouteWindowView: View {
                 VStack(spacing: 8) {
                     AgentConfirmationBanner()
                     PermissionQueueBanner()
+                    ComputerUsePreviewBanner()
                     ThreadDiffBanner()
                 }
             })

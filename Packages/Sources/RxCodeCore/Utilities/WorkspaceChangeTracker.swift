@@ -606,7 +606,7 @@ public actor WorkspaceChangeTracker {
             // Check other candidates against the current rules, including symlink
             // targets and paths that already have a content baseline in the ledger.
             let pathsToCheck = paths.subtracting(statusPaths)
-            let ignored = await gitIgnoredPaths(in: pathsToCheck, at: gitRoot)
+            let ignored = await GitHelper.checkIgnoredPaths(pathsToCheck, at: gitRoot)
             // Only use Git status paths if the ignore check fails.
             let skippedPaths = ignored ?? pathsToCheck
             pendingEventPaths.subtract(skippedPaths)

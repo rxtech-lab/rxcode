@@ -16,7 +16,7 @@ struct SessionActivity: Equatable {
     var hasUncheckedCompletion = false
     /// Latest todo list reconstructed from in-memory messages, or `nil` when the
     /// transcript has none (callers fall back to the persisted snapshot).
-    var liveTodos: [TodoItem]?
+    var liveTodos: TodoListSnapshot?
 
     /// Cheap summary of a session's transcript tail. Todos are only re-extracted
     /// when this changes (or while the session is streaming, since a tool call's
@@ -88,7 +88,7 @@ extension AppState {
             next[id, default: SessionActivity(
                 isStreaming: state.isStreaming,
                 hasUncheckedCompletion: state.hasUncheckedCompletion
-            )].liveTodos = TodoExtractor.latest(in: state.messages)
+            )].liveTodos = TodoExtractor.latestSnapshot(in: state.messages)
         }
         if next != sessionActivity {
             sessionActivity = next
@@ -103,8 +103,13 @@ extension AppState {
     }
 
     /// Live todos for a session from the in-memory transcript, if any.
-    func liveTodos(forSessionId id: String) -> [TodoItem]? {
+    func liveTodos(forSessionId id: String) -> TodoListSnapshot? {
         sessionActivity[id]?.liveTodos
+    }
+
+    func computerUseMonitors(forSession id: String) -> [ComputerUseMonitorWindow] {
+        guard let state = sessionStates[id], state.isStreaming else { return [] }
+        return state.computerUseWindows
     }
 
     /// Enabled custom menu rows for `projectId`/`surface`, served from a cache

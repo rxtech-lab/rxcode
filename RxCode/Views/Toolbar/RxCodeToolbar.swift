@@ -12,10 +12,10 @@ struct RxCodeToolbarContent: ToolbarContent {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(\.openWindow) private var openWindow
+    @State private var loadedFileCount: (sessionId: String, count: Int)?
 
-    private var fileEditCount: Int {
-        _ = appState.threadFileEditsRevision
-        return appState.threadFileEdits(in: windowState).count
+    private var fileEditLoadID: ThreadFileEditsLoadID {
+        appState.threadFileEditsLoadID(sessionId: windowState.currentSessionId ?? windowState.newSessionKey)
     }
 
     var body: some ToolbarContent {
@@ -55,26 +55,35 @@ struct RxCodeToolbarContent: ToolbarContent {
             .help("Views")
             .accessibilityIdentifier("open-views-button")
 
-            Button {
-                appState.showRightSidebar.toggle()
-            } label: {
-                Image(systemName: "sidebar.trailing")
-                    .overlay(alignment: .topTrailing) {
-                        let editCount = fileEditCount
-                        if editCount > 0 {
-                            Text("\(editCount)")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 4)
-                                .frame(minWidth: 14, minHeight: 14)
-                                .background(Capsule().fill(Color.red))
-                                .offset(x: 8, y: -6)
-                        }
+            inspectorButton
+        }
+    }
+
+    private var inspectorButton: some View {
+        let key = fileEditLoadID
+        return Button {
+            appState.showRightSidebar.toggle()
+        } label: {
+            Image(systemName: "sidebar.trailing")
+                .overlay(alignment: .topTrailing) {
+                    if let loadedFileCount, loadedFileCount.sessionId == key.sessionId, loadedFileCount.count > 0 {
+                        Text("\(loadedFileCount.count)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 14, minHeight: 14)
+                            .background(Capsule().fill(Color.red))
+                            .offset(x: 8, y: -6)
                     }
-            }
-            .help("Toggle Inspector")
-            .keyboardShortcut("4", modifiers: .command)
-            .accessibilityIdentifier("toggle-inspector-button")
+                }
+        }
+        .help("Toggle Inspector")
+        .keyboardShortcut("4", modifiers: .command)
+        .accessibilityIdentifier("toggle-inspector-button")
+        .task(id: key) {
+            let count = await appState.threadStoreReader.loadVisibleFileEditCount(sessionId: key.sessionId)
+            guard !Task.isCancelled, fileEditLoadID == key else { return }
+            loadedFileCount = (key.sessionId, count)
         }
     }
 }

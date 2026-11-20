@@ -17,11 +17,15 @@ extension AppState {
     }
 
     func resetToNewChat(in window: WindowState) {
+        if let projectId = window.selectedProject?.id,
+           let project = projects.first(where: { $0.id == projectId }) {
+            window.selectedProject = project
+        }
         window.generalRoute = window.selectedProject?.isGlobalChat == true ? .chat : nil
         window.currentSessionId = nil
         window.sessionAgentProvider = nil
         window.sessionModel = nil
-        window.sessionEffort = rememberedProjectEffort(in: window)
+        window.sessionEffort = nil
         window.sessionPermissionMode = nil
         window.sessionPlanMode = false
         window.pendingWorktreePath = nil
@@ -55,6 +59,7 @@ extension AppState {
     /// `pending-<uuid>` → real sid (and later advance the sid again on
     /// `compact_boundary`) while a long-running task holds the old id.
     func resolveCurrentSessionId(_ id: String) -> String {
+        guard sessionIdRedirect[id] != nil else { return id }
         var current = id
         var seen: Set<String> = [current]
         while let next = sessionIdRedirect[current] {

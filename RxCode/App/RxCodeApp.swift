@@ -81,6 +81,7 @@ struct RxCodeApp: App {
     @State private var workspaceManager: WorkspaceManager
     @FocusedValue(\.startNewChat) private var startNewChat
     @FocusedValue(\.showCacheStorage) private var showCacheStorage
+    @FocusedValue(\.chooseWindowPreview) private var chooseWindowPreview
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
     private let updateService = UpdateService.shared
 
@@ -142,6 +143,10 @@ struct RxCodeApp: App {
                 }
                 Button("Clear Cached Data…") { showCacheStorage?() }
                     .disabled(showCacheStorage == nil)
+            }
+            CommandGroup(after: .toolbar) {
+                Button("Preview a Window…") { chooseWindowPreview?() }
+                    .disabled(chooseWindowPreview == nil)
             }
             CommandMenu("Theme") {
                 ForEach(AppTheme.allCases) { theme in

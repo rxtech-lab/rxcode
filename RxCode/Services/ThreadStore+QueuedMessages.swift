@@ -17,7 +17,7 @@ extension ThreadStore {
         return rows.map { $0.toQueuedMessage() }
     }
 
-    func loadAllQueues() -> [String: [QueuedMessage]] {
+    nonisolated static func queuesBySession(in context: ModelContext) -> [String: [QueuedMessage]] {
         let descriptor = FetchDescriptor<QueuedMessageRecord>(
             sortBy: [SortDescriptor(\.order, order: .forward)]
         )

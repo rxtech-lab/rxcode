@@ -13,7 +13,10 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
     public var lastSessionId: String?
     public var lastAgentProvider: AgentProvider?
     public var lastModel: String?
+    /// Read during migration from project-wide effort preferences.
     public var lastEffort: String?
+    /// Thinking levels keyed by `AgentModel.key`.
+    public var effortsByModel: [String: String]?
     /// Additional instructions sent with turns in this project.
     public var customPrompt: String? = nil
     /// The Autopilot project this project's task board syncs with. `nil`

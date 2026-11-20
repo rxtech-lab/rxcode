@@ -6,10 +6,9 @@ import XCTest
 /// it.
 ///
 /// Effort is chosen in places that don't know which agent will run: the global
-/// Settings default spans every provider, and a session carries its pick across
-/// a provider switch. So a value can be perfectly valid where it was chosen and
-/// invalid by the time it is sent — Claude launching with `--effort minimal`,
-/// or codex failing its whole config on `max`.
+/// Settings default spans every provider, and automated callers can supply an
+/// explicit effort. A level one client accepts can fail in another client's
+/// configuration.
 ///
 /// Every send path funnels through `resolveStreamPreflight`, so these assert on
 /// what actually reached the backend rather than on the helper alone.
@@ -113,16 +112,18 @@ final class EffortSanitizationTests: XCTestCase {
         XCTAssertEqual(codex, .some("minimal"))
     }
 
-    /// A session that picked `minimal` under Codex and was switched to Claude
-    /// before the toolbar's reconciliation ran.
-    func testEffortCarriedAcrossAProviderSwitchIsDropped() async throws {
+    func testProviderSwitchClearsThePreviousModelsEffortImmediately() async throws {
+        appState.selectedEffort = "auto"
+        appState.setSessionModel("gpt-5.4", provider: .codex, in: window)
         appState.setSessionEffort("minimal", in: window)
-        XCTAssertEqual(window.sessionEffort, "minimal", "Valid while the session was on Codex")
+        XCTAssertEqual(appState.effectiveSessionEffort(in: window), "minimal")
 
+        appState.setSessionModel("opus", provider: .claudeCode, in: window)
+        XCTAssertNil(appState.effectiveSessionEffort(in: window))
         let sent = try await effortReachingBackend(
             claudeBackend,
             provider: .claudeCode,
-            effort: window.sessionEffort
+            effort: appState.effectiveSessionEffort(in: window)
         )
 
         XCTAssertEqual(sent, .some(nil), "Claude must not be launched with --effort minimal")
@@ -163,7 +164,7 @@ final class EffortSanitizationTests: XCTestCase {
         let handled = await appState.handleNativeSlashCommand("/effort high", in: window)
 
         XCTAssertTrue(handled)
-        XCTAssertEqual(window.sessionEffort, "high")
+        XCTAssertEqual(appState.effectiveSessionEffort(in: window), "high")
     }
 
     func testEffortSlashCommandStillRejectsALevelTheProviderLacks() async {

@@ -71,6 +71,7 @@ extension AppState {
         if let earlyStream = preflight.earlyStream {
             stream = earlyStream
         } else {
+            await recordThreadCheckout(sessionId: sessionKey, projectId: projectId, cwd: cwd, streamId: streamId)
             let preflightElapsed = Date().timeIntervalSince(streamStart)
             logger.info("[Stream:UI] backend send starting provider=\(agentProvider.rawValue, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", preflightElapsed), privacy: .public)s cwd=\(cwd, privacy: .public)")
             if let debugLogPrefix {
@@ -535,6 +536,18 @@ extension AppState {
                         guard let toolUseId = userMessage.toolUseId else { return }
                         state.pendingToolResults.append((toolUseId, userMessage.content, userMessage.isError))
                         state.needsNewMessage = true
+                    }
+
+                case .computerUseWindows(let windows):
+                    updateState(sessionKey) { state in
+                        for window in windows {
+                            if let index = state.computerUseWindows.firstIndex(where: { $0.id == window.id }) {
+                                state.computerUseWindows[index] = state.computerUseWindows[index].updated(with: window)
+                            } else {
+                                // Newest app first so the window being driven stays visible.
+                                state.computerUseWindows.insert(window, at: 0)
+                            }
+                        }
                     }
 
                 case .result(let resultEvent):

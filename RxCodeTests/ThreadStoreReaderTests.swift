@@ -85,7 +85,7 @@ final class ThreadStoreReaderTests: XCTestCase {
         XCTAssertEqual(snapshot.todoProgress, store.loadTodoProgressBySession())
         XCTAssertEqual(
             snapshot.queues.mapValues { $0.map(\.text) },
-            store.loadAllQueues().mapValues { $0.map(\.text) }
+            ["session-b": store.loadQueue(sessionKey: "session-b").map(\.text)]
         )
     }
 
@@ -98,9 +98,88 @@ final class ThreadStoreReaderTests: XCTestCase {
 
         let reader = ThreadStoreReader(container: store.container)
         let edits = await reader.loadThreadDiffPreview(sessionId: "session-a")
+        let count = await reader.loadVisibleFileEditCount(sessionId: "session-a")
 
         XCTAssertEqual(edits.map(\.path), ["/tmp/file.swift"])
         XCTAssertEqual(edits.first?.hunks, hunks)
+        XCTAssertEqual(count, edits.count)
+    }
+
+    func testCheckoutBranchSurvivesSessionRenameWithoutAnAISummary() async {
+        let store = makeStore()
+        let projectId = UUID()
+        store.upsert(summary("pending", projectId: projectId, title: "New thread"))
+        store.upsert(summary("real", projectId: projectId, title: "New thread"))
+        store.setCheckoutBranch(sessionId: "pending", branch: "feature")
+        store.renameId(from: "pending", to: "real")
+        store.upsert(summary("real", projectId: projectId, title: "Updated title"))
+        store.upsertThreadSummaryTitle(sessionId: "older", projectId: projectId, branch: "legacy", title: "Older")
+        store.upsertThreadSummaryTitle(sessionId: "no-branch", projectId: projectId, branch: "unknown", title: "No branch")
+
+        let reader = ThreadStoreReader(container: store.container)
+        let branches = await reader.loadThreadBranches()
+
+        XCTAssertEqual(branches, ["real": ["feature"], "older": ["legacy"]])
+        XCTAssertNil(store.threadSummaryItem(sessionId: "real"))
+    }
+
+    func testPullRequestMatchingUsesCommittedEditsAndRequiresOneMatchingPR() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.path
+        let file = directory.appending(path: "Feature File.swift")
+        let before = "let value = 1\n"
+        let after = "let value = 2\n"
+
+        func git(_ arguments: [String]) async throws -> String {
+            let output = await GitHelper.run(arguments, at: path)
+            return try XCTUnwrap(output).trimmingCharacters(in: .newlines)
+        }
+
+        _ = try await git(["init", "-b", "main"])
+        try before.write(to: file, atomically: true, encoding: .utf8)
+        _ = try await git(["add", "--", file.lastPathComponent])
+        let author = ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"]
+        _ = try await git(author + ["commit", "-m", "Base"])
+        let base = try await git(["rev-parse", "HEAD"])
+
+        let store = makeStore()
+        let project = Project(name: "Repo", path: path, gitHubRepo: "owner/repo")
+        let threads = ["before-branch", "same-file-other-edit", "ambiguous-edit"].map {
+            summary($0, projectId: project.id, title: $0)
+        }
+        for thread in threads {
+            store.upsert(thread)
+            let edited = thread.id == "same-file-other-edit" ? "let value = 3\n" : after
+            store.appendFileEdit(
+                sessionId: thread.id, path: file.path,
+                hunks: [PreviewFile.EditHunk(oldString: before, newString: edited)],
+                containsWrite: false, originalContent: before, modifiedContent: edited,
+                isAmbiguous: thread.id == "ambiguous-edit"
+            )
+        }
+
+        try after.write(to: file, atomically: true, encoding: .utf8)
+        _ = try await git(["checkout", "-b", "feature"])
+        _ = try await git(author + ["commit", "-am", "Commit the saved edit"])
+        let head = try await git(["rev-parse", "HEAD"])
+
+        func revision(_ number: Int) -> ThreadPullRequestRevision {
+            ThreadPullRequestRevision(
+                repositoryFullName: "Owner/Repo", number: number, state: "merged", htmlUrl: nil,
+                baseSha: base, headSha: head, updatedAt: FlexibleTimestamp(date: .now)
+            )
+        }
+        let reader = ThreadStoreReader(container: store.container)
+        let matcher = ThreadPullRequestMatcher()
+        let matches = await matcher.match([revision(375)], to: threads, in: [project], reader: reader)
+        XCTAssertEqual(Set(matches.keys), ["before-branch"])
+        XCTAssertEqual(matches["before-branch"]?.url.absoluteString, "https://github.com/owner/repo/pull/375")
+        XCTAssertEqual(matches["before-branch"]?.state, .merged)
+
+        let ambiguous = await matcher.match([revision(375), revision(376)], to: threads, in: [project], reader: reader)
+        XCTAssertTrue(ambiguous.isEmpty)
     }
 
     /// The sidebar list is the one index the launch path publishes before the

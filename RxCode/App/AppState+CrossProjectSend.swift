@@ -88,22 +88,28 @@ extension AppState {
 
         if let resolvedThreadId, let summary = resolvedThreadSummary {
             let existingState = sessionStates[resolvedThreadId]
-            let resolvedProvider = agentProvider
-                ?? existingState?.agentProvider
-                ?? summary.agentProvider
-            let resolvedModel = model
-                ?? existingState?.model
-                ?? summary.model
+            let previousProvider = existingState?.agentProvider ?? summary.agentProvider
+            let previousModel = existingState?.model ?? summary.model
+            let resolvedProvider = agentProvider ?? previousProvider
+            let resolvedModel = model ?? previousModel
             window.sessionAgentProvider = resolvedProvider
             window.sessionModel = resolvedModel
-            window.sessionEffort = effort ?? existingState?.effort ?? summary.effort
+            let inheritedEffort: String?
+            if resolvedProvider != previousProvider || resolvedModel != previousModel {
+                inheritedEffort = rememberedProjectEffort(in: window)
+            } else if let existingState {
+                inheritedEffort = existingState.effort(fallingBackTo: summary.effort)
+            } else {
+                inheritedEffort = summary.effort
+            }
+            window.sessionEffort = effort ?? inheritedEffort
             window.sessionPermissionMode = permissionMode ?? existingState?.permissionMode ?? summary.permissionMode
 
             if agentProvider != nil || model != nil || effort != nil || permissionMode != nil || existingState == nil {
                 updateState(resolvedThreadId) { state in
                     state.agentProvider = resolvedProvider
                     state.model = resolvedModel
-                    if let effort = window.sessionEffort { state.effort = effort }
+                    state.setEffort(window.sessionEffort)
                     if let permissionMode = window.sessionPermissionMode { state.permissionMode = permissionMode }
                     if state.providerSessionIds.isEmpty {
                         state.providerSessionIds = threadStore.providerSessionIds(forLocalId: resolvedThreadId)

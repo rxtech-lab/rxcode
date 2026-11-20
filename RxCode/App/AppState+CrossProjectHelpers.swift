@@ -98,6 +98,8 @@ extension AppState {
             return "rateLimitEvent"
         case .todoSnapshot:
             return "todoSnapshot"
+        case .computerUseWindows:
+            return "computerUseWindows"
         case .acpModelsDiscovered:
             return "acpModelsDiscovered"
         case .textDelta:

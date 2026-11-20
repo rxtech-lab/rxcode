@@ -2407,6 +2407,9 @@
     "Add another view…" : {
 
     },
+    "Add another window to the preview" : {
+
+    },
     "Add card view" : {
 
     },
@@ -3496,6 +3499,12 @@
       }
     },
     "Allow Personal Voice…" : {
+
+    },
+    "Allow Screen Recording to watch Codex work live." : {
+
+    },
+    "Allow Screen Recording…" : {
 
     },
     "Allow this copy of RxCode in Privacy & Security → Accessibility to focus windows and perform requested clicks or scrolling. Then retry the action." : {
@@ -4931,6 +4940,9 @@
         }
       }
     },
+    "Bring App to Front" : {
+
+    },
     "Browse Flowcy projects" : {
       "localizations" : {
         "ko" : {
@@ -5458,7 +5470,13 @@
     "Choose a setup agent in the studio's Engine & Setup settings first. RxCode's local agent can't read model cards." : {
 
     },
+    "Choose a single window in the macOS sharing picker." : {
+
+    },
     "Choose an account" : {
+
+    },
+    "Choose an available window in the macOS sharing picker to start the preview." : {
 
     },
     "Choose an existing value" : {
@@ -5627,6 +5645,9 @@
           }
         }
       }
+    },
+    "Choose Window…" : {
+
     },
     "Choose…" : {
       "localizations" : {
@@ -6015,6 +6036,9 @@
         }
       }
     },
+    "Click to show this window in the floating preview" : {
+
+    },
     "Click to view run history, double-click to edit" : {
 
     },
@@ -6149,6 +6173,9 @@
           }
         }
       }
+    },
+    "Close the preview in the other RxCode window before choosing a new window." : {
+
     },
     "Close UI card" : {
 
@@ -6707,6 +6734,12 @@
       }
     },
     "Compressing ZIP…" : {
+
+    },
+    "Computer use — %@" : {
+
+    },
+    "Computer Use Windows" : {
 
     },
     "Concurrent" : {
@@ -7459,6 +7492,9 @@
       }
     },
     "Couldn't Open the Model Page" : {
+
+    },
+    "Couldn’t Preview Window" : {
 
     },
     "Couldn't reach the current response — still queued, sends when it ends." : {
@@ -12016,6 +12052,9 @@
         }
       }
     },
+    "Follow Codex" : {
+
+    },
     "Follow-up" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12025,6 +12064,9 @@
           }
         }
       }
+    },
+    "Following Codex" : {
+
     },
     "Font Size" : {
       "localizations" : {
@@ -14603,6 +14645,12 @@
     "Listening…" : {
 
     },
+    "Live" : {
+
+    },
+    "LIVE" : {
+
+    },
     "Live channel only" : {
       "localizations" : {
         "ko" : {
@@ -14986,6 +15034,9 @@
       }
     },
     "Looked up on the next run" : {
+
+    },
+    "Looking for the window…" : {
 
     },
     "Low" : {
@@ -15873,6 +15924,9 @@
           }
         }
       }
+    },
+    "Minimize to the banner above the message box" : {
+
     },
     "Minute" : {
       "localizations" : {
@@ -18219,6 +18273,9 @@
     "No Voice Models Found" : {
 
     },
+    "No Windows to Preview" : {
+
+    },
     "No workflows scanned yet. Add a release workflow (e.g. .github/workflows/create-release.yaml) to the repo, then re-add the repository to rescan." : {
       "localizations" : {
         "ko" : {
@@ -20233,6 +20290,9 @@
           }
         }
       }
+    },
+    "Preview a Window…" : {
+
     },
     "Preview Poses…" : {
 
@@ -24563,6 +24623,9 @@
         }
       }
     },
+    "Shared Window" : {
+
+    },
     "Shared With" : {
       "localizations" : {
         "zh-Hans" : {
@@ -24739,6 +24802,9 @@
           }
         }
       }
+    },
+    "Show All Windows" : {
+
     },
     "Show archived chats" : {
       "localizations" : {
@@ -24924,6 +24990,9 @@
           }
         }
       }
+    },
+    "Show in Floating Preview" : {
+
     },
     "Show less" : {
       "localizations" : {
@@ -26132,6 +26201,9 @@
           }
         }
       }
+    },
+    "Stop Window Preview" : {
+
     },
     "Storage and Cache" : {
       "localizations" : {
@@ -30065,6 +30137,12 @@
           }
         }
       }
+    },
+    "Window preview minimized" : {
+
+    },
+    "Windows appear here while Codex uses your computer." : {
+
     },
     "Wipe cached embeddings and re-embed every thread for semantic search. Use this if global search results look stale or empty." : {
       "localizations" : {

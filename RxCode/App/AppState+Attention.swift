@@ -36,17 +36,25 @@ extension AppState {
 
     /// Setup banners belong to projects, so they do not mark every child thread.
     func projectAttention(projectId: UUID, in window: WindowState) -> PendingAttention {
-        var sessionIds = Set(allSessionSummaries.filter { $0.projectId == projectId }
-            .map { resolveCurrentSessionId($0.id) })
+        var sessionIds = projectAttentionSessionIDs(projectId: projectId)
         // Include a new chat before its first persisted summary is available.
         for candidate in [window] + liveWindowRefs.compactMap(\.window)
             where candidate.selectedProject?.id == projectId {
-            sessionIds.insert(resolveCurrentSessionId(candidate.currentSessionId ?? candidate.newSessionKey))
+            let id = resolveCurrentSessionId(candidate.currentSessionId ?? candidate.newSessionKey)
+            if !sessionIds.contains(id) {
+                sessionIds.insert(id)
+            }
         }
         let tasks = taskBoard(for: projectId).inProgressTasks
         let taskSessionIds = Set(tasks.compactMap(\.sessionKey).map { resolveCurrentSessionId($0) })
-        let running = sessionIds.filter { sessionActivity[$0]?.isStreaming == true }
-        let unread = sessionIds.filter { sessionActivity[$0]?.hasUncheckedCompletion == true }
+        var running = 0
+        var unread = 0
+        for (id, activity) in sessionActivity
+            where (activity.isStreaming || activity.hasUncheckedCompletion)
+                && sessionIds.contains(id) && !taskSessionIds.contains(id) {
+            if activity.isStreaming { running += 1 }
+            else { unread += 1 }
+        }
         // A task and its chat represent the same activity, even after a session rename.
         let taskCount = taskSessionIds.count + tasks.filter { $0.sessionKey == nil }.count
         return PendingAttention(
@@ -57,10 +65,26 @@ extension AppState {
             confirmations: agentPrompts.confirmations.filter {
                 $0.projectId == projectId || sessionIds.contains(resolveCurrentSessionId($0.sessionKey))
             }.count,
-            runningThreads: running.subtracting(taskSessionIds).count,
-            unreadThreads: unread.subtracting(taskSessionIds).subtracting(running).count,
+            runningThreads: running,
+            unreadThreads: unread,
             inProgressTasks: taskCount
         )
+    }
+
+    private func projectAttentionSessionIDs(projectId: UUID) -> Set<String> {
+        // Register the dependencies even when the index is warm so each badge
+        // refreshes after a thread moves, is removed, or gets a new ID.
+        let summaries = allSessionSummaries
+        _ = sessionIdRedirect
+        if let attentionSessionIDsByProject {
+            return attentionSessionIDsByProject[projectId] ?? []
+        }
+        var index: [UUID: Set<String>] = [:]
+        for summary in summaries {
+            index[summary.projectId, default: []].insert(resolveCurrentSessionId(summary.id))
+        }
+        attentionSessionIDsByProject = index
+        return index[projectId] ?? []
     }
 
     func setupAttentionCount(projectId: UUID?) -> Int {

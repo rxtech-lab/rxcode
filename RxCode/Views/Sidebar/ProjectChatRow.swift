@@ -18,17 +18,20 @@ nonisolated struct ChatTodoProgress: Sendable, Equatable {
     let done: Int
     let total: Int
     let inProgress: Bool
+    let updatedAt: Date
 
-    init(done: Int, total: Int, inProgress: Bool) {
+    init(done: Int, total: Int, inProgress: Bool, updatedAt: Date = .distantPast) {
         self.done = done
         self.total = total
         self.inProgress = inProgress
+        self.updatedAt = updatedAt
     }
 
-    init(todos: [TodoItem]) {
-        self.done = todos.filter { $0.status == .completed }.count
-        self.total = todos.count
-        self.inProgress = todos.contains { $0.status == .inProgress }
+    init(snapshot: TodoListSnapshot) {
+        self.done = snapshot.items.filter { $0.status == .completed }.count
+        self.total = snapshot.items.count
+        self.inProgress = snapshot.items.contains { $0.status == .inProgress }
+        self.updatedAt = snapshot.updatedAt
     }
 }
 

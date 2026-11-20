@@ -129,7 +129,7 @@ struct EffortPickerSheet: View {
 
     private var items: [String?] { [nil] + levels.map { Optional($0.id) } }
 
-    var effectiveEffort: String? { windowState.sessionEffort }
+    var effectiveEffort: String? { appState.effectiveSessionEffort(in: windowState) }
 
     private func displayName(_ effort: String?) -> String {
         // The clearing row names what it falls back to, the same way the

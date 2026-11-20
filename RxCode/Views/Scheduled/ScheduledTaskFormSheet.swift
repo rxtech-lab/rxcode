@@ -268,7 +268,7 @@ struct ScheduledTaskFormSheet: View {
                         Text("At the due time, the pet delivers this reminder text as a caption and spoken notification according to Pet & Voice preferences. No project is checked and no agent is dispatched. Muting the microphone does not silence notifications.")
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("This check reads observed task-board and thread activity. It does not dispatch an agent or execute the request as project actions. Captions and speech follow Pet & Voice notification preferences; a muted microphone does not silence output.")
+                        Text("This check reads observed task-board and thread activity. It does not dispatch an agent or execute the request as project actions. Captions and speech follow Pet & Voice notification preferences. Muting pet audio delivers captions only.")
                             .foregroundStyle(.secondary)
                     }
                 }

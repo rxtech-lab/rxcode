@@ -1,354 +1,131 @@
-import SwiftUI
 import RxCodeCore
+import SwiftUI
 
-/// View that visually shows the Git status of the project.
+/// Branch management for the checkout selected in the workspace.
 struct GitStatusView: View {
-    let projectPath: String
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @State private var gitStatus: GitStatusInfo = .loading
-    @State private var refreshTask: Task<Void, Never>?
-    @State private var localBranches: [String] = []
-    @State private var remoteBranches: [RemoteBranch] = []
-    @State private var headWatcher: (any DispatchSourceFileSystemObject)?
-    @State private var isInitializingGit = false
+    let tree: GitWorkingTree
+    @Environment(RepositoryStatus.self) private var repository
+    @State private var branches = BranchList()
+    @State private var filter = ""
+    @State private var reloadID = UUID()
+    @State private var switching = false
+    @State private var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            switch gitStatus {
-            case .loading:
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text("Checking...")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Spacer()
-                }
-
-            case .notARepo:
-                HStack(spacing: 8) {
-                    Image(systemName: "folder")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text("Not a Git repository")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Spacer()
-                    Button {
-                        initializeGit()
-                    } label: {
-                        HStack(spacing: 4) {
-                            if isInitializingGit {
-                                ProgressView().controlSize(.mini)
-                            } else {
-                                Image(systemName: "plus.circle")
-                                    .font(.system(size: ClaudeTheme.size(10)))
-                            }
-                            Text(isInitializingGit ? "Initializing…" : "Initialize Git")
-                                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                        }
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(ClaudeTheme.surfacePrimary.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isInitializingGit)
-                    .help("Run git init in this project")
-                }
-
-            case .clean(let branch):
-                // First row: branch button + refresh
-                HStack(spacing: 8) {
-                    branchMenu(branch)
-                    Spacer()
-                    refreshButton
-                }
-                // Second row: status
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(ClaudeTheme.statusSuccess)
-                    Text("No changes")
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                }
-
-            case .dirty(let branch, let changes):
-                // First row: branch button + refresh
-                HStack(spacing: 8) {
-                    branchMenu(branch)
-                    Spacer()
-                    refreshButton
-                }
-                // Second row: change status + badges
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(ClaudeTheme.accent)
-                        .frame(width: 6, height: 6)
-                    Text("\(changes.total) changed")
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(ClaudeTheme.accent)
-
-                    if changes.modified > 0 {
-                        badge("M \(changes.modified)", color: .blue)
-                    }
-                    if changes.added > 0 {
-                        badge("A \(changes.added)", color: ClaudeTheme.statusSuccess)
-                    }
-                    if changes.deleted > 0 {
-                        badge("D \(changes.deleted)", color: ClaudeTheme.statusError)
-                    }
-                }
-
-            case .error:
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text("Failed to check status")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Spacer()
-                    refreshButton
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(ClaudeTheme.surfaceSecondary.opacity(0.5))
-        .onAppear {
-            startWatchingHEAD()
-        }
-        .onDisappear {
-            stopWatchingHEAD()
-        }
-        .onChange(of: projectPath) { _, _ in
-            // Enqueue stop/start on the next run loop tick — keeps the watcher lifecycle
-            // out of the selectProject first-frame critical path.
-            Task { @MainActor in
-                stopWatchingHEAD()
-                startWatchingHEAD()
-            }
-        }
-        .onChange(of: appState.isStreaming(in: windowState)) { old, new in
-            if old && !new { refresh() }
-        }
-        .task(id: projectPath) {
-            let path = projectPath
-            let fresh = await fetchGitStatus(at: path)
-            guard !Task.isCancelled else { return }
-            gitStatus = fresh
-        }
-    }
-
-    // MARK: - Refresh Button
-
-    private var refreshButton: some View {
-        Button {
-            refresh()
-        } label: {
-            Image(systemName: "arrow.clockwise")
-                .font(.system(size: ClaudeTheme.size(10)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-        }
-        .buttonStyle(.borderless)
-        .help("Refresh")
-    }
-
-    // MARK: - Branch Menu
-
-    private func branchMenu(_ currentBranch: String) -> some View {
-        Menu {
-            Section("Local") {
-                ForEach(localBranches, id: \.self) { branch in
-                    Button {
-                        Task {
-                            let success = await gitCheckout(branch: branch, at: projectPath)
-                            if success { refresh(); loadBranches() }
-                        }
-                    } label: {
-                        HStack {
-                            Text(branch)
-                            if branch == currentBranch {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                    .disabled(branch == currentBranch)
-                }
-                if localBranches.isEmpty {
-                    Text("No local branches")
-                }
-            }
-
-            Section("Remote") {
-                ForEach(remoteBranches, id: \.self) { branch in
-                    remoteBranchButton(branch)
-                }
-                if remoteBranches.isEmpty {
-                    Text("No remote branches")
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 9) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                Text(currentBranch)
-                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: ClaudeTheme.size(8), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.accent)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(tree.isDetached ? String(localized: "Detached at \(tree.head)") : tree.head)
+                        .font(.headline.monospaced())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let tracking = tree.upstream?.upstream {
+                        Text(tracking)
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Spacer(minLength: 4)
+                Button {
+                    reloadID = UUID()
+                } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Refresh branches")
             }
-            .foregroundStyle(ClaudeTheme.textPrimary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(ClaudeTheme.surfacePrimary.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+            .padding(12)
+            TextField("Filter branches", text: $filter)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            Divider()
+            branchList
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Switch Branch")
-        .onAppear { loadBranches() }
-        .onChange(of: projectPath) { _, _ in loadBranches() }
+        .disabled(switching)
+        .overlay {
+            if switching { ProgressView("Switching branch…").padding().background(.regularMaterial, in: .rect(cornerRadius: 10)) }
+        }
+        .alert("Couldn’t switch branches", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") { error = nil }
+        } message: { Text(error ?? "") }
+        .task(id: reloadID) {
+            await repository.refresh(at: repository.path ?? tree.root)
+            let result = await fetchGitBranches(at: tree.root)
+            guard !Task.isCancelled else { return }
+            branches = result
+        }
     }
 
-    private func remoteBranchButton(_ branch: RemoteBranch) -> some View {
-        Button {
-            Task {
-                let success = await gitCheckoutRemote(branch: branch, localBranches: localBranches, at: projectPath)
-                if success { refresh(); loadBranches() }
+    private var branchList: some View {
+        let local = branches.local.filter(matches)
+        let remote = branches.remote.filter { matches($0.refName) }
+        return List {
+            if !local.isEmpty {
+                Section("Local branches") {
+                    ForEach(local, id: \.self) { name in
+                        branchButton(name: name, current: !tree.isDetached && name == tree.head) {
+                            await GitHelper.runWithError(["switch", "--", name], at: tree.root)
+                        }
+                    }
+                }
             }
-        } label: {
-            Text(branch.displayName)
-        }
-    }
-
-    // MARK: - Branch Loading
-
-    private func loadBranches() {
-        Task {
-            let result = await fetchGitBranches(at: projectPath)
-            localBranches = result.local
-            remoteBranches = result.remote
-        }
-    }
-
-    private var currentBranchName: String? {
-        switch gitStatus {
-        case .clean(let branch): branch
-        case .dirty(let branch, _): branch
-        default: nil
-        }
-    }
-
-    // MARK: - Badge
-
-    private func badge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: ClaudeTheme.size(10)))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(Capsule())
-    }
-
-    // MARK: - HEAD Watcher
-
-    private func startWatchingHEAD() {
-        let headPath = projectPath + "/.git/HEAD"
-        let fd = open(headPath, O_EVTONLY)
-        guard fd != -1 else { return }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename, .attrib],
-            queue: .main
-        )
-        source.setEventHandler { [weak source] in
-            let data = source?.data ?? []
-            refresh()
-            if !data.intersection([.delete, .rename]).isEmpty {
-                stopWatchingHEAD()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    startWatchingHEAD()
+            if !remote.isEmpty {
+                Section("Remote branches") {
+                    ForEach(remote, id: \.self) { branch in
+                        branchButton(name: branch.refName, current: false) { await switchToRemote(branch) }
+                    }
                 }
             }
         }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        headWatcher = source
-    }
-
-    private func stopWatchingHEAD() {
-        headWatcher?.cancel()
-        headWatcher = nil
-    }
-
-    // MARK: - Refresh
-
-    private func refresh() {
-        refreshTask?.cancel()
-        let path = projectPath
-        refreshTask = Task {
-            let fresh = await fetchGitStatus(at: path)
-            guard !Task.isCancelled else { return }
-            gitStatus = fresh
+        .listStyle(.inset)
+        .overlay {
+            if local.isEmpty && remote.isEmpty {
+                ContentUnavailableView(filter.isEmpty ? "No branches yet" : "No matching branches", systemImage: "arrow.triangle.branch")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 
-    private func initializeGit() {
-        guard !isInitializingGit else { return }
-        let path = projectPath
-        isInitializingGit = true
-        Task {
-            _ = await GitHelper.initRepository(at: path)
-            isInitializingGit = false
-            refresh()
-            loadBranches()
+    private func matches(_ name: String) -> Bool {
+        filter.isEmpty || name.localizedCaseInsensitiveContains(filter)
+    }
+
+    private func branchButton(name: String, current: Bool, action: @escaping () async -> String?) -> some View {
+        Button {
+            guard !switching else { return }
+            switching = true
+            Task {
+                error = await action()
+                switching = false
+                reloadID = UUID()
+            }
+        } label: {
+            HStack {
+                Text(name).lineLimit(1).truncationMode(.middle)
+                Spacer()
+                if current {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(ClaudeTheme.accent)
+                        .accessibilityLabel("Current branch")
+                }
+            }
+            .contentShape(Rectangle())
         }
-    }
-}
-
-// MARK: - Git Status Model
-
-enum GitStatusInfo: Sendable {
-    case loading
-    case notARepo
-    case clean(branch: String)
-    case dirty(branch: String, changes: ChangeCount)
-    case error
-
-    struct ChangeCount: Sendable {
-        let modified: Int
-        let added: Int
-        let deleted: Int
-        var total: Int { modified + added + deleted }
-    }
-}
-
-// MARK: - Git Status Fetcher
-
-private func fetchGitStatus(at path: String) async -> GitStatusInfo {
-    // Run both git calls in parallel — saves the slower one's wait time (~100-250ms)
-    async let branchResult = GitHelper.run(["rev-parse", "--abbrev-ref", "HEAD"], at: path)
-    async let statusResult = GitHelper.run(["status", "--porcelain"], at: path)
-    let (b, s) = await (branchResult, statusResult)
-
-    guard let branchRaw = b, !branchRaw.isEmpty else { return .notARepo }
-    guard let statusRaw = s else { return .error }
-
-    let branch = branchRaw.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    if statusRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        return .clean(branch: branch)
+        .buttonStyle(.plain)
+        .disabled(current)
+        .help(current ? String(localized: "Current branch") : String(localized: "Switch to \(name)"))
     }
 
-    let counts = parseGitStatusPorcelain(statusRaw)
-    return .dirty(
-        branch: branch,
-        changes: .init(modified: counts.modified, added: counts.added, deleted: counts.deleted)
-    )
+    private func switchToRemote(_ branch: RemoteBranch) async -> String? {
+        if branches.local.contains(branch.name) {
+            if let failure = await GitHelper.runWithError(["switch", "--", branch.name], at: tree.root) { return failure }
+            return await GitHelper.runWithError(["branch", "--set-upstream-to", branch.refName, branch.name], at: tree.root)
+        }
+        return await GitHelper.runWithError(["switch", "--track", "-c", branch.name, branch.refName], at: tree.root)
+    }
 }
 
 // MARK: - Git Branch List
@@ -363,7 +140,6 @@ struct RemoteBranch: Hashable, Sendable {
     let name: String
 
     var refName: String { "\(remote)/\(name)" }
-    var displayName: String { refName }
 }
 
 private func fetchGitBranches(at path: String) async -> BranchList {
@@ -397,32 +173,6 @@ private func fetchGitBranches(at path: String) async -> BranchList {
 
     return BranchList(
         local: local.sorted(),
-        remote: remote.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        remote: remote.sorted { $0.refName.localizedStandardCompare($1.refName) == .orderedAscending }
     )
-}
-
-// MARK: - Git Checkout
-
-private func gitCheckout(branch: String, at path: String) async -> Bool {
-    await GitHelper.run(["switch", branch], at: path) != nil
-}
-
-private func gitCheckoutRemote(branch: RemoteBranch, localBranches: [String], at path: String) async -> Bool {
-    if localBranches.contains(branch.name) {
-        guard await GitHelper.run(["switch", branch.name], at: path) != nil else {
-            return false
-        }
-        _ = await GitHelper.run(["branch", "--set-upstream-to", branch.refName, branch.name], at: path)
-        return true
-    }
-
-    return await GitHelper.run(["switch", "--track", "-c", branch.name, branch.refName], at: path) != nil
-}
-
-
-#Preview {
-    VStack(spacing: 0) {
-        GitStatusView(projectPath: "/Users/jmlee/workspace/RxCode")
-    }
-    .frame(width: 400)
 }

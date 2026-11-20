@@ -81,7 +81,28 @@ extension AppState {
         includeIDEMCP: Bool,
         streamStart: Date
     ) async -> StreamPreflight {
-        // Flowcy accepts the conversation over HTTPS and has no local tool bridge.
+        if projectId == Project.globalChatID {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+                }.value
+            } catch {
+                let message = "Could not prepare the chat folder: \(error.localizedDescription)"
+                return StreamPreflight(
+                    mcpCodexOverrides: [], acpMCPServers: [], resolvedPrompt: prompt, resolvedModel: model,
+                    resolvedEffort: nil, resolvedSendMode: permissionMode,
+                    earlyStream: AsyncStream { continuation in
+                        continuation.yield(.user(UserMessage(toolUseId: nil, content: message, isError: true)))
+                        continuation.yield(.result(ResultEvent(
+                            durationMs: nil, totalCostUsd: nil, sessionId: cliSessionId ?? sessionKey,
+                            isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                        )))
+                        continuation.finish()
+                    }
+                )
+            }
+        }
+        // Flowcy declares its desktop terminal directly in the HTTPS chat request.
         if agentProvider == .flowcy {
             return StreamPreflight(
                 mcpCodexOverrides: [], acpMCPServers: [], resolvedPrompt: prompt, resolvedModel: model,
@@ -308,25 +329,6 @@ extension AppState {
                         isError: true, totalTurns: nil, usage: nil, contextWindow: nil
                     )))
                     c.finish()
-                }
-            }
-        }
-
-        if projectId == Project.globalChatID {
-            do {
-                try await Task.detached(priority: .userInitiated) {
-                    try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
-                }.value
-            } catch {
-                let message = "Could not prepare the chat folder: \(error.localizedDescription)"
-                earlyStream = AsyncStream { continuation in
-                    continuation.yield(.user(UserMessage(toolUseId: nil, content: message, isError: true)))
-                    continuation.yield(.result(ResultEvent(
-                        durationMs: nil, totalCostUsd: nil,
-                        sessionId: cliSessionId ?? sessionKey,
-                        isError: true, totalTurns: nil, usage: nil, contextWindow: nil
-                    )))
-                    continuation.finish()
                 }
             }
         }

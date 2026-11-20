@@ -9,6 +9,7 @@ public enum AppStorageKeys {
     public static let showRightSidebar = "showRightSidebar"
     /// Last visible width of the right inspector sidebar.
     public static let rightInspectorWidth = "rightInspectorWidth"
+    public static let rightInspectorLayout = "rightInspectorLayout"
 }
 
 // MARK: - RightInspectorPanelLayout
@@ -61,7 +62,7 @@ public enum RightInspectorPanelLayout {
 
 // MARK: - InspectorTab
 
-public enum InspectorTab: String, CaseIterable {
+public enum InspectorTab: String, CaseIterable, Codable, Sendable {
     case terminal = "Terminal"
     case run = "Run"
     case views = "Views"
@@ -89,7 +90,7 @@ public enum InspectorTab: String, CaseIterable {
 
 // MARK: - InspectorReviewTab
 
-public enum InspectorReviewTab: String, CaseIterable, Sendable {
+public enum InspectorReviewTab: String, CaseIterable, Codable, Sendable {
     case thisThread = "This thread"
     case changes = "Changes"
     case branch = "Branch"
@@ -109,14 +110,20 @@ public enum InspectorReviewTab: String, CaseIterable, Sendable {
 
 // MARK: - InspectorMode
 
-public enum InspectorMode: String, CaseIterable, Sendable {
+public enum InspectorMode: String, CaseIterable, Codable, Identifiable, Sendable {
     case review = "Review"
     case inspector = "Inspector"
+    case preview = "Preview"
+    case browser = "Browser"
+
+    public var id: Self { self }
 
     public var title: LocalizedStringResource {
         switch self {
         case .review: "Review"
-        case .inspector: "Inspector"
+        case .inspector: "Tools"
+        case .preview: "Preview"
+        case .browser: "Browser"
         }
     }
 
@@ -275,58 +282,75 @@ public final class WindowState {
     // MARK: - UI State
 
     public var interactiveTerminal: InteractiveTerminalState?
-    /// Persisted to UserDefaults so the inspector remembers whether the user
-    /// last looked at Review or Inspector. Defaults to Review on first launch.
-    public var inspectorMode: InspectorMode = WindowState.loadInspectorMode() {
+    @ObservationIgnored private var inspectorLayoutKey: String?
+    public var inspectorLayout = InspectorLayout(
+        selected: UserDefaults.standard.string(forKey: "inspectorMode").flatMap(InspectorMode.init(rawValue:)) ?? .review,
+        tool: UserDefaults.standard.string(forKey: "inspectorTab").flatMap(InspectorTab.init(rawValue:)) ?? .terminal,
+        review: UserDefaults.standard.string(forKey: "inspectorReviewTab").flatMap(InspectorReviewTab.init(rawValue:)) ?? .thisThread
+    ) {
         didSet {
-            UserDefaults.standard.set(inspectorMode.rawValue, forKey: WindowState.inspectorModeKey)
+            guard let inspectorLayoutKey, oldValue != inspectorLayout,
+                  let data = try? JSONEncoder().encode(inspectorLayout) else { return }
+            UserDefaults.standard.set(data, forKey: inspectorLayoutKey)
         }
     }
-    /// Persisted to UserDefaults. Defaults to Terminal so the Cmd+T workflow
-    /// keeps working out of the box when the user opens Inspector mode.
-    public var inspectorTab: InspectorTab = WindowState.loadInspectorTab() {
-        didSet {
-            UserDefaults.standard.set(inspectorTab.rawValue, forKey: WindowState.inspectorTabKey)
+
+    public func restoreInspectorLayout(forKey key: String) {
+        guard inspectorLayoutKey != key else { return }
+        inspectorLayoutKey = nil
+        let saved = UserDefaults.standard.data(forKey: key)
+        if let saved, let layout = InspectorLayout.restore(from: saved) {
+            inspectorLayout = layout
+        }
+        if let data = try? JSONEncoder().encode(inspectorLayout), data != saved {
+            // Persist the browser's session ID even if the user leaves the layout at its default.
+            UserDefaults.standard.set(data, forKey: key)
+        }
+        inspectorLayoutKey = key
+    }
+
+    public var inspectorMode: InspectorMode {
+        get { inspectorLayout.mode }
+        set { inspectorLayout.mode = newValue }
+    }
+
+    public var inspectorTab: InspectorTab {
+        get { inspectorLayout.tools.selectedTab?.tool ?? .terminal }
+        set {
+            var layout = inspectorLayout
+            layout.mode = .inspector
+            layout.tools.reveal(newValue)
+            inspectorLayout = layout
         }
     }
-    private static let inspectorModeKey = "inspectorMode"
-    private static let inspectorTabKey = "inspectorTab"
-    private static func loadInspectorMode() -> InspectorMode {
-        guard let raw = UserDefaults.standard.string(forKey: inspectorModeKey),
-            let mode = InspectorMode(rawValue: raw)
-        else { return .review }
-        return mode
+
+    public var inspectorReviewTab: InspectorReviewTab {
+        get { inspectorLayout.review }
+        set {
+            var layout = inspectorLayout
+            layout.mode = .review
+            layout.review = newValue
+            inspectorLayout = layout
+        }
     }
-    private static func loadInspectorTab() -> InspectorTab {
-        guard let raw = UserDefaults.standard.string(forKey: inspectorTabKey),
-            let tab = InspectorTab(rawValue: raw)
-        else { return .terminal }
-        return tab
-    }
+
+    /// The right inspector covers the chat, which floats above it as a compact bubble.
+    public var inspectorExpanded = false
+    /// Whether the floating chat bubble is collapsed to a single button.
+    public var floatingChatMinimized = false
+    /// Width of the main detail column, which an expanded inspector covers.
+    public var detailColumnWidth: CGFloat = 0
     /// Currently-selected run profile in the toolbar picker. Persisted only in
     /// memory — re-selecting on relaunch is fine. Per-window so two windows
     /// can target different profiles in the same project.
     public var selectedRunProfileId: UUID?
     /// Whether the run-configurations editor sheet is open.
     public var showRunConfigurations: Bool = false
-    /// Which active run task the Run inspector tab is currently displaying.
-    public var selectedRunTaskId: UUID?
+    /// Which run task each Run tab is displaying in this window.
+    public var inspectorRunTaskIDs: [UUID: UUID] = [:]
     /// Bumped to request the active inspector terminal to clear its buffer.
-    /// Observed by `RightInspectorPanel`; the value itself is meaningless — only the change matters.
+    /// The selected Terminal tab reacts to changes in this value.
     public var clearTerminalRequest: UUID?
-    public var inspectorReviewTab: InspectorReviewTab = WindowState.loadInspectorReviewTab() {
-        didSet {
-            UserDefaults.standard.set(
-                inspectorReviewTab.rawValue, forKey: WindowState.inspectorReviewTabKey)
-        }
-    }
-    private static let inspectorReviewTabKey = "inspectorReviewTab"
-    private static func loadInspectorReviewTab() -> InspectorReviewTab {
-        guard let raw = UserDefaults.standard.string(forKey: inspectorReviewTabKey),
-            let tab = InspectorReviewTab(rawValue: raw)
-        else { return .thisThread }
-        return tab
-    }
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
     /// A local video opened from a chat link, shown in a player sheet.

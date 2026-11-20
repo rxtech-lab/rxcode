@@ -8,8 +8,8 @@ import RxCodeCore
 struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @Environment(ChatBridge.self) private var environmentChatBridge: ChatBridge?
     @Environment(WindowState.self) private var environmentWindowState: WindowState?
-    @State private var isInputFocused: Bool = false
-    @State private var inputFocusTrigger: UUID? = nil
+    @State var isInputFocused: Bool = false
+    @State var inputFocusTrigger: UUID? = nil
 
     private let accessory: Accessory
     private let topAccessory: TopAccessory
@@ -17,19 +17,19 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     private let injectedWindowState: WindowState?
 
     @State private var showFilePicker = false
-    @State private var showSlashPopup = false
-    @State private var slashSelectedIndex = 0
+    @State var showSlashPopup = false
+    @State var slashSelectedIndex = 0
     @State private var slashDetailCommand: SlashCommand?
     @State private var textPreviewAttachment: Attachment?
     @State private var imagePreviewAttachment: Attachment?
     @State private var isDragOver = false
-    @State private var showAtPopup = false
-    @State private var atSelectedIndex = 0
+    @State var showAtPopup = false
+    @State var atSelectedIndex = 0
     @State private var shortcuts: [ChatShortcut] = []
-    @State private var historyIndex: Int = -1
-    @State private var textFieldLayoutID = 0
-    @State private var measuredInputHeight: CGFloat = 20
-    @State private var inputHasMarkedText = false
+    @State var historyIndex: Int = -1
+    @State var textFieldLayoutID = 0
+    @State var measuredInputHeight: CGFloat = 20
+    @State var inputHasMarkedText = false
     /// Queued messages whose "steer now" was declined by the running turn.
     /// Non-private because the queue UI lives in an InputBarView extension in
     /// another file; it renders these as an inline "still queued" note.
@@ -373,7 +373,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
     }
 
-    private var composerPlaceholder: String {
+    var composerPlaceholder: String {
         switch chatBridge.studioKind {
         case .video: String(localized: "Describe a video…", bundle: .module)
         case .image: String(localized: "Describe an image…", bundle: .module)
@@ -392,295 +392,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         )
     }
 
-    @ViewBuilder
-    private var inputTextField: some View {
-        IMETextView(
-            text: Bindable(windowState).inputText,
-            isFocused: $isInputFocused,
-            hasMarkedText: $inputHasMarkedText,
-            focusTrigger: inputFocusTrigger,
-            font: .systemFont(ofSize: ClaudeTheme.size(14)),
-            textColor: NSColor(ClaudeTheme.textPrimary),
-            placeholder: composerPlaceholder,
-            onReturn: handleReturnKey,
-            onUpArrow: { handleUpArrow() == .handled },
-            onDownArrow: { handleDownArrow() == .handled },
-            onTab: { handleTab() == .handled },
-            onShiftTab: { Task { await chatBridge.togglePlanMode() } },
-            onEscape: handleEscapeKey,
-            onPasteCommandV: handlePaste,
-            onImageChipTap: handleImageChipTap
-        )
-        .id(textFieldLayoutID)
-        .accessibilityIdentifier("chat-input")
-        .onChange(of: windowState.inputText) { oldValue, newValue in
-            handleInputTextChange(oldValue: oldValue, newValue: newValue)
-        }
-        .frame(height: clampedInputHeight)
-        .background(InputHeightMeasurer(text: windowState.inputText, measuredHeight: $measuredInputHeight))
-    }
-
-    private var clampedInputHeight: CGFloat {
-        let oneLine: CGFloat = 20
-        let minHeight: CGFloat = 38
-        let maxLines: CGFloat = 10
-        return min(max(measuredInputHeight, minHeight), oneLine * maxLines)
-    }
-
-    private func handleInputTextChange(oldValue: String, newValue: String) {
-        // Safety net for paste routes onKeyPress doesn't intercept (context menu, Edit menu).
-        // delta > 1 filters out single-keystroke typing; IME commits are too short to hit
-        // the longTextThreshold, so false positives are not a concern.
-        if newValue.count - oldValue.count > 1,
-           let inserted = insertedSubstring(oldValue: oldValue, newValue: newValue) {
-            if let attachment = attachmentFromPastedText(inserted) {
-                windowState.addAttachment(attachment)
-                windowState.inputText = oldValue
-                return
-            }
-            if chatBridge.autoPreviewSettings.longText,
-               inserted.count >= AttachmentFactory.longTextThreshold {
-                windowState.addAttachment(AttachmentFactory.fromLongText(inserted))
-                windowState.inputText = oldValue
-                return
-            }
-        }
-
-        let trimmed = newValue.trimmingCharacters(in: .whitespaces)
-        let hasSpaceAfterSlash = newValue.contains(" ")
-        let shouldShowSlash = trimmed.hasPrefix("/") && !hasSpaceAfterSlash
-        if shouldShowSlash != showSlashPopup {
-            withAnimation(.easeOut(duration: 0.15)) { showSlashPopup = shouldShowSlash }
-        }
-        if shouldShowSlash { slashSelectedIndex = 0 }
-
-        let shouldShowAt = !shouldShowSlash && hasActiveAtQuery(in: newValue)
-        if shouldShowAt != showAtPopup {
-            withAnimation(.easeOut(duration: 0.15)) { showAtPopup = shouldShowAt }
-        }
-        if shouldShowAt { atSelectedIndex = 0 }
-    }
-
-    private func handleUpArrow() -> KeyPress.Result {
-        if showAtPopup && atCombinedCount > 0 {
-            let count = atCombinedCount
-            atSelectedIndex = (atSelectedIndex - 1 + count) % count
-            return .handled
-        }
-        if showSlashPopup && !slashFilteredCommands.isEmpty {
-            let count = slashFilteredCommands.count
-            slashSelectedIndex = (slashSelectedIndex - 1 + count) % count
-            return .handled
-        }
-        let history = userMessageHistory
-        guard !history.isEmpty else { return .ignored }
-        let nextIndex = historyIndex + 1
-        if nextIndex < history.count {
-            historyIndex = nextIndex
-            let msgIndex = history.count - 1 - historyIndex
-            windowState.inputText = history[msgIndex]
-        }
-        return .handled
-    }
-
-    private func handleDownArrow() -> KeyPress.Result {
-        if showAtPopup && atCombinedCount > 0 {
-            let count = atCombinedCount
-            atSelectedIndex = (atSelectedIndex + 1) % count
-            return .handled
-        }
-        if showSlashPopup && !slashFilteredCommands.isEmpty {
-            let count = slashFilteredCommands.count
-            slashSelectedIndex = (slashSelectedIndex + 1) % count
-            return .handled
-        }
-        guard historyIndex >= 0 else { return .ignored }
-        historyIndex -= 1
-        if historyIndex < 0 {
-            windowState.inputText = ""
-        } else {
-            let history = userMessageHistory
-            let msgIndex = history.count - 1 - historyIndex
-            if msgIndex >= 0 && msgIndex < history.count {
-                windowState.inputText = history[msgIndex]
-            }
-        }
-        return .handled
-    }
-
-    private func handleTab() -> KeyPress.Result {
-        if showAtPopup && atCombinedCount > 0 {
-            selectAtMention(at: atSelectedIndex)
-            return .handled
-        }
-        guard showSlashPopup && !slashFilteredCommands.isEmpty else { return .ignored }
-        let commands = slashFilteredCommands
-        if slashSelectedIndex < commands.count { selectSlashCommand(commands[slashSelectedIndex]) }
-        return .handled
-    }
-
-    // Returns true to suppress NSTextView's native paste; false lets the default plain-text paste run.
-    private func handlePaste() -> Bool {
-        let pb = NSPasteboard.general
-
-        if let attachment = imageAttachmentFromPasteboard(pb) {
-            if chatBridge.autoPreviewSettings.image {
-                windowState.addAttachment(attachment)
-            }
-            return true
-        }
-
-        if let url = (pb.readObjects(forClasses: [NSURL.self]) as? [URL])?.first(where: \.isFileURL) {
-            let isImage = AttachmentFactory.imageExtensions.contains(url.pathExtension.lowercased())
-            let allowed = isImage ? chatBridge.autoPreviewSettings.image : chatBridge.autoPreviewSettings.filePath
-            if allowed, let attachment = AttachmentFactory.fromFileURL(url) {
-                windowState.addAttachment(attachment)
-            } else {
-                insertAtCursor(url.path)
-            }
-            return true
-        }
-
-        guard let text = pb.string(forType: .string), !text.isEmpty else { return true }
-
-        if let attachment = attachmentFromPastedText(text) {
-            windowState.addAttachment(attachment)
-            return true
-        }
-
-        if chatBridge.autoPreviewSettings.longText,
-           text.count >= AttachmentFactory.longTextThreshold {
-            windowState.addAttachment(AttachmentFactory.fromLongText(text))
-            return true
-        }
-
-        insertAtCursor(text)
-        return true
-    }
-
-    private func attachmentFromPastedText(_ text: String) -> Attachment? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
-        if let attachment = attachmentFromPathText(trimmed) {
-            let allowed = attachment.type == .image
-                ? chatBridge.autoPreviewSettings.image
-                : chatBridge.autoPreviewSettings.filePath
-            if allowed { return attachment }
-        }
-        if chatBridge.autoPreviewSettings.url,
-           !trimmed.contains(" "), !trimmed.contains("\n"),
-           let url = URL(string: trimmed),
-           let scheme = url.scheme, ["http", "https"].contains(scheme),
-           url.host != nil {
-            return AttachmentFactory.fromURL(url)
-        }
-        return nil
-    }
-
-    /// Assumes a single insertion (paste/type at one cursor position) — not a general diff.
-    private func insertedSubstring(oldValue: String, newValue: String) -> String? {
-        guard newValue.count > oldValue.count else { return nil }
-
-        var oldPrefix = oldValue.startIndex
-        var newPrefix = newValue.startIndex
-        while oldPrefix < oldValue.endIndex, newPrefix < newValue.endIndex,
-              oldValue[oldPrefix] == newValue[newPrefix] {
-            oldValue.formIndex(after: &oldPrefix)
-            newValue.formIndex(after: &newPrefix)
-        }
-
-        var oldSuffix = oldValue.endIndex
-        var newSuffix = newValue.endIndex
-        while oldSuffix > oldPrefix, newSuffix > newPrefix {
-            let prevOld = oldValue.index(before: oldSuffix)
-            let prevNew = newValue.index(before: newSuffix)
-            guard oldValue[prevOld] == newValue[prevNew] else { break }
-            oldSuffix = prevOld
-            newSuffix = prevNew
-        }
-
-        guard newPrefix < newSuffix else { return nil }
-        return String(newValue[newPrefix..<newSuffix])
-    }
-
-    // Image paths skip fileExists — some screenshot tools write the clipboard before the file.
-    private func attachmentFromPathText(_ trimmed: String) -> Attachment? {
-        guard !trimmed.contains("\n"), !trimmed.isEmpty else { return nil }
-
-        let path: String
-        if trimmed.hasPrefix("file://") {
-            guard let url = URL(string: trimmed), url.isFileURL else { return nil }
-            path = url.path
-        } else if trimmed.hasPrefix("/") {
-            path = trimmed
-        } else if trimmed.hasPrefix("~/") {
-            path = (trimmed as NSString).expandingTildeInPath
-        } else {
-            return nil
-        }
-
-        let url = URL(fileURLWithPath: path)
-        let ext = url.pathExtension.lowercased()
-        if AttachmentFactory.imageExtensions.contains(ext) {
-            return AttachmentFactory.fromFileURL(url)
-        }
-        if FileManager.default.fileExists(atPath: path) {
-            return AttachmentFactory.fromFileURL(url)
-        }
-        return nil
-    }
-
-    private func insertAtCursor(_ text: String) {
-        let current = windowState.inputText
-        if let editor = NSApp.keyWindow?.firstResponder as? NSText {
-            let range = editor.selectedRange
-            if range.location != NSNotFound {
-                windowState.inputText = (current as NSString).replacingCharacters(in: range, with: text)
-                resetIMEState()
-                return
-            }
-        }
-        windowState.inputText = current + text
-        resetIMEState()
-    }
-
-    private func imageAttachmentFromPasteboard(_ pb: NSPasteboard) -> Attachment? {
-        for type in [NSPasteboard.PasteboardType.png, .tiff] {
-            if let data = pb.data(forType: type) {
-                return Attachment(type: .image, name: "clipboard-\(UUID().uuidString.prefix(8)).png", imageData: data)
-            }
-        }
-        if let image = NSImage(pasteboard: pb),
-           let tiffData = image.tiffRepresentation,
-           let bitmapRep = NSBitmapImageRep(data: tiffData),
-           let pngData = bitmapRep.representation(using: .png, properties: [:]) {
-            return Attachment(type: .image, name: "clipboard-\(UUID().uuidString.prefix(8)).png", imageData: pngData)
-        }
-        return nil
-    }
-
-    // Recreate the text field to clear NSTextView state (e.g. after sending) and reassert focus.
-    private func resetIMEState() {
-        textFieldLayoutID += 1
-        DispatchQueue.main.async { inputFocusTrigger = UUID() }
-    }
-
-    private func handleEscapeKey() -> Bool {
-        if showAtPopup {
-            withAnimation(.easeOut(duration: 0.15)) { showAtPopup = false }
-            return true
-        }
-        if showSlashPopup {
-            withAnimation(.easeOut(duration: 0.15)) { showSlashPopup = false }
-            return true
-        }
-        if chatBridge.isStreaming {
-            Task { await chatBridge.cancelStreaming() }
-            return true
-        }
-        return false
-    }
-
     // MARK: - Slash / At Queries
 
     private var slashQuery: String {
@@ -690,11 +401,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         return text
     }
 
-    private var slashFilteredCommands: [SlashCommand] {
+    var slashFilteredCommands: [SlashCommand] {
         SlashCommandRegistry.filtered(by: slashQuery, agent: chatBridge.agentProvider)
     }
 
-    private var userMessageHistory: [String] {
+    var userMessageHistory: [String] {
         chatBridge.messages.filter { $0.role == .user }.map(\.content)
     }
 
@@ -720,11 +431,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     /// Total rows in the unified `@` popup — shortcuts followed by files.
-    private var atCombinedCount: Int {
+    var atCombinedCount: Int {
         atShortcutMatches.count + atFileFilteredEntries.count
     }
 
-    private func selectSlashCommand(_ cmd: SlashCommand) {
+    func selectSlashCommand(_ cmd: SlashCommand) {
         withAnimation(.easeOut(duration: 0.15)) { showSlashPopup = false }
         if cmd.acceptsInput && !cmd.isInteractive {
             windowState.inputText = cmd.command + " "
@@ -745,7 +456,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     /// Dispatches a flat `@` popup index to the shortcut or file at that row.
-    private func selectAtMention(at index: Int) {
+    func selectAtMention(at index: Int) {
         let shortcutMatches = atShortcutMatches
         if index < shortcutMatches.count {
             selectShortcut(shortcutMatches[index])
@@ -774,7 +485,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
     }
 
-    private func hasActiveAtQuery(in text: String) -> Bool {
+    func hasActiveAtQuery(in text: String) -> Bool {
         guard let atRange = text.range(of: "@", options: .backwards) else { return false }
         let afterAt = String(text[atRange.upperBound...])
         return !afterAt.contains(" ")
@@ -835,7 +546,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         return nil
     }
 
-    private func handleImageChipTap(_ index: Int) {
+    func handleImageChipTap(_ index: Int) {
         let images = windowState.attachments.filter { $0.type == .image }
         guard index >= 1, index <= images.count else { return }
         imagePreviewAttachment = images[index - 1]
@@ -874,7 +585,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         resetIMEState()
     }
 
-    private func handleReturnKey() {
+    func handleReturnKey() {
         // IMETextView dispatches doCommand(insertNewline:) only after the IME has finalized any
         // composing text, so windowState.inputText is already up-to-date here.
         if showSlashPopup && !slashFilteredCommands.isEmpty {
@@ -891,44 +602,5 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         sendMessage()
     }
 
-}
-
-// IMETextView's NSScrollView doesn't surface intrinsic height, so a hidden Text at the same
-// width/font reports the wrapped height that drives clampedInputHeight.
-private struct InputHeightMeasurer: View {
-    let text: String
-    @Binding var measuredHeight: CGFloat
-
-    var body: some View {
-        GeometryReader { geo in
-            Text(measuringText)
-                .font(.system(size: ClaudeTheme.size(14)))
-                .frame(width: geo.size.width, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .background(heightReporter)
-                .hidden()
-                .allowsHitTesting(false)
-        }
-    }
-
-    private var heightReporter: some View {
-        GeometryReader { inner in
-            Color.clear
-                .onAppear { measuredHeight = inner.size.height }
-                .onChange(of: inner.size.height) { _, h in
-                    measuredHeight = h
-                }
-        }
-    }
-
-    // A trailing \n has zero intrinsic height when rendered through Text, so append a space to
-    // force the empty final line to be measured. Cap input length: clampedInputHeight saturates
-    // at 10 lines (~200pt), so once the text definitely exceeds that we don't need exact height
-    // and can avoid laying out arbitrarily large pasted buffers on every keystroke.
-    private var measuringText: String {
-        if text.isEmpty { return " " }
-        let capped = text.count > 2000 ? String(text.prefix(2000)) : text
-        return capped.hasSuffix("\n") ? capped + " " : capped
-    }
 }
 #endif

@@ -53,11 +53,12 @@ extension PetController {
                 },
                 onLevels: { [weak self] input, output in
                     Task { @MainActor [weak self] in
-                        sessionRef?.meters.input = sessionRef?.isMuted == false ? input : 0
-                        sessionRef?.meters.output = output
-                        if useWebRTC, let self {
-                            if sessionRef?.lifecycle == .active {
-                                self.speechPlayback.updateRemoteLevel(output)
+                        guard let self, let session = sessionRef, self.voiceSession === session else { return }
+                        session.meters.input = session.isMuted ? 0 : input
+                        session.meters.output = session.isMuted ? 0 : output
+                        if useWebRTC {
+                            if session.lifecycle == .active {
+                                self.speechPlayback.updateRemoteLevel(session.meters.output)
                             } else { self.speechPlayback.reset() }
                         }
                     }
@@ -439,18 +440,17 @@ extension PetController {
         if actionStatusOverlayMessage == "Connecting \(PetVoiceModeKind.codexRealtime.shortTitle)…" {
             actionStatusOverlayMessage = nil
         }
-        guard configuration.isEnabled, let session = voiceSession, !AppSupport.isTestProcess else {
-            logger.debug("Skipping voice connected sound: pet disabled or no active voice session")
-            return
-        }
+        guard configuration.isEnabled, !isMuted, let session = voiceSession, !AppSupport.isTestProcess else { return }
         if let driver = currentHardwareAudioDriver, driver.playConnectedCue() {
             logger.info("Played voice connected cue through voice audio engine")
             return
         }
         // The connected event can arrive before the hardware graph starts.
+        let generation = muteGeneration
         Task { @MainActor [weak self, weak session] in
             try? await Task.sleep(for: .milliseconds(350))
-            guard let self, let session, self.voiceSession === session, self.configuration.isEnabled else { return }
+            guard let self, let session, self.voiceSession === session, self.configuration.isEnabled,
+                  self.muteGeneration == generation else { return }
             self.voiceConnectedSound?.stop()
             let sound = NSSound(named: "Hero")?.copy() as? NSSound
             sound?.playbackDeviceIdentifier = self.configuration.speakerDeviceUID
@@ -546,8 +546,8 @@ extension PetController {
                         petState.status = .working
                         petState.mood = .focused
                     case .agentSpeaking:
-                        petState.status = .speaking
-                        petState.mood = .happy
+                        petState.status = isMuted ? .thinking : .speaking
+                        petState.mood = isMuted ? .focused : .happy
                     }
                 }
                 panelController.updatePanelLayout()
@@ -586,178 +586,6 @@ extension PetController {
             }
         }
         panelController.updatePanelLayout()
-    }
-
-    @discardableResult
-    func speakProactivelyOrQueue(_ text: String) -> UUID? {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        normalizeSpeechQueueIDs()
-        let id = UUID()
-        queuedProactiveSpeech.append(text)
-        queuedSpeechIDs.append(id)
-        startAnnouncementDeliveryIfNeeded()
-        return id
-    }
-
-    func normalizeSpeechQueueIDs() {
-        if queuedSpeechIDs.count != queuedProactiveSpeech.count {
-            queuedSpeechIDs = queuedProactiveSpeech.map { _ in UUID() }
-        }
-    }
-
-    func removeQueuedSpeech(ids: [UUID]) {
-        normalizeSpeechQueueIDs()
-        for id in ids {
-            guard let index = queuedSpeechIDs.firstIndex(of: id) else { continue }
-            queuedSpeechIDs.remove(at: index)
-            queuedProactiveSpeech.remove(at: index)
-        }
-    }
-
-    /// Keep background updates in order without replacing a report already playing.
-    func startAnnouncementDeliveryIfNeeded() {
-        guard announcementTask == nil, !queuedProactiveSpeech.isEmpty else { return }
-        guard announcementRetryAfter.map({ $0 <= Date.now }) ?? true else { return }
-        let generation = UUID()
-        announcementGeneration = generation
-        announcementTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer {
-                if self.announcementGeneration == generation { self.announcementTask = nil }
-            }
-            var quietSince: ContinuousClock.Instant?
-            while !Task.isCancelled, !self.queuedProactiveSpeech.isEmpty {
-                if let session = self.voiceSession, self.isVoiceActive {
-                    // Both voice modes own notification responses. A busy conversation keeps
-                    // updates queued; it must never fall back to a separate agent or speaker.
-                    let realtime = self.activeVoiceMode == .codexRealtime ? self.realtimeNotifications : nil
-                    let canRespond = self.activeVoiceMode == .codexRealtime
-                        ? realtime?.canSend == true : session.activity == .listening
-                    guard session.lifecycle == .active, canRespond,
-                          !self.isAwaitingVoiceTextReply(in: session),
-                          !self.isLocalUserSpeaking, self.livePartialUserText.isEmpty,
-                          session.meters.input < 0.04,
-                          session.transcript.last.map({ !$0.isUser && $0.isFinal }) ?? true,
-                          self.activeToolDescription == nil, !self.isStandaloneSpeaking,
-                          self.currentHardwareAudioDriver?.hasPendingPlayback != true,
-                          session.meters.output < 0.01 else {
-                        quietSince = nil
-                        try? await Task.sleep(for: .milliseconds(100))
-                        continue
-                    }
-                    if quietSince == nil { quietSince = .now }
-                    guard quietSince!.duration(to: .now) >= .milliseconds(300) else {
-                        try? await Task.sleep(for: .milliseconds(100))
-                        continue
-                    }
-                    let updates = self.queuedProactiveSpeech
-                    self.normalizeSpeechQueueIDs()
-                    let speechIDs = self.queuedSpeechIDs
-                    let previousEntries = Set(session.transcript.map(\.id))
-                    let previousReplies = realtime?.completedReplies ?? 0
-                    let receipt = PetRealtimeVoiceNotifications.Receipt()
-                    do {
-                        let prompt = Self.voiceUpdatePrompt(updates, languageInstruction: self.configuration.conversationLanguageInstruction)
-                        if let realtime {
-                            try await realtime.send(prompt) { [weak self, weak session] in
-                                guard let self, let session, self.voiceSession === session,
-                                      self.announcementGeneration == generation, !receipt.acknowledged else { return }
-                                receipt.acknowledged = true
-                                self.removeQueuedSpeech(ids: speechIDs)
-                                Task { await self.acknowledgeScheduledReports(speechIDs: speechIDs) }
-                            }
-                        } else {
-                            try await session.send(text: prompt)
-                        }
-                        guard !Task.isCancelled, self.announcementGeneration == generation else { return }
-                    } catch {
-                        guard !Task.isCancelled else { return }
-                        // An RPC error can be ambiguous. Do not automatically resend possibly
-                        // accepted speech; retain it until the user restarts the call to retry.
-                        self.announcementRetryAfter = .distantFuture
-                        self.alertErrorMessage = "Could not deliver the update to the voice agent: \(error.localizedDescription). The update remains queued; restart voice chat to retry."
-                        return
-                    }
-                    // Sending returns before the agent starts responding. Wait for its completed
-                    // reply so a second background event cannot cancel the first pipeline turn.
-                    @MainActor func receivedReply() -> Bool {
-                        if let realtime { return realtime.completedReplies > previousReplies }
-                        return session.transcript.contains(where: {
-                              !previousEntries.contains($0.id) && !$0.isUser && $0.isFinal
-                        })
-                    }
-                    while !Task.isCancelled, self.voiceSession === session,
-                          session.lifecycle == .active, !receivedReply() {
-                        try? await Task.sleep(for: .milliseconds(100))
-                    }
-                    guard !Task.isCancelled, self.announcementGeneration == generation else { return }
-                    guard receivedReply() else { return } // Keep unacknowledged updates queued after a drop.
-                    if !receipt.acknowledged {
-                        self.removeQueuedSpeech(ids: speechIDs)
-                        await self.acknowledgeScheduledReports(speechIDs: speechIDs)
-                    }
-                    quietSince = nil
-                } else {
-                    // A dropped call does not authorize overlapping fallback playback.
-                    guard self.voiceSession == nil else { return }
-                    if self.isStandaloneSpeaking {
-                        try? await Task.sleep(for: .milliseconds(100))
-                        continue
-                    }
-                    let text = self.queuedProactiveSpeech[0]
-                    self.normalizeSpeechQueueIDs()
-                    let speechID = self.queuedSpeechIDs[0]
-                    let failures = self.speechFailureCount
-                    self.standaloneSpeaker.speak(text: text, synthesizer: self.localSynthesizer)
-                    while !Task.isCancelled, self.isStandaloneSpeaking {
-                        try? await Task.sleep(for: .milliseconds(100))
-                    }
-                    guard !Task.isCancelled, self.announcementGeneration == generation else { return }
-                    guard self.speechFailureCount == failures else {
-                        self.announcementRetryAfter = Date.now.addingTimeInterval(30)
-                        return
-                    }
-                    self.removeQueuedSpeech(ids: [speechID])
-                    await self.acknowledgeScheduledReports(speechIDs: [speechID])
-                }
-            }
-        }
-    }
-
-    func isAwaitingVoiceTextReply(in session: VoiceSession) -> Bool {
-        guard let baseline = voiceTextReplyBaseline else { return false }
-        if session.transcript.contains(where: { !$0.isUser && $0.isFinal && !baseline.contains($0.id) }) {
-            voiceTextReplyBaseline = nil
-            return false
-        }
-        return true
-    }
-
-    func showBubble(_ message: PetBubbleMessage, duration: TimeInterval) {
-        bubbleDismissTask?.cancel()
-        petState.bubble = message
-        panelController.updatePanelLayout()
-        bubbleDismissTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
-            guard !Task.isCancelled, let self else { return }
-            if self.petState.bubble?.id == message.id {
-                self.petState.bubble = nil
-                self.panelController.updatePanelLayout()
-            }
-        }
-    }
-
-    func scheduleTransientMoodReset(after seconds: TimeInterval) {
-        transientStatusResetTask?.cancel()
-        transientStatusResetTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
-            guard !Task.isCancelled, let self else { return }
-            if self.petState.status == .celebrating || self.petState.status == .failed {
-                self.petState.status = .idle
-            }
-            self.petState.mood = .neutral
-            self.refreshPetState()
-        }
     }
 
     func startBackgroundMonitorIfNeeded() {

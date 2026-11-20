@@ -1,8 +1,10 @@
 import Foundation
+import RxAuthSwift
 import RxCodeCore
 import os
 
-nonisolated struct ThreadPullRequest: Equatable, Sendable {
+nonisolated struct ThreadPullRequest: Codable, Equatable, Sendable {
+    let repository: String
     let url: URL
     let number: Int?
     let state: PRState?
@@ -17,9 +19,17 @@ nonisolated struct ThreadPullRequest: Equatable, Sendable {
         } else {
             return nil
         }
+        self.repository = repository.lowercased()
         self.number = number
         self.state = state
     }
+}
+
+/// Last published branch results and cross-branch PR matches for one workspace account.
+nonisolated struct BranchStatusSnapshot: Codable, Sendable {
+    let accountID: String?
+    var byBranch: [String: ProjectCIStatus] = [:]
+    var inferredBySession: [String: ThreadPullRequest] = [:]
 }
 
 extension AppState {
@@ -29,13 +39,22 @@ extension AppState {
 
     private static let ciSignaturesDefaultsKey = "ciHandledFailureSignatures"
     private static let ciEventsDefaultsKey = "ciHandledFailureEvents"
+    static let branchStatusAccountKey = "branchStatusAccountID"
 
     // MARK: - Poller lifecycle
 
-    /// Start (or restart) the periodic CI-status poll. Idempotent — a prior loop
-    /// is cancelled first. Safe to call before sign-in; ticks no-op until signed in.
+    /// Both startup paths call this. Whichever finishes last starts the first
+    /// poll with the signed-in account and the complete local thread index.
     func startCIStatusPoller() {
-        ciStatusPollerTask?.cancel()
+        guard isSignedIn else { return }
+        let accountID = rxUser?.id
+        workspaceDefaults.set(accountID, for: Self.branchStatusAccountKey)
+        guard isInitialized else { return }
+        if branchStatus.accountID != accountID {
+            stopCIStatusPoller()
+            resetCIStatus(accountID: accountID)
+        }
+        guard ciStatusPollerTask == nil else { return }
         loadHandledCIFailureSignatures()
         ciStatusPollerTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -50,6 +69,48 @@ extension AppState {
     func stopCIStatusPoller() {
         ciStatusPollerTask?.cancel()
         ciStatusPollerTask = nil
+        ciStatusRequestID = nil
+    }
+
+    /// While sign-in is being restored, the local workspace can display its
+    /// last known badges. Once resolved, only the matching account can use them.
+    private func canDisplayBranchStatus(accountID: String?) -> Bool {
+        switch rxAuth.manager.authState {
+        case .unknown: return accountID != nil
+        case .authenticated: return accountID == rxUser?.id
+        case .unauthenticated: return false
+        }
+    }
+
+    func restoreBranchStatus(_ snapshot: BranchStatusSnapshot?) {
+        guard let snapshot, let owner = snapshot.accountID, !isInitialized,
+              canDisplayBranchStatus(accountID: owner) else { return }
+        if rxAuth.manager.authState == .unknown, workspaceDefaults.string(for: Self.branchStatusAccountKey) != owner {
+            return
+        }
+        branchStatus = snapshot
+        ciStatusRevision &+= 1
+    }
+
+    private func resetCIStatus(accountID: String?) {
+        branchStatus = BranchStatusSnapshot(accountID: accountID)
+        ciStatusByProject = [:]
+        ciStatusRevision &+= 1
+    }
+
+    func clearCIStatus() async {
+        stopCIStatusPoller()
+        workspaceDefaults.set(nil as String?, for: Self.branchStatusAccountKey)
+        resetCIStatus(accountID: nil)
+        await persistBranchStatus()
+    }
+
+    func persistBranchStatus() async {
+        do {
+            try await CacheStorageService.shared.saveBranchStatus(branchStatus, workspaceID: activeWorkspace.id)
+        } catch {
+            logger.error("Could not save cached branch status: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Display helpers
@@ -76,8 +137,11 @@ extension AppState {
     }
 
     func pullRequest(forThread summary: ChatSession.Summary, in project: Project) -> ThreadPullRequest? {
-        guard isSignedIn, summary.projectId == project.id, let repository = project.gitHubRepo else { return nil }
-        return pullRequestForRecordedBranch(summary, repository: repository) ?? inferredPullRequestsBySessionId[summary.id]
+        guard canDisplayBranchStatus(accountID: branchStatus.accountID),
+              summary.projectId == project.id, let repository = project.gitHubRepo else { return nil }
+        if let direct = pullRequestForRecordedBranch(summary, repository: repository) { return direct }
+        let inferred = branchStatus.inferredBySession[summary.id]
+        return inferred?.repository == repository.lowercased() ? inferred : nil
     }
 
     private func pullRequestForRecordedBranch(
@@ -90,7 +154,7 @@ extension AppState {
             ?? []
         for branch in branches {
             let key = "\(repository.lowercased())#\(branch)"
-            guard let status = ciStatusByBranchKey[key], status.found,
+            guard let status = branchStatus.byBranch[key], status.found,
                   let pullRequest = ThreadPullRequest(
                     repository: repository,
                     number: status.prNumber,
@@ -118,7 +182,13 @@ extension AppState {
     /// One poll cycle: resolve each GitHub project's current branch, batch-query
     /// autopilot, update `ciStatusByProject`, and react to new failures.
     func refreshCIStatusOnce() async {
-        guard isSignedIn else { return }
+        guard isInitialized, isSignedIn, !Task.isCancelled else { return }
+        let accountID = rxUser?.id
+        let requestID = UUID()
+        ciStatusRequestID = requestID
+        func isCurrentRequest() -> Bool {
+            !Task.isCancelled && ciStatusRequestID == requestID && isSignedIn && rxUser?.id == accountID
+        }
 
         // Build one query per project that has a GitHub repo and a resolvable
         // current branch. Keep the originating project alongside each query so we
@@ -151,6 +221,7 @@ extension AppState {
         // can outlive both a checkout and a deleted worktree or remote branch.
         let previousBranches = ciBranchesBySessionId
         let storedBranches = repoByProject.isEmpty ? [:] : await threadStoreReader.loadThreadBranches()
+        guard isCurrentRequest() else { return }
         var threadBranches: [String: [String]] = [:]
         for summary in allSessionSummaries {
             guard let slug = repoByProject[summary.projectId] else { continue }
@@ -170,10 +241,11 @@ extension AppState {
         }
 
         guard !queriesByKey.isEmpty else {
-            if !ciStatusByProject.isEmpty || !ciStatusByBranchKey.isEmpty {
+            if !ciStatusByProject.isEmpty || !branchStatus.byBranch.isEmpty {
                 ciStatusByProject = [:]
-                ciStatusByBranchKey = [:]
+                branchStatus.byBranch = [:]
                 ciStatusRevision &+= 1
+                await persistBranchStatus()
             }
             return
         }
@@ -185,6 +257,7 @@ extension AppState {
             logger.error("CI status fetch failed: \(error.localizedDescription)")
             return
         }
+        guard isCurrentRequest() else { return }
 
         // Index results by owner/repo/branch (and a looser owner/repo fallback in
         // case the server echoes a different/absent branch).
@@ -201,20 +274,28 @@ extension AppState {
             let repoKey = Self.ciRepoKey(owner: pair.query.owner, repo: pair.query.repo)
             guard let status = byKey[key] ?? byRepo[repoKey] else { continue }
             next[pair.project.id] = status
-            await handleCITransition(for: pair.project, status: status)
         }
 
         // Drop status for projects/branches no longer queried (e.g. removed).
-        if next != ciStatusByProject || byKey != ciStatusByBranchKey {
+        if next != ciStatusByProject || byKey != branchStatus.byBranch {
             ciStatusByProject = next
-            ciStatusByBranchKey = byKey
+            branchStatus.byBranch = byKey
             ciStatusRevision &+= 1
+            await persistBranchStatus()
+        }
+
+        for pair in pairs {
+            guard isCurrentRequest() else { return }
+            if let status = next[pair.project.id] {
+                await handleCITransition(for: pair.project, status: status)
+            }
         }
     }
 
     /// Recover links for threads whose edits were picked up by a PR on another branch.
     private func refreshInferredThreadPullRequests() async {
         guard isSignedIn, !Task.isCancelled else { return }
+        let accountID = rxUser?.id
         let projects = projects
         let repositories = Dictionary(uniqueKeysWithValues: projects.compactMap { project in
             project.gitHubRepo.map { (project.id, $0) }
@@ -224,7 +305,10 @@ extension AppState {
             return pullRequestForRecordedBranch($0, repository: repository) == nil
         }
         guard !unmatched.isEmpty else {
-            if !inferredPullRequestsBySessionId.isEmpty { inferredPullRequestsBySessionId = [:] }
+            if !branchStatus.inferredBySession.isEmpty {
+                branchStatus.inferredBySession = [:]
+                await persistBranchStatus()
+            }
             return
         }
         do {
@@ -235,8 +319,9 @@ extension AppState {
                 in: projects,
                 reader: threadStoreReader
             )
-            guard !Task.isCancelled, isSignedIn, matches != inferredPullRequestsBySessionId else { return }
-            inferredPullRequestsBySessionId = matches
+            guard !Task.isCancelled, isSignedIn, rxUser?.id == accountID, matches != branchStatus.inferredBySession else { return }
+            branchStatus.inferredBySession = matches
+            await persistBranchStatus()
         } catch {
             if !Task.isCancelled {
                 logger.error("Thread pull request lookup failed: \(error.localizedDescription)")
@@ -247,10 +332,11 @@ extension AppState {
     /// CI/PR status for an arbitrary project + branch (any branch, not just the
     /// current one), looked up from the branch-keyed map the poller maintains.
     func ciStatus(forProjectId projectId: UUID, branch: String) -> ProjectCIStatus? {
-        guard let slug = projects.first(where: { $0.id == projectId })?.gitHubRepo else { return nil }
+        guard canDisplayBranchStatus(accountID: branchStatus.accountID),
+              let slug = projects.first(where: { $0.id == projectId })?.gitHubRepo else { return nil }
         let parts = slug.split(separator: "/", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
-        return ciStatusByBranchKey[Self.ciKey(owner: parts[0], repo: parts[1], branch: branch)]
+        return branchStatus.byBranch[Self.ciKey(owner: parts[0], repo: parts[1], branch: branch)]
     }
 
     // MARK: - Failure handling

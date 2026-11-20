@@ -1,6 +1,6 @@
 # Pet voice continuity, memory and scheduled reports
 
-Microphone mute gates capture only. It does not stop a voice connection, flush assistant audio, clear history, or silence reports. Starting a new call while muted leaves capture disabled until unmute.
+Pet mute silences microphone input and speaker output during idle time, connection setup, and active calls. The conversation stays connected and continues receiving text. Muted notifications and reports appear as captions, and unmuting enables new audio.
 
 ## Completion speech
 

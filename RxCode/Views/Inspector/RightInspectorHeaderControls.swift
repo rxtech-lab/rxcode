@@ -1,135 +1,76 @@
-import AppKit
 import SwiftUI
 import RxCodeCore
 
-// MARK: - ModeSwitchControl
-
-struct ModeSwitchControl: View {
-    @Binding var selection: InspectorMode
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(InspectorMode.allCases, id: \.self) { mode in
-                let isSelected = selection == mode
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) { selection = mode }
-                } label: {
-                    Text(mode.title)
-                        .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .contentShape(Rectangle())
-                        .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textTertiary)
-                        .background(
-                            ZStack {
-                                if isSelected {
-                                    RoundedRectangle(cornerRadius: 7)
-                                        .fill(ClaudeTheme.accent)
-                                        .shadow(color: ClaudeTheme.accent.opacity(0.25), radius: 3, x: 0, y: 1)
-                                }
-                            }
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(2)
-        .background(ClaudeTheme.surfaceSecondary.opacity(0.7), in: RoundedRectangle(cornerRadius: 9))
-    }
-}
-
-// MARK: - HeaderPickerLabel
-
-/// Shared chevron-down dropdown label used by both Review and Inspector mode.
-struct HeaderPickerLabel: View {
-    let icon: String?
-    let title: LocalizedStringResource
-    @State private var isHovered = false
+/// The inspector destinations assigned to one pane.
+struct InspectorDestinationBar: View {
+    @Environment(WindowState.self) private var windowState
+    let pane: InspectorDestinationLayout.Pane
+    let actions: InspectorPaneTabActions<InspectorDestinationDrag>
 
     var body: some View {
-        HStack(spacing: 5) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-            }
-            Text(title)
-                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                .foregroundStyle(ClaudeTheme.textPrimary)
-            Image(systemName: "chevron.down")
-                .font(.system(size: ClaudeTheme.size(9), weight: .bold))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .padding(.leading, 1)
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(
-            (isHovered ? ClaudeTheme.surfaceSecondary : Color.clear),
-            in: RoundedRectangle(cornerRadius: 7)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(ClaudeTheme.borderSubtle.opacity(isHovered ? 0.6 : 0.0), lineWidth: 0.5)
-        )
-        .onHover { isHovered = $0 }
-        .animation(.easeInOut(duration: 0.12), value: isHovered)
-    }
-}
+        GeometryReader { geometry in
+            let fullCount = CGFloat(InspectorMode.allCases.count)
+            let spacing: CGFloat = 3
+            let tabWidth = max(96, (geometry.size.width - spacing * (fullCount - 1)) / fullCount)
 
-// MARK: - ReviewTabPicker
-
-struct ReviewTabPicker: View {
-    @Binding var selection: InspectorReviewTab
-
-    var body: some View {
-        Menu {
-            ForEach(InspectorReviewTab.allCases, id: \.self) { tab in
-                Button {
-                    selection = tab
-                } label: {
-                    HStack {
-                        Text(tab.title)
-                        if selection == tab { Image(systemName: "checkmark") }
+            ScrollViewReader { reader in
+                ScrollView(.horizontal) {
+                    HStack(spacing: spacing) {
+                        ForEach(pane.tabs) { mode in
+                            destination(mode, minimumWidth: tabWidth)
+                                .modifier(InspectorDraggableTab(
+                                    item: InspectorDestinationDrag(id: mode, windowID: windowState.id),
+                                    tabIDs: pane.tabs, actions: actions
+                                ))
+                                .id(mode)
+                        }
+                        if pane.tabs.count < InspectorMode.allCases.count {
+                            InspectorTabEndDropTarget { actions.move($0, nil) }
+                                .frame(minWidth: 24, maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
+                    .frame(minWidth: geometry.size.width, minHeight: 28, alignment: .leading)
+                }
+                .scrollIndicators(.hidden)
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                .onChange(of: pane.selectedTabID, initial: true) { _, mode in
+                    if let mode { reader.scrollTo(mode) }
                 }
             }
-        } label: {
-            HeaderPickerLabel(icon: nil, title: selection.title)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .frame(height: 28)
     }
-}
 
-// MARK: - InspectorTabPicker
-
-struct InspectorTabPicker: View {
-    @Binding var selection: InspectorTab
-    var onTabClick: (InspectorTab) -> Void = { _ in }
-
-    var body: some View {
-        Menu {
-            ForEach(InspectorTab.allCases, id: \.self) { tab in
-                Button {
-                    selection = tab
-                    onTabClick(tab)
-                } label: {
-                    HStack {
-                        Image(systemName: tab.icon)
-                        Text(tab.title)
-                        if selection == tab { Image(systemName: "checkmark") }
-                    }
-                }
+    private func destination(_ mode: InspectorMode, minimumWidth: CGFloat) -> some View {
+        let selected = pane.selectedTab == mode
+        let focused = windowState.inspectorLayout.destinations.focusedPaneID == pane.id
+        return Button { windowState.inspectorMode = mode } label: {
+            Label {
+                Text(mode.title).lineLimit(1)
+            } icon: {
+                Image(systemName: symbol(for: mode))
+                    .symbolRenderingMode(.monochrome)
             }
-        } label: {
-            HeaderPickerLabel(icon: selection.icon, title: selection.title)
+            .font(.system(size: ClaudeTheme.size(12), weight: selected ? .semibold : .medium))
+            .foregroundStyle(selected ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 8)
+            .frame(minWidth: minimumWidth, minHeight: 28)
+            .background(selected ? ClaudeTheme.accentSubtle.opacity(focused ? 1 : 0.6) : .clear, in: .rect(cornerRadius: 6))
+            .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier("inspector-destination-\(mode.rawValue.lowercased())")
+    }
+
+    private func symbol(for mode: InspectorMode) -> String {
+        switch mode {
+        case .review: "arrow.triangle.branch"
+        case .inspector: "terminal"
+        case .preview: "rectangle.on.rectangle"
+        case .browser: "globe"
+        }
     }
 }
 

@@ -3,27 +3,26 @@ import Observation
 import RxCodeCore
 import SwiftUI
 
-// MARK: - Voices Pane (Embedded in Pet & Voice Settings)
-
-/// Apple, Codex Realtime, and installed neural voices plus the Hugging Face
-/// TTS catalog. Hosted as the Voices tab of `PetSettingsView`.
+/// The speech voice used by the custom-agent pipeline and by standalone announcements.
 struct PetVoiceModelsPane: View {
     enum Tab: String, CaseIterable, Identifiable {
-        case installed = "Voices"
+        case available = "Speech Voices"
         case browse = "Browse Hugging Face TTS"
         var id: String { rawValue }
     }
 
     @Bindable var controller: PetController
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
-    @State private var selectedTab: Tab = .installed
+    @State private var selectedTab: Tab = .available
     @State private var actionOverlayMessage: String?
     @State private var errorMessage: String?
     @State private var pendingDeletion: LocalModelInfo?
     @State private var customizingModel: LocalModelInfo?
     @State private var isEditingAppleVoice = false
-    @State private var isEditingCodexVoice = false
+    @State private var isEditingFlowcyVoice = false
+    @State private var preview = PetVoiceDraftPreview()
     /// Observed so README-derived voice settings refresh when the setup agent saves them.
     @AppStorage(StudioModelConfig.storageKey) private var studioConfigs = ""
     @AppStorage(StudioModelConfig.pendingStorageKey) private var pendingStudioConfigs = ""
@@ -35,38 +34,52 @@ struct PetVoiceModelsPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("View", selection: $selectedTab) {
-                ForEach(Tab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("View", selection: $selectedTab) {
+                    ForEach(Tab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
 
-            Divider()
+                Divider()
 
-            Group {
-                switch selectedTab {
-                case .installed:
-                    installedVoicesContent
-                case .browse:
-                    PetVoiceCatalogView(
-                        controller: controller,
-                        actionOverlayMessage: $actionOverlayMessage,
-                        errorMessage: $errorMessage
-                    )
+                Group {
+                    switch selectedTab {
+                    case .available:
+                        availableVoicesContent
+                    case .browse:
+                        PetVoiceCatalogView(
+                            controller: controller,
+                            actionOverlayMessage: $actionOverlayMessage,
+                            errorMessage: $errorMessage
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle("Choose Speech Voice")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minWidth: 620, idealWidth: 720, maxWidth: .infinity,
+               minHeight: 540, idealHeight: 680, maxHeight: .infinity)
+        .onDisappear { preview.shutdown() }
+        .onChange(of: preview.errorMessage) { _, message in
+            if let message { errorMessage = message }
+        }
         .overlay {
-            if let message = actionOverlayMessage ?? activeDownloadStatusText {
-                PetActionStatusOverlay(message: message)
+            if let message = actionOverlayMessage ?? preview.status ?? activeDownloadStatusText {
+                PetActionStatusOverlay(message: message).allowsHitTesting(false)
             }
         }
         .sheet(isPresented: $isEditingAppleVoice) {
@@ -74,9 +87,10 @@ struct PetVoiceModelsPane: View {
                 actionOverlayMessage = "Apple voice saved"
             }
         }
-        .sheet(isPresented: $isEditingCodexVoice) {
-            PetCodexVoiceSheet(controller: controller) {
-                actionOverlayMessage = "Codex voice saved"
+        .sheet(isPresented: $isEditingFlowcyVoice) {
+            PetFlowcyVoiceSheet(controller: controller, client: FlowcyMediaClient(auth: appState.rxAuth),
+                                isSignedIn: appState.rxAuth.isAuthenticated) {
+                actionOverlayMessage = "Flowcy voice saved"
             }
         }
         .sheet(item: $customizingModel) { model in
@@ -140,9 +154,9 @@ struct PetVoiceModelsPane: View {
         return controller.actionStatusOverlayMessage
     }
 
-    // MARK: - Installed Tab
+    // MARK: - Available Voices
 
-    private var installedVoicesContent: some View {
+    private var availableVoicesContent: some View {
         List {
             Section {
                 systemVoiceRow
@@ -151,11 +165,9 @@ struct PetVoiceModelsPane: View {
             }
 
             Section {
-                codexVoiceRow
+                flowcyVoiceRow
             } header: {
-                Text("Codex Realtime")
-            } footer: {
-                Text("Used only while Codex Realtime voice mode is live.")
+                Text("Flowcy")
             }
 
             Section {
@@ -187,7 +199,7 @@ struct PetVoiceModelsPane: View {
     }
 
     private var systemVoiceRow: some View {
-        let isSelected = controller.configuration.localTTSModelID == PetConfiguration.systemTTSModelID
+        let isSelected = controller.configuration.usesLocalVoice(modelID: PetConfiguration.systemTTSModelID)
         return HStack(spacing: 12) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(isSelected ? ClaudeTheme.accent : .secondary)
@@ -196,7 +208,7 @@ struct PetVoiceModelsPane: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("macOS System Voice")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text("\(appleVoiceSummary) · No download required")
+                Text("\(controller.configuration.appleVoiceSummary) · No download required")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             }
@@ -213,14 +225,17 @@ struct PetVoiceModelsPane: View {
             .accessibilityLabel("Choose Apple voice")
 
             Button("Preview") {
-                controller.configuration.localTTSModelID = PetConfiguration.systemTTSModelID
-                controller.previewVoiceSample()
+                var draft = controller.configuration
+                draft.selectLocalVoice(modelID: PetConfiguration.systemTTSModelID)
+                preview.play(configuration: draft, controller: controller)
             }
+            .disabled(controller.isMuted)
             .controlSize(.small)
 
             if !isSelected {
                 Button("Use Voice") {
-                    controller.configuration.localTTSModelID = PetConfiguration.systemTTSModelID
+                    controller.configuration.selectLocalVoice(modelID: PetConfiguration.systemTTSModelID)
+                    actionOverlayMessage = "Apple voice saved"
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -229,48 +244,28 @@ struct PetVoiceModelsPane: View {
         .padding(.vertical, 4)
     }
 
-    private var appleVoiceSummary: String {
-        let id = controller.configuration.systemVoiceIdentifier
-        if id == PetConfiguration.spokenContentSystemVoiceID {
-            return "Spoken Content System Voice (Siri capable)"
-        }
-        if let id, let voice = AVSpeechSynthesisVoice(identifier: id) {
-            return "\(voice.name) · \(voice.language)"
-        }
-        return id == nil ? "Automatic for Spoken Language" : "Unavailable Voice"
-    }
-
-    private var codexVoiceRow: some View {
-        let isActive = controller.configuration.voiceMode == .codexRealtime
+    private var flowcyVoiceRow: some View {
+        let selection = controller.configuration.flowcyVoice
         return HStack(spacing: 12) {
-            Image(systemName: "waveform.circle")
-                .foregroundStyle(isActive ? ClaudeTheme.accent : .secondary)
+            Image(systemName: selection == nil ? "circle" : "checkmark.circle.fill")
+                .foregroundStyle(selection == nil ? Color.secondary : ClaudeTheme.accent)
                 .font(.system(size: 16))
-
             VStack(alignment: .leading, spacing: 3) {
-                Text(controller.configuration.resolvedCodexVoice.displayName)
+                Text(selection?.voice.name ?? "Flowcy Speech")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text("\(controller.configuration.codexTransport.title) · \(isActive ? "Active Voice Engine" : "Not the Active Voice Engine")")
+                Text(selection?.model.alias ?? "Voices from your Flowcy account")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             }
-
             Spacer()
-
-            Button {
-                isEditingCodexVoice = true
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-            }
-            .controlSize(.small)
-            .help("Configure Codex Realtime Voice")
-            .accessibilityLabel("Configure Codex Realtime voice")
+            Button("Choose Flowcy Voice…") { isEditingFlowcyVoice = true }
+                .controlSize(.small)
         }
         .padding(.vertical, 4)
     }
 
     private func installedModelRow(_ model: LocalModelInfo) -> some View {
-        let isSelected = controller.configuration.localTTSModelID == model.id
+        let isSelected = controller.configuration.usesLocalVoice(modelID: model.id)
         let fit = store.fit(bytes: model.sizeBytes)
         return HStack(spacing: 12) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -305,14 +300,17 @@ struct PetVoiceModelsPane: View {
             .accessibilityLabel("Voice settings for \(model.displayName)")
 
             Button("Preview") {
-                PetVoicePresets.select(model: model, in: controller)
-                controller.previewVoiceSample()
+                var draft = controller.configuration
+                PetVoicePresets.select(model: model, in: &draft)
+                preview.play(configuration: draft, controller: controller)
             }
+            .disabled(controller.isMuted)
             .controlSize(.small)
 
             if !isSelected {
                 Button("Use Voice") {
-                    PetVoicePresets.select(model: model, in: controller)
+                    PetVoicePresets.select(model: model, in: &controller.configuration)
+                    actionOverlayMessage = "Voice settings saved"
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -363,5 +361,18 @@ struct PetVoiceModelsPane: View {
         await controller.localSynthesizer.cancelAll()
         await store.delete(model)
         actionOverlayMessage = nil
+    }
+}
+
+extension PetConfiguration {
+    var appleVoiceSummary: String {
+        let id = systemVoiceIdentifier
+        if id == PetConfiguration.spokenContentSystemVoiceID {
+            return "Spoken Content System Voice (Siri capable)"
+        }
+        if let id, let voice = AVSpeechSynthesisVoice(identifier: id) {
+            return "\(voice.name) · \(voice.language)"
+        }
+        return id == nil ? "Automatic for Spoken Language" : "Unavailable Voice"
     }
 }

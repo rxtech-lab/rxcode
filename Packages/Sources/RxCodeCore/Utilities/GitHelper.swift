@@ -190,13 +190,13 @@ public enum GitHelper {
     /// combined output on failure.
     public static func stage(paths: [String], at repoPath: String) async -> String? {
         guard !paths.isEmpty else { return nil }
-        return await runWithError(["add", "--"] + paths, at: repoPath)
+        return await runWithError(["--literal-pathspecs", "add", "--"] + paths, at: repoPath)
     }
 
-    /// Unstages the given paths (`git reset HEAD --`). Returns nil on success.
+    /// Omitting the revision also supports unstaging before the repository's first commit.
     public static func unstage(paths: [String], at repoPath: String) async -> String? {
         guard !paths.isEmpty else { return nil }
-        return await runWithError(["reset", "HEAD", "--"] + paths, at: repoPath)
+        return await runWithError(["--literal-pathspecs", "reset", "--"] + paths, at: repoPath)
     }
 
     /// Commits the staged index with the given message. Returns nil on success
@@ -222,7 +222,7 @@ public enum GitHelper {
 
     /// Runs a git command and returns nil on success or combined stdout+stderr
     /// trimmed on non-zero exit.
-    private static func runWithError(_ args: [String], at path: String) async -> String? {
+    public static func runWithError(_ args: [String], at path: String) async -> String? {
         guard let output = await execute(args, at: path) else {
             return "Failed to launch git \(args.first ?? "")"
         }

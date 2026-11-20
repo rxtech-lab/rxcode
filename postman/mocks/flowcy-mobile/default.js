@@ -69,6 +69,24 @@ http.createServer(async (req, res) => {
     const body = req.body ?? JSON.parse(raw);
     const messages = body.messages ?? [];
     const prompt = messages.findLast(m => m.role === 'user')?.content ?? '';
+    if (prompt === 'Which branch is checked out?') {
+      const shell = body.tools?.find(tool => tool.name === 'bash');
+      if (shell?.inputSchema?.properties?.command?.type !== 'string' || !shell.inputSchema.required?.includes('command'))
+        return json(400, {error:'Missing desktop terminal declaration'});
+      const command = 'git branch --show-current';
+      const id = 'worktree-branch';
+      let event = {type:'tool-call', id, name:'bash', arguments:{command}};
+      if (messages.at(-1)?.role === 'tool') {
+        const call = messages.at(-2)?.content?.at(-1);
+        const result = messages.at(-1)?.content?.[0];
+        if (call?.type !== 'tool-call' || call.toolName !== 'bash' || call.toolCallId !== id || call.input?.command !== command
+            || result?.type !== 'tool-result' || result.toolName !== 'bash' || result.toolCallId !== id || result.output?.type !== 'text')
+          return json(400, {error:'Invalid terminal result'});
+        event = {type:'text', text:result.output.value.trim()};
+      }
+      res.writeHead(200, {'Content-Type':'application/x-ndjson'});
+      return res.end(JSON.stringify(event) + '\n' + JSON.stringify({type:'finish'}) + '\n');
+    }
     if (prompt.includes('Draft a software')) {
       if (body.tools?.length !== 0) return json(400, {error:'Drafts must not declare tools'});
       if (prompt.includes('HTTPFailure')) return json(503, {error:'Unavailable'});

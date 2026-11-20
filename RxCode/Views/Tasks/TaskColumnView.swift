@@ -19,6 +19,7 @@ struct TaskColumnView: View {
     let onOpen: (TaskBoardSheet) -> Void
     let updatingModelTaskIds: Set<UUID>
     let onSelectModel: (AgentModel?, UUID) -> Void
+    let onEditEffort: (ProjectTask) -> Void
     /// A new task starts in this column; a story has no column of its own.
     let onAddTask: (TaskCreationMode) -> Void
     let onAddStory: (TaskCreationMode) -> Void
@@ -72,7 +73,8 @@ struct TaskColumnView: View {
                     board: board,
                     storyRollup: task.storyId.flatMap { storyRollups[$0] },
                     isUpdatingModel: updatingModelTaskIds.contains(task.id),
-                    onSelectModel: { onSelectModel($0, task.id) }
+                    onSelectModel: { onSelectModel($0, task.id) },
+                    onEditEffort: { onEditEffort(task) }
                 ) {
                     onOpen(.task(task))
                 }
@@ -93,7 +95,8 @@ struct TaskColumnView: View {
                         storyRollup: task.storyId.flatMap { storyRollups[$0] },
                         queuePosition: (board.tasks(in: status).filter(\.isQueued).firstIndex { $0.id == task.id } ?? offset) + 1,
                         isUpdatingModel: updatingModelTaskIds.contains(task.id),
-                        onSelectModel: { onSelectModel($0, task.id) }
+                        onSelectModel: { onSelectModel($0, task.id) },
+                        onEditEffort: { onEditEffort(task) }
                     ) {
                         onOpen(.task(task))
                     }

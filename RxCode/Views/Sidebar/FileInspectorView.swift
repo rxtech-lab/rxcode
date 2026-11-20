@@ -2,6 +2,16 @@ import SwiftUI
 import AppKit
 import RxCodeCore
 
+extension View {
+    func fileInspectorSheet(_ window: WindowState) -> some View {
+        sheet(item: Bindable(window).inspectorFile) { file in
+            FileInspectorView(filePath: file.path, fileName: file.name)
+                .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
+                       minHeight: 600, idealHeight: 1000, maxHeight: 1200)
+        }
+    }
+}
+
 /// Inspector panel for file preview with syntax highlighting
 struct FileInspectorView: View {
     let filePath: String
@@ -13,6 +23,7 @@ struct FileInspectorView: View {
     @State private var isCopied = false
     @State private var showsRawText = false
     @State private var usesNativePreview = false
+    @State private var capture = PreviewCapture()
     @State private var isEditing = false
     @State private var editingContent = ""
     @State private var isSaving = false
@@ -35,19 +46,22 @@ struct FileInspectorView: View {
             } else if let error = errorMessage {
                 errorView(error)
             } else if usesNativePreview || (format == .native && !showsRawText) {
-                NativeFilePreviewView(fileURL: fileURL)
+                NativeFilePreviewView(fileURL: fileURL, capture: capture)
                     .id(filePath + String(content?.hashValue ?? 0))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let content {
-                if showsRawText || !format.hasRenderedPreview {
-                    codeContentView(content)
-                } else if format == .markdown {
-                    MarkdownPreviewView(content: content, baseURL: fileURL.deletingLastPathComponent())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if format == .html {
-                    HTMLFilePreviewView(fileURL: fileURL, content: content)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Group {
+                    if showsRawText || !format.hasRenderedPreview {
+                        codeContentView(content)
+                    } else if format == .markdown {
+                        MarkdownPreviewView(content: content, baseURL: fileURL.deletingLastPathComponent())
+                    } else if format == .html {
+                        HTMLFilePreviewView(fileURL: fileURL, content: content)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .previewSelectionComments(for: fileURL)
+                .id(showsRawText)
             }
         }
         .background(ClaudeTheme.background)
@@ -142,6 +156,11 @@ struct FileInspectorView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 150)
                 .accessibilityIdentifier("file-preview-mode")
+            }
+
+            if !isLoading && errorMessage == nil && (usesNativePreview || (format == .native && !showsRawText)) {
+                PreviewCommentControls(url: fileURL, capture: capture)
+                    .buttonStyle(.borderless)
             }
 
             if content != nil {
@@ -413,7 +432,7 @@ private struct CodeTextRenderer: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
 
-        let textView = NSTextView()
+        let textView = SourcePreviewTextView()
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -485,34 +504,60 @@ private struct CodeTextRenderer: NSViewRepresentable {
         }
 
         private func apply(content: NSAttributedString, to textView: NSTextView) {
-            textView.textStorage?.setAttributedString(Self.buildWithGutter(content: content))
+            textView.textStorage?.setAttributedString(SourcePreviewTextView.numberedSource(content))
             lastContent = content
         }
+    }
+}
 
-        private static func buildWithGutter(content: NSAttributedString) -> NSAttributedString {
-            let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            let gutterColor = NSColor(ClaudeTheme.textTertiary).withAlphaComponent(0.6)
-            let nsString = content.string as NSString
-            let totalLines = max(nsString.components(separatedBy: "\n").count, 1)
-            let gutterDigits = max(String(totalLines).count, 2)
-            let result = NSMutableAttributedString()
-            var lineNumber = 0
+final class SourcePreviewTextView: NSTextView {
+    private static let lineAttribute = NSAttributedString.Key("RxCodeSourceLine")
 
-            nsString.enumerateSubstrings(
-                in: NSRange(location: 0, length: nsString.length),
-                options: [.byLines]
-            ) { _, substringRange, _, _ in
-                lineNumber += 1
-                let lineNum = String(lineNumber)
-                let prefix = String(repeating: " ", count: max(0, gutterDigits - lineNum.count)) + lineNum + "  "
-                result.append(NSAttributedString(string: prefix, attributes: [.font: font, .foregroundColor: gutterColor]))
-                if substringRange.length > 0 {
-                    result.append(content.attributedSubstring(from: substringRange))
-                }
-                result.append(NSAttributedString(string: "\n", attributes: [.font: font]))
-            }
+    static func numberedSource(_ content: NSAttributedString) -> NSAttributedString {
+        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let gutterColor = NSColor(ClaudeTheme.textTertiary).withAlphaComponent(0.6)
+        let nsString = content.string as NSString
+        let totalLines = max(nsString.components(separatedBy: "\n").count, 1)
+        let gutterDigits = max(String(totalLines).count, 2)
+        let result = NSMutableAttributedString()
+        var lineNumber = 0
 
-            return result
+        nsString.enumerateSubstrings(
+            in: NSRange(location: 0, length: nsString.length),
+            options: [.byLines]
+        ) { _, _, enclosingRange, _ in
+            lineNumber += 1
+            let lineNum = String(lineNumber)
+            let prefix = String(repeating: " ", count: max(0, gutterDigits - lineNum.count)) + lineNum + "  "
+            result.append(NSAttributedString(string: prefix, attributes: [.font: font, .foregroundColor: gutterColor]))
+            let start = result.length
+            result.append(content.attributedSubstring(from: enclosingRange))
+            result.addAttribute(lineAttribute, value: lineNumber,
+                                range: NSRange(location: start, length: enclosingRange.length))
         }
+
+        return result
+    }
+
+    var selectedExcerpt: PreviewExcerpt? {
+        guard let storage = textStorage else { return nil }
+        let string = storage.string as NSString
+        var passages: [String] = []
+        var firstLine: Int?
+        var lastLine: Int?
+        for range in selectedRanges.map(\.rangeValue) where range.length > 0 {
+            var passage = ""
+            storage.enumerateAttribute(Self.lineAttribute, in: range) { value, run, _ in
+                // The line number gutter is display text and has no source line attribute.
+                guard let line = value as? Int else { return }
+                firstLine = firstLine ?? line
+                lastLine = line
+                passage += string.substring(with: run)
+            }
+            if !passage.isEmpty { passages.append(passage) }
+        }
+        guard let firstLine, let lastLine else { return nil }
+        let location = firstLine == lastLine ? "Line \(firstLine)" : "Lines \(firstLine)–\(lastLine)"
+        return PreviewExcerpt(passages.joined(separator: "\n"), location: location)
     }
 }

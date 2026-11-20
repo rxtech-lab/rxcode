@@ -4,8 +4,9 @@ extension PetController {
     /// Register a durable outbox item once. This never opens capture or starts a voice session.
     func deliverScheduledReport(id: UUID, title: String, text: String, acknowledge: @escaping @MainActor () async -> Void) {
         guard configuration.isEnabled, configuration.proactiveMode != .off else { return }
+        let captionOnly = isMuted || configuration.proactiveMode == .bubbleOnly
         if scheduledReportDeliveries[id] != nil {
-            if configuration.proactiveMode == .bubbleOnly {
+            if captionOnly {
                 showBubble(.init(title: title, text: text, isProactive: true, action: nil), duration: 20)
                 if let speechID = scheduledReportDeliveries[id]?.speechID { removeQueuedSpeech(ids: [speechID]) }
                 Task { await acknowledgeScheduledReports(ids: [id]) }
@@ -13,8 +14,7 @@ extension PetController {
             return
         }
         showBubble(.init(title: title, text: text, isProactive: true, action: nil), duration: 20)
-        if configuration.proactiveMode == .bubbleOnly {
-            // Silent delivery is explicit user policy, not a muted-microphone side effect.
+        if captionOnly {
             scheduledReportDeliveries[id] = (text, nil, acknowledge)
             Task { await acknowledgeScheduledReports(ids: [id]) }
         } else {

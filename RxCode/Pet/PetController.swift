@@ -62,7 +62,9 @@ final class PetController {
     @ObservationIgnored private var textConversationID = UUID()
     @ObservationIgnored private var localVoiceWarmupTask: Task<Void, Never>?
 
-    var voiceSession: VoiceSession?
+    var voiceSession: VoiceSession? {
+        didSet { voiceSession?.setMuted(isMuted) }
+    }
     @ObservationIgnored let voiceHistoryStore: PetVoiceHistoryStore
     @ObservationIgnored var voiceHistoryBinding: PetVoiceHistoryBinding?
     @ObservationIgnored var realtimeNotifications: PetRealtimeVoiceNotifications?
@@ -91,7 +93,9 @@ final class PetController {
     @ObservationIgnored let speechPlayback = PetSpeechPlaybackSignal()
 
     var settingsTab: PetSettingsView.SettingsTab = .generalAgent
+    var isChoosingSpeechVoice = false
     var isMuted: Bool { configuration.isMuted ?? false }
+    @ObservationIgnored private(set) var muteGeneration = UUID()
     @ObservationIgnored var voiceStartGeneration = UUID()
     @ObservationIgnored var voiceStopTask: Task<Void, Never>?
     @ObservationIgnored weak var voiceDraftPreview: PetVoiceDraftPreview?
@@ -145,21 +149,18 @@ final class PetController {
         )
     }
 
+    var flowcyVoiceClient: FlowcyMediaClient? {
+        appState.map { FlowcyMediaClient(auth: $0.rxAuth) }
+    }
+
     @ObservationIgnored lazy var localSynthesizer = PetLocalSpeechSynthesizer { @MainActor [weak self] in
-        let cfg = self?.configuration ?? PetConfiguration()
-        return PetLocalSpeechSynthesizer.Configuration(
-            modelID: cfg.localTTSModelID,
-            voicePreset: cfg.localTTSVoicePreset,
-            systemVoiceIdentifier: cfg.systemVoiceIdentifier,
-            localeIdentifier: cfg.conversationLanguageIdentifier ?? cfg.speechLocaleIdentifier,
-            speechRate: cfg.speechRate,
-            seed: cfg.resolvedLocalTTSSeed,
-            onStatusUpdate: { [weak self] status in
-                Task { @MainActor [weak self] in
-                    self?.actionStatusOverlayMessage = status
-                }
+        var config = (self?.configuration ?? PetConfiguration()).speechSynthesisConfiguration(client: self?.flowcyVoiceClient)
+        config.onStatusUpdate = { [weak self] status in
+            Task { @MainActor [weak self] in
+                self?.actionStatusOverlayMessage = status
             }
-        )
+        }
+        return config
     }
 
     @ObservationIgnored lazy var customAgentResponder = PetCustomAgentResponder(
@@ -175,7 +176,9 @@ final class PetController {
         }
     )
 
-    @ObservationIgnored weak var currentHardwareAudioDriver: PetVoiceAudioDriver?
+    @ObservationIgnored weak var currentHardwareAudioDriver: PetVoiceAudioDriver? {
+        didSet { currentHardwareAudioDriver?.setOutputMuted(isMuted) }
+    }
     @ObservationIgnored var activePipelineSessionKey: String?
     @ObservationIgnored var stateSyncTask: Task<Void, Never>?
     @ObservationIgnored var schedulerTask: Task<Void, Never>?
@@ -196,6 +199,7 @@ final class PetController {
         self.configuration = PetConfiguration.load(from: defaults)
         self.looks = PetLookStore(defaults: defaults)
         self.voiceHistoryStore = historyStore ?? PetVoiceHistoryStore(directory: PetVoiceHistoryStore.defaultDirectory)
+        speechPlayback.setSuppressed(isMuted)
     }
 
     var appState: AppState? {
@@ -238,15 +242,24 @@ final class PetController {
     }
 
     private func handleConfigurationChange(from old: PetConfiguration, to new: PetConfiguration) {
-        if old.isMuted != new.isMuted {
-            // Mute only capture. Interrupting or stopping would discard the current reply
-            // and conversation transport, including local recognition/agent state.
+        if (old.isMuted ?? false) != isMuted {
+            muteGeneration = UUID()
             voiceSession?.setMuted(isMuted)
-            if isMuted { voiceSession?.meters.input = 0 }
+            currentHardwareAudioDriver?.setOutputMuted(isMuted)
+            speechPlayback.setSuppressed(isMuted)
+            if isMuted {
+                voiceSession?.meters.input = 0
+                voiceSession?.meters.output = 0
+                discardSpokenAnnouncements()
+                standaloneSpeaker.stop()
+                voiceDraftPreview?.stop()
+                voiceConnectingSounds.update(isRunning: false, didFinish: false)
+                voiceConnectedSound?.stop()
+            }
         }
         refreshToolSounds()
         if old.isEnabled != new.isEnabled || old.localTTSModelID != new.localTTSModelID
-            || old.voiceMode != new.voiceMode || old.proactiveMode != new.proactiveMode {
+            || old.flowcyVoice != new.flowcyVoice || old.voiceMode != new.voiceMode || old.proactiveMode != new.proactiveMode {
             prepareLocalVoiceIfNeeded()
         }
         if old.isEnabled != new.isEnabled {
@@ -297,113 +310,6 @@ final class PetController {
         localVoiceWarmupTask = Task { await synthesizer.warmUp() }
     }
 
-    // MARK: - User Interactions with Pet
-
-    func pat() {
-        lastInteractionAt = .now
-        petState.patReactionCount &+= 1
-        let greetings = [
-            "Hi! Ready to help with your tasks and threads.",
-            "All ears! Click the phone anytime to talk.",
-            "Purr… let me know what we are shipping next!",
-            "Need a standup summary? Try Daily Report!",
-        ]
-        let index = abs(petState.patReactionCount) % greetings.count
-        if petState.status == .sleeping {
-            petState.status = .idle
-        }
-        petState.mood = .happy
-        showBubble(
-            PetBubbleMessage(
-                title: character.displayName,
-                text: greetings[index],
-                isProactive: false,
-                action: isVoiceActive ? nil : .openCompanion
-            ),
-            duration: 6.0
-        )
-        scheduleTransientMoodReset(after: 3.0)
-    }
-
-    func setWalking(_ walking: Bool) {
-        lastInteractionAt = .now
-        if petState.isWalking != walking {
-            petState.isWalking = walking
-            if walking && petState.status == .sleeping {
-                petState.status = .idle
-            }
-        }
-    }
-
-    func wakeIfSleeping() {
-        lastInteractionAt = .now
-        if petState.status == .sleeping {
-            petState.status = .idle
-            petState.mood = .neutral
-        }
-    }
-
-    func dismissBubble() {
-        bubbleDismissTask?.cancel()
-        bubbleDismissTask = nil
-        petState.bubble = nil
-        panelController.updatePanelLayout()
-    }
-
-    func performQuickAction(_ action: PetQuickAction) {
-        lastInteractionAt = .now
-        switch action {
-        case .openCompanion:
-            openCompanionWindow()
-        case .openVoiceSettings:
-            openSettingsWindow()
-        case .openDailyReport:
-            openCompanionWindow(sheet: .dailyReport)
-        case .openURL(let url):
-            NSWorkspace.shared.open(url)
-        case .openPendingPrompt:
-            openCompanionWindow()
-        case .openThread(_, let sessionId):
-            if let appState {
-                var components = URLComponents()
-                components.scheme = "rxcode"
-                components.host = "widget"
-                components.path = "/thread"
-                components.queryItems = [
-                    URLQueryItem(name: "workspace", value: appState.activeWorkspace.id),
-                    URLQueryItem(name: "thread", value: sessionId),
-                ]
-                if let url = components.url {
-                    NSApp.activate(ignoringOtherApps: true)
-                    NSWorkspace.shared.open(url)
-                }
-            }
-        }
-    }
-
-    func openSettingsWindow(tab: PetSettingsView.SettingsTab = .generalAgent) {
-        settingsTab = tab
-        NSApp.activate(ignoringOtherApps: true)
-        if let openWindowAction {
-            openWindowAction(PetWindows.settingsID)
-        } else if let existing = NSApp.windows.first(where: { $0.identifier?.rawValue == PetWindows.settingsID }) {
-            existing.makeKeyAndOrderFront(nil)
-        }
-    }
-
-    func openCompanionWindow(sheet: PetSheetDestination? = nil) {
-        lastInteractionAt = .now
-        if let sheet {
-            activeSheet = sheet
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        if let openWindowAction {
-            openWindowAction(PetWindows.companionID)
-        } else if let existing = NSApp.windows.first(where: { $0.identifier?.rawValue == PetWindows.companionID || $0.title == "Pet Companion" }) {
-            existing.makeKeyAndOrderFront(nil)
-        }
-    }
-
     // MARK: - Voice Session Control (Codex Realtime & Local Pipeline)
 
     func toggleVoice() {
@@ -418,6 +324,7 @@ final class PetController {
 
     func startVoice(mode overrideMode: PetVoiceModeKind? = nil) async {
         guard !AppSupport.isTestProcess else { return }
+        voiceDraftPreview?.stop()
         let generation = UUID()
         voiceStartGeneration = generation
         lastInteractionAt = .now
@@ -435,7 +342,7 @@ final class PetController {
         }
 
         actionStatusOverlayMessage = "Connecting \(targetMode.shortTitle)…"
-        voiceConnectingSounds.update(isRunning: targetMode == .codexRealtime, didFinish: false, outputDeviceUID: configuration.speakerDeviceUID)
+        voiceConnectingSounds.update(isRunning: targetMode == .codexRealtime && !isMuted, didFinish: false, outputDeviceUID: configuration.speakerDeviceUID)
         activeToolDescription = nil
         livePartialUserText = ""
         isLocalUserSpeaking = false
@@ -450,7 +357,6 @@ final class PetController {
             }
             self.voiceSession = session
             self.activeVoiceMode = targetMode
-            session.setMuted(isMuted)
             try await session.start()
             guard voiceStartGeneration == generation else {
                 if self.voiceSession === session {
@@ -510,7 +416,6 @@ final class PetController {
         screenCapture.cancel()
         desktopActions.cancel()
         speechPlayback.reset()
-        speechPlayback.setSuppressed(false)
         voiceTextReplyBaseline = nil
         announcementGeneration = UUID()
         announcementTask?.cancel()
@@ -651,122 +556,6 @@ final class PetController {
             }
         } catch {
             alertErrorMessage = error.localizedDescription
-        }
-    }
-
-    // MARK: - Proactive Talk & Daily Report
-
-    /// A companion-origin approval was already explained by the current assistant.
-    /// Other permission events are keyed by their tool-use ID, never by message text.
-    func shouldAnnouncePermission(eventID: String, sessionID: String?) -> Bool {
-        guard isVoiceActive else { return true }
-        guard !announcedPermissionEventIDs.contains(eventID) else { return false }
-        announcedPermissionEventIDs.append(eventID)
-        if announcedPermissionEventIDs.count > 256 { announcedPermissionEventIDs.removeFirst() }
-        return sessionID?.hasPrefix("pet-") != true
-    }
-
-    func notifyProactiveEvent(
-        title: String?,
-        spokenText: String,
-        mood: PetMood,
-        status: PetStatus,
-        action: PetQuickAction?
-    ) {
-        guard configuration.isEnabled, configuration.proactiveMode != .off else { return }
-        guard !configuration.conversationLanguageInstruction.isEmpty, appState != nil else {
-            presentProactiveEvent(title: title, spokenText: spokenText, mood: mood, status: status, action: action)
-            return
-        }
-        // Serialize translations so slower completions cannot reorder notifications.
-        let previous = notificationLocalizationTask
-        notificationLocalizationTask = Task { @MainActor [weak self] in
-            await previous?.value
-            guard let self, !Task.isCancelled else { return }
-            var language: String?
-            var localized = (title: title, text: spokenText)
-            repeat {
-                language = self.configuration.conversationLanguageIdentifier
-                localized = await Self.localizeNotification(
-                    title: title, text: spokenText, configuration: self.configuration
-                ) { prompt in
-                    await self.completeNotification(prompt)
-                }
-            } while !Task.isCancelled && language != self.configuration.conversationLanguageIdentifier
-            guard !Task.isCancelled else { return }
-            self.presentProactiveEvent(
-                title: localized.title, spokenText: localized.text, mood: mood, status: status, action: action
-            )
-        }
-    }
-
-    private func presentProactiveEvent(
-        title: String?, spokenText: String, mood: PetMood, status: PetStatus, action: PetQuickAction?,
-        allowsSpeech: Bool = true
-    ) {
-        guard configuration.isEnabled, configuration.proactiveMode != .off else { return }
-        lastInteractionAt = .now
-        petState.mood = mood
-        petState.status = status
-
-        showBubble(
-            PetBubbleMessage(
-                title: title,
-                text: spokenText,
-                isProactive: true,
-                action: action
-            ),
-            duration: 16.0
-        )
-        scheduleTransientMoodReset(after: 7.0)
-
-        guard allowsSpeech, configuration.proactiveMode == .voiceAndBubble else { return }
-        speakProactivelyOrQueue(spokenText)
-    }
-
-    func triggerDailyReport(speakAloud: Bool = true, openSheet: Bool = false) async {
-        guard let appState else { return }
-        guard !isGeneratingDailyReport else { return }
-        lastInteractionAt = .now
-        isGeneratingDailyReport = true
-        actionStatusOverlayMessage = "Generating daily workspace report…"
-        petState.status = .thinking
-        petState.mood = .focused
-
-        let report = await PetDailyReportService.generate(for: appState)
-        latestDailyReport = report
-        isGeneratingDailyReport = false
-        actionStatusOverlayMessage = nil
-
-        petState.mood = report.ciFailing ? .concerned : .happy
-        petState.status = .celebrating
-        showBubble(
-            PetBubbleMessage(
-                title: "Daily Report · \(report.workspaceName)",
-                text: report.spokenSummary,
-                isProactive: true,
-                action: .openDailyReport
-            ),
-            duration: 20.0
-        )
-        scheduleTransientMoodReset(after: 6.0)
-
-        if openSheet {
-            openCompanionWindow(sheet: .dailyReport)
-        }
-        if speakAloud {
-            speakProactivelyOrQueue(report.spokenSummary)
-        }
-    }
-
-    func readReportAloud(_ report: PetDailyReport) {
-        speakProactivelyOrQueue(report.spokenSummary)
-    }
-
-    func previewVoiceSample(_ sampleText: String = "Hi there! I am RxBuddy, your RxCode voice companion.") {
-        Task {
-            await stopVoice(drainAnnouncements: false)
-            standaloneSpeaker.speak(text: sampleText, synthesizer: localSynthesizer)
         }
     }
 }

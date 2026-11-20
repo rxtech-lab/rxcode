@@ -39,7 +39,7 @@ final class MediaGenerationPreferences {
     }
 }
 
-nonisolated struct FlowcyMediaModel: Decodable, Identifiable, Sendable {
+nonisolated struct FlowcyMediaModel: Codable, Equatable, Identifiable, Sendable {
     let modelId: String
     let alias: String
     let provider: String
@@ -66,12 +66,15 @@ struct FlowcyMediaClient {
         URL(string: "https://www.flowcy.dev/api/v1")!
     }
 
-    func request(_ path: String, body: JSONValue? = nil, idempotencyKey: String = UUID().uuidString) async throws -> JSONValue {
+    func request(_ path: String, queryItems: [URLQueryItem] = [], body: JSONValue? = nil, idempotencyKey: String = UUID().uuidString) async throws -> JSONValue {
+        var url = baseURL.appendingPathComponent(path)
+        if !queryItems.isEmpty { url.append(queryItems: queryItems) }
         for refresh in [false, true] {
+            try Task.checkCancellation()
             guard let token = await accessToken(refresh) else {
                 throw IDEToolError.handlerFailed("Sign in to Flowcy in Settings first.")
             }
-            var request = URLRequest(url: baseURL.appendingPathComponent(path), timeoutInterval: 310)
+            var request = URLRequest(url: url, timeoutInterval: 310)
             request.httpMethod = body == nil ? "GET" : "POST"
             request.httpBody = try body.map { try JSONEncoder().encode($0) }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -102,9 +105,9 @@ struct FlowcyMediaClient {
         throw IDEToolError.handlerFailed("Flowcy returned an invalid JSON response.")
     }
 
-    func allModels() async throws -> [FlowcyMediaModel] {
+    func allModels(capability: String? = nil) async throws -> [FlowcyMediaModel] {
         // The public catalog returns one row per capability, with the original labels.
-        let response = try await request("models")
+        let response = try await request("models", queryItems: capability.map { [URLQueryItem(name: "capability", value: $0)] } ?? [])
         struct Model: Decodable { let id: String; let displayName: String; let provider: String; let labels: [String] }
         struct Catalog: Decodable { let models: [Model] }
         let catalog = try JSONDecoder().decode(Catalog.self, from: JSONEncoder().encode(response))

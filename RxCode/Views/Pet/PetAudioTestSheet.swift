@@ -10,7 +10,7 @@ enum PetAudioTest: String, Identifiable {
 
 struct PetAudioTestSheet: View {
     let test: PetAudioTest
-    let configuration: PetConfiguration
+    let controller: PetController
     @Environment(\.dismiss) private var dismiss
     @State private var meters = VoiceMeters()
     @State private var sound: NSSound?
@@ -25,6 +25,7 @@ struct PetAudioTestSheet: View {
                 } else {
                     Text(status)
                     Button("Play Test Sound", action: playSound)
+                        .disabled(controller.isMuted)
                 }
             }
             .padding(24)
@@ -35,13 +36,20 @@ struct PetAudioTestSheet: View {
             }
         }
         .frame(minWidth: 440, minHeight: 360)
-        .task {
+        .task(id: controller.isMuted) {
+            if controller.isMuted {
+                sound?.stop()
+                meters.input = 0
+                lastHeardAt = nil
+                status = "Microphone and speaker muted."
+                return
+            }
             guard test == .microphone else {
                 playSound()
                 return
             }
-            let driver = PetVoiceAudioDriver(meters: meters, inputDeviceUID: configuration.microphoneDeviceUID,
-                                             outputDeviceUID: configuration.speakerDeviceUID)
+            let driver = PetVoiceAudioDriver(meters: meters, inputDeviceUID: controller.configuration.microphoneDeviceUID,
+                                             outputDeviceUID: controller.configuration.speakerDeviceUID)
             defer { driver.stop() }
             do {
                 driver.setCaptureEnabled(true)
@@ -59,7 +67,7 @@ struct PetAudioTestSheet: View {
 
     private var microphoneMeter: some View {
         VStack(spacing: 14) {
-            PetMicLevelOrb(level: meters.input, isMuted: false, tint: ClaudeTheme.accent, diameter: 56)
+            PetMicLevelOrb(level: meters.input, isMuted: controller.isMuted, tint: ClaudeTheme.accent, diameter: 56)
 
             PetVoiceWaveform(level: meters.input, tint: ClaudeTheme.accent, barWidth: 4, barSpacing: 3)
                 .frame(height: 56)
@@ -92,9 +100,10 @@ struct PetAudioTestSheet: View {
     }
 
     private func playSound() {
+        guard !controller.isMuted else { return }
         sound?.stop()
         sound = NSSound(named: "Glass")?.copy() as? NSSound
-        sound?.playbackDeviceIdentifier = configuration.speakerDeviceUID.flatMap {
+        sound?.playbackDeviceIdentifier = controller.configuration.speakerDeviceUID.flatMap {
             PetAudioDevices.deviceID(forUID: $0) == nil ? nil : $0
         }
         status = sound?.play() == true ? "Listen for the chime on your selected speaker." : "The test sound could not play."

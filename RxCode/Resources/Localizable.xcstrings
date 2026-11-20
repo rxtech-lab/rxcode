@@ -853,6 +853,16 @@
         }
       }
     },
+    "%lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld %2$@"
+          }
+        }
+      }
+    },
     "%lld agents available" : {
       "localizations" : {
         "ko" : {
@@ -912,6 +922,7 @@
       }
     },
     "%lld changed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1245,6 +1256,16 @@
         }
       }
     },
+    "%lld of %lld steps complete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld steps complete"
+          }
+        }
+      }
+    },
     "%lld of %lld tasks" : {
       "localizations" : {
         "en" : {
@@ -1306,6 +1327,19 @@
         }
       }
     },
+    "%lld staged" : {
+
+    },
+    "%lld staged, %lld unstaged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld staged, %2$lld unstaged"
+          }
+        }
+      }
+    },
     "%lld tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1335,6 +1369,9 @@
           }
         }
       }
+    },
+    "%lld unstaged" : {
+
     },
     "%lld voices from README" : {
 
@@ -1462,6 +1499,9 @@
           }
         }
       }
+    },
+    "• Read and change your data on all websites" : {
+
     },
     "`context` exposes projectName, projectPath, gitHubRepo, branch, sessionId, and async `shell(_:)` / `git(_:)` helpers that run in the project directory. Return true to show the item." : {
       "localizations" : {
@@ -1963,6 +2003,9 @@
         }
       }
     },
+    "Access the current tab when you use the extension" : {
+
+    },
     "Access token" : {
 
     },
@@ -2102,6 +2145,9 @@
         }
       }
     },
+    "Active now" : {
+
+    },
     "Active time" : {
 
     },
@@ -2129,6 +2175,9 @@
           }
         }
       }
+    },
+    "Add “%@”?" : {
+
     },
     "Add a branch name after the prefix." : {
       "localizations" : {
@@ -2168,6 +2217,9 @@
           }
         }
       }
+    },
+    "Add a comment" : {
+
     },
     "Add a Git repository by URL" : {
       "extractionState" : "stale",
@@ -2471,6 +2523,12 @@
         }
       }
     },
+    "Add Extension" : {
+
+    },
+    "Add Extension from File…" : {
+
+    },
     "Add Files…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2480,6 +2538,9 @@
           }
         }
       }
+    },
+    "Add from File…" : {
+
     },
     "Add Git Skill Source" : {
       "localizations" : {
@@ -2547,6 +2608,9 @@
           }
         }
       }
+    },
+    "Add items to context menus" : {
+
     },
     "Add MCP Server" : {
       "localizations" : {
@@ -2900,6 +2964,9 @@
         }
       }
     },
+    "Add Tool Tab" : {
+
+    },
     "Add tools with MCP" : {
       "localizations" : {
         "ko" : {
@@ -3004,6 +3071,25 @@
         }
       }
     },
+    "Added %@" : {
+
+    },
+    "Added %lld extensions" : {
+
+    },
+    "Added %lld of %lld extensions. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Added %1$lld of %2$lld extensions. %3$@"
+          }
+        }
+      }
+    },
+    "Adding %lld extensions…" : {
+
+    },
     "Adding a task saves this story first, so the task has a story to belong to." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3013,6 +3099,9 @@
           }
         }
       }
+    },
+    "Adding extension…" : {
+
     },
     "After a successful session, the agent is asked to commit the changed files and push them (choosing a new or existing branch). The commit turn itself won't re-trigger this hook. If a Code Review hook is also enabled, the commit only happens after the review passes." : {
       "localizations" : {
@@ -3454,6 +3543,9 @@
         }
       }
     },
+    "All sites" : {
+
+    },
     "All sync traffic flows through relay servers, end-to-end encrypted. Add relay servers to connect with your mobile devices remotely." : {
       "localizations" : {
         "ko" : {
@@ -3497,6 +3589,12 @@
           }
         }
       }
+    },
+    "Allow “%@” to access these websites?" : {
+
+    },
+    "Allow “%@” to use more features?" : {
+
     },
     "Allow Personal Voice…" : {
 
@@ -3608,6 +3706,9 @@
           }
         }
       }
+    },
+    "An extension" : {
+
     },
     "An SF Symbol name shown beside the title, e.g. \"bolt\"." : {
       "extractionState" : "stale",
@@ -3950,6 +4051,9 @@
       }
     },
     "Ask the agent about this run…" : {
+
+    },
+    "Ask the agent about what you see." : {
 
     },
     "Ask the agent for a follow-up…" : {
@@ -4709,6 +4813,9 @@
         }
       }
     },
+    "Block or modify network requests" : {
+
+    },
     "Board columns, or the rows a table shows. At least one stays visible." : {
       "localizations" : {
         "zh-Hans" : {
@@ -5008,6 +5115,12 @@
         }
       }
     },
+    "Browser Extensions" : {
+
+    },
+    "Browser options" : {
+
+    },
     "Bucket name (include jurisdiction prefix if applicable)" : {
 
     },
@@ -5157,6 +5270,12 @@
         }
       }
     },
+    "Call Voice" : {
+
+    },
+    "Can’t read Chrome profiles" : {
+
+    },
     "Cancel" : {
       "localizations" : {
         "en" : {
@@ -5207,6 +5326,9 @@
 
     },
     "Category" : {
+
+    },
+    "Change list" : {
 
     },
     "Change status" : {
@@ -5288,7 +5410,7 @@
         }
       }
     },
-    "Chat with enabled Flowcy models. This conversation does not access local project files or tools." : {
+    "Chat with any agent" : {
 
     },
     "Chat with Model" : {
@@ -5388,10 +5510,14 @@
     "Checking for Updates…" : {
 
     },
+    "Checking repository…" : {
+
+    },
     "Checking which device runs this task…" : {
 
     },
     "Checking..." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5451,7 +5577,7 @@
     "Choose a model to fill in empty properties" : {
 
     },
-    "Choose a Premium, Enhanced, Personal, or Siri voice. Siri voices are used through the Spoken Content System Voice." : {
+    "Choose a preview" : {
 
     },
     "Choose a project from the workspace most recently used in RxCode." : {
@@ -5473,7 +5599,16 @@
     "Choose a single window in the macOS sharing picker." : {
 
     },
+    "Choose a target" : {
+
+    },
     "Choose an account" : {
+
+    },
+    "Choose an Apple voice, installed voice model, or Flowcy voice for notifications outside calls. During a call, Codex Realtime speaks notifications." : {
+
+    },
+    "Choose an Apple voice, installed voice model, or Flowcy voice for spoken replies and notifications." : {
 
     },
     "Choose an available window in the macOS sharing picker to start the preview." : {
@@ -5501,6 +5636,9 @@
     "Choose Apple Voice" : {
 
     },
+    "Choose Chrome Folder…" : {
+
+    },
     "Choose Claude Code, Codex, or an ACP registry client." : {
 
     },
@@ -5516,6 +5654,9 @@
           }
         }
       }
+    },
+    "Choose Flowcy Voice…" : {
+
     },
     "Choose frequency" : {
       "localizations" : {
@@ -5540,9 +5681,6 @@
         }
       }
     },
-    "Choose New Random Seed" : {
-
-    },
     "Choose one" : {
       "localizations" : {
         "ko" : {
@@ -5558,6 +5696,15 @@
           }
         }
       }
+    },
+    "Choose preview source" : {
+
+    },
+    "Choose Speech Voice" : {
+
+    },
+    "Choose Speech Voice…" : {
+
     },
     "Choose the agent for this thread" : {
       "localizations" : {
@@ -5664,6 +5811,12 @@
           }
         }
       }
+    },
+    "Chrome’s cookie database could not be read: %@" : {
+
+    },
+    "Chrome’s encryption key was not found in the Keychain. Open Chrome once, then try again." : {
+
     },
     "CI Auto-Update" : {
       "localizations" : {
@@ -5887,6 +6040,9 @@
         }
       }
     },
+    "Clear Finished Tasks" : {
+
+    },
     "Clear History" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5952,10 +6108,14 @@
         }
       }
     },
-    "Clear this conversation?" : {
+    "Clear Task" : {
+
+    },
+    "Clear Terminal" : {
 
     },
     "Click + in the toolbar to add one." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6021,6 +6181,7 @@
 
     },
     "Click to select · Command-right-click to add or remove · Right-click for Show Diff" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6130,6 +6291,12 @@
         }
       }
     },
+    "Close %@" : {
+
+    },
+    "Close floating chat" : {
+
+    },
     "Close image" : {
 
     },
@@ -6137,6 +6304,9 @@
 
     },
     "Close music player" : {
+
+    },
+    "Close Other Tabs" : {
 
     },
     "Close PR" : {
@@ -6156,6 +6326,12 @@
       }
     },
     "Close status card" : {
+
+    },
+    "Close tab" : {
+
+    },
+    "Close Tab" : {
 
     },
     "Close Terminal" : {
@@ -6422,13 +6598,7 @@
     "Codex Realtime" : {
 
     },
-    "Codex Realtime connects through RxAgentSDK and exposes RxCode IDE tools so you can manage tasks, send threads, and open interactive views by voice." : {
-
-    },
     "Codex Realtime Voice" : {
-
-    },
-    "Codex Realtime voices are generated by the Codex session, so there's no offline preview. The new voice applies the next time voice mode starts. Notifications spoken outside a live session use the Apple or neural voice." : {
 
     },
     "Coding Analytics" : {
@@ -6452,6 +6622,9 @@
           }
         }
       }
+    },
+    "Collapse chats in %@" : {
+
     },
     "Color" : {
       "localizations" : {
@@ -6563,6 +6736,15 @@
         }
       }
     },
+    "Comment on Preview" : {
+
+    },
+    "Comment on the visible preview" : {
+
+    },
+    "Commit" : {
+
+    },
     "Commit & Push" : {
       "localizations" : {
         "ko" : {
@@ -6580,6 +6762,7 @@
       }
     },
     "Commit %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6611,6 +6794,9 @@
           }
         }
       }
+    },
+    "Commit changes" : {
+
     },
     "Commit Files" : {
       "extractionState" : "stale",
@@ -6660,6 +6846,15 @@
           }
         }
       }
+    },
+    "Commit…" : {
+
+    },
+    "Committing…" : {
+
+    },
+    "Communicate with native apps" : {
+
     },
     "Companion files" : {
 
@@ -6793,10 +6988,10 @@
         }
       }
     },
-    "Configure Codex Realtime voice" : {
+    "Configure a summarization provider in Settings to generate a commit message." : {
 
     },
-    "Configure Codex Realtime Voice" : {
+    "Configure Codex Realtime…" : {
 
     },
     "Configure general agent, voice, music, and desktop pet" : {
@@ -7491,7 +7686,19 @@
         }
       }
     },
+    "Couldn’t initialize Git" : {
+
+    },
+    "Couldn't Load Flowcy Voices" : {
+
+    },
+    "Couldn’t load page" : {
+
+    },
     "Couldn't Open the Model Page" : {
+
+    },
+    "Couldn’t prepare commit" : {
 
     },
     "Couldn’t Preview Window" : {
@@ -7507,10 +7714,19 @@
         }
       }
     },
+    "Couldn’t save browser extensions: %@" : {
+
+    },
+    "Couldn’t select this element" : {
+
+    },
     "Couldn't send the message. Try again." : {
 
     },
     "Couldn't Sign In" : {
+
+    },
+    "Couldn’t switch branches" : {
 
     },
     "Couldn't sync %@ to the cloud: %@" : {
@@ -7530,6 +7746,9 @@
       }
     },
     "Couldn’t Update Task Model" : {
+
+    },
+    "Couldn’t Update Thinking Level" : {
 
     },
     "Counts as done" : {
@@ -8099,7 +8318,6 @@
       }
     },
     "Current branch" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -9270,6 +9488,9 @@
         }
       }
     },
+    "Describe the refinement" : {
+
+    },
     "Describe the story and tasks, or choose a text or PDF file." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9377,6 +9598,9 @@
         }
       }
     },
+    "Design" : {
+
+    },
     "Desktop action: %@" : {
 
     },
@@ -9401,6 +9625,9 @@
           }
         }
       }
+    },
+    "Detached at %@" : {
+
     },
     "Details" : {
       "localizations" : {
@@ -10033,6 +10260,9 @@
         }
       }
     },
+    "Drag to move chat" : {
+
+    },
     "Drag to reorder" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10168,6 +10398,9 @@
           }
         }
       }
+    },
+    "Duplicate Tab" : {
+
     },
     "Duplicate View" : {
       "localizations" : {
@@ -10668,6 +10901,9 @@
         }
       }
     },
+    "Enable %@" : {
+
+    },
     "Enable Focus Mode" : {
       "localizations" : {
         "en" : {
@@ -10873,6 +11109,12 @@
         }
       }
     },
+    "Enter a provider voice ID" : {
+
+    },
+    "Enter a valid web address" : {
+
+    },
     "Enter a valid ws:// or wss:// URL." : {
       "localizations" : {
         "ko" : {
@@ -10888,6 +11130,12 @@
           }
         }
       }
+    },
+    "Enter a web address" : {
+
+    },
+    "Enter a web address or a local development URL above." : {
+
     },
     "Enter a whole number from 0 to 2147483647." : {
 
@@ -11196,6 +11444,9 @@
         }
       }
     },
+    "Exit full width" : {
+
+    },
     "Expand" : {
 
     },
@@ -11215,7 +11466,13 @@
         }
       }
     },
+    "Expand chats in %@" : {
+
+    },
     "Expand the pending confirmation" : {
+
+    },
+    "Expand to full width" : {
 
     },
     "Expected 5 fields (minute hour day month weekday), found %lld." : {
@@ -11344,6 +11601,12 @@
         }
       }
     },
+    "Extension" : {
+
+    },
+    "Extensions" : {
+
+    },
     "Extra environment" : {
       "localizations" : {
         "ko" : {
@@ -11465,6 +11728,7 @@
       }
     },
     "Failed to check status" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11667,6 +11931,9 @@
           }
         }
       }
+    },
+    "Filter branches" : {
+
     },
     "Filter by keyword" : {
       "localizations" : {
@@ -11922,12 +12189,6 @@
     "Flowcy Catalog" : {
 
     },
-    "Flowcy Cloud Chat" : {
-
-    },
-    "Flowcy Cloud Chat…" : {
-
-    },
     "Flowcy project" : {
       "localizations" : {
         "ko" : {
@@ -11943,6 +12204,9 @@
           }
         }
       }
+    },
+    "Flowcy Speech Voice" : {
+
     },
     "Flowcy watches your CI, spots failures, and opens fix pull requests." : {
       "localizations" : {
@@ -11975,6 +12239,9 @@
           }
         }
       }
+    },
+    "Focus Address" : {
+
     },
     "Focus Mode" : {
       "localizations" : {
@@ -12206,6 +12473,9 @@
         }
       }
     },
+    "Forward" : {
+
+    },
     "Found and saved" : {
 
     },
@@ -12325,6 +12595,7 @@
       }
     },
     "Generate a commit message from the staged diff" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -12394,6 +12665,9 @@
     "Generates notification summaries and translations independently of the General Agent. Defaults to Apple Intelligence. Supports Claude Code, Codex, ACP clients, and installed local text models (MLX / GGUF). During calls, the voice assistant announces updates. If generation fails, the original text is preserved." : {
 
     },
+    "Generating message…" : {
+
+    },
     "Generating…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12456,6 +12730,9 @@
 
     },
     "GGUF models run on llama.cpp; MLX models run on Apple's MLX." : {
+
+    },
+    "Git operation failed" : {
 
     },
     "Git Repositories" : {
@@ -12834,6 +13111,9 @@
           }
         }
       }
+    },
+    "Hide inspector" : {
+
     },
     "Hide more" : {
       "extractionState" : "stale",
@@ -13323,6 +13603,24 @@
         }
       }
     },
+    "Import" : {
+
+    },
+    "Import Cookies from Chrome" : {
+
+    },
+    "Import Cookies from Chrome…" : {
+
+    },
+    "Import Extensions from Chrome" : {
+
+    },
+    "Import Extensions from Chrome…" : {
+
+    },
+    "Import from Chrome…" : {
+
+    },
     "Import JSON…" : {
       "localizations" : {
         "ko" : {
@@ -13357,6 +13655,18 @@
           }
         }
       }
+    },
+    "Import the extensions you use in Chrome, or add an unpacked folder, .crx, or .zip file." : {
+
+    },
+    "Imported %lld cookies" : {
+
+    },
+    "Imported extensions keep the permissions they have in Chrome. RxCode runs them with WebKit, so some Chrome-only features may not work." : {
+
+    },
+    "Importing Chrome cookies…" : {
+
     },
     "In progress" : {
       "localizations" : {
@@ -13668,6 +13978,9 @@
         }
       }
     },
+    "Install an extension in Chrome, or choose the folder that contains your Chrome profiles." : {
+
+    },
     "Install Client" : {
 
     },
@@ -13723,9 +14036,6 @@
       }
     },
     "Install Managed Copy" : {
-
-    },
-    "Install neural MLX or GGUF text-to-speech models (such as Kokoro-82M) for natural local speech, or use the built-in macOS voice immediately." : {
 
     },
     "Install one CLI, then check again." : {
@@ -14179,6 +14489,9 @@
           }
         }
       }
+    },
+    "Keychain access to Chrome Safe Storage was denied." : {
+
     },
     "Kind" : {
       "localizations" : {
@@ -14764,9 +15077,6 @@
     "Loading Categories…" : {
 
     },
-    "Loading cloud models…" : {
-
-    },
     "Loading current branches…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14813,6 +15123,9 @@
         }
       }
     },
+    "Loading Flowcy voices…" : {
+
+    },
     "Loading model card…" : {
 
     },
@@ -14837,6 +15150,9 @@
           }
         }
       }
+    },
+    "Loading preview…" : {
+
     },
     "Loading project…" : {
       "localizations" : {
@@ -14953,6 +15269,9 @@
         }
       }
     },
+    "Local branches" : {
+
+    },
     "Local Models" : {
 
     },
@@ -14973,6 +15292,9 @@
         }
       }
     },
+    "Local only" : {
+
+    },
     "Local project: stays on this Mac. Click to sync it to the cloud or link an Flowcy project." : {
       "localizations" : {
         "ko" : {
@@ -14990,9 +15312,6 @@
       }
     },
     "Local Speech Recognition" : {
-
-    },
-    "Local Voice Model (TTS)" : {
 
     },
     "Location" : {
@@ -15053,9 +15372,6 @@
 
     },
     "macOS System Voice" : {
-
-    },
-    "macOS System Voice (Zero-Download)" : {
 
     },
     "main" : {
@@ -15233,6 +15549,9 @@
           }
         }
       }
+    },
+    "Manage Extensions…" : {
+
     },
     "Manage Fields…" : {
       "localizations" : {
@@ -15852,6 +16171,9 @@
     "Message %@…" : {
 
     },
+    "Message the agent" : {
+
+    },
     "Messages" : {
       "localizations" : {
         "en" : {
@@ -16058,9 +16380,6 @@
         }
       }
     },
-    "Model Voice" : {
-
-    },
     "Model: %@ · %@" : {
       "localizations" : {
         "en" : {
@@ -16135,6 +16454,9 @@
       }
     },
     "More Apple Music options" : {
+
+    },
+    "More for %@" : {
 
     },
     "Most" : {
@@ -16242,10 +16564,7 @@
         }
       }
     },
-    "Mute Microphone" : {
-
-    },
-    "Mute Microphone (keep conversation connected)" : {
+    "Mute Microphone and Speaker" : {
 
     },
     "Muted" : {
@@ -16332,6 +16651,9 @@
         }
       }
     },
+    "Needs approval" : {
+
+    },
     "Needs Attention" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16341,9 +16663,6 @@
           }
         }
       }
-    },
-    "Neural Voice" : {
-
     },
     "Neutral" : {
 
@@ -16402,6 +16721,9 @@
           }
         }
       }
+    },
+    "New chat" : {
+
     },
     "New Chat" : {
       "localizations" : {
@@ -16625,6 +16947,12 @@
           }
         }
       }
+    },
+    "New tab" : {
+
+    },
+    "New tab (⌘T)" : {
+
     },
     "New tag" : {
       "localizations" : {
@@ -16950,6 +17278,9 @@
         }
       }
     },
+    "No Active Runs" : {
+
+    },
     "No agent turns yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16995,6 +17326,9 @@
           }
         }
       }
+    },
+    "No branches yet" : {
+
     },
     "No card views" : {
 
@@ -17058,6 +17392,12 @@
           }
         }
       }
+    },
+    "No Chrome extensions found" : {
+
+    },
+    "No Chrome profiles found" : {
+
     },
     "No clients installed. Add one from the Registry tab." : {
       "extractionState" : "stale",
@@ -17319,6 +17659,9 @@
         }
       }
     },
+    "No Extensions" : {
+
+    },
     "No folder selected" : {
       "localizations" : {
         "ko" : {
@@ -17334,6 +17677,9 @@
           }
         }
       }
+    },
+    "No Git repository" : {
+
     },
     "No hooks yet" : {
       "localizations" : {
@@ -17352,6 +17698,7 @@
       }
     },
     "No local branches" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17397,6 +17744,9 @@
           }
         }
       }
+    },
+    "No matching branches" : {
+
     },
     "No matching memories" : {
       "localizations" : {
@@ -17727,6 +18077,7 @@
       }
     },
     "No remote branches" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17888,6 +18239,9 @@
         }
       }
     },
+    "No running targets" : {
+
+    },
     "No Runs Yet" : {
 
     },
@@ -17957,6 +18311,12 @@
           }
         }
       }
+    },
+    "No Speech Models" : {
+
+    },
+    "No staged changes" : {
+
     },
     "No status" : {
       "localizations" : {
@@ -18117,6 +18477,7 @@
       }
     },
     "No tasks" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -18188,6 +18549,9 @@
         }
       }
     },
+    "No Tool Tabs" : {
+
+    },
     "No tools advertised" : {
 
     },
@@ -18234,6 +18598,15 @@
         }
       }
     },
+    "No unstaged changes" : {
+
+    },
+    "No upstream" : {
+
+    },
+    "No upstream branch configured" : {
+
+    },
     "No usage cards" : {
 
     },
@@ -18271,6 +18644,9 @@
 
     },
     "No Voice Models Found" : {
+
+    },
+    "No Voices Available" : {
 
     },
     "No Windows to Preview" : {
@@ -18345,6 +18721,7 @@
       }
     },
     "Not a Git repository" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -18517,6 +18894,9 @@
     "Notification Text" : {
 
     },
+    "Notification Voice" : {
+
+    },
     "Notification when a run finishes" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18635,6 +19015,9 @@
       }
     },
     "OAuth client ID (optional)" : {
+
+    },
+    "Observe network requests" : {
 
     },
     "Off" : {
@@ -18851,10 +19234,19 @@
         }
       }
     },
+    "Open Chrome and visit a website, or choose the folder that contains your Chrome profiles." : {
+
+    },
     "Open Companion" : {
 
     },
+    "Open Document…" : {
+
+    },
     "Open in Default App" : {
+
+    },
+    "Open in default browser" : {
 
     },
     "Open in Editor" : {
@@ -19012,7 +19404,6 @@
       }
     },
     "Open project branch briefing" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -19159,7 +19550,6 @@
 
     },
     "Open tasks that run on a cron schedule" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -19206,6 +19596,12 @@
           }
         }
       }
+    },
+    "Open the browser in RxCode first." : {
+
+    },
+    "Open the project task board" : {
+
     },
     "Open the project's task views" : {
       "extractionState" : "stale",
@@ -19296,9 +19692,6 @@
         }
       }
     },
-    "Optional Realtime Model Override (default managed by Codex)" : {
-
-    },
     "Optional. Paste or import a GitHub ruleset JSON exported from your repository's branch-rules settings." : {
       "localizations" : {
         "ko" : {
@@ -19324,6 +19717,9 @@
           }
         }
       }
+    },
+    "Options" : {
+
     },
     "Opus 4.6 only" : {
       "extractionState" : "stale",
@@ -20079,6 +20475,9 @@
         }
       }
     },
+    "Platform" : {
+
+    },
     "Platform: %@ • %@" : {
       "localizations" : {
         "en" : {
@@ -20291,13 +20690,28 @@
         }
       }
     },
+    "Preview %lld" : {
+
+    },
     "Preview a Window…" : {
+
+    },
+    "Preview attached to the comment" : {
+
+    },
+    "Preview Comment" : {
 
     },
     "Preview Poses…" : {
 
     },
+    "Preview unavailable" : {
+
+    },
     "Preview Voice" : {
+
+    },
+    "Previews and speech use your Flowcy account allowance." : {
 
     },
     "Previously assigned Mac" : {
@@ -20343,6 +20757,9 @@
 
     },
     "Proactive Talk & Daily Report" : {
+
+    },
+    "Profile" : {
 
     },
     "Project" : {
@@ -20694,6 +21111,15 @@
         }
       }
     },
+    "Publish" : {
+
+    },
+    "Publish this branch to its remote" : {
+
+    },
+    "Publishing branch…" : {
+
+    },
     "Publishing Swift filters (step 4 of 5)" : {
 
     },
@@ -20750,6 +21176,9 @@
           }
         }
       }
+    },
+    "Pushing commits…" : {
+
     },
     "Quantization" : {
 
@@ -20925,6 +21354,9 @@
     "Raw Text" : {
 
     },
+    "Re-run" : {
+
+    },
     "Re-run %@" : {
       "localizations" : {
         "ko" : {
@@ -20972,6 +21404,18 @@
       }
     },
     "Read Aloud" : {
+
+    },
+    "Read and change cookies" : {
+
+    },
+    "Read and change your data on %@" : {
+
+    },
+    "Read your browser tabs" : {
+
+    },
+    "Read your browsing activity" : {
 
     },
     "Reading README…" : {
@@ -21145,6 +21589,12 @@
         }
       }
     },
+    "Refresh branches" : {
+
+    },
+    "Refresh changes" : {
+
+    },
     "Refresh Cloud Projects" : {
       "localizations" : {
         "ko" : {
@@ -21181,6 +21631,9 @@
 
     },
     "Refresh Permission Status" : {
+
+    },
+    "Refresh preview" : {
 
     },
     "Refresh registry" : {
@@ -21470,7 +21923,13 @@
         }
       }
     },
+    "Reload" : {
+
+    },
     "Reload accounts" : {
+
+    },
+    "Reload Flowcy Models" : {
 
     },
     "Reload your Flowcy projects" : {
@@ -21493,6 +21952,7 @@
 
     },
     "Remote" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -21507,6 +21967,9 @@
           }
         }
       }
+    },
+    "Remote branches" : {
+
     },
     "Remove" : {
       "localizations" : {
@@ -21529,6 +21992,9 @@
           }
         }
       }
+    },
+    "Remove “%@”?" : {
+
     },
     "Remove %@" : {
       "localizations" : {
@@ -21793,6 +22259,9 @@
         }
       }
     },
+    "Removed %@" : {
+
+    },
     "Removing integration…" : {
 
     },
@@ -21949,6 +22418,9 @@
     "Renaming applies to every card view of this integration." : {
 
     },
+    "Render" : {
+
+    },
     "Replace RELEASE_TOKEN secret" : {
       "localizations" : {
         "ko" : {
@@ -21966,6 +22438,9 @@
       }
     },
     "Replay" : {
+
+    },
+    "Reply and Notification Voice" : {
 
     },
     "Repo Setup" : {
@@ -22027,6 +22502,9 @@
           }
         }
       }
+    },
+    "Repository unavailable" : {
+
     },
     "Request" : {
       "localizations" : {
@@ -22307,6 +22785,12 @@
         }
       }
     },
+    "Return to preview" : {
+
+    },
+    "Return to Preview" : {
+
+    },
     "Return to the current draft without regenerating it" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22402,6 +22886,9 @@
           }
         }
       }
+    },
+    "Review working tree changes" : {
+
     },
     "Reviewed by %@" : {
       "extractionState" : "stale",
@@ -22518,6 +23005,7 @@
       }
     },
     "Run git init in this project" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -22580,6 +23068,9 @@
           }
         }
       }
+    },
+    "Run scripts on web pages" : {
+
     },
     "Run the agent with --permission-mode plan so it proposes a plan before editing" : {
       "localizations" : {
@@ -23258,6 +23749,9 @@
         }
       }
     },
+    "Schedule background tasks" : {
+
+    },
     "Scheduled" : {
       "localizations" : {
         "ko" : {
@@ -23760,6 +24254,9 @@
     "Search Voices" : {
 
     },
+    "Search voices or languages" : {
+
+    },
     "Search your %@ models" : {
 
     },
@@ -23817,6 +24314,9 @@
         }
       }
     },
+    "See which network requests it blocked" : {
+
+    },
     "Select a connection or add one to create your usage cards." : {
 
     },
@@ -23836,10 +24336,10 @@
         }
       }
     },
-    "Select a model" : {
+    "Select a Model" : {
 
     },
-    "Select a Model" : {
+    "Select a page element for refinement" : {
 
     },
     "Select a Project" : {
@@ -23902,6 +24402,9 @@
         }
       }
     },
+    "Select a simulator, Mac window, SwiftUI view, or document." : {
+
+    },
     "Select a target…" : {
       "localizations" : {
         "ko" : {
@@ -23919,6 +24422,7 @@
       }
     },
     "Select All in Section" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -23949,6 +24453,9 @@
           }
         }
       }
+    },
+    "Select an element for refinement" : {
+
     },
     "Select Effort Level" : {
       "localizations" : {
@@ -24077,6 +24584,12 @@
         }
       }
     },
+    "Select Text in Preview" : {
+
+    },
+    "Select text in the visible preview using Live Text" : {
+
+    },
     "Selected" : {
 
     },
@@ -24095,6 +24608,9 @@
           }
         }
       }
+    },
+    "Selected Voice" : {
+
     },
     "Send" : {
       "localizations" : {
@@ -24239,6 +24755,9 @@
         }
       }
     },
+    "Send to Chat" : {
+
+    },
     "Sends a system notification while RxCode is in the background." : {
       "localizations" : {
         "en" : {
@@ -24280,6 +24799,9 @@
           }
         }
       }
+    },
+    "Separate sites with commas, such as github.com, vercel.com. macOS asks before RxCode can read Chrome Safe Storage. Cookies stay on this Mac." : {
+
     },
     "Series" : {
       "localizations" : {
@@ -24482,6 +25004,9 @@
           }
         }
       }
+    },
+    "Set up Git…" : {
+
     },
     "Set Up Release Workflow" : {
       "extractionState" : "stale",
@@ -24732,6 +25257,9 @@
         }
       }
     },
+    "Show all" : {
+
+    },
     "Show All" : {
       "localizations" : {
         "ko" : {
@@ -24828,6 +25356,9 @@
     "Show briefings created within a time range." : {
 
     },
+    "Show chat" : {
+
+    },
     "Show chat history" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -24844,6 +25375,9 @@
           }
         }
       }
+    },
+    "Show chat or drag to move" : {
+
     },
     "Show chat sidebar" : {
 
@@ -24922,6 +25456,9 @@
 
     },
     "Show Desktop Pet across Spaces" : {
+
+    },
+    "Show Diff" : {
 
     },
     "Show fewer" : {
@@ -25365,6 +25902,9 @@
     "Sign in to download your private models and gated models you have access to" : {
 
     },
+    "Sign In to Flowcy" : {
+
+    },
     "Sign in to Flowcy in Settings to create cloud projects." : {
       "localizations" : {
         "ko" : {
@@ -25489,6 +26029,9 @@
       }
     },
     "Sign In to See Your Models" : {
+
+    },
+    "Sign in to your account in Settings → Flowcy to choose a speech voice." : {
 
     },
     "Sign in to your Flowcy account" : {
@@ -25708,6 +26251,12 @@
         }
       }
     },
+    "Simulator or Mac Window…" : {
+
+    },
+    "Sites" : {
+
+    },
     "Size" : {
       "localizations" : {
         "ko" : {
@@ -25896,6 +26445,9 @@
         }
       }
     },
+    "Some features may not work in RxCode:" : {
+
+    },
     "Something Went Wrong" : {
 
     },
@@ -25918,6 +26470,9 @@
         }
       }
     },
+    "Source control" : {
+
+    },
     "Speak Daily Report" : {
 
     },
@@ -25934,13 +26489,34 @@
         }
       }
     },
+    "Speech Model" : {
+
+    },
     "Speech Recognizer" : {
 
     },
     "Speech Speed" : {
 
     },
+    "Split Above" : {
+
+    },
+    "Split Below" : {
+
+    },
     "Spoken Language" : {
+
+    },
+    "Stage Selected" : {
+
+    },
+    "Staged" : {
+
+    },
+    "Staged files (%lld)" : {
+
+    },
+    "Staging files…" : {
 
     },
     "Standalone chat" : {
@@ -26054,6 +26630,9 @@
         }
       }
     },
+    "Status unavailable" : {
+
+    },
     "Statuses" : {
       "localizations" : {
         "zh-Hans" : {
@@ -26152,6 +26731,9 @@
         }
       }
     },
+    "Stop loading" : {
+
+    },
     "Stop music and close" : {
 
     },
@@ -26230,6 +26812,9 @@
           }
         }
       }
+    },
+    "Store data" : {
+
     },
     "Stories" : {
       "localizations" : {
@@ -26440,6 +27025,15 @@
         }
       }
     },
+    "Swift source" : {
+
+    },
+    "SwiftUI preview" : {
+
+    },
+    "SwiftUI Preview…" : {
+
+    },
     "Switch between Claude Code, Codex, and installed ACP agents without changing the global default." : {
       "localizations" : {
         "ko" : {
@@ -26483,6 +27077,7 @@
       }
     },
     "Switch Branch" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -26507,6 +27102,9 @@
     "Switch to “Browse Hugging Face TTS” to install Kokoro-82M or any compatible MLX / GGUF speech synthesis model." : {
 
     },
+    "Switch to %@" : {
+
+    },
     "Switch Workspace" : {
       "localizations" : {
         "ko" : {
@@ -26522,6 +27120,9 @@
           }
         }
       }
+    },
+    "Switching branch…" : {
+
     },
     "Sync an existing project on this Mac with this cloud project" : {
       "localizations" : {
@@ -26683,6 +27284,9 @@
           }
         }
       }
+    },
+    "Targets unavailable" : {
+
     },
     "Task" : {
       "localizations" : {
@@ -26965,6 +27569,15 @@
         }
       }
     },
+    "Terminal %lld" : {
+
+    },
+    "Terminal actions" : {
+
+    },
+    "Terminal Actions" : {
+
+    },
     "Test connection" : {
       "localizations" : {
         "ko" : {
@@ -27208,6 +27821,18 @@
         }
       }
     },
+    "The extension archive couldn’t be extracted: %@" : {
+
+    },
+    "The extension doesn’t contain a manifest.json file." : {
+
+    },
+    "The extension’s files and stored data are deleted from RxCode. Chrome isn’t affected." : {
+
+    },
+    "The file is not a valid Chrome extension (.crx) or ZIP archive." : {
+
+    },
     "The first time a model runs, this agent reads its Hugging Face card and files to find the companion files it needs. RxCode only downloads files it has seen listed in the repository. The choice applies to this studio's future setups." : {
 
     },
@@ -27381,6 +28006,9 @@
         }
       }
     },
+    "The page stopped responding." : {
+
+    },
     "The pet only takes a single photo when you ask. It can photograph its display, another display, or a visible window. macOS may require reopening RxCode after access changes." : {
 
     },
@@ -27485,9 +28113,6 @@
     "The seed controls sampling variation. Reusing it with the same model, voice, and text helps repeat a result." : {
 
     },
-    "The seed stays the same for replies and notifications until you change it. Choose a new random seed to try another voice variation. Its effect depends on the model." : {
-
-    },
     "The selected file contains no readable text." : {
       "localizations" : {
         "zh-Hans" : {
@@ -27507,6 +28132,9 @@
           }
         }
       }
+    },
+    "The selected voice applies to your next Codex Realtime call. Outside a call, the pet uses your notification voice." : {
+
     },
     "The server did not advertise an %@ schema for this tool." : {
 
@@ -27600,6 +28228,9 @@
         }
       }
     },
+    "The task or its available levels changed. Reopen the picker to try again." : {
+
+    },
     "The task's project no longer exists." : {
 
     },
@@ -27612,6 +28243,9 @@
           }
         }
       }
+    },
+    "The upstream branch is unavailable." : {
+
     },
     "The version is cleared from every story, task and view that uses it." : {
       "localizations" : {
@@ -27724,6 +28358,12 @@
         }
       }
     },
+    "Thinking level for the next task run" : {
+
+    },
+    "Thinking level updated" : {
+
+    },
     "This agent didn't advertise a model selector. The model picker shows a single \"Default\" entry — the agent picks its own model at runtime. Click Fetch to retry." : {
       "localizations" : {
         "ko" : {
@@ -27792,7 +28432,7 @@
         }
       }
     },
-    "This check reads observed task-board and thread activity. It does not dispatch an agent or execute the request as project actions. Captions and speech follow Pet & Voice notification preferences; a muted microphone does not silence output." : {
+    "This check reads observed task-board and thread activity. It does not dispatch an agent or execute the request as project actions. Captions and speech follow Pet & Voice notification preferences. Muting pet audio delivers captions only." : {
 
     },
     "This client doesn't advertise any sign-in methods. It may use its own saved credentials or environment variables set in Edit." : {
@@ -27830,6 +28470,12 @@
           }
         }
       }
+    },
+    "this extension" : {
+
+    },
+    "This extension doesn’t request any permissions." : {
+
     },
     "This form couldn't be rendered. Edit the raw template JSON instead (name, enabled, mergeSettings)." : {
       "localizations" : {
@@ -27914,6 +28560,9 @@
       }
     },
     "This month" : {
+
+    },
+    "This profile has no extensions." : {
 
     },
     "This project" : {
@@ -28714,7 +29363,7 @@
     "Unload" : {
 
     },
-    "Unmute Microphone" : {
+    "Unmute Microphone and Speaker" : {
 
     },
     "Unpin" : {
@@ -28740,6 +29389,15 @@
       }
     },
     "Unread threads: %lld" : {
+
+    },
+    "Unstage Selected" : {
+
+    },
+    "Unstaged" : {
+
+    },
+    "Unstaging files…" : {
 
     },
     "Unsupported macro %@." : {
@@ -28815,6 +29473,9 @@
         }
       }
     },
+    "Untracked" : {
+
+    },
     "Unverified" : {
       "localizations" : {
         "ko" : {
@@ -28830,6 +29491,9 @@
           }
         }
       }
+    },
+    "Up to date" : {
+
     },
     "Update" : {
 
@@ -28997,6 +29661,9 @@
     "Use" : {
 
     },
+    "Use + in the toolbar to add a project." : {
+
+    },
     "Use a %@ API key with read access to the selected scope. Stored only in Keychain." : {
 
     },
@@ -29020,6 +29687,9 @@
 
     },
     "Use an AI Gateway key from the selected Vercel team. Shows the team's remaining USD balance, even when billable usage is filtered by project. Stored only in Keychain." : {
+
+    },
+    "Use an HTTP or HTTPS address, or a local address such as localhost:3000." : {
 
     },
     "Use default Makefile lookup" : {
@@ -29086,6 +29756,9 @@
           }
         }
       }
+    },
+    "Use the Add Tool Tab menu to open Terminal, Run, or Views." : {
+
     },
     "Use the filter button to hide providers or limits. Your choice is remembered." : {
       "extractionState" : "stale",
@@ -29232,9 +29905,6 @@
       }
     },
     "Used for typed conversations, daily report summaries, and Local Speech voice mode. Choose any available Claude Code, Codex, ACP client, or RxCode Local Agent model with RxCode IDE tools. Codex Realtime has its own model in the Voice tab." : {
-
-    },
-    "Used only while Codex Realtime voice mode is live." : {
 
     },
     "Used to auto-fill task and story forms, create tasks and stories from natural language, generate cron schedules, and write Swift filters and context-menu conditions. ACP clients run in a separate session." : {
@@ -29517,6 +30187,12 @@
         }
       }
     },
+    "Version %@ · Already added, importing updates it" : {
+
+    },
+    "Version %@ · Imported from Chrome" : {
+
+    },
     "Version %@ (not pinned)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -29591,6 +30267,9 @@
           }
         }
       }
+    },
+    "View branches in %@" : {
+
     },
     "View Chat History" : {
       "extractionState" : "stale",
@@ -29711,10 +30390,10 @@
     "Voice Companion Notice" : {
 
     },
-    "Voice Mode" : {
+    "Voice ID" : {
 
     },
-    "Voice Model" : {
+    "Voice Mode" : {
 
     },
     "Voice Model Error" : {
@@ -29729,16 +30408,7 @@
     "Voice Settings" : {
 
     },
-    "Voice Settings can read this model's README to find every speaker it supports." : {
-
-    },
     "Voice settings for %@" : {
-
-    },
-    "Voice Settings…" : {
-
-    },
-    "Voices come from this model's README, read by the setup agent." : {
 
     },
     "Voices…" : {
@@ -30260,6 +30930,12 @@
         }
       }
     },
+    "Working tree clean" : {
+
+    },
+    "Working…" : {
+
+    },
     "Workspace & Project Scope" : {
 
     },
@@ -30334,6 +31010,9 @@
         }
       }
     },
+    "Write to the clipboard" : {
+
+    },
     "Write with AI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -30393,6 +31072,9 @@
       }
     },
     "Xcode Recommendations" : {
+
+    },
+    "Xcode workspace or tab (optional)" : {
 
     },
     "XHigh" : {
@@ -30465,6 +31147,9 @@
           }
         }
       }
+    },
+    "Your Flowcy account has no enabled speech models." : {
+
     },
     "ZIP with analytics and chat history" : {
 

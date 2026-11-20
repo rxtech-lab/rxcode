@@ -35,39 +35,31 @@ struct ProjectWindowView: View {
     var body: some View {
         Group {
             if windowState.isInitialized {
-                GeometryReader { proxy in
-                    HStack(spacing: 0) {
-                        NavigationSplitView(columnVisibility: $columnVisibility) {
-                            sidebarContent
-                        } detail: {
-                            detailContent
+                InspectorWorkspaceLayout(inspectorStarted: inspectorStarted) {
+                    NavigationSplitView(columnVisibility: $columnVisibility) {
+                        sidebarContent
+                    } detail: {
+                        detailContent
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background {
+                        Button("") {
+                            columnVisibility = (columnVisibility == .all) ? .detailOnly : .all
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background {
-                            Button("") {
-                                columnVisibility = (columnVisibility == .all) ? .detailOnly : .all
-                            }
-                            .keyboardShortcut("3", modifiers: .command)
-                            .hidden()
-                        }
-                        .id(appState.themeRevision)
-                        .navigationTitle(navigationTitleText)
-                        .onChange(of: showRightSidebar) { _, isShowing in
-                            if isShowing, !inspectorStarted { inspectorStarted = true }
-                        }
-                        .onChange(of: appState.focusMode) { _, newValue in
-                            windowState.focusMode = newValue
-                        }
-                        .onAppear {
-                            windowState.focusMode = appState.focusMode
-                            if showRightSidebar { inspectorStarted = true }
-                        }
-
-                        if inspectorStarted {
-                            RightInspectorPanel(
-                                maxAllowedWidth: RightInspectorPanelLayout.maximumWidth(in: proxy.size.width)
-                            )
-                        }
+                        .keyboardShortcut("3", modifiers: .command)
+                        .hidden()
+                    }
+                    .id(appState.themeRevision)
+                    .navigationTitle(navigationTitleText)
+                    .onChange(of: showRightSidebar) { _, isShowing in
+                        if isShowing, !inspectorStarted { inspectorStarted = true }
+                    }
+                    .onChange(of: appState.focusMode) { _, newValue in
+                        windowState.focusMode = newValue
+                    }
+                    .onAppear {
+                        windowState.focusMode = appState.focusMode
+                        if showRightSidebar { inspectorStarted = true }
                     }
                 }
             } else {
@@ -77,6 +69,7 @@ struct ProjectWindowView: View {
                     .background(ClaudeTheme.background)
             }
         }
+        .modifier(WindowRepositoryStatus())
         .onAppear {
             windowState.isProjectWindow = true
         }
@@ -86,11 +79,7 @@ struct ProjectWindowView: View {
                 .localModelsSheetFrame()
                 .environment(appState)
         }
-        .sheet(item: Bindable(windowState).inspectorFile) { file in
-            FileInspectorView(filePath: file.path, fileName: file.name)
-                .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
-                       minHeight: 600, idealHeight: 1000, maxHeight: 1200)
-        }
+        .fileInspectorSheet(windowState)
         .sheet(isPresented: Binding(
             get: { windowState.linkCloudProjectId != nil },
             set: { if !$0 { windowState.linkCloudProjectId = nil } }
@@ -134,7 +123,7 @@ struct ProjectWindowView: View {
             ProjectTreeView()
         }
         .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
-        .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
+        .navigationSplitViewColumnWidth(min: 250, ideal: 290, max: 360)
     }
 
     // MARK: - Chat Toolbar Area
@@ -208,6 +197,7 @@ struct ProjectWindowView: View {
                     .background(ClaudeTheme.background)
             }
         }
+        .reportsInspectorDetailWidth(to: windowState)
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar(removing: .title)
         .toolbar {

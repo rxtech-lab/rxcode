@@ -1,11 +1,73 @@
 import Foundation
 import RxCodeCore
+import SwiftUI
 import XCTest
 @testable import RxCode
 
 @MainActor
 final class CacheStorageTests: XCTestCase {
     private static var retainedStores: [ThreadStore] = []
+
+    func testLaunchRestoresThreadAndBriefingMergeStatusBeforeTheFirstPoll() async throws {
+        let workspace = AppWorkspace(id: UUID().uuidString, name: "Launch", createdAt: .now, updatedAt: .now)
+        let state = AppState(core: AppCore(), workspace: workspace, startBackgroundServices: false)
+        let project = Project(name: "Repo", path: workspace.storageURL.path, gitHubRepo: "Owner/Repo")
+        try await state.persistence.saveProjects([project])
+
+        let checkout = ChatSession(id: "checkout", projectId: project.id).summary
+        let worktree = ChatSession(id: "worktree", projectId: project.id, worktreeBranch: "Feature").summary
+        let review = ChatSession(id: "review", projectId: project.id, parentThreadId: worktree.id).summary
+        let inferred = ChatSession(id: "inferred", projectId: project.id).summary
+        for thread in [checkout, worktree, review, inferred] { state.threadStore.upsert(thread) }
+        state.threadStore.setCheckoutBranch(sessionId: checkout.id, branch: "Feature")
+
+        let status = ProjectCIStatus(
+            owner: "owner", repo: "repo", branch: "Feature", found: true, overallState: .failure,
+            lastUpdated: nil, headSha: nil, prNumber: 42, prState: "merged", prUrl: nil, workflows: [], failing: []
+        )
+        let match = try XCTUnwrap(ThreadPullRequest(repository: "Owner/Repo", number: 43, state: .merged, reportedURL: nil))
+        let cached = BranchStatusSnapshot(
+            accountID: "returning-user", byBranch: ["owner/repo#Feature": status], inferredBySession: [inferred.id: match]
+        )
+        try await CacheStorageService.shared.saveBranchStatus(cached, workspaceID: workspace.id)
+        state.workspaceDefaults.set("another-user", for: AppState.branchStatusAccountKey)
+        state.restoreBranchStatus(cached)
+        XCTAssertTrue(state.branchStatus.byBranch.isEmpty)
+
+        state.workspaceDefaults.set(cached.accountID, for: AppState.branchStatusAccountKey)
+        await state.initialize()
+        XCTAssertTrue(state.isInitialized)
+        XCTAssertFalse(state.isSignedIn)
+        XCTAssertNil(state.ciStatusPollerTask)
+        XCTAssertEqual(state.ciStatus(forProjectId: project.id, branch: "Feature")?.pullRequestState, .merged)
+        for thread in [checkout, worktree, review] {
+            let link = state.pullRequest(forThread: thread, in: project)
+            XCTAssertEqual(link?.number, 42)
+            XCTAssertEqual(link?.state, .merged)
+        }
+        XCTAssertEqual(state.pullRequest(forThread: inferred, in: project), match)
+        XCTAssertNil(state.ciStatus(forProjectId: project.id, branch: "feature"))
+        XCTAssertFalse(state.anyCIFailing, "Only a live CI result should drive project failure handling")
+
+        let badge = BriefingPRStatusView(projectId: project.id, branch: "Feature", project: project)
+            .environment(state)
+            .padding(8)
+        let renderer = ImageRenderer(content: badge)
+        renderer.scale = 2
+        let attachment = XCTAttachment(image: try XCTUnwrap(renderer.nsImage))
+        attachment.name = "Briefing merge badge before the first poll"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        var relinkedProject = project
+        relinkedProject.gitHubRepo = "Owner/Other"
+        XCTAssertNil(state.pullRequest(forThread: inferred, in: relinkedProject))
+        await state.signOutRxAuth()
+        XCTAssertNil(state.pullRequest(forThread: checkout, in: project))
+        XCTAssertNil(state.workspaceDefaults.string(for: AppState.branchStatusAccountKey))
+        let afterSignOut = await CacheStorageService.shared.loadBranchStatus(workspaceID: workspace.id)
+        XCTAssertNil(afterSignOut)
+    }
 
     func testClearingCachedRecordsPreservesChats() throws {
         let store = ThreadStore.inMemory()

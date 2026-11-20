@@ -3,17 +3,20 @@ import RxCodeCore
 import SwiftTerm
 import SwiftUI
 
-/// Inspector body for the "Run" tab. Header row holds the task dropdown plus
-/// per-task action icons; the body re-parents the selected task's
-/// `LocalProcessTerminalView` so output keeps buffering when hidden.
+/// Inspector body for the "Run" tab. A tab row lists run tasks with per-task
+/// actions; the body re-parents the selected task's `LocalProcessTerminalView`
+/// so output keeps buffering when hidden.
 struct RunOutputInspectorView: View {
     @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
+    @Binding var selectedTaskID: UUID?
+    let showsLiveTerminal: Bool
+    @State private var draggingTaskID: UUID?
 
-    private var tasks: [RunTask] { appState.runService.tasks }
+    private var runService: RunService { appState.runService }
+    private var tasks: [RunTask] { runService.tasks }
 
     private var selectedTask: RunTask? {
-        if let id = windowState.selectedRunTaskId, let match = tasks.first(where: { $0.id == id }) {
+        if let id = selectedTaskID, let match = tasks.first(where: { $0.id == id }) {
             return match
         }
         return tasks.first
@@ -21,136 +24,154 @@ struct RunOutputInspectorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            taskBar
-            Divider()
             if let task = selectedTask {
-                RunTaskTerminalHost(view: task.terminalView)
-                    .padding(8)
-                    .background(ClaudeTheme.codeBackground)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                taskBar(selected: task)
+                Group {
+                    if showsLiveTerminal {
+                        RunTaskTerminalHost(view: task.terminalView)
+                    } else {
+                        ScrollView {
+                            Text(verbatim: task.terminalOutputTail)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .defaultScrollAnchor(.bottom)
+                    }
+                }
+                .padding(8)
+                .background(ClaudeTheme.codeBackground)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                emptyState
+                ContentUnavailableView(
+                    "No Active Runs",
+                    systemImage: "play.rectangle",
+                    description: Text("Pick a profile in the toolbar and press Run.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear {
-            if windowState.selectedRunTaskId == nil {
-                windowState.selectedRunTaskId = tasks.first?.id
-            }
-        }
-        .onChange(of: tasks.map(\.id)) { _, newIds in
-            // If the currently-selected task was removed, reselect the newest.
-            if let id = windowState.selectedRunTaskId, !newIds.contains(id) {
-                windowState.selectedRunTaskId = newIds.first
-            } else if windowState.selectedRunTaskId == nil {
-                windowState.selectedRunTaskId = newIds.first
-            }
+        .onChange(of: tasks.map(\.id), initial: true) { _, ids in
+            if selectedTaskID != selectedTask?.id { selectedTaskID = selectedTask?.id }
+            if let draggingTaskID, !ids.contains(draggingTaskID) { self.draggingTaskID = nil }
         }
     }
 
-    private var taskBar: some View {
-        HStack(spacing: 8) {
-            Menu {
-                if tasks.isEmpty {
-                    Text("No tasks").foregroundStyle(.secondary)
-                } else {
-                    ForEach(tasks) { task in
-                        Button {
-                            windowState.selectedRunTaskId = task.id
-                        } label: {
-                            HStack {
-                                statusDot(for: task.status)
-                                Text("\(appState.runService.displayName(for: task)) · \(task.status.label)")
-                                if selectedTask?.id == task.id {
-                                    Image(systemName: "checkmark")
-                                }
+    private func taskBar(selected: RunTask) -> some View {
+        HStack(spacing: 2) {
+            ScrollViewReader { reader in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 0) {
+                        ForEach(tasks) { task in
+                            RunTaskTab(
+                                title: runService.displayName(for: task),
+                                status: task.status,
+                                isActive: task.id == selected.id,
+                                onSelect: { selectedTaskID = task.id },
+                                onStop: { runService.stop(taskId: task.id) },
+                                onRerun: { rerun(task) },
+                                onClear: { runService.remove(taskId: task.id) },
+                                onClearFinished: { runService.clearFinished() }
+                            )
+                            .workspaceReorderableTab(id: task.id, draggingID: $draggingTaskID) { dragged, target in
+                                runService.move(taskId: dragged, to: target)
                             }
+                            .id(task.id)
                         }
                     }
+                    .frame(height: 30)
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    if let task = selectedTask {
-                        statusDot(for: task.status)
-                        Text("\(appState.runService.displayName(for: task)) · \(task.status.label)")
-                            .lineLimit(1)
-                    } else {
-                        Text("No tasks")
-                            .foregroundStyle(.secondary)
-                    }
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
+                .scrollIndicators(.hidden)
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                .workspaceTabStripDropArea(draggingID: $draggingTaskID) { dragged, target in
+                    runService.move(taskId: dragged, to: target)
                 }
-                .font(.system(size: 12, weight: .medium))
+                .onChange(of: selected.id, initial: true) { _, id in
+                    withAnimation(.smooth(duration: 0.2)) { reader.scrollTo(id) }
+                }
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
 
-            Spacer()
-
-            if let task = selectedTask {
-                if !task.status.isTerminal {
-                    Button {
-                        appState.runService.stop(taskId: task.id)
-                    } label: {
-                        Image(systemName: "stop.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Stop \(appState.runService.displayName(for: task))")
-                } else {
-                    Button {
-                        _ = appState.runService.start(profile: task.profile, project: task.project)
-                        windowState.selectedRunTaskId = appState.runService.tasks.first?.id
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Re-run \(appState.runService.displayName(for: task))")
-
-                    Button {
-                        appState.runService.remove(taskId: task.id)
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Clear task")
+            let name = runService.displayName(for: selected)
+            if selected.status.isTerminal {
+                WorkspaceTabStripButton(systemImage: "arrow.clockwise", help: "Re-run \(name)") { rerun(selected) }
+            } else {
+                WorkspaceTabStripButton(systemImage: "stop.fill", help: "Stop \(name)") {
+                    runService.stop(taskId: selected.id)
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(ClaudeTheme.surfaceElevated)
-    }
-
-    private func statusDot(for status: RunTaskStatus) -> some View {
-        let color: SwiftUI.Color = {
-            switch status {
-            case .running: return ClaudeTheme.statusWarning
-            case .succeeded: return ClaudeTheme.statusSuccess
-            case .failed, .signaled: return ClaudeTheme.statusError
-            case .stopped: return SwiftUI.Color.secondary
-            }
-        }()
-        return Circle()
-            .fill(color)
-            .frame(width: 8, height: 8)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "play.rectangle")
-                .font(.system(size: 32))
-                .foregroundStyle(.secondary)
-            Text("No active runs")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text("Pick a profile in the toolbar and press Run.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            Spacer()
+        .padding(.horizontal, 8)
+        .background(ClaudeTheme.codeBackground)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(ClaudeTheme.borderSubtle.opacity(0.5))
+                .frame(height: 0.5)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func rerun(_ task: RunTask) {
+        selectedTaskID = runService.start(profile: task.profile, project: task.project).id
+    }
+}
+
+/// A run task tab: status dot, name, and a close button once the run has finished.
+private struct RunTaskTab: View {
+    let title: String
+    let status: RunTaskStatus
+    let isActive: Bool
+    let onSelect: () -> Void
+    let onStop: () -> Void
+    let onRerun: () -> Void
+    let onClear: () -> Void
+    let onClearFinished: () -> Void
+    @State private var isHovered = false
+
+    private var statusColor: SwiftUI.Color {
+        switch status {
+        case .running: ClaudeTheme.statusWarning
+        case .succeeded: ClaudeTheme.statusSuccess
+        case .failed, .signaled: ClaudeTheme.statusError
+        case .stopped: ClaudeTheme.textTertiary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 7, height: 7)
+                .overlay {
+                    if status == .running {
+                        Circle().stroke(statusColor.opacity(0.35), lineWidth: 3)
+                    }
+                }
+                .help(status.label)
+            Text(title)
+                .font(.system(size: ClaudeTheme.size(11), weight: isActive ? .medium : .regular))
+                .foregroundStyle(isActive || isHovered ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+                .lineLimit(1)
+            WorkspaceTabCloseButton(isVisible: status.isTerminal && (isHovered || isActive),
+                                    help: "Clear task", action: onClear)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
+        .workspaceUnderlineTab(selected: isActive, hovered: isHovered)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            if status.isTerminal {
+                Button("Re-run", systemImage: "arrow.clockwise", action: onRerun)
+                Divider()
+                Button("Clear Task", systemImage: "xmark", action: onClear)
+            } else {
+                Button("Stop", systemImage: "stop.fill", action: onStop)
+            }
+            Button("Clear Finished Tasks", action: onClearFinished)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(status.label)")
+        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
     }
 }
 

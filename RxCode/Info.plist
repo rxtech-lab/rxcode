@@ -88,6 +88,26 @@
 				<string>public.data</string>
 			</array>
 		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.rxlab.rxcode.inspector-tab</string>
+			<key>UTTypeDescription</key>
+			<string>RxCode Inspector Tab</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.rxlab.rxcode.inspector-destination</string>
+			<key>UTTypeDescription</key>
+			<string>RxCode Inspector Destination</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
 	</array>
 	<key>AutopilotBaseURL</key>
 	<string>https://www.flowcy.dev</string>

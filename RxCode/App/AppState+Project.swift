@@ -351,11 +351,13 @@ extension AppState {
         onboardingCompleted = true
         workspaceDefaults.set(true, for: "onboardingCompleted")
         startAutopilotWarmup()
+        startCIStatusPoller()
         Task { [weak self] in await self?.refreshCloudProjectsAndBoards() }
     }
 
     func signOutRxAuth() async {
         await rxAuth.signOut()
+        await clearCIStatus()
         clearFlowcyModels()
         clearCloudProjectState()
         repos = []

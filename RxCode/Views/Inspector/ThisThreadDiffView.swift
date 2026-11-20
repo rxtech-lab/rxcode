@@ -192,16 +192,7 @@ struct ThisThreadFileRow: View {
 }
 
 struct BranchInfoView: View {
-    @Environment(WindowState.self) private var windowState
-
     var body: some View {
-        if let project = windowState.selectedProject {
-            VStack(spacing: 0) {
-                GitStatusView(projectPath: project.path)
-                Spacer()
-            }
-        } else {
-            InspectorEmptyState(title: "No project selected", message: "Select a project to inspect its branch.")
-        }
+        RepositoryContent { tree in GitStatusView(tree: tree) }
     }
 }

@@ -2,14 +2,13 @@ import SwiftUI
 
 extension PetSettingsView {
     enum SettingsTab: Hashable, CaseIterable {
-        case generalAgent, looks, voice, voices, music, desktop
+        case generalAgent, looks, voice, music, desktop
 
         var title: String {
             switch self {
             case .generalAgent: "General Agent"
             case .looks: "Looks"
             case .voice: "Voice"
-            case .voices: "Voices"
             case .music: "Music"
             case .desktop: "Desktop & Reports"
             }
@@ -20,7 +19,6 @@ extension PetSettingsView {
             case .generalAgent: "sparkles"
             case .looks: "paintpalette"
             case .voice: "waveform"
-            case .voices: "person.wave.2"
             case .music: "music.note"
             case .desktop: "desktopcomputer"
             }

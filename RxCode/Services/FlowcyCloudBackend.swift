@@ -1,26 +1,29 @@
 import Foundation
 import RxCodeCore
 
-/// Account-authenticated text chat. Each request replays the active thread's
-/// transcript because Flowcy does not store a server-side conversation.
+/// Account-authenticated model turns. Flowcy is stateless, so each request
+/// carries the transcript, including completed desktop tool calls and results.
 actor FlowcyCloudBackend: AgentBackend {
     nonisolated let provider = AgentProvider.flowcy
-    nonisolated let staticCapabilities: CapabilitySet = []
+    nonisolated let staticCapabilities = AgentProvider.flowcy.staticCapabilities
     static let productionURL = URL(string: "https://www.flowcy.dev/api/v1")!
 
     private let token: @Sendable (Bool) async -> String?
     private let baseURL: URL
     private let session: URLSession
+    private let permission: PermissionServer
     private var turns: [UUID: Task<Void, Never>] = [:]
     private var errors: [UUID: String] = [:]
 
-    init(auth: RxAuthService) {
-        self.init(baseURL: Self.productionURL) { await auth.accessToken(forceRefresh: $0) }
+    init(auth: RxAuthService, permission: PermissionServer) {
+        self.init(baseURL: Self.productionURL, permission: permission) { await auth.accessToken(forceRefresh: $0) }
     }
 
-    init(baseURL: URL, session: URLSession = .shared, token: @escaping @Sendable (Bool) async -> String?) {
+    init(baseURL: URL, session: URLSession = .shared, permission: PermissionServer,
+         token: @escaping @Sendable (Bool) async -> String?) {
         self.baseURL = baseURL
         self.session = session
+        self.permission = permission
         self.token = token
     }
 
@@ -65,19 +68,62 @@ actor FlowcyCloudBackend: AgentBackend {
         }
     }
 
-    func reply(model: String?, prompt: String, history: [ChatMessage] = [],
-               onText: @Sendable (String) -> Void = { _ in }) async throws -> String {
+    /// One-shot cloudChat MCP requests have no workspace or local execution authority.
+    func reply(model: String?, prompt: String) async throws -> String {
+        let messages = try transcript(history: [], prompt: prompt)
+        return try await modelStep(model: model, messages: messages, terminalEnabled: false) { _ in }.text
+    }
+
+    private struct ModelStep {
+        var text = ""
+        var calls: [FlowcyTerminalCall] = []
+
+        var assistantMessage: JSONValue {
+            var content: [JSONValue] = []
+            if !text.isEmpty { content.append(.object(["type": .string("text"), "text": .string(text)])) }
+            return .object(["role": .string("assistant"), "content": .array(content + calls.map(\.callPart))])
+        }
+    }
+
+    private func transcript(history: [ChatMessage], prompt: String) throws -> [JSONValue] {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw IDEToolError.invalidArguments("Enter a prompt to send to Flowcy.")
         }
-        var messages: [JSONValue] = history.compactMap { message in
-            guard !message.isError, !message.isCompactBoundary else { return nil }
-            let text = message.content
-            guard !text.isEmpty else { return nil }
-            return .object(["role": .string(message.role.rawValue), "content": .string(text)])
+        var messages: [JSONValue] = []
+        for message in history where !message.isError && !message.isCompactBoundary {
+            var step = ModelStep()
+            var results: [JSONValue] = []
+            func flush() {
+                if !results.isEmpty {
+                    messages.append(step.assistantMessage)
+                    messages.append(.object(["role": .string("tool"), "content": .array(results)]))
+                } else if !step.text.isEmpty {
+                    messages.append(.object(["role": .string(message.role.rawValue), "content": .string(step.text)]))
+                }
+                step = ModelStep()
+                results.removeAll()
+            }
+            for block in message.blocks {
+                if let text = block.text, !text.isEmpty {
+                    if !results.isEmpty { flush() }
+                    if !step.text.isEmpty { step.text += "\n\n" }
+                    step.text += text
+                } else if message.role == .assistant, let saved = block.toolCall, let output = saved.result,
+                          let call = FlowcyTerminalCall(saved: saved) {
+                    step.calls.append(call)
+                    results.append(call.resultPart(output, isError: saved.isError))
+                }
+            }
+            flush()
         }
         messages.append(.object(["role": .string("user"), "content": .string(prompt)]))
-        var fields: [String: JSONValue] = ["messages": .array(messages), "tools": .array([])]
+        return messages
+    }
+
+    private func modelStep(model: String?, messages: [JSONValue], terminalEnabled: Bool,
+                           onText: @Sendable (String) -> Void) async throws -> ModelStep {
+        let tools = terminalEnabled ? [FlowcyTerminalCall.definition] : []
+        var fields: [String: JSONValue] = ["messages": .array(messages), "tools": .array(tools)]
         if let model, model != AgentModel.flowcyDefaultID { fields["modelId"] = .string(model) }
         let body = try JSONEncoder().encode(fields)
         guard messages.count <= 100, body.count <= 1_000_000 else {
@@ -85,8 +131,12 @@ actor FlowcyCloudBackend: AgentBackend {
         }
         let (bytes, response) = try await request("agent/chat", body: body)
         guard response.mimeType == "application/x-ndjson" else { throw IDEToolError.handlerFailed("Invalid Flowcy stream.") }
-        var result = ""
+        var step = ModelStep()
         var byteCount = 0
+        func countPayload(_ size: Int) throws {
+            byteCount += size
+            guard byteCount <= 1_000_000 else { throw IDEToolError.handlerFailed("Flowcy response is too large.") }
+        }
         var finished = false
         for try await line in bytes.lines {
             try Task.checkCancellation()
@@ -96,17 +146,59 @@ actor FlowcyCloudBackend: AgentBackend {
             switch event["type"]?.stringValue {
             case "text":
                 guard let text = event["text"]?.stringValue else { throw IDEToolError.handlerFailed("Invalid Flowcy text event.") }
-                byteCount += text.utf8.count
-                guard byteCount <= 1_000_000 else { throw IDEToolError.handlerFailed("Flowcy response is too large.") }
-                result += text
+                try countPayload(text.utf8.count)
+                step.text += text
                 onText(text)
+            case "tool-call":
+                guard terminalEnabled, let call = FlowcyTerminalCall(event: event) else {
+                    throw IDEToolError.handlerFailed("Flowcy requested an unavailable or invalid tool.")
+                }
+                try countPayload(line.utf8.count)
+                step.calls.append(call)
             case "finish": finished = true
             default: throw IDEToolError.handlerFailed("Flowcy could not complete this response.")
             }
         }
         try Task.checkCancellation()
         guard finished else { throw IDEToolError.handlerFailed("Flowcy response was interrupted.") }
-        return result
+        return step
+    }
+
+    private func run(_ request: BackendSendRequest, permissionSessionID: String, terminalEnabled: Bool,
+                     into continuation: AsyncStream<StreamEvent>.Continuation) async throws -> Int {
+        var messages = try transcript(history: request.history, prompt: request.prompt)
+        var seen = Set<String>()
+        var round = 1
+        while true {
+            let step = try await modelStep(model: request.model, messages: messages, terminalEnabled: terminalEnabled) {
+                continuation.yield(.textDelta($0))
+            }
+            if step.calls.isEmpty { return round }
+            guard round < 8, seen.count + step.calls.count <= 32 else {
+                throw IDEToolError.handlerFailed("Flowcy reached its tool-call limit. Send another message to continue.")
+            }
+            guard messages.count + 2 <= 100 else {
+                throw IDEToolError.handlerFailed("This chat is too long to return a terminal result to Flowcy. Start a new chat to run the command.")
+            }
+            guard step.calls.allSatisfy({ seen.insert($0.id).inserted }) else {
+                throw IDEToolError.handlerFailed("Flowcy returned a duplicate tool call.")
+            }
+            // Validate the complete model step before acting. A broken stream, including
+            // a missing finish after a tool call, must never start a local command.
+            var results: [JSONValue] = []
+            for call in step.calls {
+                try Task.checkCancellation()
+                continuation.yield(.assistant(AssistantMessage(role: "assistant", content: [
+                    .toolUse(id: call.localID(streamID: request.streamId), name: "Bash", input: call.input),
+                ])))
+                let result = try await call.execute(request: request, sessionID: permissionSessionID, permission: permission)
+                continuation.yield(.user(result))
+                results.append(call.resultPart(result.content, isError: result.isError))
+            }
+            messages.append(step.assistantMessage)
+            messages.append(.object(["role": .string("tool"), "content": .array(results)]))
+            round += 1
+        }
     }
 
     func send(_ request: BackendSendRequest) -> AsyncStream<StreamEvent> {
@@ -116,13 +208,20 @@ actor FlowcyCloudBackend: AgentBackend {
                 turns.removeValue(forKey: request.streamId)
                 continuation.finish()
             }
+            let isNewThread = request.clientSessionKey.hasPrefix("pending-")
             let sessionId = request.sessionId ?? UUID().uuidString
-            continuation.yield(.system(SystemEvent(subtype: "init", sessionId: sessionId, tools: [],
+            let permissionSessionID = isNewThread ? sessionId : request.clientSessionKey
+            let terminalEnabled = request.cwd.hasPrefix("/") && !request.planMode && request.permissionMode != .plan
+            if terminalEnabled && sessionId != permissionSessionID {
+                // A thread switched from another provider keeps its original UI and permission key.
+                await permission.registerSession(sid: permissionSessionID, projectKey: request.cwd, mode: request.permissionMode)
+            }
+            continuation.yield(.system(SystemEvent(subtype: "init", sessionId: sessionId, tools: terminalEnabled ? ["Bash"] : [],
                                                     model: request.model, claudeCodeVersion: nil)))
+            var rounds: Int?
             do {
-                _ = try await reply(model: request.model, prompt: request.prompt, history: request.history) { delta in
-                    continuation.yield(.textDelta(delta))
-                }
+                rounds = try await run(request, permissionSessionID: permissionSessionID,
+                                       terminalEnabled: terminalEnabled, into: continuation)
             } catch {
                 guard !Task.isCancelled else { return }
                 // The stream consumer reads error details after finalizing the turn.
@@ -131,7 +230,7 @@ actor FlowcyCloudBackend: AgentBackend {
             }
             guard !Task.isCancelled else { return }
             continuation.yield(.result(ResultEvent(durationMs: nil, totalCostUsd: nil, sessionId: sessionId,
-                                                   isError: errors[request.streamId] != nil, totalTurns: 1,
+                                                   isError: errors[request.streamId] != nil, totalTurns: rounds,
                                                    usage: nil, contextWindow: nil)))
         }
         turns[request.streamId] = task

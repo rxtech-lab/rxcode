@@ -119,21 +119,7 @@ extension AppState {
             route = "ai/videos"
         case .audio:
             route = "ai/speech"
-            if model.provider == "google" || model.provider == "gemini" {
-                body["provider"] = .string("gemini")
-                body["transcript"] = .string(prompt)
-                body["speakers"] = body["speakers"] ?? .array([.object(["name": .string("Speaker"), "voice": .string("Kore")])])
-            } else if model.provider == "azure" {
-                guard let voice = body["voice"]?.stringValue, !voice.isEmpty else { throw IDEToolError.invalidArguments("Azure speech requires options.voice.") }
-                func escaped(_ text: String) -> String {
-                    text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;").replacingOccurrences(of: "'", with: "&apos;")
-                }
-                body["provider"] = .string("azure")
-                body["ssml"] = .string("<speak version='1.0' xml:lang='en-US'><voice name='\(escaped(voice))'>\(escaped(prompt))</voice></speak>")
-            } else {
-                body["provider"] = .string("gateway"); body["text"] = .string(prompt)
-                guard body["voice"]?.stringValue != nil else { throw IDEToolError.invalidArguments("Speech generation requires options.voice.") }
-            }
+            body = try model.speechBody(text: prompt, options: body)
         }
         let result = try await client.request(route, body: .object(body))
         if kind == .video { return result }

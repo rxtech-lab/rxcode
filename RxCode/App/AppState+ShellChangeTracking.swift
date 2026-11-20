@@ -53,7 +53,7 @@ extension AppState {
                 cwd: cwd,
                 rootPid: initialPid
             )
-            if initialPid == nil, agentProvider != .localAgent {
+            if initialPid == nil, agentProvider != .localAgent, agentProvider != .flowcy {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 guard let self,
                       let spawnedPid = await self.streamRootPid(provider: agentProvider, streamId: streamId)

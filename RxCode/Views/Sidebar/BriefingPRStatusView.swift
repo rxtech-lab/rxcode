@@ -4,7 +4,7 @@ import RxCodeCore
 /// Per-branch pull-request status shown on a briefing card: a chip reflecting the
 /// branch's PR state (merged / open / closed) that links to the PR, or a
 /// "Create PR" button when no PR exists yet. Status is read from
-/// `AppState.ciStatusByBranchKey`, which the CI poller maintains for every
+/// the workspace's branch status snapshot, which the CI poller maintains for every
 /// briefing branch (not just current branches).
 struct BriefingPRStatusView: View {
     @Environment(AppState.self) private var appState

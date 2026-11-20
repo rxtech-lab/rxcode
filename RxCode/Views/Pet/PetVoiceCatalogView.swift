@@ -1,7 +1,7 @@
 import RxCodeCore
 import SwiftUI
 
-// MARK: - Hugging Face Text-to-Speech Catalog (Voices Tab → Browse)
+// MARK: - Hugging Face Text-to-Speech Catalog
 
 /// Searches Hugging Face text-to-speech models. Each row shows the download
 /// size and how it fits this Mac; clicking a row opens the same README,
@@ -150,10 +150,11 @@ struct PetVoiceCatalogView: View {
             }
             Spacer()
             if let installed = alreadyInstalled {
-                Button(controller.configuration.localTTSModelID == installed.id ? "Active" : "Use Voice") {
-                    PetVoicePresets.select(model: installed, in: controller)
+                let isActive = controller.configuration.usesLocalVoice(modelID: installed.id)
+                Button(isActive ? "Active" : "Use Voice") {
+                    PetVoicePresets.select(model: installed, in: &controller.configuration)
                 }
-                .disabled(controller.configuration.localTTSModelID == installed.id)
+                .disabled(isActive)
                 .controlSize(.small)
             } else {
                 Button("Details") {
@@ -289,7 +290,7 @@ struct PetVoiceCatalogView: View {
             }
             try await store.download(summary: summary, variant: variant)
             if let installed = store.installed.first(where: { $0.repoID == summary.id && $0.format == summary.format }) {
-                PetVoicePresets.select(model: installed, in: controller)
+                PetVoicePresets.select(model: installed, in: &controller.configuration)
             }
         } catch is CancellationError {
             actionOverlayMessage = nil

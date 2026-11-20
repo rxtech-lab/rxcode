@@ -1,6 +1,5 @@
 import AppKit
 import AVFoundation
-import MusicKit
 import RxCodeCore
 import SwiftUI
 
@@ -17,30 +16,12 @@ struct PetSettingsView: View {
         get { controller.settingsTab }
         nonmutating set { controller.settingsTab = newValue }
     }
-    @State private var isEditingAppleVoice = false
-    @State private var editingVoiceModel: LocalModelInfo?
-    /// Observed so README-derived voice settings refresh when the setup agent saves them.
-    @AppStorage(StudioModelConfig.storageKey) private var studioConfigs = ""
+    @State private var isEditingCodexVoice = false
 
     private static let supportedLocales = PetConfiguration.supportedConversationLocales
 
-    private var installedSpeechSynthesisModels: [LocalModelInfo] {
-        appState.localModels.installed.filter { LocalAudioMode(model: $0) == .speech }
-    }
-
     private var installedTranscriptionModels: [LocalModelInfo] {
         appState.localModels.installed.filter { LocalAudioMode(model: $0) == .transcription }
-    }
-
-    private var appleVoiceSummary: String {
-        let id = controller.configuration.systemVoiceIdentifier
-        if id == PetConfiguration.spokenContentSystemVoiceID {
-            return "Spoken Content System Voice"
-        }
-        if let id, let voice = AVSpeechSynthesisVoice(identifier: id) {
-            return "\(voice.name) (\(voice.language))"
-        }
-        return id == nil ? "Automatic for Language" : "Unavailable Voice"
     }
 
     var body: some View {
@@ -50,44 +31,42 @@ struct PetSettingsView: View {
                 Divider()
                 if selectedTab == .looks {
                     PetLooksPane(controller: controller)
-                } else if selectedTab == .voices {
-                    PetVoiceModelsPane(controller: controller)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                Form {
-                    switch selectedTab {
-                    case .generalAgent:
-                        customAgentSection
-                        notificationModelSection
-                        projectScopeSection
-                    case .voice:
-                        voiceModeSection
-                        audioDevicesSection
-                        microphoneSection
-                        if controller.configuration.voiceMode == .codexRealtime {
-                            codexRealtimeSection
-                        } else {
-                            Section("Conversation Agent") {
-                                LabeledContent("Agent Model", value: customAgentSelectionLabel)
-                                Button("Choose General Agent…") { selectedTab = .generalAgent }
+                    Form {
+                        switch selectedTab {
+                        case .generalAgent:
+                            customAgentSection
+                            notificationModelSection
+                            projectScopeSection
+                        case .voice:
+                            voiceModeSection
+                            if controller.configuration.voiceMode == .codexRealtime {
+                                codexRealtimeSection
                             }
-                            localSpeechRecognitionSection
-                            localVoiceSynthesisSection
+                            speechVoiceSection
+                            if controller.configuration.voiceMode == .localPipeline {
+                                Section("Conversation Agent") {
+                                    LabeledContent("Agent Model", value: customAgentSelectionLabel)
+                                    Button("Choose General Agent…") { selectedTab = .generalAgent }
+                                }
+                                localSpeechRecognitionSection
+                            }
+                            audioDevicesSection
+                            microphoneSection
+                        case .looks:
+                            EmptyView()
+                        case .music:
+                            musicSection
+                        case .desktop:
+                            desktopPetSection
+                            screenCaptureSection
+                            accessibilitySection
+                            proactiveAndDailyReportSection
                         }
-                    case .looks, .voices:
-                        EmptyView()
-                    case .music:
-                        musicSection
-                    case .desktop:
-                        desktopPetSection
-                        screenCaptureSection
-                        accessibilitySection
-                        proactiveAndDailyReportSection
                     }
-                }
-                .formStyle(.grouped)
-                .id(selectedTab)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .formStyle(.grouped)
+                    .id(selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -100,14 +79,13 @@ struct PetSettingsView: View {
             if selectedTab == .music { Task { await controller.music.refreshConnection() } }
         }
         .sheet(item: $audioTest) { test in
-            PetAudioTestSheet(test: test, configuration: controller.configuration)
+            PetAudioTestSheet(test: test, controller: controller)
         }
-        .sheet(isPresented: $isEditingAppleVoice) {
-            PetAppleVoiceSheet(controller: controller)
+        .sheet(isPresented: $controller.isChoosingSpeechVoice) {
+            PetVoiceModelsPane(controller: controller)
         }
-        .sheet(item: $editingVoiceModel) { model in
-            PetNeuralVoiceSettingsSheet(controller: controller, model: model)
-                .environment(appState)
+        .sheet(isPresented: $isEditingCodexVoice) {
+            PetCodexVoiceSheet(controller: controller)
         }
         .task(id: selectedTab) {
             if selectedTab == .music { await controller.music.refreshConnection() }
@@ -126,153 +104,6 @@ struct PetSettingsView: View {
             Button("OK", role: .cancel) { controller.alertErrorMessage = nil }
         } message: {
             Text(controller.alertErrorMessage ?? "")
-        }
-    }
-
-    @ViewBuilder
-    private var musicSection: some View {
-        let music = controller.music
-        Section {
-            HStack(spacing: 12) {
-                Image(systemName: musicStatusSymbol)
-                    .font(.title2)
-                    .foregroundStyle(musicStatusTint)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Apple Music")
-                    Text(musicStatusDetail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                musicPrimaryAction
-                Menu {
-                    Button("Recheck Connection") { linkAppleMusic() }
-                        .disabled(music.isBusy || music.isTurningOff)
-                    Button("Open Music") { openMusicApp() }
-                    Button("Privacy Settings…") { openMusicPrivacySettings() }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("More Apple Music options")
-            }
-            .padding(.vertical, 4)
-            if let error = music.errorMessage {
-                Label {
-                    Text(error).textSelection(.enabled)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                }
-                .font(.caption)
-            }
-        } header: {
-            Text("Apple Music")
-        } footer: {
-            Text("Uses the Apple Music account signed in to Music on this Mac. Catalog playback needs an active subscription.")
-        }
-        Section {
-            if music.enabled {
-                LabeledContent {
-                    Button("Stop", role: .destructive) {
-                        Task { _ = await music.off() }
-                    }
-                    .disabled(music.isTurningOff)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(music.title).lineLimit(1)
-                        if !music.artist.isEmpty {
-                            Text(music.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                    }
-                }
-            } else {
-                Text("Nothing playing")
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Pet Player")
-        } footer: {
-            Text("Ask the voice agent to play, pause, resume, or stop a song or artist.")
-        }
-    }
-
-    /// One contextual call to action; everything else lives in the "…" menu.
-    @ViewBuilder
-    private var musicPrimaryAction: some View {
-        let music = controller.music
-        switch music.authorizationStatus {
-        case .denied, .restricted:
-            Button("Open Settings") { openMusicPrivacySettings() }
-        case .authorized where music.isLinked && music.canPlayCatalogContent == false:
-            Button("Open Music") { openMusicApp() }
-        case .authorized where music.isLinked:
-            EmptyView()
-        case .authorized:
-            Button("Retry Account Check") { music.refreshConnectionInBackground() }
-                .disabled(music.isCheckingConnection)
-        default:
-            Button("Link") { linkAppleMusic() }
-                .buttonStyle(.borderedProminent)
-                .disabled(music.isBusy || music.isTurningOff)
-        }
-    }
-
-    private var musicStatusSymbol: String {
-        let music = controller.music
-        switch music.authorizationStatus {
-        case .denied, .restricted: return "xmark.circle.fill"
-        case .authorized where music.isLinked:
-            return music.canPlayCatalogContent == false ? "exclamationmark.circle.fill" : "checkmark.circle.fill"
-        default: return music.errorMessage == nil ? "music.note" : "exclamationmark.circle.fill"
-        }
-    }
-
-    private var musicStatusTint: Color {
-        switch musicStatusSymbol {
-        case "checkmark.circle.fill": .green
-        case "xmark.circle.fill": .red
-        case "exclamationmark.circle.fill": .orange
-        default: .secondary
-        }
-    }
-
-    private var musicStatusDetail: String {
-        let music = controller.music
-        switch music.authorizationStatus {
-        case .denied: return "Access denied in Privacy settings"
-        case .restricted: return "Access restricted on this Mac"
-        case .authorized where music.isLinked:
-            return music.canPlayCatalogContent == false ? "Linked · Subscription required for playback" : "Linked · Ready to play"
-        case .authorized:
-            if music.isCheckingConnection { return "Authorized · Checking account…" }
-            return music.connectionError ?? "Authorized · Account not verified"
-        default: return "Not linked"
-        }
-    }
-
-    private func linkAppleMusic() {
-        Task {
-            do {
-                _ = try await controller.music.handle(.object(["action": .string("connect")]))
-            } catch is CancellationError {
-            } catch {
-                controller.alertErrorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func openMusicApp() {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") {
-            NSWorkspace.shared.openApplication(at: url, configuration: .init())
-        }
-    }
-
-    private func openMusicPrivacySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Media") {
-            NSWorkspace.shared.open(url)
         }
     }
 
@@ -498,24 +329,9 @@ struct PetSettingsView: View {
     }
 
     private var codexRealtimeSection: some View {
-        Section {
-            Picker("Transport", selection: $controller.configuration.codexTransport) {
-                ForEach(CodexRealtimeTransportPreference.allCases) { transport in
-                    Text(transport.title).tag(transport)
-                }
-            }
-
-            Picker("Realtime Voice", selection: $controller.configuration.codexVoice) {
-                ForEach(CodexRealtimeVoicePreset.allCases) { preset in
-                    Text(preset.displayName).tag(preset.rawValue)
-                }
-            }
-
-            TextField("Optional Realtime Model Override (default managed by Codex)", text: $controller.configuration.codexRealtimeModel)
-        } header: {
-            Text("Codex Realtime")
-        } footer: {
-            Text("Codex Realtime connects through RxAgentSDK and exposes RxCode IDE tools so you can manage tasks, send threads, and open interactive views by voice.")
+        Section("Codex Realtime") {
+            LabeledContent("Call Voice", value: controller.configuration.resolvedCodexVoice.displayName)
+            Button("Configure Codex Realtime…") { isEditingCodexVoice = true }
         }
     }
 
@@ -670,117 +486,36 @@ struct PetSettingsView: View {
         }
     }
 
-    private var localVoiceSynthesisSection: some View {
-        Section {
-            Picker("Voice Model", selection: $controller.configuration.localTTSModelID) {
-                Text("macOS System Voice (Zero-Download)").tag(PetConfiguration.systemTTSModelID)
-                ForEach(installedSpeechSynthesisModels) { model in
-                    Text("\(model.displayName) (\(model.format.label))").tag(model.id)
-                }
-            }
-
-            if controller.configuration.localTTSModelID == PetConfiguration.systemTTSModelID {
-                LabeledContent("Apple Voice") {
-                    Button {
-                        isEditingAppleVoice = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(appleVoiceSummary)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                Text("Choose a Premium, Enhanced, Personal, or Siri voice. Siri voices are used through the Spoken Content System Voice.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                neuralVoicePicker
-            }
-
-            if controller.configuration.localTTSModelID != PetConfiguration.systemTTSModelID {
-                TextField("Voice Seed", value: Binding(
-                    get: { controller.configuration.resolvedLocalTTSSeed },
-                    set: { controller.configuration.localTTSSeed = max(0, min($0, Int(Int32.max))) }
-                ), format: .number.grouping(.never))
-                Button("Choose New Random Seed") {
-                    controller.configuration.localTTSSeed = Int.random(in: 0...Int(Int32.max))
-                }
-                Text("The seed stays the same for replies and notifications until you change it. Choose a new random seed to try another voice variation. Its effect depends on the model.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            LabeledContent("Speech Speed") {
-                HStack(spacing: 10) {
-                    Slider(value: $controller.configuration.speechRate, in: 0.75...1.35, step: 0.05)
-                        .frame(maxWidth: 200)
-                    Text(String(format: "%.2fx", controller.configuration.speechRate))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .frame(width: 48, alignment: .trailing)
-                }
-            }
-
-            HStack(spacing: 10) {
-                Button {
-                    controller.previewVoiceSample()
-                } label: {
-                    Label("Preview Voice", systemImage: "play.circle")
-                }
-
-                Spacer()
-
-                Button {
-                    selectedTab = .voices
-                } label: {
-                    Label("Manage Voices…", systemImage: "person.wave.2")
-                }
+    private var speechVoiceSection: some View {
+        let usesCodex = controller.configuration.voiceMode == .codexRealtime
+        return Section {
+            LabeledContent("Selected Voice", value: speechVoiceSummary)
+            HStack {
+                Button("Choose Speech Voice…") { controller.isChoosingSpeechVoice = true }
+                Button("Preview Voice") { controller.previewVoiceSample() }
+                    .disabled(controller.isMuted)
             }
         } header: {
-            Text("Local Voice Model (TTS)")
+            Text(usesCodex ? "Notification Voice" : "Reply and Notification Voice")
         } footer: {
-            Text("Install neural MLX or GGUF text-to-speech models (such as Kokoro-82M) for natural local speech, or use the built-in macOS voice immediately.")
-        }
-        .onChange(of: controller.configuration.localTTSModelID) { _, modelID in
-            if let model = installedSpeechSynthesisModels.first(where: { $0.id == modelID }) {
-                PetVoicePresets.select(model: model, in: controller)
+            if usesCodex {
+                Text("Choose an Apple voice, installed voice model, or Flowcy voice for notifications outside calls. During a call, Codex Realtime speaks notifications.")
+            } else {
+                Text("Choose an Apple voice, installed voice model, or Flowcy voice for spoken replies and notifications.")
             }
         }
     }
 
-    /// README-derived voices when the setup agent has analyzed the model,
-    /// Kokoro's built-in list otherwise, else free text.
-    @ViewBuilder
-    private var neuralVoicePicker: some View {
-        let modelID = controller.configuration.localTTSModelID
-        let config = StudioModelConfig.decodeAll(studioConfigs)[modelID]
-        let current = controller.configuration.localTTSVoicePreset
-        if let options = PetVoicePresets.options(modelID: modelID, config: config) {
-            Picker(PetVoicePresets.voiceParameter(in: config)?.label ?? "Neural Voice",
-                   selection: $controller.configuration.localTTSVoicePreset) {
-                if !options.contains(where: { $0.id == current }) {
-                    Text("\(current.isEmpty ? "Model Default" : current) (Not Listed)").tag(current)
-                }
-                ForEach(options) { option in
-                    Text(option.label).tag(option.id)
-                }
-            }
-        } else if modelID.localizedCaseInsensitiveContains("qwen3-tts"),
-                  modelID.localizedCaseInsensitiveContains("-base") {
-            LabeledContent("Neural Voice", value: "Model Default")
-        } else {
-            TextField("Model Voice", text: $controller.configuration.localTTSVoicePreset, prompt: Text("Model Default"))
+    private var speechVoiceSummary: String {
+        let config = controller.configuration
+        if let selection = config.flowcyVoice {
+            return "Flowcy · \(selection.model.alias) · \(selection.voice.name)"
         }
-        if let model = installedSpeechSynthesisModels.first(where: { $0.id == modelID }) {
-            Button("Voice Settings…") { editingVoiceModel = model }
-            Text(config == nil
-                 ? "Voice Settings can read this model's README to find every speaker it supports."
-                 : "Voices come from this model's README, read by the setup agent.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        if config.localTTSModelID == PetConfiguration.systemTTSModelID {
+            return "Apple · \(config.appleVoiceSummary)"
         }
+        let model = appState.localModels.model(id: config.localTTSModelID)?.displayName ?? config.localTTSModelID
+        return config.localTTSVoicePreset.isEmpty ? model : "\(model) · \(config.localTTSVoicePreset)"
     }
 
     private var projectScopeSection: some View {

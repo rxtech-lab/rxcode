@@ -1,12 +1,28 @@
 import RxCodeCore
 import SwiftUI
-import TipKit
+
+enum SidebarTreeSelection: Equatable {
+    case project(UUID)
+    case thread(String)
+}
+
+extension WindowState {
+    var sidebarTreeSelection: SidebarTreeSelection? {
+        switch generalRoute {
+        case .tasks:
+            return taskDetailProjectId.map(SidebarTreeSelection.project)
+        case nil:
+            if let currentSessionId { return .thread(currentSessionId) }
+            return selectedProject.map { .project($0.id) }
+        default:
+            return nil
+        }
+    }
+}
 
 // MARK: - ProjectTreeView
 
-/// Left sidebar root. Replaces the History/Files toggle.
-/// Lists projects as collapsible disclosure rows; each project expands to show
-/// its chats with a status dot.
+/// Workspace navigation, live agent runs, and project history share one sidebar.
 struct ProjectTreeView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
@@ -33,20 +49,20 @@ struct ProjectTreeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SummarySidebarSection()
-                .padding(.top, 8)
+            SidebarNavigationSection()
 
             ClaudeThemeDivider()
-                .padding(.vertical, 4)
-
-            header
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
 
             if appState.projects.isEmpty {
+                SidebarActivitySection()
                 emptyState
             } else {
                 projectList
+            }
+
+            if let project = windowState.selectedProject, !project.isGlobalChat {
+                ClaudeThemeDivider()
+                SidebarRepositoryView(project: project)
             }
         }
         // Keep the per-project dirty flag fresh so "Commit All Changes" hides on
@@ -166,142 +182,32 @@ struct ProjectTreeView: View {
     private var header: some View {
         HStack {
             Text("Projects")
-                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textTertiary)
-                .textCase(.uppercase)
 
             Spacer()
 
             Button {
                 showAllChatsSheet = true
             } label: {
-                Image(systemName: "clock")
-                    .font(.system(size: ClaudeTheme.size(11)))
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-            .buttonStyle(.borderless)
-            .help("Show all chats")
-        }
-    }
-
-    // MARK: - SummarySidebarSection
-
-    private struct SummarySidebarSection: View {
-        @Environment(WindowState.self) private var windowState
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("General")
-                    .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .textCase(.uppercase)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 2)
-
-                GeneralRouteRow(route: .tasks, help: "Open the project task board")
-
-                GeneralRouteRow(route: .briefing, help: "Open project branch briefing")
-                    .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
-
-                GeneralRouteRow(route: .chat, help: "Chat with any agent")
-
-                GeneralRouteRow(route: .scheduled, help: "Open tasks that run on a cron schedule")
-            }
-        }
-
-        /// One "General" nav row. Both entries render identically; only the
-        /// route differs, so the styling lives in one place.
-        private struct GeneralRouteRow: View {
-            @Environment(AppState.self) private var appState
-            @Environment(WindowState.self) private var windowState
-            @Environment(\.openWindow) private var openWindow
-            let route: GeneralRoute
-            let help: String
-
-            private var isSelected: Bool { windowState.generalRoute == route }
-
-            var body: some View {
-                Button {
-                    if route == .chat {
-                        appState.openGlobalChat(in: windowState)
-                    } else {
-                        windowState.generalRoute = route
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: route.systemImage)
-                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                            .frame(width: 18, height: 18)
-
-                        Text(route.displayName)
-                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                            .lineLimit(1)
-
-                        if route == .chat {
-                            AttentionBadge(attention: appState.projectAttention(projectId: Project.globalChatID, in: windowState))
-                        }
-
-                        Spacer(minLength: 4)
-                    }
-                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                            .fill(isSelected ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
-                    )
-                    .padding(.horizontal, 8)
+                    .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(help)
-                .accessibilityIdentifier("general-route-\(route.rawValue)")
-                .contextMenu {
-                    if route == .chat {
-                        Button {
-                            openWindow(
-                                id: "chat-window",
-                                value: ChatWindowValue(instanceId: UUID(), workspaceID: appState.activeWorkspace.id)
-                            )
-                        } label: {
-                            Label("Chat in New Window", systemImage: "macwindow.badge.plus")
-                        }
-                    } else {
-                        Button {
-                            openWindow(
-                                id: "route-window",
-                                value: GeneralRouteWindowValue(
-                                    route: route,
-                                    instanceId: UUID(),
-                                    workspaceID: appState.activeWorkspace.id
-                                )
-                            )
-                        } label: {
-                            Label("Open in New Window", systemImage: "macwindow.badge.plus")
-                        }
-                    }
-                }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Show all chats")
+            .help("Show all chats")
         }
     }
 
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Spacer().frame(height: 24)
-            Image(systemName: "folder.badge.plus")
-                .font(.system(size: ClaudeTheme.size(22)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-            Text("No projects yet")
-                .font(.system(size: ClaudeTheme.size(13)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-            Text("Click + in the toolbar to add one.")
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
+        ContentUnavailableView("No projects yet", systemImage: "folder.badge.plus",
+                               description: Text("Use + in the toolbar to add a project."))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Project List
@@ -309,6 +215,13 @@ struct ProjectTreeView: View {
     private var projectList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                SidebarActivitySection()
+
+                header
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 4)
+
                 ForEach(appState.projects) { project in
                     ProjectTreeRow(
                         project: project,
@@ -322,7 +235,7 @@ struct ProjectTreeView: View {
                                 }
                             }
                         ),
-                        isSelected: windowState.selectedProject?.id == project.id,
+                        isSelected: windowState.sidebarTreeSelection == .project(project.id),
                         onOpenInNewWindow: {
                             openWindow(id: "project-window",
                                        value: ProjectWindowValue(projectId: project.id, instanceId: UUID(), workspaceID: appState.activeWorkspace.id))
@@ -401,17 +314,23 @@ private struct ProjectTreeRow: View {
             Button {
                 isExpanded.toggle()
             } label: {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
-                    .frame(width: 18, height: 18)
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    Image(systemName: isExpanded ? "folder.fill" : "folder")
+                        .font(.system(size: ClaudeTheme.size(14), weight: .medium))
+                }
+                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+                    .frame(height: 24)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(isExpanded ? "Collapse chats in \(project.name)" : "Expand chats in \(project.name)")
             .help(isExpanded ? "Collapse chats" : "Expand chats")
 
             Text(project.name)
-                .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
                 .foregroundStyle(isSelected ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -442,6 +361,19 @@ private struct ProjectTreeRow: View {
                 }
 
             ProjectTreeAttentionBadge(projectId: project.id)
+
+            if let status = appState.ciStatusByProject[project.id],
+               status.pullRequestState == .open,
+               project.gitHubRepo?.caseInsensitiveCompare("\(status.owner)/\(status.repo)") == .orderedSame {
+                let title = status.prNumber.map { String(localized: "Pull request #\($0)") }
+                    ?? String(localized: "Pull request")
+                let label = String(localized: "\(title) · Open")
+                Image(systemName: "arrow.triangle.pull")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
+                    .help(label)
+                    .accessibilityLabel(label)
+            }
 
             Spacer(minLength: 4)
 
@@ -475,10 +407,10 @@ private struct ProjectTreeRow: View {
             .animation(.easeInOut(duration: 0.12), value: isHovered)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .fill(isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.45) : Color.clear)
+                .fill(isSelected ? ClaudeTheme.accentSubtle : (isHovered ? ClaudeTheme.surfaceSecondary : .clear))
         )
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -489,6 +421,7 @@ private struct ProjectTreeRow: View {
             windowState.taskDetailProjectId = project.id
             appState.focusProject(id: project.id, in: windowState)
         }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .contextMenu {
             projectMenuItems
         }

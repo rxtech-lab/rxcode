@@ -44,7 +44,7 @@ public extension AgentProvider {
                 .planMode, .fileEdit, .mcpServers, .skills, .attachments, .getUsage,
             ]
         case .flowcy:
-            return []
+            return [.fileEdit]
         case .localAgent:
             // The harness ships its own todowrite, question and plan-mode
             // handling; usage comes from the local server, so there is no

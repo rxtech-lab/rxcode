@@ -8,6 +8,7 @@ import WebKit
 /// clips are WebM, which AVFoundation cannot decode.
 struct GeneratedVideoSheet: View {
     let file: PreviewFile
+    @State private var capture = PreviewCapture()
     @Environment(\.dismiss) private var dismiss
 
     static let playableExtensions: Set<String> = ["webm", "mp4", "m4v", "mov"]
@@ -23,7 +24,8 @@ struct GeneratedVideoSheet: View {
         NavigationStack {
             Group {
                 if exists {
-                    VideoWebView(url: url)
+                    VideoWebView(url: url, capture: capture)
+                        .visualPreviewComments(for: url, capture: capture)
                 } else {
                     ContentUnavailableView(
                         "Video Not Found", systemImage: "film",
@@ -35,6 +37,10 @@ struct GeneratedVideoSheet: View {
             .background(Color.black)
             .navigationTitle(file.name)
             .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    PreviewCommentControls(url: url, capture: capture)
+                        .disabled(!exists)
+                }
                 ToolbarItem(placement: .automatic) {
                     Button {
                         NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -55,11 +61,13 @@ struct GeneratedVideoSheet: View {
 
 private struct VideoWebView: NSViewRepresentable {
     let url: URL
+    let capture: PreviewCapture
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.mediaTypesRequiringUserActionForPlayback = []
         let view = WKWebView(frame: .zero, configuration: configuration)
+        capture.view = view
         view.setValue(false, forKey: "drawsBackground")
         load(url, in: view)
         return view

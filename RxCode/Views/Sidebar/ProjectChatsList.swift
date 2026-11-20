@@ -254,7 +254,7 @@ struct ProjectChatsList: View {
 
         return ProjectChatRow(
             summary: summary,
-            isCurrent: windowState.generalRoute == nil && windowState.currentSessionId == sessionId,
+            isCurrent: windowState.sidebarTreeSelection == .thread(sessionId),
             status: status,
             todoProgress: progress,
             linkedTask: linkedTask,

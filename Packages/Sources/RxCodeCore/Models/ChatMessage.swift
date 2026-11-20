@@ -31,6 +31,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
     public var attachmentPaths: [AttachmentInfo]
     public var duration: TimeInterval?
     public var isError: Bool
+
     public var isCompactBoundary: Bool
 
     public init(
@@ -232,6 +233,22 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     public var input: [String: JSONValue]
     public var result: String?
     public var isError: Bool
+
+    /// Preserve the action name when a backend wraps an MCP call or prefixes its server.
+    public var displayedToolName: String {
+        if let range = name.range(of: "ide__", options: .backwards), range.lowerBound == name.startIndex || name[..<range.lowerBound].hasSuffix("__") {
+            return String(name[range.lowerBound...])
+        }
+        let wrapper = name.lowercased()
+        if wrapper == "mcptoolcall" || wrapper == "mcp__rxcode-ide" || wrapper == "mcp__rxcode_ide" {
+            for value in [input["tool"], input["toolName"], input["tool_name"], input["name"], input["params"]?["name"], input["function"]?["name"]] {
+                if let raw = value?.stringValue ?? value?["name"]?.stringValue, !raw.isEmpty, raw.lowercased() != "mcptoolcall" {
+                    return raw
+                }
+            }
+        }
+        return name
+    }
 
     public var isImageGeneration: Bool {
         let lower = name.lowercased()

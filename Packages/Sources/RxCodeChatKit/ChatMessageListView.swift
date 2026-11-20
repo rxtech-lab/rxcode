@@ -124,7 +124,7 @@ struct ChatTransientToolSummaryView: View {
                     Image(systemName: "eye.slash")
                         .font(.system(size: ClaudeTheme.messageSize(13)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text(tools.last?.name ?? "Tool calls")
+                    Text(tools.last?.displayedToolName ?? "Tool calls")
                         .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textSecondary)
                         .lineLimit(1)

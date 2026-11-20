@@ -211,10 +211,11 @@ struct RunProfileToolbarGroup: View {
     }
 
     private func openRunInspector() {
-        windowState.inspectorMode = .inspector
         windowState.inspectorTab = .run
         appState.showRightSidebar = true
-        windowState.selectedRunTaskId = appState.runService.activeTasks.first?.id
+        if let tabID = windowState.inspectorLayout.tools.selectedTab?.id {
+            windowState.inspectorRunTaskIDs[tabID] = appState.runService.activeTasks.first?.id
+        }
     }
 
     // MARK: - Destination picker

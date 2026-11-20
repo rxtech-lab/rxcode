@@ -261,7 +261,7 @@ extension MobileAppState {
         if let sections = desktopSettings?.modelSections, !sections.isEmpty {
             return sections.filter { $0.provider != .flowcy }
         }
-        let flat = desktopSettings?.availableModels.filter { $0.provider != .flowcy } ?? []
+        let flat = desktopSettings?.availableModels?.filter { $0.provider != .flowcy } ?? []
         var providers: [AgentProvider] = []
         for model in flat where !providers.contains(model.provider) {
             providers.append(model.provider)

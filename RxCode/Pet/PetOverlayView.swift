@@ -389,8 +389,8 @@ struct PetOverlayView: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
-            .help(controller.isMuted ? "Unmute Microphone" : "Mute Microphone (keep conversation connected)")
-            .accessibilityLabel(controller.isMuted ? "Unmute Microphone" : "Mute Microphone")
+            .help(controller.isMuted ? "Unmute Microphone and Speaker" : "Mute Microphone and Speaker")
+            .accessibilityLabel(controller.isMuted ? "Unmute Microphone and Speaker" : "Mute Microphone and Speaker")
 
             if controller.petState.status == .speaking || controller.isStandaloneSpeaking {
                 Button {
@@ -473,7 +473,7 @@ struct PetOverlayView: View {
         Button {
             controller.toggleMute()
         } label: {
-            Label(controller.isMuted ? "Unmute Microphone" : "Mute Microphone", systemImage: controller.isMuted ? "mic.slash.fill" : "mic.fill")
+            Label(controller.isMuted ? "Unmute Microphone and Speaker" : "Mute Microphone and Speaker", systemImage: controller.isMuted ? "mic.slash.fill" : "mic.fill")
         }
 
         Menu("Voice Mode") {
@@ -512,7 +512,7 @@ struct PetOverlayView: View {
         }
 
         Button {
-            controller.openSettingsWindow(tab: .voices)
+            controller.openSpeechVoicePicker()
         } label: {
             Label("Manage Voices…", systemImage: "person.wave.2")
         }

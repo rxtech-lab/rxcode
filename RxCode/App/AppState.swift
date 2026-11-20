@@ -408,16 +408,15 @@ final class AppState: IDEToolHandling {
     /// `AppState+CIStatus.swift`. Held in memory only.
     var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
 
-    /// Latest CI/PR status keyed by `owner/repo#branch`, covering current
-    /// branches and branches from briefings and project chats.
-    var ciStatusByBranchKey: [String: ProjectCIStatus] = [:]
+    /// Branch and thread badges restored with the sidebar and refreshed by the CI poller.
+    var branchStatus = BranchStatusSnapshot(accountID: nil)
 
     /// Recorded branches by session ID, so thread rows can find their PR without
     /// querying Git or SwiftData during rendering.
     var ciBranchesBySessionId: [String: [String]] = [:]
 
-    var inferredPullRequestsBySessionId: [String: ThreadPullRequest] = [:]
     @ObservationIgnored let threadPullRequestMatcher = ThreadPullRequestMatcher()
+    @ObservationIgnored var ciStatusRequestID: UUID?
 
     /// Bumped after every CI refresh so views observing CI status recompute,
     /// mirroring the `branchBriefingRevision` pattern.
@@ -568,19 +567,6 @@ final class AppState: IDEToolHandling {
     /// computed in the background. Drives rate-limit advice in the status line.
     var rateLimitProviderStats: [AgentProvider: RateLimitTaskCostSummary] = [:]
     @ObservationIgnored var rateLimitProviderStatsTask: Task<Void, Never>?
-
-    /// Sessions currently streaming, anywhere across all windows.
-    /// Reads `sessionActivity` (not `sessionStates`) so the menu bar label doesn't
-    /// re-render its image on every stream event.
-    var inProgressSessionCount: Int {
-        sessionActivity.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
-    }
-
-    /// Sessions whose stream finished but the user hasn't selected since. Cleared
-    /// on session select via `hasUncheckedCompletion`.
-    var uncheckedFinishedSessionCount: Int {
-        sessionActivity.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
-    }
 
     // MARK: - Permissions
 
@@ -838,6 +824,7 @@ final class AppState: IDEToolHandling {
     /// to scrub stale entries out of each window's in-memory queue mirror.
     struct WeakWindowRef { weak var window: WindowState? }
     var liveWindowRefs: [WeakWindowRef] = []
+    @ObservationIgnored var designSessions: [ObjectIdentifier: WorkspaceDesignSession] = [:]
 
     var mobileSnapshotBroadcastTask: Task<Void, Never>?
     /// Pending debounced `taskBoardUpdate` pushes, one per project.
@@ -1041,7 +1028,7 @@ final class AppState: IDEToolHandling {
         )
         let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
         self.rxAuth = rxAuth
-        self.flowcyCloudBackend = FlowcyCloudBackend(auth: rxAuth)
+        self.flowcyCloudBackend = FlowcyCloudBackend(auth: rxAuth, permission: permission)
         self.autopilot = AutopilotService(rxAuth: rxAuth)
         self.secrets = SecretsService(rxAuth: rxAuth)
         self.ciUpdates = CIUpdateService(rxAuth: rxAuth)

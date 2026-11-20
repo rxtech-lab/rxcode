@@ -70,9 +70,9 @@ The indicator follows the sprite, chooses an available side and clamps to the di
 
 ## Pet mute and settings
 
-The phone button starts or ends a voice call. The microphone button is always available and toggles persistent pet mute, including spoken notifications, reports, voice previews, and activity/connection cues. Muting interrupts current speech, ends an active call, and discards queued announcements. Unmuting does not replay missed announcements or restart a call; unmute before starting another call. Text chat and visual notifications remain available.
+The phone button starts or ends a voice call. The mute button controls both the pet microphone and speaker, even while idle. It stops current speech and cues, discards queued announcements, and stays in effect across calls and app launches. Active calls stay connected. Captions, text chat, and report delivery continue while muted.
 
-Pet & Voice Settings opens in its own resizable macOS window from the pet controls, companion toolbar, app settings, and Pet menu. Manage Voices opens the Voices tab in that same window. Close the window with its native close control.
+Pet & Voice Settings opens in its own resizable macOS window. In the **Voice** tab, **Choose Speech Voice** offers Apple voices, installed neural models, and speech models from the signed-in Flowcy account. **Manage Voices** opens this chooser directly. The selected voice speaks custom-agent replies and notifications outside calls. A live Codex Realtime call speaks its own replies and notifications using its separate call voice. Flowcy previews and speech use the account allowance.
 
 The General Agent tab has an independent **Notification Model** for completed-work summaries and notification translations. Apple Intelligence is the default for new and existing preferences. The menu also includes Claude Code, Codex, enabled ACP clients, and installed local chat models (MLX / GGUF). Local notification requests are tool-free and use the managed inference lifecycle; a busy local model preserves the original event rather than interrupting ongoing work. Unavailable models or failed generation preserve the original notification text. During voice calls, the active voice assistant still receives the original result and announces it.
 

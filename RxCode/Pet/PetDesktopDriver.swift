@@ -33,6 +33,23 @@ actor PetDesktopDriver {
         AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: prompt] as CFDictionary)
     }
 
+    /// Hit-test the selected window's own accessibility tree even when the inspector covers it.
+    func designElement(in target: PetDesktopWindow, fraction: CGPoint) throws -> String {
+        guard authorized(prompt: false) else { throw IDEToolError.handlerFailed("Allow RxCode in Privacy & Security → Accessibility to inspect Mac controls.") }
+        let app = AXUIElementCreateApplication(target.pid)
+        AXUIElementSetMessagingTimeout(app, 0.4)
+        let window = try exactWindow(target, application: app)
+        let point = CGPoint(x: target.frame.minX + fraction.x * target.frame.width, y: target.frame.minY + fraction.y * target.frame.height)
+        var selected = window
+        for _ in 0..<30 {
+            let children = attribute(selected, kAXChildrenAttribute) as? [AXUIElement] ?? []
+            guard let child = children.reversed().first(where: { frame($0)?.contains(point) == true }), !CFEqual(child, selected) else { break }
+            selected = child
+        }
+        return [kAXRoleAttribute, kAXSubroleAttribute, kAXIdentifierAttribute, kAXTitleAttribute, kAXDescriptionAttribute]
+            .compactMap { attribute(selected, $0) as? String }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
     private func attribute(_ element: AXUIElement, _ key: String) -> CFTypeRef? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, key as CFString, &value) == .success else { return nil }

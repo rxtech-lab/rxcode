@@ -46,6 +46,8 @@ final class AppState: IDEToolHandling {
     /// unchecked-completion flag, live todos). Only published when a value
     /// actually changes, so views reading it don't re-render per stream event.
     var sessionActivity: [String: SessionActivity] = [:]
+    /// Mounted chat views in a key window, keyed by view so a disappearing chat only removes itself.
+    @ObservationIgnored var viewedChatSessions: [UUID: String] = [:]
 
     @ObservationIgnored var sessionActivityTodoFingerprints: [String: SessionActivity.TodoFingerprint] = [:]
     @ObservationIgnored var sessionActivityTodoRefreshTask: Task<Void, Never>?

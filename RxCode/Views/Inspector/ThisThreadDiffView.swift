@@ -6,16 +6,56 @@ import RxCodeChatKit
 // MARK: - This Thread
 
 struct ThisThreadDiffView: View {
+    let sessionId: String
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
     @State private var loaded: (sessionId: String, summaries: [FileEditSummary])?
+    @State private var selectedFile: FileEditSummary?
 
     private var loadID: ThreadFileEditsLoadID {
-        appState.threadFileEditsLoadID(sessionId: windowState.currentSessionId ?? windowState.newSessionKey)
+        appState.threadFileEditsLoadID(sessionId: sessionId)
     }
 
     var body: some View {
         let key = loadID
+        NavigationStack {
+            changes(for: key)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle("This Thread’s Changes")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { dismiss() }
+                            .keyboardShortcut(.cancelAction)
+                    }
+                }
+                .navigationDestination(isPresented: Binding(
+                    get: { selectedFile != nil },
+                    set: { if !$0 { selectedFile = nil } }
+                )) {
+                    if let file = selectedFile {
+                        FileDiffView(
+                            filePath: file.path,
+                            fileName: file.name,
+                            editHunks: file.hunks,
+                            showFullFileDiff: true,
+                            originalContent: file.originalContent,
+                            modifiedContent: file.modifiedContent,
+                            preferHunks: file.hasExternalInterleaving,
+                            onClose: { selectedFile = nil }
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+        }
+        .frame(minWidth: 760, idealWidth: 1000, minHeight: 560, idealHeight: 760)
+        .task(id: key) {
+            let summaries = await appState.loadThreadDiffPreview(key)
+            guard !Task.isCancelled, loadID == key else { return }
+            loaded = (key.sessionId, summaries)
+        }
+    }
+
+    private func changes(for key: ThreadFileEditsLoadID) -> some View {
         Group {
             if let loaded, loaded.sessionId == key.sessionId {
                 if loaded.summaries.isEmpty {
@@ -27,7 +67,7 @@ struct ThisThreadDiffView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 4) {
                             ForEach(loaded.summaries) { summary in
-                                ThisThreadFileRow(summary: summary)
+                                ThisThreadFileRow(summary: summary) { selectedFile = summary }
                             }
                         }
                         .padding(12)
@@ -44,17 +84,12 @@ struct ThisThreadDiffView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: key) {
-            let summaries = await appState.loadThreadDiffPreview(key)
-            guard !Task.isCancelled, loadID == key else { return }
-            loaded = (key.sessionId, summaries)
-        }
     }
 }
 
-struct ThisThreadFileRow: View {
+private struct ThisThreadFileRow: View {
     let summary: FileEditSummary
-    @Environment(WindowState.self) private var windowState
+    let showDiff: () -> Void
     @State private var isHovering = false
     @State private var snapshotStat: (added: Int, removed: Int)?
 
@@ -92,17 +127,7 @@ struct ThisThreadFileRow: View {
     }
 
     var body: some View {
-        Button {
-            windowState.diffFile = PreviewFile(
-                path: summary.path,
-                name: summary.name,
-                editHunks: summary.hunks,
-                showFullFileDiff: true,
-                originalContent: summary.originalContent,
-                modifiedContent: summary.modifiedContent,
-                preferHunks: summary.hasExternalInterleaving
-            )
-        } label: {
+        Button(action: showDiff) {
             HStack(spacing: 8) {
                 Image(systemName: iconName)
                     .font(.system(size: ClaudeTheme.size(12)))
@@ -188,11 +213,5 @@ struct ThisThreadFileRow: View {
                 preferHunks: preferHunks
             )
         }.value
-    }
-}
-
-struct BranchInfoView: View {
-    var body: some View {
-        RepositoryContent { tree in GitStatusView(tree: tree) }
     }
 }

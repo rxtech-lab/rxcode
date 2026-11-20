@@ -20,7 +20,7 @@ struct RightInspectorPanel: View {
         } content: { pane in
             if isShowing, let mode = pane.selectedTab {
                 switch mode {
-                case .review: reviewContent
+                case .changes: ChangesView()
                 case .inspector: InspectorToolsView(terminals: terminals)
                 case .preview: WorkspacePreviewInspector()
                 case .browser:
@@ -57,29 +57,15 @@ struct RightInspectorPanel: View {
 
     private func header(for pane: InspectorDestinationLayout.Pane, actions: InspectorPaneTabActions<InspectorDestinationDrag>) -> some View {
         let mode = pane.selectedTab
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                InspectorDestinationBar(pane: pane, actions: actions)
-                if pane.id == windowState.inspectorLayout.destinations.panes.first?.id {
-                    panelControls
-                }
-            }
-
-            if mode == .review {
-                WorkspaceChipTabPicker(
-                    options: InspectorReviewTab.allCases,
-                    selection: Bindable(windowState).inspectorReviewTab,
-                    accessibilityPrefix: "inspector-review"
-                ) { tab, selected in
-                    WorkspaceChipTabLabel(title: tab.title, systemImage: tab.icon, isSelected: selected)
-                }
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel("Review")
+        return HStack(spacing: 6) {
+            InspectorDestinationBar(pane: pane, actions: actions)
+            if pane.id == windowState.inspectorLayout.destinations.panes.first?.id {
+                panelControls
             }
         }
         .padding(.horizontal, 10)
         .padding(.top, 10)
-        .padding(.bottom, mode == .inspector ? 0 : mode == .review ? 6 : 10)
+        .padding(.bottom, mode == .inspector ? 0 : 10)
         .background(ClaudeTheme.surfaceSecondary.opacity(0.4))
         .overlay(alignment: .bottom) {
             if mode != .inspector { Divider() }
@@ -104,15 +90,6 @@ struct RightInspectorPanel: View {
             appState.showRightSidebar = false
         }
         .accessibilityLabel("Hide inspector")
-    }
-
-    @ViewBuilder
-    private var reviewContent: some View {
-        switch windowState.inspectorReviewTab {
-        case .thisThread: ThisThreadDiffView()
-        case .changes: ChangesView()
-        case .branch: BranchInfoView()
-        }
     }
 }
 
@@ -158,16 +135,6 @@ private struct InspectorToolbarInsetReader: NSViewRepresentable {
                 reportedInset = inset
                 onChange?(inset)
             }
-        }
-    }
-}
-
-private extension InspectorReviewTab {
-    var icon: String {
-        switch self {
-        case .thisThread: "bubble.left.and.text.bubble.right"
-        case .changes: "plusminus"
-        case .branch: "arrow.triangle.branch"
         }
     }
 }

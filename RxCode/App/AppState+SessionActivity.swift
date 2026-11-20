@@ -38,6 +38,17 @@ struct SessionActivity: Equatable {
 }
 
 extension AppState {
+    func setViewedChat(_ sessionID: String?, for viewID: UUID) {
+        viewedChatSessions[viewID] = sessionID
+        if let sessionID { markCompletionRead(for: sessionID) }
+    }
+
+    func markCompletionRead(for sessionID: String) {
+        let id = resolveCurrentSessionId(sessionID)
+        guard sessionActivity[id]?.hasUncheckedCompletion == true else { return }
+        updateState(id) { $0.hasUncheckedCompletion = false }
+    }
+
     /// Called from `sessionStates.didSet`. Flags are projected synchronously
     /// (O(sessions), no transcript work) so status stays exact; todo extraction
     /// is coalesced onto a short timer.

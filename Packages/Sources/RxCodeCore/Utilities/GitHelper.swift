@@ -57,8 +57,13 @@ public enum GitHelper {
     /// never exits, so the await never returns — which wedged every caller
     /// queued behind it (e.g. the workspace change tracker actor, and with it
     /// every new agent stream in that workspace).
-    static func execute(_ args: [String], at path: String, input: Data? = nil) async -> ProcessOutput? {
-        let environment = gitEnvironment()
+    static func execute(
+        _ args: [String],
+        at path: String,
+        input: Data? = nil,
+        environment overrides: [String: String] = [:]
+    ) async -> ProcessOutput? {
+        let environment = gitEnvironment().merging(overrides) { _, override in override }
         return await withCheckedContinuation { (continuation: CheckedContinuation<ProcessOutput?, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: executeBlocking(args, at: path, environment: environment, input: input))
@@ -222,8 +227,12 @@ public enum GitHelper {
 
     /// Runs a git command and returns nil on success or combined stdout+stderr
     /// trimmed on non-zero exit.
-    public static func runWithError(_ args: [String], at path: String) async -> String? {
-        guard let output = await execute(args, at: path) else {
+    public static func runWithError(
+        _ args: [String],
+        at path: String,
+        environment: [String: String] = [:]
+    ) async -> String? {
+        guard let output = await execute(args, at: path, environment: environment) else {
             return "Failed to launch git \(args.first ?? "")"
         }
         if output.status == 0 { return nil }

@@ -3,30 +3,27 @@ import Foundation
 /// The window's inspector panes and the tool tabs nested inside the Tools destination.
 public struct InspectorLayout: Codable, Equatable {
     public var destinations: InspectorDestinationLayout
-    public var review: InspectorReviewTab
     public var tools: InspectorToolLayout
     public private(set) var browserID = UUID()
     public private(set) var previousBrowserIDs: [UUID] = []
 
     /// Revealing a destination selects it in the pane that already owns it.
     public var mode: InspectorMode {
-        get { destinations.selectedTab ?? .review }
+        get { destinations.selectedTab ?? .changes }
         set { destinations.select(newValue) }
     }
 
-    public init(selected mode: InspectorMode = .review, tool: InspectorTab = .terminal, review: InspectorReviewTab = .thisThread) {
+    public init(selected mode: InspectorMode = .changes, tool: InspectorTab = .terminal) {
         destinations = InspectorDestinationLayout(selected: mode)
-        self.review = review
         tools = InspectorToolLayout(selected: tool)
     }
 
     private enum CodingKeys: CodingKey {
-        case mode, destinations, review, tools, browserID, previousBrowserIDs
+        case mode, destinations, tools, browserID, previousBrowserIDs
     }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        review = try values.decode(InspectorReviewTab.self, forKey: .review)
         tools = try values.decode(InspectorToolLayout.self, forKey: .tools)
         browserID = try values.decode(UUID.self, forKey: .browserID)
         previousBrowserIDs = try values.decodeIfPresent([UUID].self, forKey: .previousBrowserIDs) ?? []
@@ -42,7 +39,6 @@ public struct InspectorLayout: Codable, Equatable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(mode, forKey: .mode)
         try values.encode(destinations, forKey: .destinations)
-        try values.encode(review, forKey: .review)
         try values.encode(tools, forKey: .tools)
         try values.encode(browserID, forKey: .browserID)
         try values.encode(previousBrowserIDs, forKey: .previousBrowserIDs)
@@ -55,9 +51,8 @@ public struct InspectorLayout: Codable, Equatable {
         }
         guard let legacy = try? decoder.decode(LegacyInspectorLayout.self, from: data) else { return nil }
         var layout = Self(
-            selected: legacy.selected?.mode ?? .review,
-            tool: legacy.preferred(.inspector)?.tool ?? .terminal,
-            review: legacy.preferred(.review)?.review ?? .thisThread
+            selected: legacy.selected?.mode ?? .changes,
+            tool: legacy.preferred(.inspector)?.tool ?? .terminal
         )
         if let browser = legacy.preferred(.browser) {
             let others = legacy.panes.flatMap(\.tabs).filter { $0.mode == .browser && $0.id != browser.id }
@@ -77,7 +72,6 @@ private struct LegacyInspectorLayout: Decodable {
         let id: UUID
         let mode: InspectorMode
         let tool: InspectorTab?
-        let review: InspectorReviewTab?
     }
 
     struct Pane: Decodable {

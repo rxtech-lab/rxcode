@@ -666,10 +666,7 @@ extension AppState {
             let stillStreaming = stateForSession(sessionKey).isStreaming
             if stillStreaming, isStillOwner {
                 logger.warning("[Stream:UI] isStreaming was still true at stream end — forcing cleanup")
-                let markUnread = (window.currentSessionId ?? window.newSessionKey) != sessionKey
-                finalizeStreamSession(for: sessionKey) { state in
-                    if markUnread { state.hasUncheckedCompletion = true }
-                }
+                finalizeStreamSession(for: sessionKey, trackUnreadCompletion: true)
                 await awaitPendingShellDetections(for: sessionKey)
 
                 // If the last assistant message is invisible after cleanup (blocks=[] because

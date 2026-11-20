@@ -3,13 +3,14 @@ import SwiftUI
 
 struct SidebarRun: Identifiable {
     enum Status {
-        case running, verifying, needsApproval
+        case running, verifying, needsApproval, completedUnread
 
         var title: LocalizedStringResource {
             switch self {
             case .running: "Running"
             case .verifying: "Verifying"
             case .needsApproval: "Needs approval"
+            case .completedUnread: "Completed (unread)"
             }
         }
     }
@@ -23,22 +24,31 @@ struct SidebarRun: Identifiable {
 
 extension AppState {
     func sidebarRuns(in window: WindowState) -> [SidebarRun] {
-        let streaming = sessionActivity.compactMap { $0.value.isStreaming ? $0.key : nil }
+        var statuses: [String: SidebarRun.Status] = [:]
+        for (key, activity) in sessionActivity where activity.isStreaming || activity.hasUncheckedCompletion {
+            let id = resolveCurrentSessionId(key)
+            if activity.isStreaming {
+                statuses[id] = .running
+            } else if statuses[id] == nil {
+                statuses[id] = .completedUnread
+            }
+        }
         let approvals = window.pendingPermissions.compactMap(\.sessionId) + agentPrompts.confirmations.map(\.sessionKey)
-        let waiting = Set(approvals.map(resolveCurrentSessionId))
-        let active = Set(streaming.map(resolveCurrentSessionId)).union(waiting)
-        guard !active.isEmpty else { return [] }
+        for key in approvals {
+            statuses[resolveCurrentSessionId(key)] = .needsApproval
+        }
+        guard !statuses.isEmpty else { return [] }
 
         let projectsByID = Dictionary(uniqueKeysWithValues: sessionProjects.map { ($0.id, $0) })
         return allSessionSummaries.compactMap { summary -> SidebarRun? in
-            guard active.contains(summary.id), let project = projectsByID[summary.projectId] else { return nil }
+            guard let status = statuses[summary.id], let project = projectsByID[summary.projectId] else { return nil }
             let isCheck = summary.threadLabel == TaskCompletionCheckLabel.inProgress
             let ownerID = resolveCurrentSessionId((isCheck ? summary.parentThreadId : nil) ?? summary.id)
             let task = taskBoards[project.id]?.tasks.first { $0.sessionKey.map(resolveCurrentSessionId) == ownerID }
             let title = ChatSession.stripAttachmentMarkers(from: task?.title ?? summary.title)
             return SidebarRun(
                 id: summary.id, project: project, title: title.isEmpty ? ChatSession.defaultTitle : title,
-                status: waiting.contains(summary.id) ? .needsApproval : (isCheck ? .verifying : .running),
+                status: isCheck && status == .running ? .verifying : status,
                 progress: todoProgress(forSessionId: summary.id)
             )
         }.sorted { lhs, rhs in
@@ -152,11 +162,16 @@ private struct SidebarRunButton: View {
         case .running: "waveform"
         case .verifying: "checkmark.seal"
         case .needsApproval: "hand.raised.fill"
+        case .completedUnread: "checkmark.circle.fill"
         }
     }
 
     var body: some View {
-        let tint = run.status == .needsApproval ? ClaudeTheme.statusWarning : ClaudeTheme.statusRunning
+        let tint = switch run.status {
+        case .needsApproval: ClaudeTheme.statusWarning
+        case .running, .verifying: ClaudeTheme.statusRunning
+        case .completedUnread: ClaudeTheme.statusSuccess
+        }
         Button(action: open) {
             HStack(spacing: 9) {
                 Image(systemName: symbol)

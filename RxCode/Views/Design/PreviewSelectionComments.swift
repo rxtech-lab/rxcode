@@ -17,22 +17,20 @@ struct PreviewExcerpt: Identifiable {
         self.location = location
     }
 
-    /// Read only the renderer in which the selection gesture began.
+    /// Read the selection from the renderer under the pointer.
     static func read(in hit: NSView, at screenPoint: CGPoint, keepingSelection: Bool = false,
                      requireSelectionAtPoint: Bool = false) async -> Self? {
         let windowPoint = hit.window?.convertPoint(fromScreen: screenPoint) ?? .zero
         for view in sequence(first: hit, next: { $0.superview }) {
+            if view is NSRulerView { return nil }
             if let source = view as? SourcePreviewTextView {
-                if requireSelectionAtPoint {
-                    let point = source.convert(windowPoint, from: nil)
-                    let index = source.characterIndexForInsertion(at: point)
-                    guard source.selectedRanges.contains(where: { NSLocationInRange(index, $0.rangeValue) }) else { return nil }
-                }
+                if requireSelectionAtPoint, !source.containsSelectedText(at: source.convert(windowPoint, from: nil)) { return nil }
                 var excerpt = source.selectedExcerpt
                 if keepingSelection { excerpt?.highlight = .text(in: source) }
                 return excerpt
             }
             if let liveText = view as? ImageAnalysisOverlayView {
+                if requireSelectionAtPoint, !liveText.hasText(at: liveText.convert(windowPoint, from: nil)) { return nil }
                 var excerpt = Self(liveText.selectedText)
                 if keepingSelection { excerpt?.highlight = .liveText(in: liveText) }
                 return excerpt
@@ -114,6 +112,7 @@ struct PreviewCommentPopover: View {
     var browserTabID: UUID?
     var excerpt: PreviewExcerpt?
     var frame: PreviewCapture.Frame?
+    var action: PreviewEditAction = .comment
     let close: () -> Void
     @Environment(AppState.self) private var app
     @Environment(WindowState.self) private var window
@@ -128,7 +127,7 @@ struct PreviewCommentPopover: View {
 
     var body: some View {
         RefinementPopover(title: url.isFileURL ? url.lastPathComponent : url.host() ?? url.absoluteString,
-                          isComment: true, excerpt: excerpt?.text, preview: frame?.image, previewCaption: frame?.caption) { comment in
+                          action: action, excerpt: excerpt?.text, preview: frame?.image, previewCaption: frame?.caption) { comment in
             let context = sourceContext
             close()
             Task {
@@ -155,20 +154,26 @@ private struct PreviewSelectionComments: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .gesture(PreviewSelectionGesture(began: presentation.dismiss, finished: chooseComment))
+            .gesture(PreviewSelectionStart(began: presentation.dismiss))
             .overlay {
-                if url != nil { PreviewContextClick(finished: chooseComment) }
+                if let url {
+                    PreviewContextClick { surface, event in
+                        guard let hit = surface.renderer(at: event) else { return }
+                        chooseComment(for: url, in: hit, event: event)
+                    }
+                }
             }
             .onChange(of: url) { presentation.dismiss() }
             .onChange(of: browserTabID) { presentation.dismiss() }
             .onDisappear { presentation.dismiss() }
     }
 
-    private func chooseComment(_ hit: NSView, _ event: NSEvent, _ resolve: @escaping (Bool) -> Void) {
-        guard let url else { resolve(false); return }
-        presentation.choose(in: hit, event: event, resolve: resolve) { excerpt, close in
+    private func chooseComment(for url: URL, in hit: NSView, event: NSEvent) {
+        presentation.choose(in: hit, event: event, resolve: { accepted in
+            if !accepted { hit.rightMouseDown(with: event) }
+        }) { action, excerpt, close in
             let frame = await capture?.snapshot(for: url)
-            return PreviewCommentPopover(url: url, browserTabID: browserTabID, excerpt: excerpt, frame: frame, close: close)
+            return PreviewCommentPopover(url: url, browserTabID: browserTabID, excerpt: excerpt, frame: frame, action: action, close: close)
                 .environment(app).environment(window)
         }
     }
@@ -190,21 +195,21 @@ final class PreviewCommentPresentation: NSObject, NSPopoverDelegate {
     }
 
     func choose<Editor: View>(in hit: NSView, event: NSEvent, resolve: @escaping (Bool) -> Void,
-                              editor: @escaping (PreviewExcerpt, @escaping () -> Void) async -> Editor) {
+                              editor: @escaping (PreviewEditAction, PreviewExcerpt, @escaping () -> Void) async -> Editor) {
+        guard event.isPreviewContextClick else { resolve(false); return }
         dismiss()
         guard let window = hit.window else { resolve(false); return }
         let point = window.convertPoint(toScreen: event.locationInWindow)
-        let isContextClick = event.type == .rightMouseDown || event.modifierFlags.contains(.control)
         lookup = Task { @MainActor in
             let selection = await PreviewExcerpt.read(in: hit, at: point, keepingSelection: true,
-                                                      requireSelectionAtPoint: isContextClick)
+                                                      requireSelectionAtPoint: true)
             guard !Task.isCancelled, hit.window === window else {
                 selection?.highlight?.hide()
                 return
             }
             guard let selection else { resolve(false); return }
-            let original = isContextClick ? hit.menu(for: event) : nil
-            let hasDeferredMenu = isContextClick && original?.items.isEmpty != false &&
+            let original = hit.menu(for: event)
+            let hasDeferredMenu = original?.items.isEmpty != false &&
                 sequence(first: hit, next: { $0.superview }).contains { $0 is WKWebView || $0 is ImageAnalysisOverlayView }
             let actions = PreviewCommentMenu(text: selection.text, existing: original, offersRendererMenu: hasDeferredMenu)
             resolve(true)
@@ -214,13 +219,13 @@ final class PreviewCommentPresentation: NSObject, NSPopoverDelegate {
             trackMenu(actions.menu, hit.convert(event.locationInWindow, from: nil), hit)
             guard !Task.isCancelled else { return }
             menu = nil
-            guard actions.choice == .comment else {
+            guard case .edit(let action) = actions.choice else {
                 releaseHighlight()
                 if actions.choice == .rendererMenu { hit.rightMouseDown(with: event) }
                 return
             }
             let popover = NSPopover()
-            let content = await editor(selection) { [weak popover] in popover?.performClose(nil) }
+            let content = await editor(action, selection) { [weak popover] in popover?.performClose(nil) }
             guard !Task.isCancelled else { return }
             guard hit.window === window else { releaseHighlight(); return }
             panel = popover
@@ -253,16 +258,16 @@ final class PreviewCommentPresentation: NSObject, NSPopoverDelegate {
 
 @MainActor
 final class PreviewCommentMenu: NSObject {
-    enum Choice { case comment, rendererMenu }
+    enum Choice: Equatable { case edit(PreviewEditAction), rendererMenu }
     let menu: NSMenu
     private(set) var choice: Choice?
-    private let text: String
+    private let text: String?
 
-    init(text: String, existing: NSMenu?, offersRendererMenu: Bool = false) {
+    init(text: String? = nil, existing: NSMenu? = nil, offersRendererMenu: Bool = false) {
         self.text = text
         menu = existing?.copy() as? NSMenu ?? NSMenu()
         super.init()
-        if menu.items.isEmpty {
+        if menu.items.isEmpty, text != nil {
             let copy = menu.addItem(withTitle: String(localized: "Copy"), action: #selector(copyExcerpt), keyEquivalent: "c")
             copy.target = self
         }
@@ -271,16 +276,22 @@ final class PreviewCommentMenu: NSObject {
             menu.addItem(.separator())
             menu.addItem(withTitle: String(localized: "More Actions…"), action: #selector(openRendererMenu), keyEquivalent: "").target = self
         }
-        menu.insertItem(.separator(), at: 0)
-        let add = menu.insertItem(withTitle: String(localized: "Add Comment…"), action: #selector(addComment), keyEquivalent: "", at: 0)
-        add.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
-        add.target = self
+        if !menu.items.isEmpty { menu.insertItem(.separator(), at: 0) }
+        for (index, action) in PreviewEditAction.allCases.enumerated() {
+            let item = menu.insertItem(withTitle: action.title, action: #selector(editSelection(_:)), keyEquivalent: "", at: index)
+            item.image = NSImage(systemSymbolName: action.systemImage, accessibilityDescription: nil)
+            item.representedObject = action
+            item.target = self
+        }
     }
 
-    @objc private func addComment() { choice = .comment }
+    @objc private func editSelection(_ sender: NSMenuItem) {
+        if let action = sender.representedObject as? PreviewEditAction { choice = .edit(action) }
+    }
     @objc private func openRendererMenu() { choice = .rendererMenu }
 
     @objc private func copyExcerpt() {
+        guard let text else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
@@ -296,10 +307,9 @@ extension NSPopover {
     }
 }
 
-/// Observes completed selections without taking clicks, drags, or links away from the renderer.
-private struct PreviewSelectionGesture: NSGestureRecognizerRepresentable {
+/// A new primary press cancels any pending context lookup before the renderer changes its selection.
+private struct PreviewSelectionStart: NSGestureRecognizerRepresentable {
     let began: () -> Void
-    let finished: PreviewMenuRequest
 
     func makeNSGestureRecognizer(context: Context) -> Observer {
         let recognizer = Observer()
@@ -309,29 +319,14 @@ private struct PreviewSelectionGesture: NSGestureRecognizerRepresentable {
 
     func updateNSGestureRecognizer(_ recognizer: Observer, context: Context) {
         recognizer.began = began
-        recognizer.finished = finished
     }
 
     final class Observer: NSGestureRecognizer {
         var began: (() -> Void)?
-        var finished: PreviewMenuRequest?
-        private weak var hit: NSView?
-        private var dragged = false
 
         override func mouseDown(with event: NSEvent) {
-            guard !event.modifierFlags.contains(.control) else { state = .failed; return }
-            began?()
-            dragged = false
-            hit = event.previewHit
-        }
-
-        override func mouseDragged(with event: NSEvent) { dragged = true }
-
-        override func mouseUp(with event: NSEvent) {
-            defer { state = .failed }
-            guard dragged || event.clickCount > 1 || event.modifierFlags.contains(.shift),
-                  let hit else { return }
-            finished?(hit, event) { _ in }
+            if !event.modifierFlags.contains(.control) { began?() }
+            state = .failed
         }
 
         override func canPrevent(_ other: NSGestureRecognizer) -> Bool { false }
@@ -339,9 +334,11 @@ private struct PreviewSelectionGesture: NSGestureRecognizerRepresentable {
     }
 }
 
-private typealias PreviewMenuRequest = (NSView, NSEvent, @escaping (Bool) -> Void) -> Void
-
 private extension NSEvent {
+    var isPreviewContextClick: Bool {
+        type == .rightMouseDown || (type == .leftMouseDown && modifierFlags.contains(.control))
+    }
+
     var previewHit: NSView? {
         guard let root = window?.contentView else { return nil }
         return root.hitTest(root.superview?.convert(locationInWindow, from: nil) ?? locationInWindow)
@@ -349,38 +346,36 @@ private extension NSEvent {
 }
 
 /// Only secondary and Control-clicks hit this surface. Native text selection receives ordinary pointer events.
-private struct PreviewContextClick: NSViewRepresentable {
-    let finished: PreviewMenuRequest
+struct PreviewContextClick: NSViewRepresentable {
+    let perform: (Surface, NSEvent) -> Void
 
     func makeNSView(context: Context) -> Surface {
         let view = Surface()
-        view.finished = finished
+        view.perform = perform
         return view
     }
 
-    func updateNSView(_ view: Surface, context: Context) { view.finished = finished }
+    func updateNSView(_ view: Surface, context: Context) { view.perform = perform }
 
     final class Surface: NSView {
-        var finished: PreviewMenuRequest?
+        var perform: ((Surface, NSEvent) -> Void)?
         private var findingRenderer = false
 
         override func hitTest(_ point: NSPoint) -> NSView? {
             guard !findingRenderer, let event = NSApp.currentEvent, event.window === window,
-                  event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control)),
+                  event.isPreviewContextClick,
                   visibleRect.contains(convert(point, from: superview)) else { return nil }
             return self
         }
 
-        override func rightMouseDown(with event: NSEvent) {
+        func renderer(at event: NSEvent) -> NSView? {
             findingRenderer = true
-            let renderer = event.previewHit
-            findingRenderer = false
-            guard let renderer, renderer !== self, let finished else { return }
-            finished(renderer, event) { accepted in
-                if !accepted { renderer.rightMouseDown(with: event) }
-            }
+            defer { findingRenderer = false }
+            let hit = event.previewHit
+            return hit === self ? nil : hit
         }
 
+        override func rightMouseDown(with event: NSEvent) { perform?(self, event) }
         override func mouseDown(with event: NSEvent) { rightMouseDown(with: event) }
         override func isAccessibilityElement() -> Bool { false }
     }

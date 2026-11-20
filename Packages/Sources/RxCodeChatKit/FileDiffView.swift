@@ -20,6 +20,7 @@ public struct FileDiffView: View {
     /// True when another thread edited this file between two turns of the
     /// current thread; instructs `buildThreadEditDiff` to isolate this thread's hunks.
     public let preferHunks: Bool
+    private let onClose: (() -> Void)?
     @Environment(WindowState.self) private var windowState
     @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
@@ -37,7 +38,8 @@ public struct FileDiffView: View {
         showFullFileDiff: Bool = false,
         originalContent: String? = nil,
         modifiedContent: String? = nil,
-        preferHunks: Bool = false
+        preferHunks: Bool = false,
+        onClose: (() -> Void)? = nil
     ) {
         self.filePath = filePath
         self.fileName = fileName
@@ -47,6 +49,7 @@ public struct FileDiffView: View {
         self.originalContent = originalContent
         self.modifiedContent = modifiedContent
         self.preferHunks = preferHunks
+        self.onClose = onClose
     }
 
     public var body: some View {
@@ -61,12 +64,20 @@ public struct FileDiffView: View {
         }
         .background(ClaudeTheme.background)
         .background {
-            Button("") { windowState.diffFile = nil }
+            Button("", action: close)
                 .keyboardShortcut(.escape, modifiers: [])
                 .opacity(0)
                 .allowsHitTesting(false)
         }
         .task(id: filePath) { await loadDiff() }
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            windowState.diffFile = nil
+        }
     }
 
     // MARK: - Header
@@ -119,7 +130,7 @@ public struct FileDiffView: View {
                 .help(isCopied ? "Copied" : "Copy")
             }
 
-            Button { windowState.diffFile = nil } label: {
+            Button(action: close) {
                 Image(systemName: "xmark")
                     .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textSecondary)

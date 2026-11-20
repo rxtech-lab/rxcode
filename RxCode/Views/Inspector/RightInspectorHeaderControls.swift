@@ -66,7 +66,7 @@ struct InspectorDestinationBar: View {
 
     private func symbol(for mode: InspectorMode) -> String {
         switch mode {
-        case .review: "arrow.triangle.branch"
+        case .changes: "arrow.triangle.branch"
         case .inspector: "terminal"
         case .preview: "rectangle.on.rectangle"
         case .browser: "globe"

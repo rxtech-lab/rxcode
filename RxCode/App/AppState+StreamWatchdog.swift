@@ -80,8 +80,7 @@ extension AppState {
                 // backgrounded sessions) inside the same finalize so the
                 // mobile diff broadcast carries both at once.
                 let isForeground = (window.currentSessionId ?? window.newSessionKey) == currentKey
-                self.finalizeStreamSession(for: currentKey) { state in
-                    if !isForeground { state.hasUncheckedCompletion = true }
+                self.finalizeStreamSession(for: currentKey, trackUnreadCompletion: true) { state in
                     state.messages.append(ChatMessage(role: .assistant, content: message, isError: true))
                 }
                 if isForeground {

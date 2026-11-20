@@ -1,4 +1,7 @@
+import AppKit
+import RxCodeChatKit
 import RxCodeCore
+import SwiftUI
 import XCTest
 @testable import RxCode
 
@@ -44,23 +47,78 @@ final class WorkspaceSidebarTests: XCTestCase {
             ChatSession(id: "old", projectId: a.id).summary,
         ]
         app.sessionActivity = [
-            "atlas": SessionActivity(isStreaming: true), "beacon": SessionActivity(isStreaming: true),
+            "atlas": SessionActivity(isStreaming: true, hasUncheckedCompletion: true),
+            "beacon": SessionActivity(isStreaming: true),
             "old": SessionActivity(hasUncheckedCompletion: true),
         ]
         app.todoProgressBySession["beacon"] = .init(done: 1, total: 3, inProgress: true)
         window.pendingPermissions = [.init(id: "permission", toolName: "Edit", toolInput: [:], runToken: "run", sessionId: "pending-beacon")]
         let runs = app.sidebarRuns(in: window)
-        XCTAssertEqual(runs.map(\.id), ["beacon", "atlas"])
+        XCTAssertEqual(runs.map(\.id), ["beacon", "atlas", "old"])
+        XCTAssertEqual(runs.map(\.status), [.needsApproval, .running, .completedUnread])
         XCTAssertEqual(runs.first?.title, "Fix indexing")
-        XCTAssertEqual(runs.first?.status, .needsApproval)
         XCTAssertEqual(runs.first?.progress?.done, 1)
         window.pendingPermissions = []
         app.sessionActivity["beacon"] = .init(hasUncheckedCompletion: true)
         app.sessionActivity["check"] = .init(isStreaming: true)
-        XCTAssertEqual(app.sidebarRuns(in: window).map(\.id), ["atlas", "check"])
-        XCTAssertEqual(app.sidebarRuns(in: window).last?.status, .verifying)
-        XCTAssertEqual(app.sidebarRuns(in: window).last?.title, "Fix indexing")
+        let updated = app.sidebarRuns(in: window)
+        XCTAssertEqual(updated.map(\.id), ["atlas", "old", "beacon", "check"])
+        XCTAssertEqual(updated.map(\.status), [.running, .completedUnread, .completedUnread, .verifying])
+        XCTAssertEqual(updated.first { $0.id == "check" }?.title, "Fix indexing")
         app.sessionActivity.removeAll()
+        XCTAssertTrue(app.sidebarRuns(in: window).isEmpty)
+    }
+
+    func testFinishedThreadsStayInActiveNowUntilViewed() {
+        let app = AppState(startBackgroundServices: false)
+        let window = WindowState()
+        let a = Project(name: "Atlas", path: "/atlas")
+        let b = Project(name: "Beacon", path: "/beacon")
+        let visible = ChatSession(id: "visible", projectId: a.id)
+        let covered = ChatSession(id: "covered", projectId: a.id)
+        let background = ChatSession(id: "background", projectId: b.id)
+        app.projects = [a, b]
+        window.selectedProject = a
+        app.allSessionSummaries = [visible.summary, covered.summary, background.summary]
+        for thread in [visible, covered, background] {
+            app.updateState(thread.id) { state in
+                state.isStreaming = true
+                state.messages = [ChatMessage(role: .assistant, content: "Finished")]
+            }
+        }
+        let bridge = ChatBridge()
+        func chat(focus: ControlActiveState) -> some View {
+            Text("Chat")
+                .modifier(ChatDetailModifiers())
+                .environment(app).environment(window).environment(bridge)
+                .environment(\.controlActiveState, focus)
+        }
+        app.sessionIdRedirect["pending-visible"] = visible.id
+        window.currentSessionId = "pending-visible"
+        let host = NSHostingView(rootView: chat(focus: .key))
+        let hostWindow = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 360, height: 220),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+        hostWindow.contentView = host
+        hostWindow.orderBack(nil)
+        defer { hostWindow.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        app.finalizeStreamSession(for: visible.id, trackUnreadCompletion: true)
+        host.rootView = chat(focus: .inactive)
+        window.currentSessionId = covered.id
+        host.layoutSubtreeIfNeeded()
+        app.finalizeStreamSession(for: covered.id, trackUnreadCompletion: true)
+        app.finalizeStreamSession(for: background.id, trackUnreadCompletion: true)
+        let completed = app.sidebarRuns(in: window)
+        XCTAssertEqual(completed.map(\.id), [covered.id, background.id])
+        XCTAssertEqual(completed.map(\.status), [.completedUnread, .completedUnread])
+
+        app.selectProject(b, in: window)
+        XCTAssertEqual(app.sidebarRuns(in: window).map(\.id), [covered.id, background.id])
+        app.selectSession(id: background.id, in: window)
+        XCTAssertEqual(app.sidebarRuns(in: window).map(\.id), [covered.id])
+        window.currentSessionId = covered.id
+        host.rootView = chat(focus: .key)
+        host.layoutSubtreeIfNeeded()
         XCTAssertTrue(app.sidebarRuns(in: window).isEmpty)
     }
 

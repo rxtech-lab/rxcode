@@ -164,8 +164,8 @@ final class WorkspaceBrowserTests: XCTestCase {
         window.inspectorLayout.destinations.split(.browser, beside: originalPane, edge: .below)
         window.inspectorTab = .run
         XCTAssertEqual(window.inspectorLayout.destinations.panes.compactMap(\.selectedTab), [.inspector, .browser])
-        window.inspectorReviewTab = .changes
-        XCTAssertEqual(window.inspectorLayout.destinations.panes.compactMap(\.selectedTab), [.review, .browser])
+        window.inspectorMode = .changes
+        XCTAssertEqual(window.inspectorLayout.destinations.panes.compactMap(\.selectedTab), [.changes, .browser])
         window.inspectorMode = .browser
         XCTAssertTrue(design.inspectorBrowser.selectedTab === blank)
 

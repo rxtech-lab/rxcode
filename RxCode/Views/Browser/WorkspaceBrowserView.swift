@@ -219,7 +219,7 @@ private struct BrowserPageView: View {
                     .toggleStyle(.button)
                     .controlSize(.small)
                     .disabled(tab.address == nil)
-                    .help("Select a page element for refinement")
+                    .help("Select an element, then right-click to comment or refine")
                     .accessibilityIdentifier("browser-design")
                 Button {
                     if let url = tab.address { NSWorkspace.shared.open(url) }

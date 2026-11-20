@@ -5,7 +5,7 @@ import XCTest
 final class InspectorLayoutTests: XCTestCase {
     func testEveryDestinationCanSplitAndRejoinWithoutChangingToolOrBrowserSessions() throws {
         for mode in InspectorMode.allCases {
-            var layout = InspectorLayout(selected: mode, tool: .run, review: .changes)
+            var layout = InspectorLayout(selected: mode, tool: .run)
             let original = layout.destinations.focusedPaneID
             let browser = layout.browserID
             let tools = layout.tools
@@ -29,43 +29,59 @@ final class InspectorLayoutTests: XCTestCase {
             XCTAssertEqual(layout.mode, mode)
             XCTAssertEqual(layout.tools, tools)
             XCTAssertEqual(layout.browserID, browser)
-            XCTAssertEqual(layout.review, .changes)
         }
     }
 
     func testReorderingAndSplittingDestinationsKeepsTheNeighborSelected() throws {
         var layout = InspectorLayout(selected: .browser)
         let original = layout.destinations.focusedPaneID
-        layout.destinations.move(.preview, to: original, before: .review)
-        XCTAssertEqual(layout.destinations.panes[0].tabs, [.preview, .review, .inspector, .browser])
+        layout.destinations.move(.preview, to: original, before: .changes)
+        XCTAssertEqual(layout.destinations.panes[0].tabs, [.preview, .changes, .inspector, .browser])
         XCTAssertEqual(layout.mode, .browser)
 
         layout.destinations.split(.preview, beside: original, edge: .above)
         let preview = layout.destinations.focusedPaneID
-        layout.destinations.split(.review, beside: preview, edge: .below)
-        let review = layout.destinations.focusedPaneID
-        XCTAssertEqual(layout.destinations.panes.compactMap(\.selectedTab), [.preview, .review, .browser])
+        layout.destinations.split(.changes, beside: preview, edge: .below)
+        let changes = layout.destinations.focusedPaneID
+        XCTAssertEqual(layout.destinations.panes.compactMap(\.selectedTab), [.preview, .changes, .browser])
         layout.destinations.split(.preview, beside: original, edge: .below)
-        XCTAssertEqual(layout.destinations.panes.map(\.id), [review, original, preview])
+        XCTAssertEqual(layout.destinations.panes.map(\.id), [changes, original, preview])
         XCTAssertEqual(layout.destinations.focusedPaneID, preview)
     }
 
     func testFixedDestinationLayoutMigratesWithoutLosingNestedSplitsOrBrowserHistoryKeys() throws {
-        var fixed = InspectorLayout(selected: .preview, tool: .run, review: .branch)
+        var fixed = InspectorLayout(selected: .preview, tool: .run)
         let run = try XCTUnwrap(fixed.tools.selectedTab)
         fixed.tools.split(run.id, beside: fixed.tools.focusedPaneID, edge: .below)
         var saved = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(fixed)) as? [String: Any])
         saved.removeValue(forKey: "destinations")
+        saved["review"] = "Branch"
         let oldBrowser = UUID()
         saved["previousBrowserIDs"] = [oldBrowser.uuidString]
 
         let restored = try XCTUnwrap(InspectorLayout.restore(from: JSONSerialization.data(withJSONObject: saved)))
         XCTAssertEqual(restored.destinations.panes.map(\.tabs), [InspectorMode.allCases])
         XCTAssertEqual(restored.mode, .preview)
-        XCTAssertEqual(restored.review, .branch)
         XCTAssertEqual(restored.tools, fixed.tools)
         XCTAssertEqual(restored.browserID, fixed.browserID)
         XCTAssertEqual(restored.previousBrowserIDs, [oldBrowser])
+    }
+
+    func testSavedReviewSplitsMigrateToChangesWithoutLosingPaneOrSessionIdentity() throws {
+        var layout = InspectorLayout(selected: .changes, tool: .run)
+        let originalPane = layout.destinations.focusedPaneID
+        layout.destinations.split(.changes, beside: originalPane, edge: .above)
+        let run = try XCTUnwrap(layout.tools.selectedTab)
+        layout.tools.split(run.id, beside: layout.tools.focusedPaneID, edge: .below)
+        var saved = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(layout)) as? [String: Any])
+        saved["review"] = "This thread"
+
+        let restored = try XCTUnwrap(InspectorLayout.restore(from: JSONSerialization.data(withJSONObject: saved)))
+        XCTAssertEqual(restored, layout)
+        XCTAssertEqual(restored.mode, .changes)
+        XCTAssertEqual(restored.destinations.panes.first?.selectedTab, .changes)
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(restored)) as? [String: Any])
+        XCTAssertNil(encoded["review"])
     }
 
     func testReorderingToolsKeepsTheCurrentTabSelected() throws {
@@ -147,7 +163,6 @@ final class InspectorLayoutTests: XCTestCase {
 
         let layout = try XCTUnwrap(InspectorLayout.restore(from: Data(legacy.utf8)))
         XCTAssertEqual(layout.mode, .inspector)
-        XCTAssertEqual(layout.review, .changes)
         XCTAssertEqual(layout.browserID, browser)
         XCTAssertEqual(layout.tools.selectedTab?.tool, .views)
         XCTAssertEqual(layout.tools.panes[0].tabs.map(\.tool), InspectorTab.allCases)

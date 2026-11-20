@@ -528,6 +528,7 @@ extension AppState {
     func selectSession(id: String, inChatTab: Bool = false, in window: WindowState) {
         logger.info("[SelectSession] click sid=\(id, privacy: .public) currentSid=\(window.currentSessionId ?? "<nil>", privacy: .public) selectedProject=\(window.selectedProject?.id.uuidString ?? "<nil>", privacy: .public) summariesCount=\(self.allSessionSummaries.count)")
         guard window.currentSessionId != id else {
+            markCompletionRead(for: id)
             // Any General route (Tasks, Briefing) covers the chat, so clicking
             // the current thread must still reveal it.
             if window.generalRoute != nil || inChatTab {

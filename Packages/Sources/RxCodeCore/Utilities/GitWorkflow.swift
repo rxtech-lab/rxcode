@@ -1,0 +1,381 @@
+import Foundation
+
+#if os(macOS)
+/// Snapshot of refs and repository state shown by the Git workflow window.
+public struct GitRepositorySnapshot: Equatable, Sendable {
+    public var currentBranch: String?
+    public var headCommit: String?
+    public var localBranches: [GitLocalBranch] = []
+    public var remoteBranches: [GitRemoteBranch] = []
+    public var remotes: [String] = []
+    public var tags: [GitTag] = []
+    public var stashes: [GitStash] = []
+    public var pendingOperation: GitPendingOperation?
+
+    public init() {}
+
+    public var currentLocalBranch: GitLocalBranch? {
+        localBranches.first { $0.isCurrent }
+    }
+}
+
+/// Read-only queries for the Git workflow window.
+public enum GitRepositoryLoader {
+    static let branchFormat = "--format=%(refname:short)%1f%(upstream:short)%1f%(HEAD)%1f%(upstream:track)%1f%(objectname)"
+
+    public static func snapshot(at root: String) async -> GitRepositorySnapshot {
+        async let branch = GitHelper.currentBranch(at: root)
+        async let head = GitHelper.run(["rev-parse", "HEAD"], at: root)
+        async let locals = GitHelper.run(["for-each-ref", branchFormat, "refs/heads"], at: root)
+        async let remoteRefs = GitHelper.run(["for-each-ref", "--format=%(refname)%1f%(objectname)", "refs/remotes"], at: root)
+        async let remoteNames = GitHelper.run(["remote"], at: root)
+        async let tagRefs = GitHelper.run(
+            ["for-each-ref", "--sort=-creatordate", "--format=%(refname:short)%1f%(objectname)%1f%(*objectname)", "refs/tags"],
+            at: root
+        )
+        async let stashList = GitHelper.run(["stash", "list", "--format=%gd%x1f%s%x1f%H"], at: root)
+        async let pending = pendingOperation(at: root)
+
+        var snapshot = GitRepositorySnapshot()
+        snapshot.currentBranch = await branch
+        snapshot.headCommit = await head?.trimmingCharacters(in: .whitespacesAndNewlines)
+        snapshot.localBranches = GitHistoryParser.parseLocalBranches(await locals ?? "")
+        snapshot.remoteBranches = parseRemoteBranches(await remoteRefs ?? "")
+        snapshot.remotes = (await remoteNames ?? "").split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        snapshot.tags = (await tagRefs ?? "").split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 3, !fields[0].isEmpty else { return nil }
+            return GitTag(name: fields[0], tip: fields[2].isEmpty ? fields[1] : fields[2])
+        }
+        snapshot.stashes = (await stashList ?? "").split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 3 else { return nil }
+            return GitStash(selector: fields[0], message: fields[1], tip: fields[2])
+        }
+        snapshot.pendingOperation = await pending
+        return snapshot
+    }
+
+    static func parseRemoteBranches(_ raw: String) -> [GitRemoteBranch] {
+        raw.split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 2, fields[0].hasPrefix("refs/remotes/"), !fields[0].hasSuffix("/HEAD") else { return nil }
+            let ref = fields[0].dropFirst("refs/remotes/".count)
+            guard let slash = ref.firstIndex(of: "/") else { return nil }
+            return GitRemoteBranch(remote: String(ref[..<slash]), name: String(ref[ref.index(after: slash)...]), tip: fields[1])
+        }
+        .sorted { $0.refName.localizedStandardCompare($1.refName) == .orderedAscending }
+    }
+
+    public static func pendingOperation(at root: String) async -> GitPendingOperation? {
+        guard let raw = await GitHelper.run(["rev-parse", "--absolute-git-dir"], at: root) else { return nil }
+        let gitDirectory = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        for operation in GitPendingOperation.allCases {
+            for marker in operation.markers
+            where FileManager.default.fileExists(atPath: (gitDirectory as NSString).appendingPathComponent(marker)) {
+                return operation
+            }
+        }
+        return nil
+    }
+
+    /// Commits reachable from branches, remote branches, tags, and HEAD, newest first.
+    /// `ref` limits the history to one branch or commit.
+    public static func history(at root: String, ref: String? = nil, limit: Int) async -> [GitCommit] {
+        var args = ["log", "--topo-order", "--decorate=full", GitHistoryParser.logFormat, "--max-count=\(limit)"]
+        if let ref {
+            args += [ref, "--"]
+        } else {
+            args += ["--branches", "--remotes", "--tags", "HEAD", "--"]
+        }
+        guard let raw = await GitHelper.run(args, at: root) else { return [] }
+        return GitHistoryParser.parseLog(raw)
+    }
+
+    /// Commits after `base` up to HEAD, oldest first. A nil base lists the whole branch.
+    public static func commitsSince(_ base: String?, at root: String) async -> [GitCommit]? {
+        let range = base.map { "\($0)..HEAD" } ?? "HEAD"
+        guard let raw = await GitHelper.run(["log", "--reverse", "--topo-order", GitHistoryParser.logFormat, range, "--"], at: root) else {
+            return nil
+        }
+        return GitHistoryParser.parseLog(raw)
+    }
+
+    public static func isAncestor(_ commit: String, of descendant: String = "HEAD", at root: String) async -> Bool {
+        await GitHelper.execute(["merge-base", "--is-ancestor", commit, descendant], at: root)?.status == 0
+    }
+
+    /// Files a commit changed relative to its first parent (or the empty tree for root commits).
+    public static func files(in commit: GitCommit, at root: String) async -> [GitCommitFile] {
+        var args = ["diff-tree", "-r", "-M", "--name-status", "-z", "--no-commit-id"]
+        if let parent = commit.parents.first {
+            args += [parent, commit.id]
+        } else {
+            args += ["--root", commit.id]
+        }
+        guard let raw = await GitHelper.run(args, at: root) else { return [] }
+        return GitHistoryParser.parseNameStatus(raw)
+    }
+
+    public static func diff(of file: GitCommitFile, in commit: GitCommit, at root: String) async -> String {
+        let paths = [file.path] + (file.originalPath.map { [$0] } ?? [])
+        if let parent = commit.parents.first {
+            return await GitHelper.run(["diff", "--no-color", "-M", parent, commit.id, "--"] + paths, at: root) ?? ""
+        }
+        return await GitHelper.run(["show", "--no-color", "--format=", commit.id, "--"] + paths, at: root) ?? ""
+    }
+
+    public static func stashDiff(_ stash: GitStash, at root: String) async -> String {
+        if let diff = await GitHelper.run(["stash", "show", "--no-color", "-p", "--include-untracked", stash.selector], at: root) {
+            return diff
+        }
+        return await GitHelper.run(["stash", "show", "--no-color", "-p", stash.selector], at: root) ?? ""
+    }
+}
+
+/// Mutating Git commands for the workflow window. Every call returns nil on
+/// success or git's combined output on failure. None of them open an editor.
+public enum GitWorkflow {
+    /// Prevents git from blocking on an interactive editor.
+    static let nonInteractive = ["GIT_EDITOR": "true", "GIT_SEQUENCE_EDITOR": "true"]
+
+    public enum ResetMode: String, CaseIterable, Sendable {
+        case soft, mixed, hard
+    }
+
+    public enum PullStrategy: Sendable {
+        case fastForwardOnly, merge, rebase
+    }
+
+    public static func fetch(at root: String) async -> String? {
+        await GitHelper.runWithError(["fetch", "--all", "--prune", "--tags"], at: root)
+    }
+
+    public static func pull(_ strategy: PullStrategy, at root: String) async -> String? {
+        let flag = switch strategy {
+        case .fastForwardOnly: "--ff-only"
+        case .merge: "--no-rebase"
+        case .rebase: "--rebase"
+        }
+        return await GitHelper.runWithError(["pull", flag], at: root, environment: nonInteractive)
+    }
+
+    /// Pushes `branch` to its upstream, or publishes it to `remote` when it has none.
+    public static func push(branch: GitLocalBranch, remote: String?, force: Bool, at root: String) async -> String? {
+        var args = ["push"]
+        if force { args.append("--force-with-lease") }
+        if branch.upstream == nil {
+            guard let remote else { return String(localized: "Add a remote before publishing this branch.") }
+            args += ["-u", remote, "refs/heads/\(branch.name):refs/heads/\(branch.name)"]
+        } else {
+            let format = "--format=%(upstream:remotename)%00%(upstream:remoteref)"
+            let target = await GitHelper.run(["for-each-ref", format, "refs/heads/\(branch.name)"], at: root)?
+                .trimmingCharacters(in: .newlines).split(separator: "\0")
+            guard let target, target.count == 2 else { return String(localized: "The upstream branch is unavailable.") }
+            args += ["--", String(target[0]), "refs/heads/\(branch.name):\(target[1])"]
+        }
+        return await GitHelper.runWithError(args, at: root)
+    }
+
+    public static func checkout(_ ref: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["switch", "--", ref], at: root)
+    }
+
+    public static func checkoutDetached(_ commit: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["switch", "--detach", commit], at: root)
+    }
+
+    public static func checkout(remote branch: GitRemoteBranch, localBranches: [GitLocalBranch], at root: String) async -> String? {
+        if localBranches.contains(where: { $0.name == branch.name }) {
+            if let failure = await checkout(branch.name, at: root) { return failure }
+            return await GitHelper.runWithError(["branch", "--set-upstream-to", branch.refName, branch.name], at: root)
+        }
+        return await GitHelper.runWithError(["switch", "--track", "-c", branch.name, branch.refName], at: root)
+    }
+
+    public static func createBranch(_ name: String, at startPoint: String, checkout: Bool, root: String) async -> String? {
+        if checkout {
+            return await GitHelper.runWithError(["switch", "-c", name, startPoint], at: root)
+        }
+        return await GitHelper.runWithError(["branch", "--", name, startPoint], at: root)
+    }
+
+    public static func renameBranch(_ name: String, to newName: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["branch", "-m", "--", name, newName], at: root)
+    }
+
+    public static func deleteBranch(_ name: String, force: Bool, at root: String) async -> String? {
+        await GitHelper.runWithError(["branch", force ? "-D" : "-d", "--", name], at: root)
+    }
+
+    public static func deleteRemoteBranch(_ branch: GitRemoteBranch, at root: String) async -> String? {
+        await GitHelper.runWithError(["push", branch.remote, "--delete", branch.name], at: root)
+    }
+
+    public static func merge(_ ref: String, noFastForward: Bool, at root: String) async -> String? {
+        var args = ["merge", "--no-edit"]
+        if noFastForward { args.append("--no-ff") }
+        args.append(ref)
+        return await GitHelper.runWithError(args, at: root, environment: nonInteractive)
+    }
+
+    public static func rebase(onto ref: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["rebase", "--autostash", ref], at: root, environment: nonInteractive)
+    }
+
+    public static func cherryPick(_ commit: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["cherry-pick", commit], at: root, environment: nonInteractive)
+    }
+
+    public static func revert(_ commit: GitCommit, at root: String) async -> String? {
+        var args = ["revert", "--no-edit"]
+        if commit.isMerge { args += ["-m", "1"] }
+        args.append(commit.id)
+        return await GitHelper.runWithError(args, at: root, environment: nonInteractive)
+    }
+
+    public static func reset(to commit: String, mode: ResetMode, at root: String) async -> String? {
+        await GitHelper.runWithError(["reset", "--\(mode.rawValue)", commit], at: root)
+    }
+
+    public static func createTag(_ name: String, at commit: String, message: String?, root: String) async -> String? {
+        var args = ["tag"]
+        if let message, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            args += ["-a", "-m", message]
+        }
+        args += ["--", name, commit]
+        return await GitHelper.runWithError(args, at: root)
+    }
+
+    public static func deleteTag(_ name: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["tag", "-d", "--", name], at: root)
+    }
+
+    public static func pushTag(_ name: String, remote: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["push", remote, "refs/tags/\(name)"], at: root)
+    }
+
+    public static func stash(message: String, includeUntracked: Bool, at root: String) async -> String? {
+        var args = ["stash", "push"]
+        if includeUntracked { args.append("--include-untracked") }
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { args += ["-m", trimmed] }
+        return await GitHelper.runWithError(args, at: root)
+    }
+
+    public static func applyStash(_ stash: GitStash, pop: Bool, at root: String) async -> String? {
+        await GitHelper.runWithError(["stash", pop ? "pop" : "apply", stash.selector], at: root)
+    }
+
+    public static func dropStash(_ stash: GitStash, at root: String) async -> String? {
+        await GitHelper.runWithError(["stash", "drop", stash.selector], at: root)
+    }
+
+    public static func discard(paths: [String], untracked: Bool, at root: String) async -> String? {
+        guard !paths.isEmpty else { return nil }
+        if untracked {
+            return await GitHelper.runWithError(["--literal-pathspecs", "clean", "-f", "--"] + paths, at: root)
+        }
+        return await GitHelper.runWithError(["--literal-pathspecs", "restore", "--worktree", "--"] + paths, at: root)
+    }
+
+    public static func addRemote(name: String, url: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["remote", "add", "--", name, url], at: root)
+    }
+
+    public static func removeRemote(_ name: String, at root: String) async -> String? {
+        await GitHelper.runWithError(["remote", "remove", name], at: root)
+    }
+
+    public enum Continuation: String, Sendable {
+        case `continue`, abort, skip
+    }
+
+    public static func resolve(_ operation: GitPendingOperation, _ action: Continuation, at root: String) async -> String? {
+        await GitHelper.runWithError([operation.command, "--\(action.rawValue)"], at: root, environment: nonInteractive)
+    }
+
+    /// Rewrites one commit message. HEAD is amended directly; older commits go
+    /// through a non-interactive rebase that rewords only that commit.
+    public static func reword(_ commit: GitCommit, message: String, at root: String) async -> String? {
+        let head = await GitHelper.run(["rev-parse", "HEAD"], at: root)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if head == commit.id {
+            return await withTemporaryFile(message) { path in
+                await GitHelper.runWithError(
+                    ["commit", "--amend", "--allow-empty", "--only", "--cleanup=strip", "-F", path],
+                    at: root,
+                    environment: nonInteractive
+                )
+            }
+        }
+        guard let steps = await rebaseSteps(from: commit, at: root) else {
+            return String(localized: "Only commits on the current branch can be reworded.")
+        }
+        let edited = steps.map { step in
+            var step = step
+            if step.commit == commit.id {
+                step.action = .reword
+                step.message = message
+            }
+            return step
+        }
+        return await interactiveRebase(edited, base: commit.parents.first, at: root)
+    }
+
+    /// Lists the commits from `commit` through HEAD as rebase steps, oldest
+    /// first. Returns nil when `commit` isn't on the current branch or the
+    /// range contains merge commits, which a linear rebase would flatten.
+    public static func rebaseSteps(from commit: GitCommit, at root: String) async -> [GitRebaseStep]? {
+        guard await GitRepositoryLoader.isAncestor(commit.id, at: root),
+              let commits = await GitRepositoryLoader.commitsSince(commit.parents.first, at: root),
+              !commits.contains(where: \.isMerge) else { return nil }
+        return commits.map { GitRebaseStep(commit: $0.id, subject: $0.subject, message: $0.fullMessage) }
+    }
+
+    /// Runs `git rebase -i` with a prepared todo list. A nil base rebases from the root commit.
+    public static func interactiveRebase(_ steps: [GitRebaseStep], base: String?, at root: String) async -> String? {
+        if let invalid = GitRebasePlan.validate(steps) {
+            switch invalid {
+            case .empty: return String(localized: "Keep at least one commit in the rebase.")
+            case .squashWithoutTarget: return String(localized: "The first kept commit can’t be squashed or fixed up.")
+            case .emptyRewordMessage: return String(localized: "Reworded commits need a message.")
+            }
+        }
+        // Left in place while the rebase is paused: the reword `exec` lines still
+        // read their message files after the user continues.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("rxcode-rebase-\(UUID().uuidString)")
+        let todoURL = directory.appendingPathComponent("todo")
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            var files: [String: String] = [:]
+            for (index, step) in steps.enumerated() where step.action == .reword {
+                let url = directory.appendingPathComponent("message-\(index).txt")
+                try step.message.write(to: url, atomically: true, encoding: .utf8)
+                files[step.commit] = url.path
+            }
+            try GitRebasePlan.todo(for: steps) { files[$0.commit] ?? "" }.write(to: todoURL, atomically: true, encoding: .utf8)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            return error.localizedDescription
+        }
+        var environment = nonInteractive
+        environment["GIT_SEQUENCE_EDITOR"] = "cp \(GitRebasePlan.shellQuoted(todoURL.path))"
+        let result = await GitHelper.runWithError(["rebase", "-i", "--autostash", base ?? "--root"], at: root, environment: environment)
+        if await GitRepositoryLoader.pendingOperation(at: root) != .rebase {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        return result
+    }
+
+    private static func withTemporaryFile(_ contents: String, body: (String) async -> String?) async -> String? {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("rxcode-message-\(UUID().uuidString).txt")
+        do {
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            return error.localizedDescription
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+        return await body(url.path)
+    }
+}
+#endif

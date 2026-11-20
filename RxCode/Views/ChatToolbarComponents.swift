@@ -282,6 +282,8 @@ struct ChatDetailModifiers: ViewModifier {
     @Environment(AppState.self) var appState
     @Environment(WindowState.self) var windowState
     @Environment(ChatBridge.self) var chatBridge
+    @Environment(\.controlActiveState) private var controlActiveState
+    @State private var chatViewID = UUID()
 
     var presentedRequest: PermissionRequest? {
         guard let id = windowState.presentedPermissionId else { return nil }
@@ -324,6 +326,10 @@ struct ChatDetailModifiers: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .onChange(of: controlActiveState == .key ? windowState.currentSessionId : nil, initial: true) { _, id in
+                appState.setViewedChat(id, for: chatViewID)
+            }
+            .onDisappear { appState.setViewedChat(nil, for: chatViewID) }
             .environment(\.chatTranscriptEndActions, AnyView(CodingSessionRatingButton()))
             .contentShape(Rectangle())
             .contextMenu {

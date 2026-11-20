@@ -17,6 +17,9 @@
         }
       }
     },
+    "\nThis can’t be undone." : {
+
+    },
     " :" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -455,6 +458,19 @@
         }
       }
     },
+    "%@ (%lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "%@ (current branch)" : {
+
+    },
     "%@ (Not Listed)" : {
 
     },
@@ -491,6 +507,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ %2$@ · %3$@"
+          }
+        }
+      }
+    },
+    "%@ <%@>" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ <%2$@>"
           }
         }
       }
@@ -659,6 +685,16 @@
     "%@ tokens" : {
 
     },
+    "%@ tracks %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ tracks %2$@"
+          }
+        }
+      }
+    },
     "%@ Usage" : {
       "localizations" : {
         "ko" : {
@@ -739,6 +775,19 @@
           }
         }
       }
+    },
+    "%@, %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "%@, current branch" : {
+
     },
     "%@, in progress" : {
       "localizations" : {
@@ -1545,6 +1594,9 @@
         }
       }
     },
+    "↑%lld" : {
+
+    },
     "↑↓ Select  ↵ Confirm  esc Cancel" : {
       "localizations" : {
         "en" : {
@@ -1566,6 +1618,9 @@
           }
         }
       }
+    },
+    "↓%lld" : {
+
     },
     "+%lld" : {
       "localizations" : {
@@ -1970,6 +2025,12 @@
           }
         }
       }
+    },
+    "Abort" : {
+
+    },
+    "Aborting…" : {
+
     },
     "Absolute or project-relative path. Leave empty to use the project root." : {
       "localizations" : {
@@ -2475,6 +2536,9 @@
         }
       }
     },
+    "Add Comment…" : {
+
+    },
     "Add Delay" : {
       "localizations" : {
         "ko" : {
@@ -2820,6 +2884,9 @@
         }
       }
     },
+    "Add Remote" : {
+
+    },
     "Add Repo" : {
       "localizations" : {
         "ko" : {
@@ -3101,6 +3168,9 @@
       }
     },
     "Adding extension…" : {
+
+    },
+    "Adding remote…" : {
 
     },
     "After a successful session, the agent is asked to commit the changed files and push them (choosing a new or existing branch). The commit turn itself won't re-trigger this hook. If a Code Review hook is also enabled, the commit only happens after the review passes." : {
@@ -3434,6 +3504,9 @@
         }
       }
     },
+    "All Commits" : {
+
+    },
     "All metrics" : {
 
     },
@@ -3758,6 +3831,9 @@
     "Animation frame" : {
 
     },
+    "Annotation (optional)" : {
+
+    },
     "another device" : {
 
     },
@@ -3901,6 +3977,9 @@
           }
         }
       }
+    },
+    "Applying stash…" : {
+
     },
     "Approve risky actions with context" : {
       "localizations" : {
@@ -4953,6 +5032,9 @@
         }
       }
     },
+    "Branches" : {
+
+    },
     "Briefing" : {
       "localizations" : {
         "ko" : {
@@ -5469,6 +5551,12 @@
         }
       }
     },
+    "Check out a branch to push" : {
+
+    },
+    "Check out after creating" : {
+
+    },
     "Check the scheme and container path." : {
       "localizations" : {
         "ko" : {
@@ -5510,6 +5598,12 @@
     "Checking for Updates…" : {
 
     },
+    "Checking out commit…" : {
+
+    },
+    "Checking out tag…" : {
+
+    },
     "Checking repository…" : {
 
     },
@@ -5538,6 +5632,27 @@
           }
         }
       }
+    },
+    "Checkout" : {
+
+    },
+    "Checkout %@" : {
+
+    },
+    "Checkout Commit" : {
+
+    },
+    "Checkout Tag" : {
+
+    },
+    "Cherry-pick Commit" : {
+
+    },
+    "Cherry-pick in progress" : {
+
+    },
+    "Cherry-picking…" : {
+
     },
     "Choose" : {
       "localizations" : {
@@ -5696,6 +5811,9 @@
           }
         }
       }
+    },
+    "Choose one changed file to see its diff." : {
+
     },
     "Choose preview source" : {
 
@@ -6325,6 +6443,9 @@
         }
       }
     },
+    "Close Preview" : {
+
+    },
     "Close status card" : {
 
     },
@@ -6850,6 +6971,9 @@
     "Commit…" : {
 
     },
+    "Commits appear here after the first commit." : {
+
+    },
     "Committing…" : {
 
     },
@@ -6906,6 +7030,9 @@
       }
     },
     "Completed" : {
+
+    },
+    "Completed (unread)" : {
 
     },
     "Completion could not be verified. Review the task and continue its chat." : {
@@ -7442,6 +7569,9 @@
         }
       }
     },
+    "Continuing…" : {
+
+    },
     "Control what Flowcy does automatically — issue labeling, PR validation and linking, project field population, and more." : {
       "localizations" : {
         "ko" : {
@@ -7560,6 +7690,12 @@
         }
       }
     },
+    "Copy Commit Message" : {
+
+    },
+    "Copy Commit SHA" : {
+
+    },
     "Copy device token" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7569,6 +7705,9 @@
           }
         }
       }
+    },
+    "Copy File Contents" : {
+
     },
     "Copy install command" : {
       "localizations" : {
@@ -7787,6 +7926,9 @@
         }
       }
     },
+    "Create a branch from HEAD" : {
+
+    },
     "Create a new thread or continue an existing one with a templated message." : {
       "localizations" : {
         "ko" : {
@@ -7880,6 +8022,15 @@
           }
         }
       }
+    },
+    "Create Branch" : {
+
+    },
+    "Create Branch from %@…" : {
+
+    },
+    "Create Branch Here…" : {
+
     },
     "Create new branch…" : {
       "localizations" : {
@@ -8076,6 +8227,12 @@
         }
       }
     },
+    "Create Tag" : {
+
+    },
+    "Create Tag Here…" : {
+
+    },
     "Create Task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8232,6 +8389,9 @@
         }
       }
     },
+    "Creating branch…" : {
+
+    },
     "Creating Pull Request…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8248,6 +8408,9 @@
           }
         }
       }
+    },
+    "Creating tag…" : {
+
     },
     "Creating task from chat" : {
       "localizations" : {
@@ -8332,6 +8495,9 @@
           }
         }
       }
+    },
+    "Current name" : {
+
     },
     "Current project" : {
       "localizations" : {
@@ -8565,6 +8731,9 @@
 
     },
     "Database name (optional)" : {
+
+    },
+    "Date" : {
 
     },
     "Day" : {
@@ -8941,6 +9110,9 @@
     "Delete “%@”" : {
 
     },
+    "Delete “%@” from the remote?" : {
+
+    },
     "Delete \"%@\"?" : {
       "localizations" : {
         "ko" : {
@@ -9075,6 +9247,9 @@
     "Delete all user-global memories shared by pets and workspaces on this Mac, plus this workspace's project and pet memories? Other workspaces' project memories and voice transcripts are unchanged. This action cannot be undone." : {
 
     },
+    "Delete branch “%@”?" : {
+
+    },
     "Delete Briefing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9151,6 +9326,9 @@
           }
         }
       }
+    },
+    "Delete from %@…" : {
+
     },
     "Delete Hook" : {
       "localizations" : {
@@ -9303,6 +9481,9 @@
         }
       }
     },
+    "Delete tag “%@”?" : {
+
+    },
     "Delete task “%@”?" : {
       "comment" : "First task deletion confirmation",
       "localizations" : {
@@ -9446,6 +9627,15 @@
           }
         }
       }
+    },
+    "Deleting branch…" : {
+
+    },
+    "Deleting remote branch…" : {
+
+    },
+    "Deleting tag…" : {
+
     },
     "Deleting…" : {
 
@@ -9774,6 +9964,15 @@
         }
       }
     },
+    "Discard" : {
+
+    },
+    "Discard changes in %lld files?" : {
+
+    },
+    "Discard Changes…" : {
+
+    },
     "Discard Follow-up" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9793,6 +9992,12 @@
           }
         }
       }
+    },
+    "Discard…" : {
+
+    },
+    "Discarding changes…" : {
+
     },
     "Disconnected" : {
       "localizations" : {
@@ -10283,6 +10488,12 @@
         }
       }
     },
+    "Drop" : {
+
+    },
+    "Drop %@?" : {
+
+    },
     "Drop to attach" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10292,6 +10503,9 @@
           }
         }
       }
+    },
+    "Drop…" : {
+
     },
     "Dropping a card here starts a chat with its agent" : {
       "localizations" : {
@@ -10323,6 +10537,9 @@
           }
         }
       }
+    },
+    "Dropping stash…" : {
+
     },
     "Dropping this task into In Progress runs the assigned agent in a new thread. It moves to Pending Review when the turn finishes." : {
       "localizations" : {
@@ -10452,6 +10669,7 @@
 
     },
     "Edit" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10533,6 +10751,9 @@
     "Edit connection…" : {
 
     },
+    "Edit File" : {
+
+    },
     "Edit integration…" : {
 
     },
@@ -10583,6 +10804,9 @@
           }
         }
       }
+    },
+    "Edit Message" : {
+
     },
     "Edit Pet Look" : {
 
@@ -11763,6 +11987,9 @@
         }
       }
     },
+    "feature/my-change" : {
+
+    },
     "Fetch" : {
       "localizations" : {
         "ko" : {
@@ -11778,6 +12005,9 @@
           }
         }
       }
+    },
+    "Fetch all remotes" : {
+
     },
     "Fetch Models" : {
       "localizations" : {
@@ -11823,6 +12053,9 @@
       }
     },
     "Fetching cloud board (step 1 of 5)" : {
+
+    },
+    "Fetching…" : {
 
     },
     "Fields" : {
@@ -11954,6 +12187,9 @@
           }
         }
       }
+    },
+    "Filter refs" : {
+
     },
     "Filter stories" : {
       "localizations" : {
@@ -12153,6 +12389,9 @@
           }
         }
       }
+    },
+    "Fixup" : {
+
     },
     "Flowcy" : {
       "localizations" : {
@@ -12420,6 +12659,18 @@
           }
         }
       }
+    },
+    "Force Push" : {
+
+    },
+    "Force push “%@”?" : {
+
+    },
+    "Force Push (with Lease)…" : {
+
+    },
+    "Force pushing…" : {
+
     },
     "Forced off for this project" : {
       "localizations" : {
@@ -12785,6 +13036,9 @@
         }
       }
     },
+    "git@github.com:owner/repo.git" : {
+
+    },
     "GitHub" : {
       "localizations" : {
         "en" : {
@@ -12982,6 +13236,15 @@
 
     },
     "Grant Screen Recording Access…" : {
+
+    },
+    "Graph" : {
+
+    },
+    "Hard — discard all changes" : {
+
+    },
+    "HEAD" : {
 
     },
     "Headers" : {
@@ -13752,6 +14015,9 @@
         }
       }
     },
+    "Include untracked files" : {
+
+    },
     "Includes RxCode's Application Support and Caches data across all workspaces." : {
       "localizations" : {
         "zh-Hans" : {
@@ -14264,6 +14530,15 @@
     "Integrations" : {
 
     },
+    "Interactive Rebase" : {
+
+    },
+    "Interactive Rebase from Here…" : {
+
+    },
+    "Interactive rebase needs a commit on the current branch with no merge commits after it." : {
+
+    },
     "Interactive View" : {
 
     },
@@ -14386,6 +14661,9 @@
           }
         }
       }
+    },
+    "Keep at least one commit." : {
+
     },
     "Keep Downloading" : {
 
@@ -15037,6 +15315,9 @@
         }
       }
     },
+    "Load more commits" : {
+
+    },
     "Load teams" : {
 
     },
@@ -15124,6 +15405,9 @@
       }
     },
     "Loading Flowcy voices…" : {
+
+    },
+    "Loading history…" : {
 
     },
     "Loading model card…" : {
@@ -15270,6 +15554,9 @@
       }
     },
     "Local branches" : {
+
+    },
+    "Local Changes" : {
 
     },
     "Local Models" : {
@@ -16130,6 +16417,25 @@
         }
       }
     },
+    "Merge %@ into %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Merge %1$@ into %2$@"
+          }
+        }
+      }
+    },
+    "Merge commits list changes against their first parent." : {
+
+    },
+    "Merge in progress" : {
+
+    },
+    "Merge into %@" : {
+
+    },
     "Merged" : {
       "localizations" : {
         "ko" : {
@@ -16145,6 +16451,9 @@
           }
         }
       }
+    },
+    "Merging…" : {
+
     },
     "Message" : {
       "localizations" : {
@@ -16259,6 +16568,9 @@
           }
         }
       }
+    },
+    "Mixed — keep changes unstaged" : {
+
     },
     "MLX (Apple Silicon)" : {
 
@@ -16453,7 +16765,13 @@
         }
       }
     },
+    "More Actions…" : {
+
+    },
     "More Apple Music options" : {
+
+    },
+    "More File Actions" : {
 
     },
     "More for %@" : {
@@ -16563,6 +16881,15 @@
           }
         }
       }
+    },
+    "Moves the branch to %@ and permanently discards later commits and all uncommitted changes." : {
+
+    },
+    "Moves the branch to %@. Later commits’ changes stay in the working tree, unstaged." : {
+
+    },
+    "Moves the branch to %@. Later commits’ changes stay staged." : {
+
     },
     "Mute Microphone and Speaker" : {
 
@@ -16722,6 +17049,9 @@
         }
       }
     },
+    "New Branch" : {
+
+    },
     "New chat" : {
 
     },
@@ -16863,6 +17193,9 @@
         }
       }
     },
+    "New name" : {
+
+    },
     "New Project" : {
       "localizations" : {
         "ko" : {
@@ -16963,6 +17296,9 @@
           }
         }
       }
+    },
+    "New Tag" : {
+
     },
     "New Task" : {
       "localizations" : {
@@ -17192,6 +17528,9 @@
         }
       }
     },
+    "Newest commit first. Drag to reorder." : {
+
+    },
     "Next" : {
       "localizations" : {
         "ko" : {
@@ -17415,6 +17754,9 @@
           }
         }
       }
+    },
+    "No commits yet" : {
+
     },
     "No connection details" : {
 
@@ -17660,6 +18002,9 @@
       }
     },
     "No Extensions" : {
+
+    },
+    "No file changes" : {
 
     },
     "No folder selected" : {
@@ -18539,6 +18884,9 @@
         }
       }
     },
+    "No textual changes" : {
+
+    },
     "No thread to follow up in" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19143,6 +19491,9 @@
         }
       }
     },
+    "Only the local tag is deleted." : {
+
+    },
     "Only this project" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19241,6 +19592,12 @@
 
     },
     "Open Document…" : {
+
+    },
+    "Open Git history, branches, and rebase tools" : {
+
+    },
+    "Open Git Window" : {
 
     },
     "Open in Default App" : {
@@ -19692,6 +20049,9 @@
         }
       }
     },
+    "Optional description" : {
+
+    },
     "Optional. Paste or import a GitHub ruleset JSON exported from your repository's branch-rules settings." : {
       "localizations" : {
         "ko" : {
@@ -19747,6 +20107,9 @@
     "Organization name" : {
 
     },
+    "origin" : {
+
+    },
     "Original link (optional)" : {
       "localizations" : {
         "ko" : {
@@ -19762,6 +20125,9 @@
           }
         }
       }
+    },
+    "Original: %@" : {
+
     },
     "Other" : {
       "localizations" : {
@@ -19899,6 +20265,9 @@
           }
         }
       }
+    },
+    "Overwrites the remote branch. The push fails if someone else pushed in the meantime." : {
+
     },
     "Package" : {
       "extractionState" : "stale",
@@ -20046,6 +20415,12 @@
       }
     },
     "Parameters" : {
+
+    },
+    "Parent" : {
+
+    },
+    "Parents" : {
 
     },
     "Passing" : {
@@ -20312,6 +20687,9 @@
     "Pet Size" : {
 
     },
+    "Pick" : {
+
+    },
     "Pick a common schedule" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -20520,6 +20898,12 @@
         }
       }
     },
+    "Pop" : {
+
+    },
+    "Popping stash…" : {
+
+    },
     "Port" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20582,6 +20966,9 @@
       }
     },
     "Preparing export…" : {
+
+    },
+    "Preparing rebase…" : {
 
     },
     "Preparing…" : {
@@ -21114,6 +21501,12 @@
     "Publish" : {
 
     },
+    "Publish %@" : {
+
+    },
+    "Publish Branch" : {
+
+    },
     "Publish this branch to its remote" : {
 
     },
@@ -21123,10 +21516,38 @@
     "Publishing Swift filters (step 4 of 5)" : {
 
     },
+    "Pull" : {
+
+    },
+    "Pull (Fast-forward Only)" : {
+
+    },
+    "Pull (Merge)" : {
+
+    },
+    "Pull (Rebase)" : {
+
+    },
+    "Pull %lld commits from %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Pull %1$lld commits from %2$@"
+          }
+        }
+      }
+    },
+    "Pull from %@" : {
+
+    },
     "Pull request" : {
 
     },
     "Pull request #%lld" : {
+
+    },
+    "Pulling…" : {
 
     },
     "Push" : {
@@ -21141,6 +21562,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "推送"
+          }
+        }
+      }
+    },
+    "Push %lld commits to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Push %1$lld commits to %2$@"
           }
         }
       }
@@ -21161,6 +21592,9 @@
         }
       }
     },
+    "Push to %@" : {
+
+    },
     "Push to the remote automatically, or keep the commit local." : {
       "localizations" : {
         "ko" : {
@@ -21178,6 +21612,12 @@
       }
     },
     "Pushing commits…" : {
+
+    },
+    "Pushing tag…" : {
+
+    },
+    "Pushing…" : {
 
     },
     "Quantization" : {
@@ -21478,6 +21918,38 @@
         }
       }
     },
+    "Rebase %@ onto %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rebase %1$@ onto %2$@"
+          }
+        }
+      }
+    },
+    "Rebase %@ onto Here" : {
+
+    },
+    "Rebase in progress" : {
+
+    },
+    "Rebase stopped" : {
+
+    },
+    "Rebasing %lld commits onto %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rebasing %1$lld commits onto %2$@"
+          }
+        }
+      }
+    },
+    "Rebasing…" : {
+
+    },
     "Receives notifications" : {
       "localizations" : {
         "zh-Hans" : {
@@ -21550,6 +22022,9 @@
           }
         }
       }
+    },
+    "Refine…" : {
+
     },
     "Refresh" : {
       "localizations" : {
@@ -21932,6 +22407,9 @@
     "Reload Flowcy Models" : {
 
     },
+    "Reload the repository" : {
+
+    },
     "Reload your Flowcy projects" : {
       "localizations" : {
         "ko" : {
@@ -21969,6 +22447,12 @@
       }
     },
     "Remote branches" : {
+
+    },
+    "Remote-tracking branches for this remote are removed." : {
+
+    },
+    "Remotes" : {
 
     },
     "Remove" : {
@@ -22150,6 +22634,12 @@
         }
       }
     },
+    "Remove remote “%@”?" : {
+
+    },
+    "Remove Remote…" : {
+
+    },
     "Remove saved credentials for this server?" : {
 
     },
@@ -22262,7 +22752,13 @@
     "Removed %@" : {
 
     },
+    "Removes the branch for everyone using this remote." : {
+
+    },
     "Removing integration…" : {
+
+    },
+    "Removing remote…" : {
 
     },
     "Rename" : {
@@ -22286,6 +22782,9 @@
           }
         }
       }
+    },
+    "Rename Branch" : {
+
     },
     "Rename device" : {
       "localizations" : {
@@ -22416,6 +22915,9 @@
       }
     },
     "Renaming applies to every card view of this integration." : {
+
+    },
+    "Renaming branch…" : {
 
     },
     "Render" : {
@@ -22563,6 +23065,19 @@
         }
       }
     },
+    "Reset %@ (%@)?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reset %1$@ (%2$@)?"
+          }
+        }
+      }
+    },
+    "Reset %@ to Here" : {
+
+    },
     "Reset Desktop Position" : {
 
     },
@@ -22625,6 +23140,12 @@
           }
         }
       }
+    },
+    "Resetting…" : {
+
+    },
+    "Resolve conflicts and stage the files in Local Changes, then continue." : {
+
     },
     "Resources" : {
 
@@ -22817,6 +23338,15 @@
         }
       }
     },
+    "Revert Commit" : {
+
+    },
+    "Revert in progress" : {
+
+    },
+    "Reverting commit…" : {
+
+    },
     "Review" : {
 
     },
@@ -22934,6 +23464,27 @@
       }
     },
     "Revise with Prompt…" : {
+
+    },
+    "Reword" : {
+
+    },
+    "Reword Commit" : {
+
+    },
+    "Reword…" : {
+
+    },
+    "Reworded commits need a message." : {
+
+    },
+    "Rewording an older commit rewrites every commit after it. Force push if the branch is already published." : {
+
+    },
+    "Rewording commit…" : {
+
+    },
+    "Right-click a commit to reword, rebase, cherry-pick, or reset." : {
 
     },
     "Rotate token & reinstall" : {
@@ -24317,6 +24868,9 @@
     "See which network requests it blocked" : {
 
     },
+    "Select a commit" : {
+
+    },
     "Select a connection or add one to create your usage cards." : {
 
     },
@@ -24336,10 +24890,10 @@
         }
       }
     },
-    "Select a Model" : {
+    "Select a file" : {
 
     },
-    "Select a page element for refinement" : {
+    "Select a Model" : {
 
     },
     "Select a Project" : {
@@ -24454,7 +25008,7 @@
         }
       }
     },
-    "Select an element for refinement" : {
+    "Select an element, then right-click to comment or refine" : {
 
     },
     "Select Effort Level" : {
@@ -25137,6 +25691,9 @@
           }
         }
       }
+    },
+    "SHA" : {
+
     },
     "Share of each limit a million tokens uses. Tokens are input and output tokens, including cache writes; cache reads aren't counted. Larger models cost more for the same tokens; for light tasks a cheaper model usually does the job and leaves more room. 0% means the limit didn't move, which is common for the 7-day limit." : {
       "localizations" : {
@@ -26345,7 +26902,6 @@
       }
     },
     "Skip" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -26376,6 +26932,9 @@
           }
         }
       }
+    },
+    "Skipping…" : {
+
     },
     "Slash Commands" : {
       "localizations" : {
@@ -26433,6 +26992,9 @@
       }
     },
     "Smaller quantizations (Q4) use less memory with a small quality cost. Q4_K_M is a good default." : {
+
+    },
+    "Soft — keep changes staged" : {
 
     },
     "Solid 5-hour · dashed 7-day" : {
@@ -26507,6 +27069,15 @@
     "Spoken Language" : {
 
     },
+    "Squash" : {
+
+    },
+    "Stage" : {
+
+    },
+    "Stage All" : {
+
+    },
     "Stage Selected" : {
 
     },
@@ -26568,6 +27139,9 @@
         }
       }
     },
+    "Start Rebase" : {
+
+    },
     "Start Voice" : {
 
     },
@@ -26575,6 +27149,9 @@
 
     },
     "Start Voice Mode (%@)" : {
+
+    },
+    "Starting point" : {
 
     },
     "Starts a chat" : {
@@ -26618,6 +27195,24 @@
       }
     },
     "Starts with your next prompt" : {
+
+    },
+    "Stash" : {
+
+    },
+    "Stash Changes" : {
+
+    },
+    "Stash not found" : {
+
+    },
+    "Stash uncommitted changes" : {
+
+    },
+    "Stashes" : {
+
+    },
+    "Stashing changes…" : {
 
     },
     "Status" : {
@@ -27219,6 +27814,9 @@
         }
       }
     },
+    "Tag name" : {
+
+    },
     "Tags" : {
       "localizations" : {
         "zh-Hans" : {
@@ -27791,6 +28389,9 @@
         }
       }
     },
+    "The current branch has no upstream" : {
+
+    },
     "The default model is used when a RxCode Agent chat does not pick one." : {
 
     },
@@ -28006,6 +28607,9 @@
         }
       }
     },
+    "The oldest kept commit can’t be squashed or fixed up." : {
+
+    },
     "The page stopped responding." : {
 
     },
@@ -28076,6 +28680,9 @@
           }
         }
       }
+    },
+    "the root" : {
+
     },
     "The run ended with an error. Open the chat for details." : {
       "localizations" : {
@@ -28294,6 +28901,9 @@
           }
         }
       }
+    },
+    "There are no uncommitted changes." : {
+
     },
     "There is unsent content in the follow-up field. Are you sure you want to discard it?" : {
       "localizations" : {
@@ -28724,6 +29334,9 @@
           }
         }
       }
+    },
+    "This Thread’s Changes" : {
+
     },
     "This unregisters %@ from the docs service and removes its indexed documents. The repo's files are not affected." : {
       "localizations" : {
@@ -29363,6 +29976,9 @@
     "Unload" : {
 
     },
+    "Unmerged commits on this branch are deleted too." : {
+
+    },
     "Unmute Microphone and Speaker" : {
 
     },
@@ -29389,6 +30005,12 @@
       }
     },
     "Unread threads: %lld" : {
+
+    },
+    "Unstage" : {
+
+    },
+    "Unstage All" : {
 
     },
     "Unstage Selected" : {
@@ -29561,6 +30183,9 @@
           }
         }
       }
+    },
+    "upstream" : {
+
     },
     "URL" : {
       "localizations" : {
@@ -30021,6 +30646,9 @@
           }
         }
       }
+    },
+    "v1.0.0" : {
+
     },
     "value" : {
       "localizations" : {
@@ -30934,6 +31562,9 @@
 
     },
     "Working…" : {
+
+    },
+    "Workspace" : {
 
     },
     "Workspace & Project Scope" : {

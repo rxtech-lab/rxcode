@@ -12,6 +12,8 @@ struct ChangesView: View {
 
 private struct WorkingTreeChanges: View {
     let tree: GitWorkingTree
+    @Environment(\.openWindow) private var openWindow
+    @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(RepositoryStatus.self) private var repository
     @State private var showsStaged: Bool
@@ -39,6 +41,12 @@ private struct WorkingTreeChanges: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
+                Button {
+                    openWindow(id: "git-window", value: GitWindowValue(path: tree.root, workspaceID: appState.activeWorkspace.id))
+                } label: { Image(systemName: "point.3.connected.trianglepath.dotted") }
+                .buttonStyle(.borderless)
+                .help("Open Git history, branches, and rebase tools")
+                .accessibilityLabel("Open Git Window")
                 Button {
                     if let path = repository.path { Task { await repository.refresh(at: path) } }
                 } label: { Image(systemName: "arrow.clockwise") }

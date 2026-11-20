@@ -138,9 +138,7 @@ extension AppState {
         // "finished, unread" flag so the green indicator clears on desktop and
         // mobile alike. Done before the snapshot is built so the payload below
         // already reflects the cleared state.
-        if let activeID = active.id, sessionStates[activeID]?.hasUncheckedCompletion == true {
-            updateState(activeID) { $0.hasUncheckedCompletion = false }
-        }
+        if let activeID = active.id { markCompletionRead(for: activeID) }
         let branches = await mobileProjectBranches()
         // Keep mobile usage reasonably fresh. Non-forced — RateLimitService's
         // 5-minute cache turns this into a no-op when usage was fetched

@@ -7,16 +7,18 @@ import XCTest
 
 @MainActor
 final class PreviewCommentTests: XCTestCase {
-    func testAddCommentIsAnExplicitChoiceAlongsideNativeSelectionActions() throws {
+    func testCommentAndRefineAreExplicitChoicesAlongsideNativeSelectionActions() throws {
         let original = NSMenu()
         original.addItem(withTitle: "Look Up", action: nil, keyEquivalent: "")
         let actions = PreviewCommentMenu(text: "Two moons", existing: original)
         XCTAssertEqual(original.items.map(\.title), ["Look Up"])
         XCTAssertEqual(actions.menu.items.last?.title, "Look Up")
         XCTAssertNil(actions.choice)
-        let add = try XCTUnwrap(actions.menu.item(withTitle: "Add Comment…"))
-        actions.menu.performActionForItem(at: actions.menu.index(of: add))
-        XCTAssertEqual(actions.choice, .comment)
+        for action in PreviewEditAction.allCases {
+            let item = try XCTUnwrap(actions.menu.item(withTitle: action.title))
+            actions.menu.performActionForItem(at: actions.menu.index(of: item))
+            XCTAssertEqual(actions.choice, .edit(action))
+        }
         let deferred = PreviewCommentMenu(text: "Two moons", existing: nil, offersRendererMenu: true)
         XCTAssertNotNil(deferred.menu.item(withTitle: "Copy"))
         let more = try XCTUnwrap(deferred.menu.item(withTitle: "More Actions…"))
@@ -29,7 +31,7 @@ final class PreviewCommentTests: XCTestCase {
         let window = NSWindow(contentRect: bounds, styleMask: .titled, backing: .buffered, defer: false)
         let source = SourcePreviewTextView(frame: bounds)
         source.isEditable = false
-        source.textStorage?.setAttributedString(SourcePreviewTextView.numberedSource(.init(string: "Blue lantern, silver lantern")))
+        source.display(SourcePreviewContent(.init(string: "Blue lantern, silver lantern")))
         window.contentView = source
         window.orderFront(nil)
         defer { window.orderOut(nil) }
@@ -41,23 +43,33 @@ final class PreviewCommentTests: XCTestCase {
             try XCTUnwrap(NSEvent.mouseEvent(with: type, location: location, modifierFlags: flags, timestamp: 0,
                                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
         }
-        var choose = false
+        var choice: PreviewEditAction?
         var menus = 0
         let presentation = PreviewCommentPresentation { menu, _, _ in
             menus += 1
-            let index = menu.indexOfItem(withTitle: "Add Comment…")
-            XCTAssertGreaterThanOrEqual(index, 0)
-            if choose, index >= 0 { menu.performActionForItem(at: index) }
+            if let choice {
+                let index = menu.indexOfItem(withTitle: choice.title)
+                XCTAssertGreaterThanOrEqual(index, 0)
+                if index >= 0 { menu.performActionForItem(at: index) }
+            }
         }
         defer { presentation.dismiss() }
         func open(_ input: NSEvent) async -> Bool {
             var accepted: Bool?
-            presentation.choose(in: source, event: input, resolve: { accepted = $0 }) { excerpt, _ in
+            presentation.choose(in: source, event: input, resolve: { accepted = $0 }) { action, excerpt, _ in
+                XCTAssertEqual(action, choice)
                 XCTAssertEqual(excerpt.text, "lantern")
                 return TextField("Comment", text: .constant("Draft"))
             }
             for _ in 0..<100 where accepted == nil { try? await Task.sleep(for: .milliseconds(10)) }
             return accepted == true
+        }
+        for input in [try event(.leftMouseDown, at: point), try event(.leftMouseDragged, at: point),
+                      try event(.leftMouseUp, at: point), try event(.leftMouseUp, at: point, flags: .shift)] {
+            let accepted = await open(input)
+            XCTAssertFalse(accepted)
+            XCTAssertEqual(source.selectedRange(), range)
+            XCTAssertNil(presentation.panel)
         }
         let outside = try event(.rightMouseDown, at: CGPoint(x: 2, y: point.y))
         let acceptedOutside = await open(outside)
@@ -69,8 +81,8 @@ final class PreviewCommentTests: XCTestCase {
         XCTAssertNil(presentation.panel)
         XCTAssertNil(source.layoutManager?.temporaryAttribute(.backgroundColor, atCharacterIndex: range.location, effectiveRange: nil))
 
-        choose = true
-        for input in [rightClick, try event(.leftMouseDown, at: point, flags: .control)] {
+        for (action, input) in [(PreviewEditAction.comment, rightClick), (.refine, try event(.leftMouseDown, at: point, flags: .control))] {
+            choice = action
             let accepted = await open(input)
             XCTAssertTrue(accepted)
             let panel = try XCTUnwrap(presentation.panel)
@@ -139,18 +151,62 @@ final class PreviewCommentTests: XCTestCase {
         XCTAssertEqual(panel.positioningRect, NSRect(origin: root.convert(point, from: nil), size: NSSize(width: 1, height: 1)))
     }
 
-    func testSourceQuoteOmitsGuttersAndPreservesUnicodeAndLineEndings() {
+    func testSourceSelectionAndNativeCopyContainOnlyFileText() {
         let view = SourcePreviewTextView()
-        let source = NSAttributedString(string: "let label = \"🌙\"\r\n\r\n    display(label)")
-        view.textStorage?.setAttributedString(SourcePreviewTextView.numberedSource(source))
+        let source = NSAttributedString(string: "let label = \"🌙\"\r\n\r\n    display(label)\n")
+        let content = SourcePreviewContent(source)
+        view.display(content)
+        XCTAssertEqual(view.string, source.string)
+        XCTAssertEqual(content.lineStarts.count, 4)
+        XCTAssertEqual(content.lineStarts.last, source.length)
         let displayed = view.string as NSString
         let start = displayed.range(of: "🌙").location
         let end = NSMaxRange(displayed.range(of: "display"))
         view.setSelectedRange(NSRange(location: start, length: end - start))
         XCTAssertEqual(view.selectedExcerpt?.text, "🌙\"\r\n\r\n    display")
         XCTAssertEqual(view.selectedExcerpt?.location, "Lines 1–3")
-        view.setSelectedRange(NSRange(location: 0, length: 4))
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        view.selectAll(nil)
+        XCTAssertTrue(view.writeSelection(to: board, types: view.writablePasteboardTypes))
+        XCTAssertEqual(board.string(forType: .string), source.string)
+        XCTAssertEqual(view.selectedExcerpt?.text, source.string)
+        view.setSelectedRange(NSRange(location: 0, length: 0))
         XCTAssertNil(view.selectedExcerpt)
+    }
+
+    func testGutterStaysBesideTheTextDuringSelectionAndScrolling() throws {
+        let text = (1...100).map { "Source line \($0)" }.joined(separator: "\n")
+        let host = NSHostingView(rootView: CodeTextRenderer(content: SourcePreviewContent(.init(string: text)))
+            .frame(maxWidth: .infinity, maxHeight: .infinity))
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 320, height: 140),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+        host.sizingOptions = []
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        func source(in view: NSView) -> SourcePreviewTextView? {
+            (view as? SourcePreviewTextView) ?? view.subviews.lazy.compactMap { source(in: $0) }.first
+        }
+        let textView = try XCTUnwrap(source(in: host))
+        let scroll = try XCTUnwrap(textView.enclosingScrollView)
+        let ruler = try XCTUnwrap(scroll.verticalRulerView)
+        XCTAssertTrue(scroll.rulersVisible)
+        let gutterPoint = ruler.convert(NSPoint(x: ruler.bounds.midX, y: ruler.bounds.midY), to: nil)
+        let hit = host.hitTest(host.superview?.convert(gutterPoint, from: nil) ?? gutterPoint)
+        XCTAssertTrue(hit?.isDescendant(of: ruler) == true)
+        func gutterPixels() throws -> Data {
+            let bitmap = try XCTUnwrap(ruler.bitmapImageRepForCachingDisplay(in: ruler.bounds))
+            ruler.cacheDisplay(in: ruler.bounds, to: bitmap)
+            return try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        }
+        let firstPage = try gutterPixels()
+        textView.setSelectedRange((text as NSString).range(of: "Source line 1\nSource line 2"))
+        XCTAssertEqual(try gutterPixels(), firstPage)
+        textView.scrollRangeToVisible((text as NSString).range(of: "Source line 100"))
+        XCTAssertGreaterThan(scroll.contentView.bounds.minY, 0)
+        XCTAssertNotEqual(try gutterPixels(), firstPage)
     }
 
     func testLocalHTMLSelectionUsesRenderedTextWithPageScriptsDisabled() async throws {

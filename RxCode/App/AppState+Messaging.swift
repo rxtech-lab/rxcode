@@ -573,6 +573,7 @@ extension AppState {
 
     func finalizeStreamSession(
         for sessionKey: String,
+        trackUnreadCompletion: Bool = false,
         extraMutations: ((inout SessionStreamState) -> Void)? = nil
     ) {
         flushPendingUpdates(for: sessionKey, forceText: true)
@@ -593,6 +594,10 @@ extension AppState {
             state.liveBackgroundTaskIds.removeAll()
             state.unconsumedSteerCount = 0
 
+            if trackUnreadCompletion {
+                let id = resolveCurrentSessionId(sessionKey)
+                state.hasUncheckedCompletion = !viewedChatSessions.values.contains { resolveCurrentSessionId($0) == id }
+            }
             extraMutations?(&state)
 
             let lastStreamingIdx = state.messages.indices.reversed().first {

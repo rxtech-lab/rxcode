@@ -88,30 +88,11 @@ public enum InspectorTab: String, CaseIterable, Codable, Sendable {
     }
 }
 
-// MARK: - InspectorReviewTab
-
-public enum InspectorReviewTab: String, CaseIterable, Codable, Sendable {
-    case thisThread = "This thread"
-    case changes = "Changes"
-    case branch = "Branch"
-
-    public var title: LocalizedStringResource {
-        switch self {
-        case .thisThread: "This thread"
-        case .changes: "Changes"
-        case .branch: "Branch"
-        }
-    }
-
-    public var titleText: String {
-        String(localized: title)
-    }
-}
-
 // MARK: - InspectorMode
 
 public enum InspectorMode: String, CaseIterable, Codable, Identifiable, Sendable {
-    case review = "Review"
+    // Preserve the former Review destination's persisted pane identity.
+    case changes = "Review"
     case inspector = "Inspector"
     case preview = "Preview"
     case browser = "Browser"
@@ -120,7 +101,7 @@ public enum InspectorMode: String, CaseIterable, Codable, Identifiable, Sendable
 
     public var title: LocalizedStringResource {
         switch self {
-        case .review: "Review"
+        case .changes: "Changes"
         case .inspector: "Tools"
         case .preview: "Preview"
         case .browser: "Browser"
@@ -284,9 +265,8 @@ public final class WindowState {
     public var interactiveTerminal: InteractiveTerminalState?
     @ObservationIgnored private var inspectorLayoutKey: String?
     public var inspectorLayout = InspectorLayout(
-        selected: UserDefaults.standard.string(forKey: "inspectorMode").flatMap(InspectorMode.init(rawValue:)) ?? .review,
-        tool: UserDefaults.standard.string(forKey: "inspectorTab").flatMap(InspectorTab.init(rawValue:)) ?? .terminal,
-        review: UserDefaults.standard.string(forKey: "inspectorReviewTab").flatMap(InspectorReviewTab.init(rawValue:)) ?? .thisThread
+        selected: UserDefaults.standard.string(forKey: "inspectorMode").flatMap(InspectorMode.init(rawValue:)) ?? .changes,
+        tool: UserDefaults.standard.string(forKey: "inspectorTab").flatMap(InspectorTab.init(rawValue:)) ?? .terminal
     ) {
         didSet {
             guard let inspectorLayoutKey, oldValue != inspectorLayout,
@@ -320,16 +300,6 @@ public final class WindowState {
             var layout = inspectorLayout
             layout.mode = .inspector
             layout.tools.reveal(newValue)
-            inspectorLayout = layout
-        }
-    }
-
-    public var inspectorReviewTab: InspectorReviewTab {
-        get { inspectorLayout.review }
-        set {
-            var layout = inspectorLayout
-            layout.mode = .review
-            layout.review = newValue
             inspectorLayout = layout
         }
     }

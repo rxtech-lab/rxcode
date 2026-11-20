@@ -120,11 +120,7 @@ extension AppState {
         // id) so each provider can resume its own native session.
         recordProviderSessionId(agentProvider, nativeId: resultEvent.sessionId, threadId: sessionKey)
 
-        // A background completion is "finished, unread". Setting the
-        // flag inside finalizeStreamSession means the trailing
-        // `.streamingFinished` broadcast already carries it to mobile.
         let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
-        let markUnread = !isFg && !resultEvent.isError
 
         let stopProject = projects.first(where: { $0.id == projectId })
         // Capture queued-followup state now, synchronously, before
@@ -133,7 +129,7 @@ extension AppState {
         // to defer until the queue has fully drained.
         let hasQueuedFollowups = !threadStore.loadQueue(sessionKey: sessionKey).isEmpty
 
-        finalizeStreamSession(for: sessionKey) { state in
+        finalizeStreamSession(for: sessionKey, trackUnreadCompletion: !resultEvent.isError) { state in
             if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
             if let duration = resultEvent.durationMs { state.durationMs += duration }
             if let turns = resultEvent.totalTurns { state.turns += turns }
@@ -143,7 +139,6 @@ extension AppState {
                 state.cacheCreationTokens += usage.cacheCreationInputTokens
                 state.cacheReadTokens += usage.cacheReadInputTokens
             }
-            if markUnread { state.hasUncheckedCompletion = true }
         }
         await awaitPendingShellDetections(for: sessionKey)
         let finalAssistantText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)

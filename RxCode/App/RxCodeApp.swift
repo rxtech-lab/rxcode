@@ -167,6 +167,20 @@ struct RxCodeApp: App {
         .defaultSize(width: 1000, height: 700)
         .windowStyle(.hiddenTitleBar)
 
+        // Full Git workflow window (history graph, rebase, branches) for one checkout.
+        WindowGroup(id: "git-window", for: GitWindowValue.self) { $value in
+            if let value {
+                GitWindowRoot(
+                    workspaceManager: workspaceManager,
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    path: value.path
+                )
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
+            }
+        }
+        .defaultSize(width: 1280, height: 800)
+
         // Detached terminal window — opened from the toolbar.
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
             TerminalWindowRoot(path: value?.path ?? "")

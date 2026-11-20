@@ -8,65 +8,17 @@ struct WorkspacePreviewInspector: View {
     @State private var picker: PickerKind?
     @State private var importing = false
     @State private var designing = false
-    @State private var capture = PreviewCapture()
 
     private enum PickerKind: String, Identifiable { case device, swift; var id: Self { self } }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Menu {
-                    Button("Simulator or Mac Window…") { picker = .device }
-                    Button("SwiftUI Preview…") { picker = .swift }.disabled(window.selectedProject == nil)
-                    Button("Open Document…") { importing = true }
-                } label: {
-                    Label(design.source?.title ?? "Choose preview", systemImage: "rectangle.on.rectangle")
-                        .lineLimit(1).truncationMode(.middle)
-                }
-                .menuStyle(.borderlessButton).accessibilityLabel("Choose preview source")
-                Spacer(minLength: 0)
-                if case .document(let url) = design.source {
-                    if !Self.usesFileViewer(url) { PreviewCommentControls(url: url, capture: capture) }
-                }
-                else if let source = design.source {
-                    Toggle(isOn: $designing) { Image(systemName: "scope") }.toggleStyle(.button)
-                        .disabled(design.image == nil).help("Select an element for refinement").accessibilityLabel("Design")
-                    Button { Task { await design.open(source) } } label: { Image(systemName: "arrow.clockwise") }
-                        .disabled(design.loading).accessibilityLabel("Refresh preview")
-                }
+            if case .document(let url) = design.source, design.error == nil {
+                FileInspectorView(filePath: url.path, fileName: url.lastPathComponent, onClose: design.reset) { sourcePicker }
+                    .id(url)
+            } else {
+                targetPreview
             }
-            .controlSize(.small).padding(10)
-            Divider()
-            Group {
-                if let error = design.error {
-                    ContentUnavailableView { Label("Preview unavailable", systemImage: "exclamationmark.triangle") }
-                        description: { Text(error).textSelection(.enabled) }
-                        actions: { if let source = design.source { Button("Retry") { Task { await design.open(source) } } } }
-                } else if case .document(let url) = design.source {
-                    if Self.usesFileViewer(url) {
-                        FileInspectorView(filePath: url.path, fileName: url.lastPathComponent).id(url)
-                    } else { NativeFilePreviewView(fileURL: url, capture: capture).id(url) }
-                } else if let image = design.image, let source = design.source {
-                    GeometryReader { proxy in
-                        let scale = min(proxy.size.width / image.size.width, proxy.size.height / image.size.height)
-                        Image(nsImage: image).resizable().interpolation(.high)
-                            .frame(width: image.size.width * scale, height: image.size.height * scale)
-                            .overlay {
-                                if designing {
-                                    DesignSelectionOverlay { point, size in
-                                        try await design.selection(point: point, size: size, source: source, image: image)
-                                    }
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                } else if !design.loading {
-                    ContentUnavailableView("Choose a preview", systemImage: "rectangle.on.rectangle",
-                        description: Text("Select a simulator, Mac window, SwiftUI view, or document."))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay { if design.loading { ProgressView("Loading preview…").padding().background(.regularMaterial, in: .rect(cornerRadius: 8)) } }
         }
         .accessibilityIdentifier("workspace-preview-inspector")
         .onChange(of: window.selectedProject?.id) { designing = false }
@@ -91,9 +43,66 @@ struct WorkspacePreviewInspector: View {
         }
     }
 
-    private static func usesFileViewer(_ url: URL) -> Bool {
-        FilePreviewFormat(fileName: url.lastPathComponent).canReadSource(fileName: url.lastPathComponent)
+    private var sourcePicker: some View {
+        Menu {
+            Button("Simulator or Mac Window…") { picker = .device }
+            Button("SwiftUI Preview…") { picker = .swift }.disabled(window.selectedProject == nil)
+            Button("Open Document…") { importing = true }
+        } label: {
+            if case .document(let url) = design.source {
+                FilePreviewTitle(fileName: url.lastPathComponent)
+            } else {
+                Label(design.source?.title ?? "Choose preview", systemImage: "rectangle.on.rectangle")
+                    .lineLimit(1).truncationMode(.middle)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .accessibilityLabel("Choose preview source")
     }
+
+    @ViewBuilder private var targetPreview: some View {
+        HStack(spacing: 8) {
+            sourcePicker
+            Spacer(minLength: 0)
+            if let source = design.source {
+                if design.image != nil {
+                    Toggle(isOn: $designing) { Image(systemName: "scope") }.toggleStyle(.button)
+                        .help("Select an element, then right-click to comment or refine").accessibilityLabel("Design")
+                }
+                Button { Task { await design.open(source) } } label: { Image(systemName: "arrow.clockwise") }
+                    .disabled(design.loading).accessibilityLabel("Refresh preview")
+            }
+        }
+        .controlSize(.small).padding(10)
+        Divider()
+        Group {
+            if let error = design.error {
+                ContentUnavailableView { Label("Preview unavailable", systemImage: "exclamationmark.triangle") }
+                    description: { Text(error).textSelection(.enabled) }
+                    actions: { if let source = design.source { Button("Retry") { Task { await design.open(source) } } } }
+            } else if let image = design.image, let source = design.source {
+                GeometryReader { proxy in
+                    let scale = min(proxy.size.width / image.size.width, proxy.size.height / image.size.height)
+                    Image(nsImage: image).resizable().interpolation(.high)
+                        .frame(width: image.size.width * scale, height: image.size.height * scale)
+                        .overlay {
+                            if designing {
+                                DesignSelectionOverlay { point, size in
+                                    try await design.selection(point: point, size: size, source: source, image: image)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else if !design.loading {
+                ContentUnavailableView("Choose a preview", systemImage: "rectangle.on.rectangle",
+                    description: Text("Select a simulator, Mac window, SwiftUI view, or document."))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay { if design.loading { ProgressView("Loading preview…").padding().background(.regularMaterial, in: .rect(cornerRadius: 8)) } }
+    }
+
 }
 
 private struct DesignTargetPicker: View {

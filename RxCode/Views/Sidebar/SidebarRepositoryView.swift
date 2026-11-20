@@ -26,9 +26,11 @@ struct WindowRepositoryStatus: ViewModifier {
 
 struct SidebarRepositoryView: View {
     let project: Project
+    @Environment(\.openWindow) private var openWindow
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(RepositoryStatus.self) private var repository
+    @State private var showsBranches = false
 
     var body: some View {
         let path = appState.sourceControlPath(in: windowState)
@@ -42,11 +44,23 @@ struct SidebarRepositoryView: View {
                     .foregroundStyle(ClaudeTheme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if case .ready(let tree) = repository.path == path ? repository.state : .loading {
+                    Button {
+                        openWindow(id: "git-window", value: GitWindowValue(path: tree.root, workspaceID: appState.activeWorkspace.id))
+                    } label: {
+                        Image(systemName: "point.3.connected.trianglepath.dotted")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Open Git history, branches, and rebase tools")
+                    .accessibilityLabel("Open Git Window")
+                    .accessibilityIdentifier("sidebar-git-window")
+                }
             }
             .padding(.bottom, 2)
             switch repository.path == path ? repository.state : .loading {
             case .ready(let tree):
-                Button { open(.branch) } label: {
+                Button { showsBranches = true } label: {
                     HStack(spacing: 7) {
                         Image(systemName: "arrow.triangle.branch")
                             .symbolRenderingMode(.monochrome)
@@ -66,7 +80,10 @@ struct SidebarRepositoryView: View {
                 .help("View branches in \(tree.root)")
                 .accessibilityLabel(tree.isDetached ? String(localized: "Detached at \(tree.head)") : tree.head)
                 .accessibilityIdentifier("sidebar-git-branches")
-                Button { open(.changes) } label: {
+                Button {
+                    windowState.inspectorMode = .changes
+                    appState.showRightSidebar = true
+                } label: {
                     HStack(spacing: 8) {
                         if tree.changes.staged.isEmpty && tree.changes.unstaged.isEmpty {
                             Label("Working tree clean", systemImage: "checkmark.circle")
@@ -100,7 +117,7 @@ struct SidebarRepositoryView: View {
                     .font(.caption)
                     .foregroundStyle(ClaudeTheme.textSecondary)
             case .notRepository:
-                Button { open(.branch) } label: {
+                Button { showsBranches = true } label: {
                     Label("Set up Git…", systemImage: "arrow.triangle.branch")
                 }
                 .buttonStyle(.link)
@@ -121,11 +138,18 @@ struct SidebarRepositoryView: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ClaudeTheme.surfaceSecondary.opacity(0.35))
-    }
-
-    private func open(_ tab: InspectorReviewTab) {
-        windowState.inspectorMode = .review
-        windowState.inspectorReviewTab = tab
-        appState.showRightSidebar = true
+        .sheet(isPresented: $showsBranches) {
+            NavigationStack {
+                RepositoryContent { tree in GitStatusView(tree: tree) }
+                    .navigationTitle("Branches")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { showsBranches = false }
+                                .keyboardShortcut(.cancelAction)
+                        }
+                    }
+            }
+            .frame(minWidth: 420, idealWidth: 520, minHeight: 360, idealHeight: 520)
+        }
     }
 }

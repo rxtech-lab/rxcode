@@ -103,8 +103,9 @@ extension AppState {
         case "model":
             if parts.count > 1 {
                 let arg = String(parts[1]).trimmingCharacters(in: .whitespaces).lowercased()
-                let flattened = availableAgentModelSections().flatMap(\.models)
-                let matched = flattened.first { $0.id.lowercased() == arg }
+                let flattened = availableAgentModelSections(in: window).flatMap(\.models)
+                let matched = flattened.first { $0.key.lowercased() == arg }
+                    ?? flattened.first { $0.id.lowercased() == arg }
                     ?? flattened.first { arg.contains($0.id.lowercased()) }
                 setSessionModel(matched?.id ?? arg, provider: matched?.provider, in: window)
             } else {
@@ -256,13 +257,32 @@ extension AppState {
         debugLogPrefix: String? = nil,
         includeIDEMCP: Bool = true,
         useProjectEffortForNewChat: Bool = false,
-        in window: WindowState
+        in sourceWindow: WindowState
     ) async -> UUID? {
-        let resumeKey = window.currentSessionId ?? window.newSessionKey
+        let resumeKey = sourceWindow.currentSessionId ?? sourceWindow.newSessionKey
         usageLimitResumeTasks.removeValue(forKey: resumeKey)?.cancel()
-        guard let project = window.selectedProject else {
-            handleError(AppError.noProjectSelected, in: window)
+        guard let project = sourceWindow.selectedProject else {
+            handleError(AppError.noProjectSelected, in: sourceWindow)
             return nil
+        }
+
+        let window: WindowState
+        if let id = sourceWindow.currentSessionId, initialMessages == nil,
+           !sourceWindow.pendingPlaceholderIds.contains(id),
+           sessionStates[id]?.messages.isEmpty != false,
+           (sessionStates[id]?.agentProvider ?? effectiveModelSelection(in: sourceWindow).provider) == .flowcy,
+           let summary = allSessionSummaries.first(where: { $0.id == id }) ?? threadStore.fetch(id: id)?.toSummary() {
+            await hydrateSessionIfNeeded(summary: summary, project: project)
+            if sourceWindow.currentSessionId == id, sourceWindow.selectedProject?.id == project.id {
+                window = sourceWindow
+            } else {
+                // Navigation during the read must not redirect this prompt to another thread.
+                window = WindowState()
+                window.currentSessionId = id
+                window.selectedProject = project
+            }
+        } else {
+            window = sourceWindow
         }
 
         if isStreaming(in: window) {
@@ -362,6 +382,14 @@ extension AppState {
         }
 
         let wasFirstUserMessage = (sessionStates[sessionKey]?.messages.filter { $0.role == .user }.count ?? 0) == 0
+        var history: [ChatMessage] = []
+        if effectiveProvider == .flowcy {
+            history = sessionStates[sessionKey]?.messages ?? []
+            // Edit-and-resend seeds the transcript with the edited prompt already at the end.
+            if skipAppendingUserMessage, initialMessages?.last?.role == .user {
+                history.removeLast()
+            }
+        }
         if !skipAppendingUserMessage {
             updateState(sessionKey) { state in
                 state.messages.append(ChatMessage(
@@ -494,6 +522,7 @@ extension AppState {
                 hookSessionMode: hookSessionMode,
                 projectId: project.id,
                 includeIDEMCP: includeIDEMCP,
+                history: history,
                 window: window
             )
             for path in tempFilePaths {

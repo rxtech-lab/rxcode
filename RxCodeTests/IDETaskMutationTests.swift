@@ -231,11 +231,12 @@ final class IDETaskMutationTests: XCTestCase {
         ]
         let catalog = try await modelCatalog()
         let providers = try XCTUnwrap(jsonArray(catalog["providers"]))
-        XCTAssertEqual(providers.compactMap { jsonString($0["provider"]) }, ["claudeCode", "codex", "acp", "localAgent"])
+        XCTAssertEqual(providers.compactMap { jsonString($0["provider"]) }, ["claudeCode", "codex", "acp", "localAgent", "flowcy"])
         let groups = providers.flatMap { jsonArray($0["groups"]) ?? [] }
         let modelIds = groups.flatMap { jsonArray($0["models"]) ?? [] }.compactMap { jsonString($0["id"]) }
         XCTAssertTrue(modelIds.contains("opus"))
         XCTAssertTrue(modelIds.contains("test-codex"))
+        XCTAssertTrue(modelIds.contains(AgentModel.flowcyDefaultID))
         XCTAssertTrue(modelIds.contains("test-acp::model-a"))
         XCTAssertTrue(modelIds.contains("default-acp::"))
         XCTAssertFalse(modelIds.contains("disabled-acp::hidden"))

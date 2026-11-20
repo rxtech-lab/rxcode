@@ -287,6 +287,7 @@ extension AppState {
         case .codex: return codex
         case .acp: return acp
         case .localAgent: return localAgentBackend
+        case .flowcy: return flowcyCloudBackend
         }
     }
 

@@ -40,7 +40,7 @@ Project notes:
 - Main app bundle ID: `app.rxlab.flowcy.code`
 - App-level dependencies: SwiftTerm and Sparkle
 - Package dependencies: ViewInspector
-- Mobile builds use Flowcy Cloud (`https://www.flowcy.dev`) in both Debug and Release configurations.
+- Desktop and mobile builds use Flowcy Cloud (`https://www.flowcy.dev`) in both Debug and Release configurations.
 
 ## Repository Layout
 

@@ -43,8 +43,8 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__set_todos",
-            description: "Replace the current todo list shown in the IDE sidebar. Use to track multi-step work.",
-            visibility: .polyfill(.todos),
+            description: "Replace the current chat's todo list shown in RxCode. Send the full list to track progress on large, multi-step tasks.",
+            visibility: .polyfill(.todos, alsoFor: [.codex, .localAgent]),
             inputSchema: .object([
                 "type": .string("object"),
                 "properties": .object([

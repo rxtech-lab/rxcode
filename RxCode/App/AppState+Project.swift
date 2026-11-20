@@ -356,6 +356,7 @@ extension AppState {
 
     func signOutRxAuth() async {
         await rxAuth.signOut()
+        clearFlowcyModels()
         clearCloudProjectState()
         repos = []
         installations = []

@@ -2,6 +2,13 @@ purpose:
   stands_in_for: Flowcy account APIs used by the mobile client
   unblocks: Mobile task draft generation without spending live AI credits
 assumptions:
+  - id: desktop-chat-transcript
+    status: supported
+    claim: Desktop chat can continue a thread by sending prior user and assistant text with the new prompt and omitting modelId for the server default.
+    reason: The chat route accepts message history, an optional modelId and an empty tools array.
+    verification: The desktop backend sent the three-message transcript to the local simulation, refreshed its token after HTTP 401, streamed text and retained the thread ID. Separate turns surfaced interrupted output, a stream error, HTTP 503 and HTTP 429.
+    source: github-pm/app/api/v1/agent/chat/route.ts, RxCode/Services/FlowcyCloudBackend.swift, postman/mocks/flowcy-mobile/default.js
+    updated_at: "2026-11-20"
   - id: draft-chat-without-tools
     status: supported
     claim: The chat route accepts an empty tools array and emits text and finish NDJSON events.

@@ -588,7 +588,7 @@ extension AppState {
             return
         }
 
-        await hydrateMobileSessionIfNeeded(summary: summary, project: project)
+        await hydrateSessionIfNeeded(summary: summary, project: project)
         updateMobilePlaceholderTitleIfNeeded(sessionID: sessionID, firstUserMessage: text)
 
         // If a turn is already streaming, the mobile message goes into the
@@ -740,31 +740,6 @@ extension AppState {
             state.model = selection.model
         }
         return sessionID
-    }
-
-    func hydrateMobileSessionIfNeeded(summary: ChatSession.Summary, project: Project) async {
-        if sessionStates[summary.id] == nil,
-           let full = await persistence.loadFullSession(summary: summary, cwd: project.path) {
-            updateState(summary.id) { state in
-                // Skip the assignment when persistence returned an empty thread
-                // (e.g. corrupted JSONL that decoded to no messages). The state
-                // we just created is also empty, so this is a no-op cosmetic
-                // guard — but it stops a future caller from accidentally
-                // overwriting a non-empty in-memory list if this branch is
-                // ever reached for a session that re-appeared mid-call.
-                guard !full.messages.isEmpty || state.messages.isEmpty else { return }
-                state.messages = full.messages
-            }
-        }
-
-        updateState(summary.id) { state in
-            if state.agentProvider == nil { state.agentProvider = summary.agentProvider }
-            if state.model == nil { state.model = summary.model }
-            state.effort = state.effort(fallingBackTo: summary.effort)
-            if state.permissionMode == nil { state.permissionMode = summary.permissionMode }
-            if state.worktreePath == nil { state.worktreePath = summary.worktreePath }
-            if state.worktreeBranch == nil { state.worktreeBranch = summary.worktreeBranch }
-        }
     }
 
     func updateMobilePlaceholderTitleIfNeeded(sessionID: String, firstUserMessage: String) {

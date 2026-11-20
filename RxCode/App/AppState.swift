@@ -118,18 +118,8 @@ final class AppState: IDEToolHandling {
     /// Keeps file-change and commit indicators in memory for sidebar rows.
     var threadFileEditPresence: [String: ThreadFileEditPresence] = [:]
 
-    /// Bumped each time a todo snapshot row is upserted in SwiftData (MCP
-    /// `ide__set_todos`, Codex `.todoSnapshot` events, in-message TodoWrite
-    /// persistence). The toolbar's `TodoProgressToolbarItem` reads this so
-    /// SwiftUI re-runs the `fetchTodoSnapshot` method when the snapshot
-    /// changes without an accompanying observable property mutation.
-    var todoSnapshotsRevision: Int = 0 {
-        didSet { refreshTodoSnapshotIndex() }
-    }
-
-    /// Persisted todo progress by session id. Kept in sync with
-    /// `todoSnapshotsRevision` so the sidebar's per-row progress ring reads from
-    /// memory rather than fetching a snapshot per row per view update.
+    /// Persisted todo progress by session id. Loaded once at launch and updated
+    /// per session as progress changes.
     var todoProgressBySession: [String: ChatTodoProgress] = [:]
 
     /// Bumped each time a custom context-menu item is created, edited, toggled,
@@ -240,6 +230,10 @@ final class AppState: IDEToolHandling {
 
     var claudeModels: [AgentModel] = []
     var codexModels: [AgentModel] = []
+    var flowcyModels: [AgentModel]?
+    var flowcyModelAccountID: String?
+    var flowcyModelRequestID: UUID?
+    var flowcyModelError: String?
 
     // MARK: - ACP
 
@@ -768,6 +762,7 @@ final class AppState: IDEToolHandling {
     // MARK: - Services
 
     var rxAuth: RxAuthService
+    let flowcyCloudBackend: FlowcyCloudBackend
     var autopilot: AutopilotService
     var secrets: SecretsService
     var ciUpdates: CIUpdateService
@@ -1046,6 +1041,7 @@ final class AppState: IDEToolHandling {
         )
         let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
         self.rxAuth = rxAuth
+        self.flowcyCloudBackend = FlowcyCloudBackend(auth: rxAuth)
         self.autopilot = AutopilotService(rxAuth: rxAuth)
         self.secrets = SecretsService(rxAuth: rxAuth)
         self.ciUpdates = CIUpdateService(rxAuth: rxAuth)

@@ -135,6 +135,28 @@ extension AppState {
             )
     }
 
+    func hydrateSessionIfNeeded(summary: ChatSession.Summary, project: Project) async {
+        if sessionStates[summary.id]?.messages.isEmpty != false,
+           sessionStates[summary.id]?.isStreaming != true,
+           !summary.id.hasPrefix("pending-"),
+           let full = await persistence.loadFullSession(summary: summary, cwd: project.path) {
+            updateState(summary.id) { state in
+                // A window or another sender can load this thread while disk I/O is pending.
+                guard state.messages.isEmpty, !state.isStreaming else { return }
+                state.messages = cleanLoadedMessages(full.messages)
+            }
+        }
+
+        updateState(summary.id) { state in
+            if state.agentProvider == nil { state.agentProvider = summary.agentProvider }
+            if state.model == nil { state.model = summary.model }
+            state.effort = state.effort(fallingBackTo: summary.effort)
+            if state.permissionMode == nil { state.permissionMode = summary.permissionMode }
+            if state.worktreePath == nil { state.worktreePath = summary.worktreePath }
+            if state.worktreeBranch == nil { state.worktreeBranch = summary.worktreeBranch }
+        }
+    }
+
     /// Reload messages from the CLI's jsonl on disk and fill any blocks the
     /// live stream may have missed (e.g. ownership-transfer races, observation
     /// re-subscribe gaps). Fired off as a detached task so the stream loop is
@@ -522,6 +544,9 @@ extension AppState {
         let prompt = buildPromptWithAttachments(next.text, attachments: resolvedAttachments)
         let displayText = next.text
         let streamId = UUID()
+        let projectSelection = defaultModelSelection(for: projects.first { $0.id == projectId })
+        let agentProvider = sessionStates[sessionKey]?.agentProvider ?? projectSelection.provider
+        let history = agentProvider == .flowcy ? sessionStates[sessionKey]?.messages ?? [] : []
 
         updateState(sessionKey) { state in
             state.messages.append(ChatMessage(role: .user, content: displayText, attachments: resolvedAttachments))
@@ -536,8 +561,6 @@ extension AppState {
         resumeTaskForStreamingSession(sessionKey)
 
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
-        let projectSelection = defaultModelSelection(for: projects.first { $0.id == projectId })
-        let agentProvider = sessionStates[sessionKey]?.agentProvider ?? projectSelection.provider
         let model = sessionStates[sessionKey]?.model ?? projectSelection.model
         let effort = sessionStates[sessionKey]?.effort ?? (selectedEffort == "auto" ? nil : selectedEffort)
         var hookSettingsPath: String?
@@ -572,6 +595,7 @@ extension AppState {
                 hookSettingsPath: hookSettingsPath,
                 permissionMode: currentPermissionMode,
                 projectId: projectId,
+                history: history,
                 window: window
             )
             for path in tempFilePaths {

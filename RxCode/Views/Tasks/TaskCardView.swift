@@ -628,8 +628,8 @@ private struct TaskCardModelRow: View {
             let clientId = appState.acpSelectionParts(for: agent.model)?.clientId
             let iconURL = appState.acpClients.first(where: { $0.id == clientId })?.iconURL
             ACPIconView(url: iconURL, size: 14)
-        case .localAgent:
-            Image(systemName: "desktopcomputer")
+        case .localAgent, .flowcy:
+            Image(systemName: provider == .flowcy ? "cloud" : "desktopcomputer")
                 .resizable()
                 .scaledToFit()
                 .foregroundStyle(.secondary)

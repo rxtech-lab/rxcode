@@ -11,7 +11,7 @@ extension AppState {
             return latestRateLimitUsage
         case .codex:
             return latestCodexRateLimitUsage
-        case .acp, .localAgent:
+        case .acp, .localAgent, .flowcy:
             return nil
         }
     }
@@ -33,7 +33,7 @@ extension AppState {
             case .codex:
                 guard self.codexInstalled else { return nil }
                 return await self.codex.fetchRateLimits(forceRefresh: forceRefresh)
-            case .acp, .localAgent:
+            case .acp, .localAgent, .flowcy:
                 return nil
             }
         }
@@ -57,7 +57,7 @@ extension AppState {
         case .codex:
             latestCodexRateLimitUsage = usage
             desktopCodexUsageDate = .now
-        case .acp, .localAgent:
+        case .acp, .localAgent, .flowcy:
             break
         }
         recordRateLimitSample(usage, for: provider)
@@ -85,7 +85,7 @@ extension AppState {
             await refreshCodexRateLimitUsage(forceRefresh: forceRefresh)
         case .acp:
             await refreshACPUsage(for: selectedModel, clientID: selectedACPClientId, forceRefresh: forceRefresh)
-        case .localAgent:
+        case .localAgent, .flowcy:
             break
         }
     }

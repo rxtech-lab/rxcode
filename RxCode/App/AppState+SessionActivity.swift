@@ -17,6 +17,7 @@ struct SessionActivity: Equatable {
     /// Latest todo list reconstructed from in-memory messages, or `nil` when the
     /// transcript has none (callers fall back to the persisted snapshot).
     var liveTodos: TodoListSnapshot?
+    var recordedTodos: TodoListSnapshot?
 
     /// Cheap summary of a session's transcript tail. Todos are only re-extracted
     /// when this changes (or while the session is streaming, since a tool call's
@@ -105,6 +106,34 @@ extension AppState {
     /// Live todos for a session from the in-memory transcript, if any.
     func liveTodos(forSessionId id: String) -> TodoListSnapshot? {
         sessionActivity[id]?.liveTodos
+    }
+
+    func recordTodoSnapshot(_ items: [TodoItem], forSessionId id: String) {
+        let sessionId = resolveCurrentSessionId(id)
+        let snapshot = threadStore.upsertTodoSnapshot(sessionId: sessionId, items: items)
+        publishTodoSnapshot(snapshot, forSessionId: sessionId)
+    }
+
+    func latestTodoSnapshot(forSessionId id: String) -> TodoListSnapshot? {
+        let sessionId = resolveCurrentSessionId(id)
+        let transcript = liveTodos(forSessionId: sessionId)
+        let recorded = sessionActivity[sessionId]?.recordedTodos
+            ?? todoProgressBySession[sessionId].flatMap { _ in
+                threadStore.fetchTodoSnapshot(sessionId: sessionId)?.list
+            }
+        return TodoListSnapshot.latest(transcript: transcript, recorded: recorded)
+    }
+
+    /// Call after moving the persisted row during a session ID transition.
+    func moveTodoSnapshotIndex(from oldId: String, to newId: String) {
+        guard oldId != newId, todoProgressBySession[oldId] != nil else { return }
+        publishTodoSnapshot(nil, forSessionId: oldId)
+        publishTodoSnapshot(threadStore.fetchTodoSnapshot(sessionId: newId)?.list, forSessionId: newId)
+    }
+
+    private func publishTodoSnapshot(_ snapshot: TodoListSnapshot?, forSessionId id: String) {
+        todoProgressBySession[id] = snapshot.map(ChatTodoProgress.init(snapshot:))
+        sessionActivity[id]?.recordedTodos = snapshot
     }
 
     func computerUseMonitors(forSession id: String) -> [ComputerUseMonitorWindow] {

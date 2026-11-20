@@ -20,6 +20,7 @@ extension AppState {
         hookSessionMode: PermissionMode? = nil,
         projectId: UUID,
         includeIDEMCP: Bool = true,
+        history: [ChatMessage] = [],
         window: WindowState
     ) async {
         // Mode used when registering a session with PermissionServer for hook auto-approve.
@@ -94,7 +95,8 @@ extension AppState {
                 acpSpec: preflight.acpSpec,
                 clientSessionKey: sessionKey,
                 mcpServers: preflight.mcpRecords,
-                ideBridgeCommand: preflight.ideBridgeCommand
+                ideBridgeCommand: preflight.ideBridgeCommand,
+                history: history
             )
             stream = await backend(for: agentProvider).send(request)
             let backendReturnedElapsed = Date().timeIntervalSince(streamStart)
@@ -104,8 +106,13 @@ extension AppState {
             }
         }
 
-        shellTrackerBeginStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd, agentProvider: agentProvider)
-        defer { shellTrackerEndStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd) }
+        let tracksEdits = agentProvider.staticCapabilities.contains(.fileEdit)
+        if tracksEdits {
+            shellTrackerBeginStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd, agentProvider: agentProvider)
+        }
+        defer {
+            if tracksEdits { shellTrackerEndStream(streamId: streamId, sessionKey: sessionKey, cwd: cwd) }
+        }
 
         startFlushTimer(for: sessionKey)
 
@@ -873,8 +880,7 @@ extension AppState {
                     logger.info(
                         "[TodoSnapshot] session=\(targetSession, privacy: .public) total=\(snapshot.items.count) done=\(done) active=\(active, privacy: .public)"
                     )
-                    threadStore.upsertTodoSnapshot(sessionId: targetSession, items: snapshot.items)
-                    todoSnapshotsRevision &+= 1
+                    recordTodoSnapshot(snapshot.items, forSessionId: targetSession)
                     broadcastMobileSessionStatus(sessionID: targetSession)
 
                 case .acpModelsDiscovered(let event):

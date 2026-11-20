@@ -458,6 +458,22 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(selection.model, "sonnet")
     }
 
+    func testFlowcyCanBeSelectedForChatBeforeItsAccountCatalogLoads() {
+        let chatSections = appState.availableAgentModelSections(in: window)
+        XCTAssertEqual(chatSections.first { $0.provider == .flowcy }?.models.first?.id, AgentModel.flowcyDefaultID)
+        XCTAssertFalse(appState.availableAgentModelSections().contains { $0.provider == .flowcy })
+
+        let project = Project(name: "A", path: "/tmp/a", lastAgentProvider: .flowcy, lastModel: "account-model")
+        let selection = appState.defaultModelSelection(for: project)
+        XCTAssertEqual(selection.provider, .flowcy)
+        XCTAssertEqual(selection.model, "account-model")
+
+        let catalog = [AgentModel(provider: .flowcy, id: "enabled-model", displayName: "Enabled Model")]
+        XCTAssertEqual(AppState.resolvedFlowcyModel("account-model", catalog: catalog), "enabled-model")
+        XCTAssertEqual(AppState.resolvedFlowcyModel("account-model", catalog: []), AgentModel.flowcyDefaultID)
+        XCTAssertEqual(AppState.resolvedFlowcyModel(AgentModel.flowcyDefaultID, catalog: catalog), AgentModel.flowcyDefaultID)
+    }
+
     func testEffectiveModelSelectionHonorsProviderOnlyOverride() {
         appState.selectedAgentProvider = .claudeCode
         appState.selectedModel = "sonnet"

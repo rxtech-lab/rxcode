@@ -478,7 +478,7 @@ extension AppState {
 
     func mobileSettingsSnapshot() -> MobileSettingsSnapshot {
         // Tasks launched from mobile run on this Mac, including local agents.
-        let sections = availableAgentModelSections().map {
+        let sections = availableAgentModelSections(includeFlowcy: true).map {
             AgentModelSection(
                 id: $0.id,
                 title: $0.title,
@@ -490,7 +490,7 @@ extension AppState {
         let models = sections.flatMap(\.models)
         return MobileSettingsSnapshot(
             selectedAgentProvider: selectedAgentProvider,
-            selectedModel: selectedModel,
+            selectedModel: defaultModelSelection(for: nil).model,
             selectedACPClientId: selectedACPClientId,
             selectedEffort: selectedEffort,
             permissionMode: permissionMode,

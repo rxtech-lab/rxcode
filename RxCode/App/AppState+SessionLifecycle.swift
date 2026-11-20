@@ -563,7 +563,7 @@ extension AppState {
             return await claude.generateSessionTitle(firstUserMessage: firstUserMessage, model: model ?? "haiku")
         case .codex:
             return await codex.generateSessionTitle(firstUserMessage: firstUserMessage, model: model)
-        case .acp, .localAgent:
+        case .acp, .localAgent, .flowcy:
             // No standardized title-generation in ACP; fall back to the truncation logic upstream.
             return nil
         }
@@ -591,7 +591,7 @@ extension AppState {
                 finalResponse: finalResponse,
                 model: model
             )
-        case .acp, .localAgent:
+        case .acp, .localAgent, .flowcy:
             return nil
         }
     }
@@ -612,7 +612,7 @@ extension AppState {
                 threadSummaries: threadSummaries,
                 model: model
             )
-        case .acp, .localAgent:
+        case .acp, .localAgent, .flowcy:
             return nil
         }
     }
@@ -636,7 +636,7 @@ extension AppState {
                 userMessages: userMessages,
                 model: model
             )
-        case .acp, .localAgent:
+        case .acp, .localAgent, .flowcy:
             return nil
         }
     }
@@ -647,7 +647,7 @@ extension AppState {
             return await claude.generateResponseNotificationSummary(responseText: responseText, model: model ?? "haiku")
         case .codex:
             return await codex.generateResponseNotificationSummary(responseText: responseText, model: model)
-        case .acp, .localAgent:
+        case .acp, .localAgent, .flowcy:
             // No standardized one-shot generation in ACP; keep the local preview fallback.
             return nil
         }
@@ -715,7 +715,7 @@ extension AppState {
                 return await claude.generatePlainSummary(prompt: prompt, model: sel.model, limit: 200)
             case .codex:
                 return await codex.generateCodexPlainSummary(prompt: prompt, model: sel.model)
-            case .acp, .localAgent:
+            case .acp, .localAgent, .flowcy:
                 break // ACP has no one-shot; fall through to the summarization model.
             }
         }
@@ -730,7 +730,7 @@ extension AppState {
                 return await claude.generatePlainSummary(prompt: prompt, model: model ?? "haiku", limit: 200)
             case .codex:
                 return await codex.generateCodexPlainSummary(prompt: prompt, model: model)
-            case .acp, .localAgent:
+            case .acp, .localAgent, .flowcy:
                 // ACP can't run a one-shot; fall back to a cheap Claude classifier.
                 return await claude.generatePlainSummary(prompt: prompt, model: "haiku", limit: 200)
             }

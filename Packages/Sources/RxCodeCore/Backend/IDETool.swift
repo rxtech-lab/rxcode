@@ -1,15 +1,13 @@
 import Foundation
 
 /// Catalog of IDE-side MCP tools the editor can expose to agent backends.
-/// Tools are gated by the *complement* of the backend's capability set:
-/// if a backend natively supports a feature, the corresponding polyfill
-/// tool is NOT registered for that session. Tools tagged `.alwaysIDEOnly`
-/// are exposed to every backend regardless of capabilities, including
-/// IDE state and prompts that must remain available in every agent mode.
+/// Polyfills are available to backends that lack the native capability and to
+/// providers that opt into the IDE implementation. IDE-only tools are always
+/// available, including IDE state and prompts used in every agent mode.
 public struct IDETool: Sendable {
     public enum Visibility: Sendable {
-        /// Exposed only when the backend lacks the matched capability.
-        case polyfill(BackendCapability)
+        /// Exposed when the backend lacks the capability or the provider is listed.
+        case polyfill(BackendCapability, alsoFor: Set<AgentProvider> = [])
         /// Exposed unconditionally, independent of native tools or agent mode.
         case alwaysIDEOnly
     }

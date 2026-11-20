@@ -224,18 +224,6 @@ extension PetController {
             sessionKey = fresh
         }
 
-        let idePort = await appState.ideMCPServer.allocate(
-            sessionKey: sessionKey,
-            capabilities: provider.staticCapabilities
-        )
-        let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
-        let mcpRecords = await appState.mcp.enabledServerRecords(projectPath: cwdPath)
-        var sdkMCPs: [RxAgentCore.MCPServerSpec] = []
-        if let bridge {
-            sdkMCPs.append(.stdio(name: "rxcode-ide", command: bridge.command, args: bridge.args))
-        }
-        sdkMCPs += mcpRecords.sorted { $0.name < $1.name }.compactMap(RxAgentCore.MCPServerSpec.init)
-
         let client: any RxAgentCore.AgentClient
         switch provider {
         case .claudeCode:
@@ -252,6 +240,8 @@ extension PetController {
                 throw VoiceError.unavailable("No enabled ACP client is configured. Add or enable one in Settings → Agent.")
             }
             client = acpClient
+        case .flowcy:
+            throw VoiceError.unavailable("Choose a tool-capable agent in Pet Settings.")
         case .localAgent:
             if requestedModel == nil || requestedModel?.isEmpty == true {
                 requestedModel = appState.localModels.installed.first { !$0.studioKind.isStudio }?.id
@@ -272,6 +262,18 @@ extension PetController {
                 }
             )
         }
+
+        let idePort = await appState.ideMCPServer.allocate(
+            sessionKey: sessionKey,
+            capabilities: provider.staticCapabilities
+        )
+        let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
+        let mcpRecords = await appState.mcp.enabledServerRecords(projectPath: cwdPath)
+        var sdkMCPs: [RxAgentCore.MCPServerSpec] = []
+        if let bridge {
+            sdkMCPs.append(.stdio(name: "rxcode-ide", command: bridge.command, args: bridge.args))
+        }
+        sdkMCPs += mcpRecords.sorted { $0.name < $1.name }.compactMap(RxAgentCore.MCPServerSpec.init)
 
         var context = contextOverride ?? Self.buildVoiceSystemInstructions(
             appState: appState, targetProject: targetProject, configuration: configuration
@@ -332,6 +334,8 @@ extension PetController {
             return hasEnabled
                 ? .ready
                 : .needsSetup("No ACP client is enabled. Enable one in Settings → Agent or pick another custom agent.")
+        case .flowcy:
+            return .needsSetup("Choose a tool-capable agent in Pet Settings.")
         case .localAgent:
             let hasChatModel = appState.localModels.installed.contains { !$0.studioKind.isStudio }
             return hasChatModel

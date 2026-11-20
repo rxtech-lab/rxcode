@@ -58,7 +58,8 @@ final class GlobalChatTests: XCTestCase {
         for (provider, model) in [
             (AgentProvider.claudeCode, "sonnet"),
             (.codex, "gpt-5.4"),
-            (.acp, "remembered-client::test-model")
+            (.acp, "remembered-client::test-model"),
+            (.flowcy, "account-model"),
         ] {
             appState.setSessionModel(model, provider: provider, in: window)
             appState.startNewGlobalChat(in: window)
@@ -163,7 +164,7 @@ final class GlobalChatTests: XCTestCase {
 
     func testGlobalChatUsesAllAgentProviders() {
         appState.openGlobalChat(in: window)
-        for provider in [AgentProvider.claudeCode, .codex, .acp] {
+        for provider in [AgentProvider.claudeCode, .codex, .acp, .flowcy] {
             appState.setSessionModel("test-model", provider: provider, in: window)
             XCTAssertEqual(appState.effectiveModelSelection(in: window).provider, provider)
             XCTAssertEqual(appState.effectiveModelSelection(in: window).model, "test-model")
@@ -180,7 +181,7 @@ final class GlobalChatTests: XCTestCase {
         appState.openGlobalChat(in: window)
         let cwd = appState.globalChatProject.path
 
-        for provider in [AgentProvider.claudeCode, .codex, .acp] {
+        for provider in [AgentProvider.claudeCode, .codex, .acp, .flowcy] {
             appState.startNewChat(in: window)
             let backend = MockAgentBackend(provider: provider)
             appState.agentBackendOverrides[provider] = backend
@@ -219,6 +220,13 @@ final class GlobalChatTests: XCTestCase {
             XCTAssertEqual(requests.count, 2)
             XCTAssertEqual(requests.last?.cwd, cwd)
             XCTAssertEqual(requests.last?.sessionId, sessionId)
+            if provider == .flowcy {
+                XCTAssertEqual(requests.first?.history, [])
+                XCTAssertEqual(requests.last?.history.filter { !$0.content.isEmpty }.map(\.content),
+                               ["Hello", "Hello from the agent"])
+                XCTAssertEqual(requests.last?.prompt, "Continue")
+                XCTAssertNil(requests.last?.ideBridgeCommand)
+            }
         }
     }
 

@@ -22,8 +22,9 @@ extension AppState {
             let activeForm = dict["activeForm"]?.stringValue ?? content
             return TodoItem(id: idx, content: content, activeForm: activeForm, status: status)
         }
-        threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: parsed)
-        todoSnapshotsRevision &+= 1
+        let sessionId = resolveCurrentSessionId(sessionKey)
+        recordTodoSnapshot(parsed, forSessionId: sessionId)
+        broadcastMobileSessionStatus(sessionID: sessionId)
         return textResult("Recorded \(parsed.count) todo(s).")
     }
 

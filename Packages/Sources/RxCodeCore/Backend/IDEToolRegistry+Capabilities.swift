@@ -1,15 +1,12 @@
 import Foundation
 
 extension IDEToolRegistry {
-    /// Returns the tools that should be exposed to an agent whose declared
-    /// capabilities are `capabilities`. Polyfill tools whose capability is
-    /// already covered natively are filtered out; `alwaysIDEOnly` tools
-    /// always pass through.
-    public static func tools(for capabilities: CapabilitySet) -> [IDETool] {
+    /// Returns the tools available for the agent's capabilities and provider.
+    public static func tools(for capabilities: CapabilitySet, provider: AgentProvider? = nil) -> [IDETool] {
         allTools.filter { tool in
             switch tool.visibility {
-            case .polyfill(let cap):
-                return !capabilities.contains(cap)
+            case .polyfill(let capability, let providers):
+                return !capabilities.contains(capability) || provider.map(providers.contains) == true
             case .alwaysIDEOnly:
                 return true
             }

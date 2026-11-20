@@ -630,13 +630,16 @@ final class ThreadStore {
         }
     }
 
-    func upsertTodoSnapshot(sessionId: String, items: [TodoItem]) {
+    @discardableResult
+    func upsertTodoSnapshot(sessionId: String, items: [TodoItem]) -> TodoListSnapshot {
+        let snapshot = TodoListSnapshot(items: items, updatedAt: .now)
         if let existing = fetchTodoSnapshot(sessionId: sessionId) {
-            existing.apply(items: items)
+            existing.apply(items: items, at: snapshot.updatedAt)
         } else {
-            context.insert(TodoSnapshot(sessionId: sessionId, items: items))
+            context.insert(TodoSnapshot(sessionId: sessionId, items: items, updatedAt: snapshot.updatedAt))
         }
         save()
+        return snapshot
     }
 
     func renameTodoSnapshot(from oldId: String, to newId: String) {

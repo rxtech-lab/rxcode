@@ -15,16 +15,8 @@ struct TodoProgressToolbarItem: View {
         windowState.currentSessionId ?? windowState.newSessionKey
     }
 
-    private var todos: [TodoItem]? {
-        _ = appState.todoSnapshotsRevision
-        return TodoListSnapshot.latest(
-            transcript: appState.liveTodos(forSessionId: sessionKey),
-            recorded: appState.threadStore.fetchTodoSnapshot(sessionId: sessionKey)?.list
-        )?.items
-    }
-
     var body: some View {
-        if let todos, !todos.isEmpty {
+        if let todos = appState.latestTodoSnapshot(forSessionId: sessionKey)?.items, !todos.isEmpty {
             let done = todos.filter { $0.status == .completed }.count
             let inProgress = todos.contains { $0.status == .inProgress }
             Button {

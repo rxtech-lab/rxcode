@@ -128,6 +128,11 @@ struct ChatToolbarControls: View {
                                     }
                                 }
                             }
+                            if section.provider == .flowcy, appState.isSignedIn {
+                                Button("Reload Flowcy Models") { Task { await appState.refreshFlowcyModels() } }
+                                    .disabled(appState.flowcyModelRequestID != nil)
+                                    .help(appState.flowcyModelError ?? "Refresh the model list from Flowcy.")
+                            }
                         } header: {
                             Text(section.title)
                         }

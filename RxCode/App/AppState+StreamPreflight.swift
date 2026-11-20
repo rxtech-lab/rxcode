@@ -29,15 +29,37 @@ extension AppState {
         var ideBridgeCommand: MCPBridgeCommand?
     }
 
-    private static let todoListPromptContext = """
-    # Task progress
+    static func taskProgressPromptContext(for provider: AgentProvider, hasIDEBridge: Bool, planMode: Bool) -> String {
+        let toolGuidance: String
+        switch provider {
+        case .flowcy:
+            return ""
+        case .claudeCode:
+            toolGuidance = "Use Claude Code’s native todo tools, `TaskCreate` and `TaskUpdate` or `TodoWrite`, whichever is available."
+        case .codex where planMode || !hasIDEBridge:
+            toolGuidance = "Use Codex’s `update_plan` tool to track the checklist."
+        case .localAgent where !hasIDEBridge:
+            toolGuidance = "Use the native `todowrite` tool to track the checklist."
+        case .acp where !hasIDEBridge:
+            toolGuidance = "Use the client’s native todo or plan tool when available."
+        case .codex, .localAgent, .acp:
+            toolGuidance = """
+            Use the RxCode IDE tool `ide__set_todos` when available. Send the full `todos` array on every update \
+            with `content` and `status` for each step. Use `pending`, `in_progress`, and `completed`.
+            """
+        }
 
-    For large tasks with several meaningful steps, use the RxCode IDE tool `ide__set_todos` to show progress \
-    when the tool is available. Create a short list before starting the main work. Send the full `todos` array \
-    with `content` and `status` for each step. Use `pending`, `in_progress`, and `completed` to reflect actual \
-    progress. Update the list when a step changes status or the plan changes, and leave the final status visible \
-    when you finish. Skip the list for simple tasks.
-    """
+        return """
+        # Task progress
+
+        When a task has more than two steps, create a short checklist before starting the work and keep it current. \
+        Mark steps in progress when they start and completed when they are done. Keep one checklist and leave its \
+        final status visible. \(toolGuidance)
+
+        If work is unfinished, continue until the request is complete within the current mode, the user asks you to \
+        stop, or a blocker requires their input or approval. Keep blocked or unfinished steps open and explain the blocker.
+        """
+    }
 
     /// Runs the expensive, independent pre-spawn work (memory lookup,
     /// IDE-MCP port allocation, skill-context resolution,
@@ -59,6 +81,14 @@ extension AppState {
         includeIDEMCP: Bool,
         streamStart: Date
     ) async -> StreamPreflight {
+        // Flowcy accepts the conversation over HTTPS and has no local tool bridge.
+        if agentProvider == .flowcy {
+            return StreamPreflight(
+                mcpCodexOverrides: [], acpMCPServers: [], resolvedPrompt: prompt, resolvedModel: model,
+                resolvedEffort: nil, resolvedSendMode: permissionMode
+            )
+        }
+
         // Resolve per-backend send-request fields (MCP injection, ACP client
         // spec, model split) before dispatching through the unified protocol.
         var mcpClaudeConfigPath: String? = nil
@@ -165,7 +195,11 @@ extension AppState {
         logPreflight("projectBriefing", detail: "contextChars=\(briefingContext.count)")
         let skillContext = bridge != nil ? await skillContextAsync : ""
         logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-        let todoContext = bridge != nil && permissionMode != .plan ? Self.todoListPromptContext : ""
+        let taskProgressContext = Self.taskProgressPromptContext(
+            for: agentProvider,
+            hasIDEBridge: bridge != nil,
+            planMode: permissionMode == .plan
+        )
 
         // Session-start hooks fire once, only for a brand-new thread (no resumed
         // CLI session). Their stdout is injected into this turn's agent context
@@ -184,12 +218,13 @@ extension AppState {
         }
 
         let codexAndACPContext = [
-            todoContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
+            taskProgressContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
         ]
         switch agentProvider {
         case .claudeCode:
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
+            appendExtraSystemPrompt(taskProgressContext)
             appendExtraSystemPrompt(configuredPromptContext)
             appendExtraSystemPrompt(briefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
@@ -213,11 +248,13 @@ extension AppState {
             mcpCodexOverrides += codexSkillOverrides
             resolvedPrompt = Self.promptWithBackgroundContext(codexAndACPContext, prompt: resolvedPrompt)
             resolvedSendMode = registerMode
+        case .flowcy:
+            break // Handled before local preflight.
         case .localAgent:
             // The harness renders one system prompt per turn, so background
             // context goes there rather than into the user's message.
             if localModels.model(id: resolvedModel)?.studioKind.isStudio == false {
-                appendExtraSystemPrompt(todoContext)
+                appendExtraSystemPrompt(taskProgressContext)
             }
             appendExtraSystemPrompt(configuredPromptContext)
             appendExtraSystemPrompt(briefingContext)

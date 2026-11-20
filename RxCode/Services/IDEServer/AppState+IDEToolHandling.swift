@@ -8,12 +8,8 @@ import RxCodeCore
 // `IDEMCPServer`. The conformance lives in its own file so AppState.swift
 // stays focused on chat/session state.
 //
-// Per-session capability gating:
-//   • Polyfill tools (`ide__set_todos`) are filtered out
-//     for backends that natively support the feature — see
-//     `IDEToolRegistry.tools(for:)`.
-//   • IDE-only tools (`ide__get_running_jobs`, `ide__ask_user` etc.) always
-//     appear so any agent can introspect editor state and ask questions.
+// Tool discovery uses the session's provider and capabilities. IDE-only tools
+// are available across providers so agents can query editor state and ask questions.
 //
 // `sessionKey` is the AppState session key the agent is bound to. The
 // listener allocates one port per session, so this is unambiguous.
@@ -22,7 +18,7 @@ extension AppState {
     public func ideAvailableTools(forSession sessionKey: String) async -> [IDETool] {
         let provider = ideAgentProvider(for: sessionKey)
         let caps = await backend(for: provider).capabilities(for: sessionKey)
-        return IDEToolRegistry.tools(for: caps)
+        return IDEToolRegistry.tools(for: caps, provider: provider)
     }
 
     private func ideAgentProvider(for sessionKey: String) -> AgentProvider {

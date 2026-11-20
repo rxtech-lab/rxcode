@@ -141,17 +141,6 @@ extension AppState {
         return recorded.flatMap { $0.total > 0 ? $0 : nil }
     }
 
-    /// Reload the todo-snapshot index from SwiftData. Driven by
-    /// `todoSnapshotsRevision`, so every existing bump site keeps the index fresh
-    /// without also having to remember to refresh it.
-    func refreshTodoSnapshotIndex() {
-        let progress = threadStore.loadTodoProgressBySession()
-        // Assigning an equal value still fires observation, and this runs on every
-        // todo write — only publish when the answer actually changed.
-        guard progress != todoProgressBySession else { return }
-        todoProgressBySession = progress
-    }
-
     // MARK: - Initialization
 
     /// Once per app launch — start services and load shared data.
@@ -577,8 +566,9 @@ extension AppState {
         async let docs: Void = refreshDocsStatuses()
         async let ciUpdates: Void = refreshCIStatuses()
         async let releases: Void = refreshReleaseStatuses()
+        async let models: Void = refreshFlowcyModels()
 
-        _ = await (repos, secrets, docs, ciUpdates, releases)
+        _ = await (repos, secrets, docs, ciUpdates, releases, models)
     }
 
     func seedUITestBriefingIfRequested() {

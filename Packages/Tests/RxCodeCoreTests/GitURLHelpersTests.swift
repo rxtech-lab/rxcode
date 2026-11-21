@@ -24,6 +24,17 @@ struct GitURLHelpersTests {
         #expect(parseGitHubOwnerRepo(from: "git@github.com:owner/repo") == "owner/repo")
     }
 
+    @Test("SSH URLs with a scheme can use either GitHub SSH host")
+    func sshURLWithScheme() {
+        #expect(parseGitHubOwnerRepo(from: "ssh://git@GitHub.com/Owner/repo.git") == "Owner/repo")
+        #expect(parseGitHubOwnerRepo(from: "ssh://git@ssh.github.com:443/Owner/repo.git") == "Owner/repo")
+    }
+
+    @Test("Only the final .git suffix is stripped")
+    func gitInRepositoryName() {
+        #expect(parseGitHubOwnerRepo(from: "https://github.com/owner/project.git-tools.git") == "owner/project.git-tools")
+    }
+
     @Test("Trailing slash stripped")
     func trailingSlash() {
         #expect(parseGitHubOwnerRepo(from: "https://github.com/owner/repo/") == "owner/repo")
@@ -32,6 +43,8 @@ struct GitURLHelpersTests {
     @Test("Non-GitHub URL returns nil")
     func nonGitHub() {
         #expect(parseGitHubOwnerRepo(from: "https://gitlab.com/owner/repo.git") == nil)
+        #expect(parseGitHubOwnerRepo(from: "https://github.com.example.net/owner/repo.git") == nil)
+        #expect(parseGitHubOwnerRepo(from: "https://example.net/github.com/owner/repo.git") == nil)
     }
 
     @Test("Empty string returns nil")

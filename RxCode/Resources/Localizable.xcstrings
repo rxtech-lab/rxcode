@@ -11992,6 +11992,9 @@
         }
       }
     },
+    "Fast-forward Only" : {
+
+    },
     "feature/my-change" : {
 
     },
@@ -16432,6 +16435,9 @@
         }
       }
     },
+    "Merge" : {
+
+    },
     "Merge %@ into %@" : {
       "localizations" : {
         "en" : {
@@ -19660,7 +19666,6 @@
       }
     },
     "Open in GitHub" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -21534,15 +21539,6 @@
     "Pull" : {
 
     },
-    "Pull (Fast-forward Only)" : {
-
-    },
-    "Pull (Merge)" : {
-
-    },
-    "Pull (Rebase)" : {
-
-    },
     "Pull %lld commits from %@" : {
       "localizations" : {
         "en" : {
@@ -21553,6 +21549,12 @@
         }
       }
     },
+    "Pull and Push" : {
+
+    },
+    "Pull Branch" : {
+
+    },
     "Pull from %@" : {
 
     },
@@ -21560,6 +21562,9 @@
 
     },
     "Pull request #%lld" : {
+
+    },
+    "Pull…" : {
 
     },
     "Pulling…" : {
@@ -21931,6 +21936,9 @@
           }
         }
       }
+    },
+    "Rebase" : {
+
     },
     "Rebase %@ onto %@" : {
       "localizations" : {
@@ -27492,6 +27500,9 @@
         }
       }
     },
+    "Strategy" : {
+
+    },
     "Streamable HTTP" : {
       "localizations" : {
         "zh-Hans" : {
@@ -30210,6 +30221,9 @@
       }
     },
     "upstream" : {
+
+    },
+    "Upstream" : {
 
     },
     "URL" : {

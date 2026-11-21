@@ -76,6 +76,36 @@ private struct GitFormSheet<Content: View>: View {
     }
 }
 
+struct GitPullSheet: View {
+    let store: GitWorkflowStore
+    @State private var strategy: GitWorkflow.PullStrategy = .fastForwardOnly
+
+    var body: some View {
+        let branch = store.currentBranch
+        GitFormSheet(
+            title: "Pull Branch",
+            confirmTitle: "Pull",
+            progressTitle: "Pulling…",
+            canConfirm: branch?.upstream != nil,
+            store: store,
+            action: { await GitWorkflow.pull(strategy, at: store.root) }
+        ) {
+            if let branch {
+                LabeledContent("Branch", value: branch.name)
+                if let upstream = branch.upstream {
+                    LabeledContent("Upstream", value: upstream)
+                }
+            }
+            Picker("Strategy", selection: $strategy) {
+                Text("Fast-forward Only").tag(GitWorkflow.PullStrategy.fastForwardOnly)
+                Text("Merge").tag(GitWorkflow.PullStrategy.merge)
+                Text("Rebase").tag(GitWorkflow.PullStrategy.rebase)
+            }
+            .pickerStyle(.radioGroup)
+        }
+    }
+}
+
 struct GitPushSheet: View {
     let store: GitWorkflowStore
     let source: GitPushSource

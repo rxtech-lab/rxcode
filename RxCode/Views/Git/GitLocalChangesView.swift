@@ -44,10 +44,13 @@ struct GitLocalChangesView: View {
                             .frame(minHeight: 100, idealHeight: 240, maxHeight: .infinity)
                     }
                     .frame(minWidth: 190, idealWidth: 300, maxWidth: 420, maxHeight: .infinity)
-                    GitLocalChangeDiffView(file: selected.count == 1 ? selected.first : nil) {
-                        selection.removeAll()
+                    // Give the split a stable size as the placeholder and file diffs change.
+                    GeometryReader { _ in
+                        GitLocalChangeDiffView(file: selected.count == 1 ? selected.first : nil) {
+                            selection.removeAll()
+                        }
                     }
-                    .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
                 }
                 Divider()
                 HStack(spacing: 8) {

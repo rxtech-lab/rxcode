@@ -1,3 +1,4 @@
+import RxAuthSwift
 import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
@@ -46,9 +47,19 @@ struct GitWindowRoot: View {
 }
 
 struct GitWorkflowView: View {
+    private struct PullRequestLookup: Equatable {
+        let checkout: GitHubCheckout
+        let accountID: String
+        let refreshCount: Int
+    }
+
     @State private var store: GitWorkflowStore
     @State private var commitTab: GitCommitDetailTab = .changes
+    @State private var fetchedPullRequest: (lookup: PullRequestLookup, url: URL?)?
+    @State private var pullRequestRefreshCount = 0
+    @Environment(AppState.self) private var appState
     @Environment(RepositoryStatus.self) private var repository
+    @Environment(\.openURL) private var openURL
 
     init(root: String) {
         _store = State(initialValue: GitWorkflowStore(root: root))
@@ -75,6 +86,12 @@ struct GitWorkflowView: View {
         .task(id: store.selection) { await store.reloadHistory() }
         .onChange(of: repository.state) { Task { await store.reload() } }
         .task { await store.reload() }
+        .task(id: pullRequestLookup) {
+            guard let lookup = pullRequestLookup, let branch = lookup.checkout.branch else { return }
+            let pullRequest = await appState.fetchPullRequest(forRepository: lookup.checkout.repository, branch: branch)
+            guard !Task.isCancelled, pullRequestLookup == lookup else { return }
+            fetchedPullRequest = (lookup, pullRequest?.url)
+        }
         .sheet(item: $store.sheet) { sheet in sheetContent(sheet) }
         .confirmationDialog(
             confirmationTitle,
@@ -136,33 +153,35 @@ struct GitWorkflowView: View {
     // MARK: Toolbar
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
+        ToolbarItem(placement: .primaryAction) {
             Button("Fetch", systemImage: "arrow.triangle.2.circlepath") {
                 store.perform("Fetching…") { await GitWorkflow.fetch(at: store.root) }
             }
             .help("Fetch all remotes")
             .disabled(store.snapshot.remotes.isEmpty)
+        }
 
-            Menu {
-                Button("Pull (Fast-forward Only)") { pull(.fastForwardOnly) }
-                Button("Pull (Merge)") { pull(.merge) }
-                Button("Pull (Rebase)") { pull(.rebase) }
-            } label: {
-                Label("Pull", systemImage: "arrow.down.circle")
-            } primaryAction: {
-                pull(.fastForwardOnly)
-            }
-            .help(pullHelp)
-            .disabled(store.currentBranch?.upstream == nil)
-
-            Button("Push…", systemImage: "arrow.up.circle") {
-                if let branch = store.currentBranch {
-                    store.sheet = .push(.branch(branch))
+        ToolbarItem(placement: .primaryAction) {
+            ControlGroup {
+                Button("Pull…", systemImage: "arrow.down.circle") {
+                    store.sheet = .pull
                 }
-            }
-            .help("Choose a remote and push options")
-            .disabled(store.currentBranch == nil || store.snapshot.remotes.isEmpty)
+                .help(pullHelp)
+                .disabled(store.currentBranch?.upstream == nil)
 
+                Button("Push…", systemImage: "arrow.up.circle") {
+                    if let branch = store.currentBranch {
+                        store.sheet = .push(.branch(branch))
+                    }
+                }
+                .help("Choose a remote and push options")
+                .disabled(store.currentBranch == nil || store.snapshot.remotes.isEmpty)
+            } label: {
+                Label("Pull and Push", systemImage: "arrow.up.arrow.down")
+            }
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
             Button("Stash", systemImage: "archivebox") { store.sheet = .stash }
                 .help("Stash uncommitted changes")
             Button("New Branch", systemImage: "plus") {
@@ -173,9 +192,32 @@ struct GitWorkflowView: View {
                 Task {
                     await repository.refresh(at: store.root)
                     await store.reload()
+                    pullRequestRefreshCount += 1
                 }
             }
             .help("Reload the repository")
+        }
+
+        if let checkout = store.gitHubCheckout, let url = gitHubWebURL(forOwnerRepo: checkout.repository) {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Open in GitHub", systemImage: "globe") { openURL(url) }
+                    if let pullRequestURL {
+                        Button("Open Pull Request", systemImage: "arrow.triangle.pull") { openURL(pullRequestURL) }
+                    }
+                } label: {
+                    Label {
+                        Text("GitHub")
+                    } icon: {
+                        Image(.gitHubMark)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                    }
+                }
+                .menuIndicator(.visible)
+                .help("GitHub")
+            }
         }
     }
 
@@ -186,8 +228,21 @@ struct GitWorkflowView: View {
         return branch.behind > 0 ? String(localized: "Pull \(branch.behind) commits from \(upstream)") : String(localized: "Pull from \(upstream)")
     }
 
-    private func pull(_ strategy: GitWorkflow.PullStrategy) {
-        store.perform("Pulling…") { await GitWorkflow.pull(strategy, at: store.root) }
+    private var pullRequestLookup: PullRequestLookup? {
+        guard let checkout = store.gitHubCheckout, checkout.branch != nil,
+              appState.isSignedIn, let accountID = appState.rxUser?.id else { return nil }
+        return PullRequestLookup(checkout: checkout, accountID: accountID, refreshCount: pullRequestRefreshCount)
+    }
+
+    private var pullRequestURL: URL? {
+        guard let checkout = store.gitHubCheckout, let branch = checkout.branch else { return nil }
+        if let pullRequest = appState.pullRequest(forRepository: checkout.repository, branch: branch) {
+            return pullRequest.url
+        }
+        guard let fetchedPullRequest, let lookup = pullRequestLookup,
+              fetchedPullRequest.lookup.checkout == lookup.checkout,
+              fetchedPullRequest.lookup.accountID == lookup.accountID else { return nil }
+        return fetchedPullRequest.url
     }
 
     // MARK: Sheets
@@ -198,6 +253,8 @@ struct GitWorkflowView: View {
             if case .ready(let tree) = repository.state {
                 GitWindowCommitSheet(tree: tree, store: store)
             }
+        case .pull:
+            GitPullSheet(store: store)
         case .push(let source):
             GitPushSheet(store: store, source: source)
         case .createBranch(let start, let label):

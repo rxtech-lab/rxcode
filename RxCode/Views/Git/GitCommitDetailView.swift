@@ -6,6 +6,11 @@ enum GitCommitDetailTab: Hashable {
     case commit, changes, fileTree
 }
 
+/// The file list keeps one width so selecting a file never resizes it to fit the detail pane.
+private enum GitCommitDetailLayout {
+    static let fileListWidth: CGFloat = 280
+}
+
 /// Inspector below the history graph for the selected commit.
 struct GitCommitDetailView: View {
     let commit: GitCommit
@@ -110,14 +115,16 @@ private struct GitCommitChangesView: View {
             } else if changes.files.isEmpty {
                 ContentUnavailableView("No file changes", systemImage: "doc")
             } else {
-                HSplitView {
+                HStack(spacing: 0) {
                     List(selection: $selectedPath) {
                         GitChangedFileTree(changes: changes, isSelected: { $0 == selectedPath }) { file in
                             GitCommitFileRow(file: file)
                         }
                     }
                     .listStyle(.inset)
-                    .frame(minWidth: 180, idealWidth: 260, maxWidth: 380, maxHeight: .infinity)
+                    .frame(width: GitCommitDetailLayout.fileListWidth)
+                    .frame(maxHeight: .infinity)
+                    Divider()
 
                     Group {
                         if let selectedFile {
@@ -129,7 +136,7 @@ private struct GitCommitChangesView: View {
                             ContentUnavailableView("Select a file", systemImage: "doc.text.magnifyingglass")
                         }
                     }
-                    .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
@@ -186,12 +193,12 @@ private struct GitCommitFileTreeView: View {
                 if tree.roots.isEmpty {
                     ContentUnavailableView("No tracked files", systemImage: "folder")
                 } else {
-                    HSplitView {
+                    HStack(spacing: 0) {
                         List(selection: $selectedPath) {
                             OutlineGroup(tree.roots, children: \.outlineChildren) { node in
                                 Label {
                                     Text(node.name).lineLimit(1).truncationMode(.middle)
-                                        .foregroundStyle(ClaudeTheme.textPrimary)
+                                        .foregroundStyle(.primary)
                                 } icon: {
                                     GitFileIcon(name: node.name, isFolder: node.isDirectory)
                                 }
@@ -201,7 +208,9 @@ private struct GitCommitFileTreeView: View {
                             }
                         }
                         .listStyle(.inset)
-                        .frame(minWidth: 180, idealWidth: 260, maxWidth: 380, maxHeight: .infinity)
+                        .frame(width: GitCommitDetailLayout.fileListWidth)
+                        .frame(maxHeight: .infinity)
+                        Divider()
                         Group {
                             if let path = selectedPath {
                                 if tree.folders.contains(path) {
@@ -214,7 +223,7 @@ private struct GitCommitFileTreeView: View {
                                 ContentUnavailableView("Select a file", systemImage: "doc.text.magnifyingglass")
                             }
                         }
-                        .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
             } else {

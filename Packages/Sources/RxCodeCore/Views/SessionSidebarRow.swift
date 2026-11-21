@@ -28,7 +28,7 @@ public struct SessionSidebarRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 TypewriterTitleText(title: title.prefix(1).uppercased() + title.dropFirst())
                     .font(.system(size: ClaudeTheme.size(13)))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .contentTransition(.opacity)
                     .animation(.easeInOut(duration: 0.25), value: title)
@@ -37,17 +37,17 @@ public struct SessionSidebarRow: View {
                     if let projectName {
                         Text(projectName)
                             .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.foreground(ClaudeTheme.accent))
+                            .themedAccentInk()
                             .lineLimit(1)
 
                         Text("·")
                             .font(.system(size: ClaudeTheme.size(10)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .foregroundStyle(.tertiary)
                     }
 
                     Text(Self.compactElapsed(since: updatedAt))
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -62,7 +62,7 @@ public struct SessionSidebarRow: View {
             if isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: ClaudeTheme.size(9)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.vertical, 2)

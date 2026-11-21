@@ -55,8 +55,8 @@ struct GitWorkflowView: View {
 
     @State private var store: GitWorkflowStore
     @State private var commitTab: GitCommitDetailTab = .changes
-    @State private var fetchedPullRequest: (lookup: PullRequestLookup, url: URL?)?
     @State private var pullRequestRefreshCount = 0
+    @State private var showsPullRequestTip = false
     @Environment(AppState.self) private var appState
     @Environment(RepositoryStatus.self) private var repository
     @Environment(\.openURL) private var openURL
@@ -87,10 +87,17 @@ struct GitWorkflowView: View {
         .onChange(of: repository.state) { Task { await store.reload() } }
         .task { await store.reload() }
         .task(id: pullRequestLookup) {
-            guard let lookup = pullRequestLookup, let branch = lookup.checkout.branch else { return }
-            let pullRequest = await appState.fetchPullRequest(forRepository: lookup.checkout.repository, branch: branch)
+            guard let lookup = pullRequestLookup, let branch = lookup.checkout.branch else {
+                // Signed out or no branch: forget any earlier result so no stale prompt lingers.
+                if let checkout = store.gitHubCheckout { store.setPullRequestPresence(nil, for: checkout) }
+                return
+            }
+            let presence = await appState.lookUpBranchPullRequest(repository: lookup.checkout.repository, branch: branch)
             guard !Task.isCancelled, pullRequestLookup == lookup else { return }
-            fetchedPullRequest = (lookup, pullRequest?.url)
+            store.setPullRequestPresence(presence, for: lookup.checkout)
+        }
+        .onChange(of: store.pullRequestSuggestion, initial: true) { _, suggestion in
+            showsPullRequestTip = suggestion.map { !GitPullRequestTipLedger.isDismissed($0) } ?? false
         }
         .sheet(item: $store.sheet) { sheet in sheetContent(sheet).appThemeForeground() }
         .confirmationDialog(
@@ -202,6 +209,36 @@ struct GitWorkflowView: View {
             .help("Reload the repository")
         }
 
+        if let suggestion = store.pullRequestSuggestion {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Create Pull Request…", systemImage: "arrow.triangle.pull") {
+                        presentCreatePullRequest(suggestion)
+                    }
+                    Menu {
+                        PullRequestDraftModelMenuContent { _ in presentCreatePullRequest(suggestion) }
+                    } label: {
+                        Label("Draft with Agent", systemImage: "sparkles")
+                    }
+                } label: {
+                    Label("Create PR", systemImage: "arrow.triangle.pull")
+                } primaryAction: {
+                    presentCreatePullRequest(suggestion)
+                }
+                .help("\(suggestion.branch) is pushed but has no pull request. Create one with an agent-drafted title and description.")
+                .accessibilityIdentifier("git-create-pr-toolbar")
+                .popover(isPresented: $showsPullRequestTip, arrowEdge: .bottom) {
+                    GitPullRequestTipView(branch: suggestion.branch) {
+                        showsPullRequestTip = false
+                        presentCreatePullRequest(suggestion)
+                    } onDismiss: {
+                        GitPullRequestTipLedger.dismiss(suggestion)
+                        showsPullRequestTip = false
+                    }
+                }
+            }
+        }
+
         if let checkout = store.gitHubCheckout, let url = gitHubWebURL(forOwnerRepo: checkout.repository) {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -243,10 +280,15 @@ struct GitWorkflowView: View {
         if let pullRequest = appState.pullRequest(forRepository: checkout.repository, branch: branch) {
             return pullRequest.url
         }
-        guard let fetchedPullRequest, let lookup = pullRequestLookup,
-              fetchedPullRequest.lookup.checkout == lookup.checkout,
-              fetchedPullRequest.lookup.accountID == lookup.accountID else { return nil }
-        return fetchedPullRequest.url
+        guard case .exists(let url) = store.pullRequestPresence else { return nil }
+        return url
+    }
+
+    private func presentCreatePullRequest(_ target: GitPullRequestTarget) {
+        // Opening the flow counts as acting on the tip.
+        GitPullRequestTipLedger.dismiss(target)
+        showsPullRequestTip = false
+        store.sheet = .createPullRequest(target)
     }
 
     // MARK: Sheets
@@ -279,6 +321,8 @@ struct GitWorkflowView: View {
             GitAddRemoteSheet(store: store)
         case .searchTags:
             GitTagSearchSheet(store: store)
+        case .createPullRequest(let target):
+            GitCreatePullRequestSheet(store: store, target: target)
         }
     }
 

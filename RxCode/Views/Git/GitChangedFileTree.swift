@@ -53,7 +53,7 @@ struct GitChangedFileTree<File: Equatable & Sendable, Row: View>: View {
                     } label: {
                         Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(ClaudeTheme.textSecondary)
+                            .foregroundStyle(.secondary)
                             .frame(width: 12, height: 18)
                             .contentShape(Rectangle())
                     }
@@ -61,11 +61,11 @@ struct GitChangedFileTree<File: Equatable & Sendable, Row: View>: View {
                     .accessibilityLabel(isCollapsed ? "Expand \(node.name)" : "Collapse \(node.name)")
                     GitFileIcon(name: node.name, isFolder: true)
                     Text(verbatim: node.name).lineLimit(1).truncationMode(.middle)
-                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .foregroundStyle(.primary)
                     Spacer(minLength: 4)
                     Text(node.fileCount, format: .number)
                         .font(.callout.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .foregroundStyle(.secondary)
                         .accessibilityLabel("\(node.fileCount) changed files")
                 }
                 .padding(.leading, indent)

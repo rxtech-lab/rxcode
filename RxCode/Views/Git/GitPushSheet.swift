@@ -26,12 +26,16 @@ struct GitPushSheet: View {
         let remote = selectedRemote ?? trackingRemote ?? store.defaultRemote
         let ref = selectedRef ?? remote.flatMap { branch?.pushDestination(on: $0) }
         let destination = choices.first { $0.remote == remote && $0.ref == ref }
+        // Already tracking the selected destination: there's nothing to set up.
+        let isTrackedDestination = trackingRemote != nil
+            && destination?.remote == branch?.upstreamRemote
+            && destination?.ref == branch?.upstreamRef
 
         GitSheetOperation(store: store, progressTitle: force ? "Force pushing…" : "Pushing…", action: {
             guard let branch, let destination else { return String(localized: "Select a remote before pushing.") }
             return await GitWorkflow.push(
                 branch: branch, remote: destination.remote, force: force, pushAllTags: pushAllTags,
-                destinationRef: destination.ref, setUpstream: createTracking, at: store.root
+                destinationRef: destination.ref, setUpstream: createTracking && !isTrackedDestination, at: store.root
             )
         }) { submit in
             HStack(alignment: .top, spacing: 24) {
@@ -90,7 +94,9 @@ struct GitPushSheet: View {
                         GridRow {
                             Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
                             VStack(alignment: .leading, spacing: 4) {
-                                Toggle("Create tracking reference", isOn: $createTracking)
+                                if !isTrackedDestination {
+                                    Toggle("Create tracking reference", isOn: $createTracking)
+                                }
                                 Toggle("Push all tags", isOn: $pushAllTags)
                                 Toggle("Force push", isOn: $force)
                                     .help("Force push with lease")

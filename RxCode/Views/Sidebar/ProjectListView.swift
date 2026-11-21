@@ -146,21 +146,26 @@ struct ProjectListView: View {
         let isSelected = windowState.selectedProject?.id == project.id
 
         return HStack(spacing: 8) {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(isSelected ? ClaudeTheme.foreground(ClaudeTheme.accent) : ClaudeTheme.textTertiary)
+            Group {
+                if isSelected {
+                    Image(systemName: "folder.fill").themedAccentInk()
+                } else {
+                    Image(systemName: "folder.fill").foregroundStyle(.tertiary)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(project.name)
                         .font(.body)
-                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     AttentionBadge(attention: appState.projectAttention(projectId: project.id, in: windowState))
                 }
 
                 Text(truncatedPath(project.path))
                     .font(.caption)
-                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }

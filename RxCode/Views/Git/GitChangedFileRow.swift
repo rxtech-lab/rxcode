@@ -62,16 +62,16 @@ private struct GitChangedFileRow: View {
                 .accessibilityLabel(Text(badge.title))
             GitFileIcon(name: name)
             Text(verbatim: name)
-                .foregroundStyle(ClaudeTheme.textPrimary)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
             HStack(spacing: 4) {
                 switch lineChanges {
                 case .text(let added, let deleted):
-                    Text("+\(added)").foregroundStyle(ClaudeTheme.semanticForeground(ClaudeTheme.statusSuccess))
+                    GitLineCountText(text: "+\(added)", color: ClaudeTheme.statusSuccess)
                         .accessibilityLabel("\(added) added lines")
-                    Text("−\(deleted)").foregroundStyle(ClaudeTheme.semanticForeground(ClaudeTheme.statusError))
+                    GitLineCountText(text: "−\(deleted)", color: ClaudeTheme.statusError)
                         .accessibilityLabel("\(deleted) deleted lines")
                 case .binary:
                     Text("Binary")
@@ -80,12 +80,23 @@ private struct GitChangedFileRow: View {
                         .accessibilityLabel("Line counts unavailable")
                 }
             }
-            .foregroundStyle(ClaudeTheme.textSecondary)
+            .foregroundStyle(.secondary)
             .font(.callout.weight(.semibold).monospacedDigit())
             .fixedSize()
         }
         .help(originalPath.map { "\($0) → \(path)" } ?? path)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Reads the selection fill in its own body so the count re-inks when a row gains or loses emphasis.
+private struct GitLineCountText: View {
+    let text: String
+    let color: Color
+    @Environment(\.themeSelectionBackground) private var selection
+
+    var body: some View {
+        Text(verbatim: text).foregroundStyle(ClaudeTheme.semanticForeground(color, on: selection))
     }
 }

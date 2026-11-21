@@ -469,7 +469,7 @@ extension AppState {
         "\(owner.lowercased())/\(repo.lowercased())#\(branch ?? "")"
     }
 
-    private static func ciRepoKey(owner: String, repo: String) -> String {
+    static func ciRepoKey(owner: String, repo: String) -> String {
         "\(owner.lowercased())/\(repo.lowercased())"
     }
 

@@ -39,7 +39,7 @@ struct GitWorkflowSidebar: View {
                         Text("Local Changes")
                         Spacer()
                         if changeCount > 0 {
-                            Text("\(changeCount)").monospacedDigit().foregroundStyle(ClaudeTheme.textSecondary)
+                            Text("\(changeCount)").monospacedDigit().foregroundStyle(.secondary)
                         }
                     }
                 } icon: { Image(systemName: "pencil.and.list.clipboard") }
@@ -53,8 +53,12 @@ struct GitWorkflowSidebar: View {
                 .controlSize(.small)
 
             Section("Branches", isExpanded: $branchesExpanded) {
+                let suggestion = store.pullRequestSuggestion
                 ForEach(store.snapshot.localBranches.filter { matches($0.name) }) { branch in
-                    GitBranchRow(branch: branch)
+                    GitBranchRow(branch: branch, pullRequestSuggestion: branch.isCurrent ? suggestion : nil) { target in
+                        GitPullRequestTipLedger.dismiss(target)
+                        store.sheet = .createPullRequest(target)
+                    }
                         .themedListRow(GitSidebarItem.branch(branch.name), selection: store.selection)
                         .contextMenu { GitLocalBranchContextMenu(branch: branch, store: store) }
                 }
@@ -181,6 +185,9 @@ struct GitTagRow: View {
 
 private struct GitBranchRow: View {
     let branch: GitLocalBranch
+    /// Set on the current branch when it is pushed but has no pull request.
+    var pullRequestSuggestion: GitPullRequestTarget?
+    var onCreatePullRequest: (GitPullRequestTarget) -> Void = { _ in }
 
     var body: some View {
         Label {
@@ -190,6 +197,11 @@ private struct GitBranchRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
+                if let pullRequestSuggestion {
+                    GitSidebarPullRequestButton(target: pullRequestSuggestion) {
+                        onCreatePullRequest(pullRequestSuggestion)
+                    }
+                }
                 if branch.ahead > 0 {
                     Text("↑\(branch.ahead)").monospacedDigit()
                 }
@@ -199,8 +211,11 @@ private struct GitBranchRow: View {
             }
             .font(.system(size: ClaudeTheme.size(12)))
         } icon: {
-            Image(systemName: branch.isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
-                .foregroundStyle(branch.isCurrent ? ClaudeTheme.foreground(ClaudeTheme.accent) : ClaudeTheme.textSecondary)
+            if branch.isCurrent {
+                Image(systemName: "checkmark.circle.fill").themedAccentInk()
+            } else {
+                Image(systemName: "arrow.triangle.branch").foregroundStyle(.secondary)
+            }
         }
         .help(branch.upstream.map { String(localized: "\(branch.name) tracks \($0)") } ?? branch.name)
         .accessibilityLabel(branch.isCurrent ? String(localized: "\(branch.name), current branch") : branch.name)

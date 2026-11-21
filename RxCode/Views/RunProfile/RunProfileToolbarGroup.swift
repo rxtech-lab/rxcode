@@ -121,10 +121,14 @@ struct RunProfileToolbarGroup: View {
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: 200)
+            .foregroundStyle(.primary)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        // Borderless menus pick up the accent tint; match the other toolbar
+        // items, which draw in the standard label color.
+        .tint(.primary)
         .fixedSize()
         .help("Select Run Profile")
         .accessibilityIdentifier("run-profile-menu")
@@ -276,10 +280,12 @@ struct RunProfileToolbarGroup: View {
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: 220)
+            .foregroundStyle(.primary)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .tint(.primary)
         .fixedSize()
         .help("Select Run Destination")
         .accessibilityIdentifier("run-profile-destination-menu")

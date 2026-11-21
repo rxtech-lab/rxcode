@@ -160,6 +160,12 @@
         }
       }
     },
+    "“%@” is pushed but has no pull request yet. An agent can draft the title and description for you." : {
+
+    },
+    "“%@” is pushed but has no pull request. Create one with an agent-drafted title and description." : {
+
+    },
     "\"%@\" will be archived. Archived chats are hidden from the active list and can be restored from Archived." : {
       "localizations" : {
         "ko" : {
@@ -599,6 +605,9 @@
           }
         }
       }
+    },
+    "%@ is pushed but has no pull request. Create one with an agent-drafted title and description." : {
+
     },
     "%@ isn't backed up to Flowcy" : {
       "localizations" : {
@@ -8113,7 +8122,6 @@
       }
     },
     "Create Pull Request" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8128,6 +8136,9 @@
           }
         }
       }
+    },
+    "Create Pull Request…" : {
+
     },
     "Create Release" : {
       "localizations" : {
@@ -8422,6 +8433,9 @@
       }
     },
     "Creating branch…" : {
+
+    },
+    "Creating pull request…" : {
 
     },
     "Creating Pull Request…" : {
@@ -8936,6 +8950,9 @@
           }
         }
       }
+    },
+    "Default branch" : {
+
     },
     "Default Effort Level" : {
       "localizations" : {
@@ -10457,6 +10474,12 @@
         }
       }
     },
+    "Draft the title and description with an agent" : {
+
+    },
+    "Draft with Agent" : {
+
+    },
     "Drafted by AI from your description." : {
       "localizations" : {
         "zh-Hans" : {
@@ -10466,6 +10489,9 @@
           }
         }
       }
+    },
+    "Drafting with %@…" : {
+
     },
     "Drag a card here." : {
       "localizations" : {
@@ -12026,6 +12052,9 @@
       }
     },
     "Fast-forward Only" : {
+
+    },
+    "feat: describe the change" : {
 
     },
     "feature/my-change" : {
@@ -19230,6 +19259,9 @@
         }
       }
     },
+    "Not Now" : {
+
+    },
     "Not sent" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19276,6 +19308,9 @@
       }
     },
     "Nothing playing" : {
+
+    },
+    "Nothing to preview" : {
 
     },
     "Nothing written (files already exist)." : {
@@ -21928,6 +21963,9 @@
 
     },
     "Reads OpenCode Go usage limits using this client's existing login or OPENCODE_API_KEY. Other providers and prepaid balances are not reported." : {
+
+    },
+    "Ready for a pull request?" : {
 
     },
     "Ready for review: %@" : {
@@ -31683,6 +31721,9 @@
           }
         }
       }
+    },
+    "Write" : {
+
     },
     "Write a schedule with AI" : {
       "localizations" : {

@@ -69,3 +69,19 @@ private extension Color.Resolved {
         return ink
     }
 }
+
+extension View {
+    /// Accent ink for list rows. Reads the selection fill in a view body, so the ink updates
+    /// when the row loses emphasis. Text keeps an environment-resolved color after the environment changes.
+    public func themedAccentInk() -> some View {
+        modifier(ThemedAccentInk())
+    }
+}
+
+private struct ThemedAccentInk: ViewModifier {
+    @Environment(\.themeSelectionBackground) private var selection
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(selection.map { ClaudeTheme.foreground(on: $0) } ?? ClaudeTheme.foreground(ClaudeTheme.accent))
+    }
+}

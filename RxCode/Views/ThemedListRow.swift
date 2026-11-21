@@ -22,8 +22,16 @@ private struct ThemedListRow: ViewModifier {
         let emphasized = selected && isFocused && appearsActive
         let accent = ClaudeTheme.accent
         let shape = RoundedRectangle(cornerRadius: 6)
+        // Concrete inks whose value changes with emphasis. Text caches environment-resolved theme colors,
+        // so a row that was once emphasized would otherwise keep its on-accent ink after deselection.
+        let palette = ThemeStore.shared.colors
+        let ink = ClaudeTheme.foreground(on: accent)
         return content
-            .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
+            .foregroundStyle(
+                emphasized ? ink : palette.textPrimary,
+                emphasized ? ink.opacity(0.8) : palette.textSecondary,
+                emphasized ? ink.opacity(0.6) : palette.textTertiary
+            )
             .environment(\.themeSelectionBackground, emphasized ? accent : nil)
             .environment(\.backgroundProminence, .standard)
             .background {

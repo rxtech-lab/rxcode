@@ -13,7 +13,25 @@ actor MCPAppConnection {
     private var tools: [JSONValue] = []
     private var busy = false
 
-    init(detail: MCPServerDetail) { self.detail = detail }
+    private let timeoutSeconds: Int
+
+    init(detail: MCPServerDetail, timeoutSeconds: Int = 30) {
+        self.detail = detail
+        self.timeoutSeconds = timeoutSeconds
+    }
+
+    func nativeToolDescriptors() async throws -> [JSONValue] {
+        try await connect()
+        return tools
+    }
+
+    /// This entry point is for native clients such as the Xcode preview inspector.
+    /// Embedded HTML continues through the visibility checks in appRequest.
+    func callNativeTool(_ name: String, arguments: [String: JSONValue]) async throws -> JSONValue {
+        try await connect()
+        guard tools.contains(where: { $0["name"]?.stringValue == name }) else { throw failure("MCP tool \(name) is unavailable.") }
+        return try await rpc("tools/call", params: .object(["name": .string(name), "arguments": .object(arguments)]))
+    }
 
     deinit {
         try? input?.close()
@@ -111,8 +129,8 @@ actor MCPAppConnection {
             guard let output, let process else { throw failure("MCP process is unavailable.") }
             let requestID = message["id"]
             // Bound blocking pipe reads by terminating a non-responsive child.
-            let timeout = Task.detached {
-                try await Task.sleep(for: .seconds(30))
+            let timeout = Task.detached { [timeoutSeconds] in
+                try await Task.sleep(for: .seconds(timeoutSeconds))
                 if process.isRunning { process.terminate() }
             }
             defer { timeout.cancel() }

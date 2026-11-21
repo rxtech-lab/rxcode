@@ -259,9 +259,9 @@ extension MobileAppState {
     /// fallback for desktops that only send the flat list.
     var taskModelSections: [AgentModelSection] {
         if let sections = desktopSettings?.modelSections, !sections.isEmpty {
-            return sections
+            return sections.filter { $0.provider != .flowcy }
         }
-        let flat = desktopSettings?.availableModels ?? []
+        let flat = desktopSettings?.availableModels?.filter { $0.provider != .flowcy } ?? []
         var providers: [AgentProvider] = []
         for model in flat where !providers.contains(model.provider) {
             providers.append(model.provider)

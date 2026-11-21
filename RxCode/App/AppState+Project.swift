@@ -153,7 +153,7 @@ extension AppState {
         withAnimation(nil) {
             window.showingBriefing = false
             window.selectedProject = project
-            sessionStates = sessionStates.filter { $0.value.isStreaming }
+            sessionStates = sessionStates.filter { $0.value.isStreaming || $0.value.hasUncheckedCompletion }
             resetToNewChat(in: window)
         }
 
@@ -265,7 +265,7 @@ extension AppState {
             flushPendingUpdates(for: session.id, forceText: true)
         }
 
-        updateState(session.id) { $0.hasUncheckedCompletion = false }
+        markCompletionRead(for: session.id)
 
         window.generalRoute = window.selectedProject?.isGlobalChat == true ? .chat : nil
         window.pendingWorktreePath = nil
@@ -319,7 +319,8 @@ extension AppState {
                 do { try await persistence.saveSession(outgoing) }
                 catch { logger.error("Failed to save outgoing session: \(error.localizedDescription)") }
             }
-            if window.currentSessionId != outgoingId {
+            if window.currentSessionId != outgoingId, let state = sessionStates[outgoingId],
+               !state.isStreaming, !state.hasUncheckedCompletion {
                 sessionStates.removeValue(forKey: outgoingId)
             }
         }
@@ -351,11 +352,14 @@ extension AppState {
         onboardingCompleted = true
         workspaceDefaults.set(true, for: "onboardingCompleted")
         startAutopilotWarmup()
+        startCIStatusPoller()
         Task { [weak self] in await self?.refreshCloudProjectsAndBoards() }
     }
 
     func signOutRxAuth() async {
         await rxAuth.signOut()
+        await clearCIStatus()
+        clearFlowcyModels()
         clearCloudProjectState()
         repos = []
         installations = []

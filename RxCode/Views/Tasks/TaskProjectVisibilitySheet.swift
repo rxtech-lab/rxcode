@@ -19,6 +19,8 @@ struct TaskProjectVisibilityButton: View {
         .sheet(isPresented: $isPresented) {
             TaskProjectVisibilitySheet()
                 .environment(appState)
+                .labelStyle(.automatic)
+                .controlSize(.regular)
         }
     }
 }

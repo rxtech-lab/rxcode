@@ -53,7 +53,7 @@ public struct ToolActivityGroupView: View {
                     ToolActivityBadge(status: overallStatus, systemImage: "wrench.and.screwdriver.fill", size: 32)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(tools.last?.name ?? "Tool calls")
+                            Text(tools.last?.displayedToolName ?? "Tool calls")
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .font(.subheadline.weight(.semibold))
@@ -198,6 +198,7 @@ enum ToolActivityStatus: CaseIterable {
 enum ToolActivityPresentation {
     /// `mcp__rxcode-ide__ide__get_projects` → "Get projects"; `list_issues` → "List issues".
     static func title(for name: String) -> String {
+        if name.hasPrefix("ide__") { return name }
         if name.lowercased() == "mcptoolcall" { return "MCP tool call" }
         let base = name.components(separatedBy: "__").last(where: { !$0.isEmpty }) ?? name
         let words = base
@@ -312,7 +313,7 @@ private struct ToolActivityStepRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(ToolActivityPresentation.title(for: tool.name))
+                    Text(ToolActivityPresentation.title(for: tool.displayedToolName))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -392,8 +393,8 @@ struct ToolActivityDetailView: View {
                 HStack(spacing: 12) {
                     ToolActivityBadge(status: status, systemImage: ToolActivityPresentation.systemImage(for: tool.name), size: 40)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(ToolActivityPresentation.title(for: tool.name)).font(.headline)
-                        Text(tool.name)
+                        Text(ToolActivityPresentation.title(for: tool.displayedToolName)).font(.headline)
+                        Text(tool.displayedToolName)
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

@@ -12,6 +12,11 @@ struct ThreadDiffBanner: View {
     var onOpen: (() -> Void)? = nil
     @State private var isHovered: Bool = false
     @State private var changes: LoadedChanges?
+    @State private var presentedThread: PresentedThread?
+
+    private struct PresentedThread: Identifiable {
+        let id: String
+    }
 
     private struct LoadedChanges {
         let sessionId: String
@@ -31,6 +36,9 @@ struct ThreadDiffBanner: View {
                 content(fileCount: visibleChanges.fileCount, stat: visibleChanges.stat)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .sheet(item: $presentedThread) { thread in
+            ThisThreadDiffView(sessionId: thread.id)
         }
         .task(id: key) {
             let summaries = await appState.loadThreadDiffPreview(key)
@@ -117,9 +125,7 @@ struct ThreadDiffBanner: View {
             onOpen()
             return
         }
-        windowState.inspectorMode = .review
-        windowState.inspectorReviewTab = .thisThread
-        appState.showRightSidebar = true
+        presentedThread = PresentedThread(id: loadID.sessionId)
     }
 
     /// Mirrors `ThisThreadFileRow`: computes thread-isolated `+/-` stats via

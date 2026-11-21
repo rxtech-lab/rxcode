@@ -56,8 +56,8 @@ struct MenuBarLabel: View {
                 value > 0 && value < 1 ? String(format: "%.1f%%", value) : "\(Int(value.rounded()))%"
             } ?? "—%"
             return (text, label, "\(provider.displayNameText) \(label) usage limit: \(text)")
-        case .acp:
-            return ("", "", "ACP activity")
+        case .acp, .flowcy:
+            return ("", "", "\(provider.displayNameText) activity")
         }
     }
 
@@ -86,6 +86,7 @@ struct MenuBarLabel: View {
         case .codex: return "CODEX"
         case .acp: return "ACP"
         case .localAgent: return "LOCAL"
+        case .flowcy: return "FLOWCY"
         }
     }
 }
@@ -160,7 +161,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return appState.latestRateLimitUsage
         case .codex: return appState.latestCodexRateLimitUsage
-        case .acp, .localAgent: return nil
+        case .acp, .localAgent, .flowcy: return nil
         }
     }
 
@@ -168,7 +169,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return "7-day limit"
         case .codex: return "7-day limit"
-        case .acp, .localAgent: return "Usage"
+        case .acp, .localAgent, .flowcy: return "Usage"
         }
     }
 
@@ -176,7 +177,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayPercent
         case .codex: return selectedUsage?.sevenDayPercent
-        case .acp, .localAgent: return nil
+        case .acp, .localAgent, .flowcy: return nil
         }
     }
 
@@ -184,7 +185,7 @@ struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayResetsAt
         case .codex: return selectedUsage?.sevenDayResetsAt
-        case .acp, .localAgent: return nil
+        case .acp, .localAgent, .flowcy: return nil
         }
     }
 
@@ -383,9 +384,8 @@ struct MenuBarContentView: View {
                 Task { await appState.refreshSelectedAgentRateLimitUsage() }
             }
         )) {
-            // ACP and the RxCode Agent have no usage tracking, so they aren't
-            // offered in the menubar picker.
-            ForEach(AgentProvider.allCases.filter { $0 != .acp && $0 != .localAgent }, id: \.self) { provider in
+            // These clients report the quota windows shown in this menu.
+            ForEach(AppState.rateLimitedProviders, id: \.self) { provider in
                 Text(provider.displayName)
                     .tag(provider)
             }
@@ -399,6 +399,7 @@ struct MenuBarContentView: View {
         case .codex: return "Sign in to Codex to see usage"
         case .acp: return "Usage tracking not supported by ACP"
         case .localAgent: return "Local models have no usage limits"
+        case .flowcy: return "Flowcy usage is unavailable here"
         }
     }
 

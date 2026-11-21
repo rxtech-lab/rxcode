@@ -1,4 +1,5 @@
 import AppKit
+import RxAuthSwift
 import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
@@ -85,6 +86,9 @@ struct ModelPickerSheet: View {
         .background(ClaudeTheme.background)
         .focusable()
         .focused($isFocused)
+        .task(id: appState.rxUser?.id) {
+            if appState.isSignedIn { await appState.refreshFlowcyModels() }
+        }
         .onKeyPress(.upArrow) {
             guard !flatModels.isEmpty else { return .ignored }
             selectedIndex = (selectedIndex - 1 + flatModels.count) % flatModels.count

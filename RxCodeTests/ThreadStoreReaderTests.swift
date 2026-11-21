@@ -120,6 +120,8 @@ final class ThreadStoreReaderTests: XCTestCase {
         let branches = await reader.loadThreadBranches()
 
         XCTAssertEqual(branches, ["real": ["feature"], "older": ["legacy"]])
+        let startup = await reader.loadStartupSnapshot()
+        XCTAssertEqual(startup.branches, branches)
         XCTAssertNil(store.threadSummaryItem(sessionId: "real"))
     }
 

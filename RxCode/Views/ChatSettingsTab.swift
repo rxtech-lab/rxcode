@@ -121,7 +121,7 @@ struct ChatSettingsTab: View {
                 .foregroundStyle(.secondary)
 
             Picker("", selection: defaultModelKey) {
-                ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                ForEach(appState.availableAgentModelSections(includeFlowcy: true), id: \.id) { section in
                     Section(section.title) {
                         ForEach(section.models, id: \.key) { model in
                             Text(model.displayName).tag(model.key)
@@ -141,7 +141,10 @@ struct ChatSettingsTab: View {
 
     private var defaultModelKey: Binding<String> {
         Binding(
-            get: { "\(appState.selectedAgentProvider.rawValue):\(appState.selectedModel)" },
+            get: {
+                let selection = appState.defaultModelSelection(for: nil)
+                return AgentModel.key(for: selection.model, provider: selection.provider)
+            },
             set: { key in
                 let parts = key.split(separator: ":", maxSplits: 1).map(String.init)
                 guard parts.count == 2, let provider = AgentProvider(rawValue: parts[0]) else { return }
@@ -152,14 +155,15 @@ struct ChatSettingsTab: View {
     }
 
     private var selectedDefaultModel: AgentModel {
-        appState.availableAgentModelSections()
+        let selection = appState.defaultModelSelection(for: nil)
+        return appState.availableAgentModelSections(includeFlowcy: true)
             .flatMap(\.models)
-            .first { $0.provider == appState.selectedAgentProvider && $0.id == appState.selectedModel }
+            .first { $0.provider == selection.provider && $0.id == selection.model }
             ?? AgentModel(
-                provider: appState.selectedAgentProvider,
-                id: appState.selectedModel,
-                displayName: appState.modelDisplayLabel(appState.selectedModel, provider: appState.selectedAgentProvider),
-                description: AppState.modelDescription(appState.selectedModel, provider: appState.selectedAgentProvider)
+                provider: selection.provider,
+                id: selection.model,
+                displayName: appState.modelDisplayLabel(selection.model, provider: selection.provider),
+                description: AppState.modelDescription(selection.model, provider: selection.provider)
             )
     }
 

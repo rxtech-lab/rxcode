@@ -19,7 +19,9 @@ nonisolated struct StorageBreakdown: Sendable, Equatable {
 
 /// Measures RxCode-owned disk storage and removes briefing files and caches.
 actor CacheStorageService {
-    static let shared = CacheStorageService()
+    static let shared = CacheStorageService(
+        cacheRoot: AppSupport.isTestProcess ? AppSupport.bundleScopedURL.appendingPathExtension("caches") : nil
+    )
 
     private let fileManager = FileManager.default
     private let appSupportRoot: URL
@@ -43,6 +45,28 @@ actor CacheStorageService {
     }
 
     func occupiedBytes() -> Int64 { breakdown().totalBytes }
+
+    private func branchStatusURL(workspaceID: String) -> URL {
+        cacheRoot.appending(path: appSupportRoot.lastPathComponent)
+            .appending(path: "branch-status")
+            .appending(path: "\(workspaceID).json")
+    }
+
+    func loadBranchStatus(workspaceID: String) -> BranchStatusSnapshot? {
+        let url = branchStatusURL(workspaceID: workspaceID)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(BranchStatusSnapshot.self, from: data)
+    }
+
+    func saveBranchStatus(_ snapshot: BranchStatusSnapshot, workspaceID: String) throws {
+        let url = branchStatusURL(workspaceID: workspaceID)
+        guard snapshot.accountID != nil, !snapshot.byBranch.isEmpty || !snapshot.inferredBySession.isEmpty else {
+            if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) }
+            return
+        }
+        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(snapshot).write(to: url, options: .atomic)
+    }
 
     func breakdown() -> StorageBreakdown {
         var result = StorageBreakdown()

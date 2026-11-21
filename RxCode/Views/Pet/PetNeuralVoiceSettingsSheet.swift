@@ -43,13 +43,13 @@ enum PetVoicePresets {
     }
 
     /// Activates `model`, moving the voice preset onto one the model lists.
-    static func select(model: LocalModelInfo, in controller: PetController) {
-        controller.configuration.localTTSModelID = model.id
+    static func select(model: LocalModelInfo, in configuration: inout PetConfiguration) {
+        configuration.selectLocalVoice(modelID: model.id)
         let config = config(for: model.id)
         guard let options = options(modelID: model.id, config: config),
-              !options.contains(where: { $0.id == controller.configuration.localTTSVoicePreset }),
+              !options.contains(where: { $0.id == configuration.localTTSVoicePreset }),
               let fallback = defaultVoice(modelID: model.id, config: config) else { return }
-        controller.configuration.localTTSVoicePreset = fallback
+        configuration.localTTSVoicePreset = fallback
     }
 }
 
@@ -67,6 +67,7 @@ struct PetNeuralVoiceSettingsSheet: View {
     @AppStorage(StudioModelConfig.pendingStorageKey) private var pendingConfigs = ""
 
     @State private var draftVoice = ""
+    @State private var draftRate = 1.0
     @State private var seedText = "42"
     @State private var isAnalyzing = false
     @State private var analyzeError: String?
@@ -117,16 +118,17 @@ struct PetNeuralVoiceSettingsSheet: View {
                             preview.stop()
                         } else if let seed = fixedSeed {
                             var draft = controller.configuration
-                            draft.localTTSModelID = model.id
+                            draft.selectLocalVoice(modelID: model.id)
                             draft.localTTSVoicePreset = draftVoice
                             draft.localTTSSeed = seed
+                            draft.speechRate = draftRate
                             preview.play(configuration: draft, controller: controller)
                         }
                     } label: {
                         Label(preview.isPlaying ? "Stop Preview" : "Preview Voice",
                               systemImage: preview.isPlaying ? "stop.circle" : "play.circle")
                     }
-                    .disabled(!preview.isPlaying && fixedSeed == nil)
+                    .disabled(controller.isMuted || (!preview.isPlaying && fixedSeed == nil))
                 }
             }
             .formStyle(.grouped)
@@ -139,9 +141,12 @@ struct PetNeuralVoiceSettingsSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Use Voice & Save") {
                         guard let seed = fixedSeed else { return }
-                        controller.configuration.localTTSModelID = model.id
-                        controller.configuration.localTTSVoicePreset = draftVoice
-                        controller.configuration.localTTSSeed = seed
+                        var draft = controller.configuration
+                        draft.selectLocalVoice(modelID: model.id)
+                        draft.localTTSVoicePreset = draftVoice
+                        draft.localTTSSeed = seed
+                        draft.speechRate = draftRate
+                        controller.configuration = draft
                         onSaved()
                         dismiss()
                     }
@@ -177,12 +182,14 @@ struct PetNeuralVoiceSettingsSheet: View {
         }
         .onChange(of: draftVoice) { preview.stop() }
         .onChange(of: seedText) { preview.stop() }
+        .onChange(of: draftRate) { preview.stop() }
         .onChange(of: savedConfigs) { adoptDefaultVoiceIfNeeded() }
         .onDisappear { preview.shutdown() }
         .onAppear {
             let isActive = controller.configuration.localTTSModelID == model.id
             draftVoice = isActive ? controller.configuration.localTTSVoicePreset : ""
             seedText = String(controller.configuration.resolvedLocalTTSSeed)
+            draftRate = controller.configuration.speechRate
             adoptDefaultVoiceIfNeeded()
         }
     }
@@ -271,6 +278,11 @@ struct PetNeuralVoiceSettingsSheet: View {
 
     private var seedSection: some View {
         Section {
+            LabeledContent("Speech Speed") {
+                Slider(value: $draftRate, in: 0.75...1.35, step: 0.05)
+                    .frame(maxWidth: 200)
+                Text(String(format: "%.2fx", draftRate)).monospacedDigit()
+            }
             TextField("Voice Seed", text: $seedText)
             Button("Try Another Seed") {
                 seedText = String(Int.random(in: 0...Int(Int32.max)))
@@ -323,29 +335,23 @@ final class PetVoiceDraftPreview {
     var isPlaying = false
     var status: String?
     var errorMessage: String?
-    private var configuration = PetConfiguration()
+    private var configuration = PetConfiguration().speechSynthesisConfiguration()
     @ObservationIgnored private var startTask: Task<Void, Never>?
     private let speaker = PetStandaloneSpeaker()
     @ObservationIgnored private lazy var synthesizer: PetLocalSpeechSynthesizer = {
         PetLocalSpeechSynthesizer { @MainActor [weak self] in
-            let cfg = self?.configuration ?? PetConfiguration()
-            return PetLocalSpeechSynthesizer.Configuration(
-                modelID: cfg.localTTSModelID,
-                voicePreset: cfg.localTTSVoicePreset,
-                systemVoiceIdentifier: cfg.systemVoiceIdentifier,
-                localeIdentifier: cfg.speechLocaleIdentifier,
-                speechRate: cfg.speechRate,
-                seed: cfg.resolvedLocalTTSSeed
-            )
+            self?.configuration ?? PetConfiguration().speechSynthesisConfiguration()
         }
     }()
 
-    func play(configuration: PetConfiguration, controller: PetController) {
+    func play(configuration: PetConfiguration, controller: PetController, flowcyClient: FlowcyMediaClient? = nil) {
         stop()
+        guard !controller.isMuted else { return }
+        if controller.voiceDraftPreview !== self { controller.voiceDraftPreview?.stop() }
         controller.voiceDraftPreview = self
-        self.configuration = configuration
+        self.configuration = configuration.speechSynthesisConfiguration(client: flowcyClient ?? controller.flowcyVoiceClient)
         speaker.speechPlayback = controller.speechPlayback
-        speaker.outputDeviceUID = { [weak self] in self?.configuration.speakerDeviceUID }
+        speaker.outputDeviceUID = { configuration.speakerDeviceUID }
         errorMessage = nil
         isPlaying = true
         status = "Preparing voice preview…"
@@ -359,7 +365,9 @@ final class PetVoiceDraftPreview {
             self?.status = nil
         }
         startTask = Task {
-            await controller.stopVoice(drainAnnouncements: false)
+            guard !Task.isCancelled else { return }
+            // Queued announcements wait on isPlaying until the preview finishes or stops.
+            await controller.stopVoice()
             guard !Task.isCancelled else { return }
             controller.standaloneSpeaker.stop()
             speaker.speak(text: "Hi there! I am RxBuddy, your RxCode voice companion.", synthesizer: synthesizer)

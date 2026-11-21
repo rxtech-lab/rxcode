@@ -401,156 +401,6 @@ extension AppState {
         await MobileSyncService.shared.send(.mcpMutationResult(result), toHex: fromHex)
     }
 
-    func mobileFolderTreeRoot(for request: FolderTreeRequestPayload) throws -> RemoteFolderNode {
-        let depth = max(0, min(request.depth, 2))
-        guard let path = request.path?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !path.isEmpty
-        else {
-            return RemoteFolderNode(
-                name: Host.current().localizedName ?? "Mac",
-                path: "",
-                isSelectable: false,
-                children: mobileFolderPickerRoots(
-                    depth: 1,
-                    includeHidden: request.includeHidden,
-                    includeFiles: request.includeFiles
-                )
-            )
-        }
-
-        return try mobileFolderNode(
-            for: URL(fileURLWithPath: path).standardizedFileURL,
-            depth: depth,
-            includeHidden: request.includeHidden,
-            includeFiles: request.includeFiles
-        )
-    }
-
-    func mobileFolderPickerRoots(
-        depth: Int,
-        includeHidden: Bool,
-        includeFiles: Bool
-    ) -> [RemoteFolderNode] {
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        var candidates = [
-            home,
-            home.appendingPathComponent("Desktop", isDirectory: true),
-            home.appendingPathComponent("Documents", isDirectory: true),
-            home.appendingPathComponent("Downloads", isDirectory: true),
-            home.appendingPathComponent("Developer", isDirectory: true)
-        ]
-
-        let projectParents = projects
-            .map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().standardizedFileURL }
-        candidates.append(contentsOf: projectParents)
-
-        var seen: Set<String> = []
-        return candidates.compactMap { url in
-            let path = url.path
-            guard seen.insert(path).inserted else { return nil }
-            return try? mobileFolderNode(
-                for: url,
-                depth: depth,
-                includeHidden: includeHidden,
-                includeFiles: includeFiles
-            )
-        }
-    }
-
-    func mobileFolderNode(
-        for url: URL,
-        depth: Int,
-        includeHidden: Bool,
-        includeFiles: Bool
-    ) throws -> RemoteFolderNode {
-        let fm = FileManager.default
-        var isDirectory: ObjCBool = false
-        guard fm.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue
-        else {
-            throw MobileFolderPickerError.notFolder
-        }
-
-        let name = url == fm.homeDirectoryForCurrentUser.standardizedFileURL
-            ? "Home"
-            : url.lastPathComponent
-        guard depth > 0 else {
-            return RemoteFolderNode(name: name, path: url.path, children: [])
-        }
-
-        var options: FileManager.DirectoryEnumerationOptions = []
-        if !includeHidden { options.insert(.skipsHiddenFiles) }
-        let contents = (try? fm.contentsOfDirectory(
-            at: url,
-            includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
-            options: options
-        )) ?? []
-
-        // Keep directories (always) and plain files (when requested). Folders
-        // sort first so navigation targets stay grouped above file leaves.
-        let entries = contents
-            .compactMap { child -> (url: URL, isDirectory: Bool)? in
-                guard let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isHiddenKey])
-                else { return nil }
-                if !includeHidden && (values.isHidden == true || child.lastPathComponent.hasPrefix(".")) {
-                    return nil
-                }
-                if Self.mobileFolderIgnoredNames.contains(child.lastPathComponent) { return nil }
-                let isDir = values.isDirectory == true
-                if !isDir && !includeFiles { return nil }
-                return (child, isDir)
-            }
-            .sorted { lhs, rhs in
-                if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-                return lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent) == .orderedAscending
-            }
-            .prefix(Self.mobileFolderMaxChildren)
-
-        let children = entries.compactMap { entry -> RemoteFolderNode? in
-            if entry.isDirectory {
-                return try? mobileFolderNode(
-                    for: entry.url.standardizedFileURL,
-                    depth: depth - 1,
-                    includeHidden: includeHidden,
-                    includeFiles: includeFiles
-                )
-            }
-            return RemoteFolderNode(
-                name: entry.url.lastPathComponent,
-                path: entry.url.standardizedFileURL.path,
-                isSelectable: false,
-                isDirectory: false,
-                children: []
-            )
-        }
-
-        return RemoteFolderNode(name: name, path: url.path, children: Array(children))
-    }
-
-    func mobileFolderErrorMessage(_ error: Error) -> String {
-        if let folderError = error as? MobileFolderPickerError {
-            return folderError.localizedDescription
-        }
-        return error.localizedDescription
-    }
-
-    static let mobileFolderMaxChildren = 250
-    static let mobileFolderIgnoredNames: Set<String> = [
-        ".git", ".build", ".swiftpm", "DerivedData",
-        "node_modules", ".DS_Store", "Pods", "xcuserdata"
-    ]
-
-    enum MobileFolderPickerError: LocalizedError {
-        case notFolder
-
-        var errorDescription: String? {
-            switch self {
-            case .notFolder:
-                return "Folder does not exist on the desktop."
-            }
-        }
-    }
-
     func handleMobileCancelStream(_ cancel: CancelStreamPayload) async {
         // The mobile may hold a session id the CLI has since advanced
         // (pending-→real swap, or a compaction boundary). Follow the redirect
@@ -588,7 +438,7 @@ extension AppState {
             return
         }
 
-        await hydrateMobileSessionIfNeeded(summary: summary, project: project)
+        await hydrateSessionIfNeeded(summary: summary, project: project)
         updateMobilePlaceholderTitleIfNeeded(sessionID: sessionID, firstUserMessage: text)
 
         // If a turn is already streaming, the mobile message goes into the
@@ -740,31 +590,6 @@ extension AppState {
             state.model = selection.model
         }
         return sessionID
-    }
-
-    func hydrateMobileSessionIfNeeded(summary: ChatSession.Summary, project: Project) async {
-        if sessionStates[summary.id] == nil,
-           let full = await persistence.loadFullSession(summary: summary, cwd: project.path) {
-            updateState(summary.id) { state in
-                // Skip the assignment when persistence returned an empty thread
-                // (e.g. corrupted JSONL that decoded to no messages). The state
-                // we just created is also empty, so this is a no-op cosmetic
-                // guard — but it stops a future caller from accidentally
-                // overwriting a non-empty in-memory list if this branch is
-                // ever reached for a session that re-appeared mid-call.
-                guard !full.messages.isEmpty || state.messages.isEmpty else { return }
-                state.messages = full.messages
-            }
-        }
-
-        updateState(summary.id) { state in
-            if state.agentProvider == nil { state.agentProvider = summary.agentProvider }
-            if state.model == nil { state.model = summary.model }
-            state.effort = state.effort(fallingBackTo: summary.effort)
-            if state.permissionMode == nil { state.permissionMode = summary.permissionMode }
-            if state.worktreePath == nil { state.worktreePath = summary.worktreePath }
-            if state.worktreeBranch == nil { state.worktreeBranch = summary.worktreeBranch }
-        }
     }
 
     func updateMobilePlaceholderTitleIfNeeded(sessionID: String, firstUserMessage: String) {

@@ -2,24 +2,39 @@ import SwiftUI
 import AppKit
 import RxCodeCore
 
+extension View {
+    func fileInspectorSheet(_ window: WindowState) -> some View {
+        sheet(item: Bindable(window).inspectorFile) { file in
+            FileInspectorView(filePath: file.path, fileName: file.name, onClose: { window.inspectorFile = nil }) {
+                FilePreviewTitle(fileName: file.name)
+            }
+            .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
+                   minHeight: 600, idealHeight: 1000, maxHeight: 1200)
+            .onExitCommand { window.inspectorFile = nil }
+        }
+    }
+}
+
 /// Inspector panel for file preview with syntax highlighting
-struct FileInspectorView: View {
+struct FileInspectorView<Title: View>: View {
     let filePath: String
     let fileName: String
+    let onClose: () -> Void
+    @ViewBuilder var title: () -> Title
     @State private var content: String?
-    @State private var highlightedContent: NSAttributedString?
+    @State private var highlightedContent: SourcePreviewContent?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isCopied = false
     @State private var showsRawText = false
     @State private var usesNativePreview = false
+    @State private var capture = PreviewCapture()
     @State private var isEditing = false
     @State private var editingContent = ""
     @State private var isSaving = false
     @State private var saveError: String?
     @State private var sourceEncoding = String.Encoding.utf8
     @State private var sourceBOM = Data()
-    @Environment(WindowState.self) private var windowState
 
     private var isDirty: Bool {
         isEditing && editingContent != (content ?? "")
@@ -30,47 +45,44 @@ struct FileInspectorView: View {
             header
             ClaudeThemeDivider()
 
-            if isLoading {
-                loadingView
-            } else if let error = errorMessage {
-                errorView(error)
-            } else if usesNativePreview || (format == .native && !showsRawText) {
-                NativeFilePreviewView(fileURL: fileURL)
-                    .id(filePath + String(content?.hashValue ?? 0))
+            Group {
+                if isLoading {
+                    loadingView
+                } else if let error = errorMessage {
+                    errorView(error)
+                } else if usesNativePreview || (format == .native && !showsRawText) {
+                    NativeFilePreviewView(fileURL: fileURL, capture: capture)
+                        .id(filePath + String(content?.hashValue ?? 0))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let content {
+                    Group {
+                        if showsRawText || !format.hasRenderedPreview {
+                            if let highlightedContent {
+                                CodeTextRenderer(content: highlightedContent)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .background(ClaudeTheme.codeBackground)
+                            }
+                        } else if format == .markdown {
+                            MarkdownPreviewView(content: content, baseURL: fileURL.deletingLastPathComponent())
+                        } else if format == .html {
+                            HTMLFilePreviewView(fileURL: fileURL, content: content)
+                        }
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let content {
-                if showsRawText || !format.hasRenderedPreview {
-                    codeContentView(content)
-                } else if format == .markdown {
-                    MarkdownPreviewView(content: content, baseURL: fileURL.deletingLastPathComponent())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if format == .html {
-                    HTMLFilePreviewView(fileURL: fileURL, content: content)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .previewSelectionComments(for: fileURL)
+                    .id(showsRawText)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isCopied {
+                    Label("Copied", systemImage: "checkmark.circle.fill")
+                        .font(.callout).padding(8)
+                        .background(.regularMaterial, in: .rect(cornerRadius: 8))
+                        .padding(8).allowsHitTesting(false)
                 }
             }
         }
         .background(ClaudeTheme.background)
-        .background {
-            // Cmd+S: Save
-            Button("") { Task { await saveFile() } }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!isDirty || isSaving)
-                .opacity(0)
-                .allowsHitTesting(false)
-            // ESC: Cancel editing if in edit mode, otherwise close the inspector
-            Button("") {
-                if isEditing {
-                    isEditing = false
-                    editingContent = content ?? ""
-                } else {
-                    windowState.inspectorFile = nil
-                }
-            }
-            .keyboardShortcut(.escape, modifiers: [])
-            .opacity(0)
-            .allowsHitTesting(false)
-        }
         .sheet(isPresented: $isEditing) {
             NavigationStack {
                 editingView
@@ -79,6 +91,7 @@ struct FileInspectorView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Cancel") { isEditing = false }
+                                .keyboardShortcut(.cancelAction)
                                 .disabled(isSaving)
                         }
                         ToolbarItem(placement: .confirmationAction) {
@@ -114,122 +127,77 @@ struct FileInspectorView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: iconForExtension)
-                .font(.system(size: ClaudeTheme.size(13)))
-                .foregroundStyle(iconColorForExtension)
+        ViewThatFits(in: .horizontal) {
+            headerRow(compact: false)
+            headerRow(compact: true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(ClaudeTheme.surfacePrimary)
+        .task { ExternalEditorService.shared.detectIfNeeded() }
+    }
 
-            Text(fileName)
-                .font(.system(size: ClaudeTheme.size(13), weight: .semibold, design: .monospaced))
-                .foregroundStyle(ClaudeTheme.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer()
-
-            Text(languageLabel)
-                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(ClaudeTheme.surfaceSecondary, in: Capsule())
-
+    private func headerRow(compact: Bool) -> some View {
+        HStack(spacing: compact ? 3 : 8) {
+            title()
+                .help(filePath)
+            Spacer(minLength: 0)
             if content != nil && format.hasRenderedPreview {
-                Picker("View", selection: $showsRawText) {
-                    Text("Preview").tag(false)
-                    Text("Raw Text").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 150)
-                .accessibilityIdentifier("file-preview-mode")
+                FilePreviewModeTabs(showsRawText: $showsRawText, compact: compact)
+                Divider().frame(height: 16)
             }
-
-            if content != nil {
-                Button {
-                    if !isEditing {
-                        editingContent = content ?? ""
+            HStack(spacing: 2) {
+                if !isLoading && errorMessage == nil && (usesNativePreview || (format == .native && !showsRawText)) {
+                    PreviewCommentControls(url: fileURL, capture: capture)
+                        .buttonStyle(.borderless).controlSize(.small)
+                }
+                if let content {
+                    WorkspaceTabStripButton(systemImage: "pencil", help: "Edit File") {
+                        editingContent = content
+                        isEditing = true
                     }
-                    isEditing.toggle()
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle" : "pencil")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(isEditing ? ClaudeTheme.statusSuccess : ClaudeTheme.textSecondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(isEditing ? "Preview" : "Edit")
-            }
-
-            if let content, !isEditing {
-                Button {
-                    copyToClipboard(content, feedback: $isCopied)
-                } label: {
-                    Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(isCopied ? ClaudeTheme.statusSuccess : ClaudeTheme.textSecondary)
-                }
-                .buttonStyle(.borderless)
-                .help(isCopied ? "Copied" : "Copy")
-            }
-
-            Menu {
-                Button("Open in Default App", systemImage: "arrow.up.forward.app") {
-                    NSWorkspace.shared.open(fileURL)
-                }
-                Divider()
-                let editors = ExternalEditorService.shared.detectedEditors
-                if editors.isEmpty {
-                    Text("No editors detected")
-                } else {
-                    ForEach(editors) { editor in
-                        Button {
-                            ExternalEditorService.shared.open(editor, path: filePath)
-                        } label: {
-                            Label(editor.displayName, systemImage: editor.systemSymbol)
+                    if !compact {
+                        WorkspaceTabStripButton(systemImage: "doc.on.doc", help: "Copy File Contents") {
+                            copyToClipboard(content, feedback: $isCopied)
                         }
                     }
                 }
-                Divider()
-                Button {
-                    ExternalEditorService.shared.revealInFinder(filePath)
+                Menu {
+                    if compact, let content {
+                        Button("Copy File Contents", systemImage: "doc.on.doc") {
+                            copyToClipboard(content, feedback: $isCopied)
+                        }
+                        Divider()
+                    }
+                    Button("Open in Default App", systemImage: "arrow.up.forward.app") { NSWorkspace.shared.open(fileURL) }
+                    let editors = ExternalEditorService.shared.detectedEditors
+                    if !editors.isEmpty {
+                        Menu("Open in Editor") {
+                            ForEach(editors) { editor in
+                                Button(editor.displayName, systemImage: editor.systemSymbol) {
+                                    ExternalEditorService.shared.open(editor, path: filePath)
+                                }
+                            }
+                        }
+                    }
+                    Button("Reveal in Finder", systemImage: "folder") { ExternalEditorService.shared.revealInFinder(filePath) }
                 } label: {
-                    Label("Reveal in Finder", systemImage: "folder")
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: ClaudeTheme.size(14), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .frame(width: 24, height: 24).contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: "arrow.up.forward.app")
-                    .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .accessibilityLabel("More File Actions").help("More File Actions")
+                WorkspaceTabStripButton(systemImage: "xmark", help: "Close Preview", action: onClose)
             }
-            .menuStyle(.borderlessButton)
-            .help("Open in Editor")
-            .task { ExternalEditorService.shared.detectIfNeeded() }
-
-            Button { windowState.inspectorFile = nil } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .frame(width: 22, height: 22)
-                    .background(ClaudeTheme.surfaceSecondary, in: Circle())
-            }
-            .buttonStyle(.borderless)
-            .focusable(false)
+            .fixedSize()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(ClaudeTheme.surfacePrimary)
+        .frame(minHeight: 28)
     }
 
     // MARK: - Content
-
-    private func codeContentView(_ text: String) -> some View {
-        let highlighted = highlightedContent ?? NSAttributedString(string: text, attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        ])
-        return CodeTextRenderer(content: highlighted)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(ClaudeTheme.codeBackground)
-    }
 
     private var editingView: some View {
         VStack(spacing: 0) {
@@ -286,9 +254,9 @@ struct FileInspectorView: View {
                 }
                 try (bom + encoded).write(to: url, options: .atomic)
             }.value
+            let highlighted = await SourcePreviewContent.highlighted(textToSave, language: fileExtension)
             content = textToSave
-            let ext = fileExtension
-            highlightedContent = await SyntaxHighlighter.highlightNSAsync(textToSave, language: ext)
+            highlightedContent = highlighted
             isEditing = false
         } catch {
             saveError = "Save failed: \(error.localizedDescription)"
@@ -329,7 +297,7 @@ struct FileInspectorView: View {
             try Task.checkCancellation()
             if let text = FilePreviewFormat.decodeSource(data) {
                 let ext = fileExtension
-                let highlighted = await SyntaxHighlighter.highlightNSAsync(text, language: ext)
+                let highlighted = await SourcePreviewContent.highlighted(text, language: ext)
                 try Task.checkCancellation()
                 content = text
                 highlightedContent = highlighted
@@ -364,155 +332,68 @@ struct FileInspectorView: View {
     private var fileExtension: String {
         (fileName as NSString).pathExtension.lowercased()
     }
-
-    private var languageLabel: String {
-        switch fileExtension {
-        case "swift": "Swift"
-        case "js": "JavaScript"
-        case "jsx": "JSX"
-        case "ts": "TypeScript"
-        case "tsx": "TSX"
-        case "json": "JSON"
-        case "md": "Markdown"
-        case "html": "HTML"
-        case "css": "CSS"
-        case "py": "Python"
-        case "go": "Go"
-        case "rs": "Rust"
-        case "yaml", "yml": "YAML"
-        case "sh", "bash", "zsh": "Shell"
-        default: fileExtension.isEmpty ? "File" : fileExtension.uppercased()
-        }
-    }
-
-    private var iconForExtension: String {
-        FileNode(id: "", name: fileName, isDirectory: false, children: []).icon
-    }
-
-    private var iconColorForExtension: Color {
-        FileNode(id: "", name: fileName, isDirectory: false, children: []).iconColor
-    }
 }
 
 private enum FileInspectorError: Error {
     case tooLarge
 }
 
-// MARK: - NSTextView-based Code Renderer (TextKit2)
+struct FilePreviewTitle: View {
+    let fileName: String
 
-private struct CodeTextRenderer: NSViewRepresentable {
-    let content: NSAttributedString
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-        scrollView.drawsBackground = false
-
-        let textView = NSTextView()
-        textView.minSize = .zero
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = true
-        textView.autoresizingMask = [.height]
-        textView.textContainerInset = NSSize(width: 0, height: 10)
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.allowsUndo = false
-        textView.usesFontPanel = false
-        textView.drawsBackground = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isAutomaticLinkDetectionEnabled = false
-
-        if let container = textView.textContainer {
-            container.widthTracksTextView = false
-            container.heightTracksTextView = false
-            container.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-            container.lineFragmentPadding = 0
+    var body: some View {
+        let file = FileNode(id: fileName, name: fileName, isDirectory: false, children: [])
+        HStack(spacing: 7) {
+            Image(systemName: file.icon)
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                .foregroundStyle(file.iconColor)
+                .frame(width: 24, height: 24)
+                .background(ClaudeTheme.surfaceSecondary, in: .rect(cornerRadius: 6))
+                .accessibilityHidden(true)
+            Text(verbatim: fileName)
+                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .lineLimit(1).truncationMode(.middle)
         }
+    }
+}
 
-        scrollView.documentView = textView
-        context.coordinator.attach(textView: textView, content: content)
-        return scrollView
+private struct FilePreviewModeTabs: View {
+    @Binding var showsRawText: Bool
+    let compact: Bool
+    @State private var hoveredTab: Bool?
+
+    var body: some View {
+        HStack(spacing: 2) {
+            tab("Preview", systemImage: "eye", raw: false)
+            tab("Raw Text", systemImage: "chevron.left.forwardslash.chevron.right", raw: true)
+        }
+        .padding(2)
+        .background(ClaudeTheme.surfaceSecondary, in: .rect(cornerRadius: 8))
+        .fixedSize()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("View")
+        .accessibilityIdentifier("file-preview-mode")
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
-        context.coordinator.update(textView: textView, content: content)
-    }
-
-    final class Coordinator {
-        private weak var textView: NSTextView?
-        private var lastContent: NSAttributedString = NSAttributedString()
-        nonisolated(unsafe) private var themeObserver: NSObjectProtocol?
-
-        deinit {
-            if let observer = themeObserver {
-                NotificationCenter.default.removeObserver(observer)
+    private func tab(_ title: LocalizedStringKey, systemImage: String, raw: Bool) -> some View {
+        let selected = showsRawText == raw
+        return Button { showsRawText = raw } label: {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(selected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+                if !compact { Text(title) }
             }
+            .font(.system(size: ClaudeTheme.size(11), weight: selected ? .semibold : .medium))
+            .foregroundStyle(selected ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+            .padding(.horizontal, compact ? 6 : 8)
+            .frame(minWidth: 26, minHeight: 24)
+            .workspaceTabChip(selected: selected, hovered: hoveredTab == raw, cornerRadius: 6)
+            .contentShape(Rectangle())
         }
-
-        func attach(textView: NSTextView, content: NSAttributedString) {
-            self.textView = textView
-            apply(content: content, to: textView)
-            registerThemeObserver()
-        }
-
-        func update(textView: NSTextView, content: NSAttributedString) {
-            if content === lastContent, textView === self.textView { return }
-            self.textView = textView
-            apply(content: content, to: textView)
-        }
-
-        private func registerThemeObserver() {
-            guard themeObserver == nil else { return }
-            themeObserver = NotificationCenter.default.addObserver(
-                forName: .rxcodeThemeDidChange,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    guard let self, let tv = self.textView else { return }
-                    self.apply(content: self.lastContent, to: tv)
-                }
-            }
-        }
-
-        private func apply(content: NSAttributedString, to textView: NSTextView) {
-            textView.textStorage?.setAttributedString(Self.buildWithGutter(content: content))
-            lastContent = content
-        }
-
-        private static func buildWithGutter(content: NSAttributedString) -> NSAttributedString {
-            let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            let gutterColor = NSColor(ClaudeTheme.textTertiary).withAlphaComponent(0.6)
-            let nsString = content.string as NSString
-            let totalLines = max(nsString.components(separatedBy: "\n").count, 1)
-            let gutterDigits = max(String(totalLines).count, 2)
-            let result = NSMutableAttributedString()
-            var lineNumber = 0
-
-            nsString.enumerateSubstrings(
-                in: NSRange(location: 0, length: nsString.length),
-                options: [.byLines]
-            ) { _, substringRange, _, _ in
-                lineNumber += 1
-                let lineNum = String(lineNumber)
-                let prefix = String(repeating: " ", count: max(0, gutterDigits - lineNum.count)) + lineNum + "  "
-                result.append(NSAttributedString(string: prefix, attributes: [.font: font, .foregroundColor: gutterColor]))
-                if substringRange.length > 0 {
-                    result.append(content.attributedSubstring(from: substringRange))
-                }
-                result.append(NSAttributedString(string: "\n", attributes: [.font: font]))
-            }
-
-            return result
-        }
+        .buttonStyle(.plain)
+        .onHover { inside in hoveredTab = inside ? raw : nil }
+        .accessibilityLabel(title).accessibilityAddTraits(selected ? .isSelected : [])
+        .help(title)
     }
 }

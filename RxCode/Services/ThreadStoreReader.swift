@@ -10,6 +10,7 @@ import os
 /// values that can cross back to the main actor.
 nonisolated struct ThreadStartupSnapshot: Sendable {
     var summaries: [ChatSession.Summary] = []
+    var branches: [String: [String]] = [:]
     var reviewVerdicts: [String: Bool] = [:]
     var fileEditPresence: [String: ThreadFileEditPresence] = [:]
     var todoProgress: [String: ChatTodoProgress] = [:]
@@ -34,7 +35,7 @@ nonisolated struct EmbeddingChunkSnapshot: Sendable {
 /// Background reader over the thread store.
 ///
 /// `ThreadStore` is main-actor bound, which is right for the writes the UI
-/// drives. Launch, though, needs five whole-table reads whose results are pure
+/// drives. Launch, though, needs several whole-table reads whose results are pure
 /// values — on a long-lived install that is a thousand threads and several
 /// thousand file-edit rows of SQLite work, and on the main thread it holds up
 /// the first frame.
@@ -60,8 +61,10 @@ nonisolated struct ThreadStoreReader: Sendable {
     /// One background pass for every index the sidebar reads at launch.
     func loadStartupSnapshot() async -> ThreadStartupSnapshot {
         await read { context in
-            ThreadStartupSnapshot(
-                summaries: Self.summaries(in: context),
+            let threads = Self.threads(in: context)
+            return ThreadStartupSnapshot(
+                summaries: threads.map { $0.toSummary() },
+                branches: Self.threadBranches(for: threads, in: context),
                 reviewVerdicts: Self.reviewVerdicts(in: context),
                 fileEditPresence: ThreadStore.fileEditPresence(in: context),
                 todoProgress: Self.todoProgress(in: context),
@@ -73,7 +76,7 @@ nonisolated struct ThreadStoreReader: Sendable {
     /// Thread summaries alone, for callers that only need the sidebar list
     /// refreshed (e.g. after a launch-time prune removed orphan rows).
     func loadSummaries() async -> [ChatSession.Summary] {
-        await read { Self.summaries(in: $0) }
+        await read { Self.threads(in: $0).map { $0.toSummary() } }
     }
 
     /// The full mobile snapshot needs the persisted list, queue, and edit count
@@ -112,23 +115,11 @@ nonisolated struct ThreadStoreReader: Sendable {
     /// Checkouts recorded at turn start, plus older branch observations from briefings.
     func loadThreadBranches() async -> [String: [String]] {
         await read { context in
-            var checkouts = FetchDescriptor<ChatThread>(predicate: #Predicate { $0.checkoutBranch != nil })
-            checkouts.propertiesToFetch = [\.id, \.checkoutBranch]
-            var summaries = FetchDescriptor<ThreadSummaryRecord>()
-            summaries.propertiesToFetch = [\.sessionId, \.branch]
-
-            var branches: [String: [String]] = [:]
-            for row in (try? context.fetch(checkouts)) ?? [] {
-                if let branch = row.checkoutBranch {
-                    branches[row.id] = [branch]
-                }
-            }
-            for row in (try? context.fetch(summaries)) ?? [] {
-                guard !row.branch.isEmpty, row.branch != "unknown",
-                      branches[row.sessionId]?.contains(row.branch) != true else { continue }
-                branches[row.sessionId, default: []].append(row.branch)
-            }
-            return branches
+            var checkouts = FetchDescriptor<ChatThread>(predicate: #Predicate {
+                $0.checkoutBranch != nil || $0.worktreeBranch != nil
+            })
+            checkouts.propertiesToFetch = [\.id, \.checkoutBranch, \.worktreeBranch]
+            return Self.threadBranches(for: (try? context.fetch(checkouts)) ?? [], in: context)
         }
     }
 
@@ -153,12 +144,33 @@ nonisolated struct ThreadStoreReader: Sendable {
 
     // MARK: - Fetches
 
-    private static func summaries(in context: ModelContext) -> [ChatSession.Summary] {
+    private static func threadBranches(for threads: [ChatThread], in context: ModelContext) -> [String: [String]] {
+        var summaries = FetchDescriptor<ThreadSummaryRecord>()
+        summaries.propertiesToFetch = [\.sessionId, \.branch]
+
+        var branches: [String: [String]] = [:]
+        for row in (try? context.fetch(summaries)) ?? [] {
+            guard !row.branch.isEmpty, row.branch != "unknown",
+                  branches[row.sessionId]?.contains(row.branch) != true else { continue }
+            branches[row.sessionId, default: []].append(row.branch)
+        }
+        for thread in threads {
+            if let worktree = thread.worktreeBranch {
+                branches[thread.id] = [worktree]
+            } else if let checkout = thread.checkoutBranch {
+                let older = branches[thread.id] ?? []
+                branches[thread.id] = [checkout] + older.filter { $0 != checkout }
+            }
+        }
+        return branches
+    }
+
+    private static func threads(in context: ModelContext) -> [ChatThread] {
         let descriptor = FetchDescriptor<ChatThread>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         do {
-            return try context.fetch(descriptor).map { $0.toSummary() }
+            return try context.fetch(descriptor)
         } catch {
             logger.error("Summary fetch failed: \(error.localizedDescription)")
             return []

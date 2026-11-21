@@ -1,4 +1,3 @@
-import RxAuthSwift
 import RxCodeCore
 import SwiftUI
 
@@ -7,7 +6,6 @@ import SwiftUI
 struct LocalAgentSettingsRow: View {
     @Environment(AppState.self) private var appState
     @State private var showModels = false
-    @State private var showCloudChat = false
     @State private var showRuntimes = false
 
     private var store: LocalModelStore { appState.localModels }
@@ -42,7 +40,6 @@ struct LocalAgentSettingsRow: View {
                     .foregroundStyle(.secondary)
             }
             Menu("Manage…") {
-                Button("Flowcy Cloud Chat…") { showCloudChat = true }
                 Button("Models…") { showModels = true }
                 Button("Runtimes…") { showRuntimes = true }
             }
@@ -56,10 +53,6 @@ struct LocalAgentSettingsRow: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1),
         )
-        .sheet(isPresented: $showCloudChat) {
-            FlowcyCloudChatSheet(auth: appState.rxAuth)
-                .id(appState.rxUser?.id)
-        }
         .sheet(isPresented: $showModels) {
             LocalModelsSheet()
                 .localModelsSheetFrame()

@@ -1,7 +1,21 @@
 purpose:
-  stands_in_for: Flowcy account APIs used by the mobile client
-  unblocks: Mobile task draft generation without spending live AI credits
+  stands_in_for: Flowcy account APIs used by the mobile and desktop clients
+  unblocks: Mobile task drafting and desktop chat verification without spending live AI credits
 assumptions:
+  - id: desktop-terminal-round-trip
+    status: supported
+    claim: A desktop model turn can request bash and receive its result in the next chat request.
+    reason: The updated Flowcy route accepts a client-declared bash tool. RxCode executes the command in the active checkout after applying the session permission policy.
+    verification: A project chat sent through AppState ran git branch --show-current in a linked worktree. The local Postman simulation received two successful chat requests and echoed the randomly named worktree branch from the terminal result. Both the Bash card and the assistant reply contained that branch. The live account service was not exercised.
+    source: github-pm/app/api/v1/agent/chat/route.ts, RxCode/Services/FlowcyCloudBackend.swift, RxCodeTests/FlowcyMCPTests.swift, postman/mocks/flowcy-mobile/default.js
+    updated_at: "2026-11-20"
+  - id: desktop-chat-transcript
+    status: supported
+    claim: Desktop chat can continue a thread by sending prior user and assistant text with the new prompt and omitting modelId for the server default.
+    reason: The chat route accepts message history, an optional modelId and an empty tools array.
+    verification: The desktop backend sent the three-message transcript to the local simulation, refreshed its token after HTTP 401, streamed text and retained the thread ID. Separate turns surfaced interrupted output, a stream error, HTTP 503 and HTTP 429.
+    source: github-pm/app/api/v1/agent/chat/route.ts, RxCode/Services/FlowcyCloudBackend.swift, postman/mocks/flowcy-mobile/default.js
+    updated_at: "2026-11-20"
   - id: draft-chat-without-tools
     status: supported
     claim: The chat route accepts an empty tools array and emits text and finish NDJSON events.

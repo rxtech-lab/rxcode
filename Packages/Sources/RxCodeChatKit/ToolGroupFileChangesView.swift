@@ -7,7 +7,7 @@ struct ToolGroupFileChangesView: View {
 
     #if os(macOS)
     @Environment(ChatBridge.self) private var chatBridge: ChatBridge?
-    @State private var ignoreResult: (query: IgnoreQuery, paths: Set<String>)?
+    @State private var ignoreResult: (query: IgnoreQuery, ignoredPaths: Set<String>)?
 
     private struct IgnoreQuery: Equatable {
         let directory: String
@@ -22,8 +22,11 @@ struct ToolGroupFileChangesView: View {
         let query = workingDirectory.map { IgnoreQuery(directory: $0, paths: changes.paths) }
         let totals: ToolGroupFileChanges.Totals? = if query == nil {
             changes.totals()
-        } else if let ignoreResult, ignoreResult.query == query {
-            changes.totals(excluding: ignoreResult.paths)
+        } else if let query, let ignoreResult, ignoreResult.query.directory == query.directory {
+            // Keep confirmed files visible while Git checks newly changed paths.
+            changes.totals(excluding: query.paths
+                .subtracting(ignoreResult.query.paths)
+                .union(ignoreResult.ignoredPaths))
         } else {
             nil
         }
@@ -57,24 +60,39 @@ struct ToolGroupFileChangesView: View {
                 .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
                 .foregroundStyle(ClaudeTheme.textSecondary)
                 .accessibilityLabel(fileLabel)
+                .modifier(ToolGroupCountTransition(count: fileCount))
 
                 if totals.added > 0 {
                     Text("+\(totals.added)")
                         .foregroundStyle(ClaudeTheme.statusSuccess)
                         .fixedSize(horizontal: true, vertical: false)
                         .accessibilityLabel(Text("\(totals.added) lines added", bundle: .module))
+                        .modifier(ToolGroupCountTransition(count: totals.added))
                 }
                 if totals.removed > 0 {
                     Text("−\(totals.removed)")
                         .foregroundStyle(ClaudeTheme.statusError)
                         .fixedSize(horizontal: true, vertical: false)
                         .accessibilityLabel(Text("\(totals.removed) lines removed", bundle: .module))
+                        .modifier(ToolGroupCountTransition(count: totals.removed))
                 }
             }
         }
         .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold, design: .monospaced))
         .lineLimit(1)
         .accessibilityElement(children: .combine)
+    }
+}
+
+struct ToolGroupCountTransition: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let count: Int
+
+    func body(content: Content) -> some View {
+        content
+            .monospacedDigit()
+            .contentTransition(reduceMotion ? .identity : .numericText(value: Double(count)))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: count)
     }
 }
 

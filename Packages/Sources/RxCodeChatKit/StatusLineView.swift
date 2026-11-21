@@ -33,17 +33,15 @@ struct StatusLineView: View {
         HStack(spacing: 10) {
             providerMenuSegment()
 
-            Divider().frame(height: 12)
-
-            usageSegments()
-
-            rateLimitAdviceSegment()
-
-            // Studio generations have no conversation context to report.
-            if !chatBridge.studioKind.isStudio {
+            if chatBridge.agentProvider != .flowcy {
                 Divider().frame(height: 12)
+                usageSegments()
+                rateLimitAdviceSegment()
 
-                contextSegment()
+                if !chatBridge.studioKind.isStudio {
+                    Divider().frame(height: 12)
+                    contextSegment()
+                }
             }
 
             Spacer()
@@ -55,9 +53,10 @@ struct StatusLineView: View {
             }
             .foregroundStyle(ClaudeTheme.textTertiary)
 
-            Divider().frame(height: 12)
-
-            versionSegment()
+            if currentRuntimeVersion != nil {
+                Divider().frame(height: 12)
+                versionSegment()
+            }
         }
         .font(.system(size: ClaudeTheme.size(12), weight: .medium, design: .monospaced))
         .padding(.leading, 12)
@@ -108,6 +107,7 @@ struct StatusLineView: View {
             }
         }
         .task(id: "\(chatBridge.agentProvider.rawValue):\(chatBridge.selectedModelID)") {
+            guard chatBridge.agentProvider.staticCapabilities.contains(.getUsage) else { return }
             if chatBridge.agentProvider == .acp {
                 await chatBridge.refreshACPUsage(force: false)
                 return
@@ -120,7 +120,7 @@ struct StatusLineView: View {
             }
         }
         .onChange(of: chatBridge.isStreaming) { old, new in
-            if old && !new {
+            if old && !new && chatBridge.agentProvider.staticCapabilities.contains(.getUsage) {
                 Task {
                     if chatBridge.agentProvider == .acp {
                         await chatBridge.refreshACPUsage(force: true)
@@ -193,7 +193,7 @@ struct StatusLineView: View {
         switch chatBridge.agentProvider {
         case .claudeCode: return chatBridge.claudeVersion
         case .codex: return chatBridge.codexVersion
-        case .acp, .localAgent: return nil
+        case .acp, .localAgent, .flowcy: return nil
         }
     }
 
@@ -203,6 +203,7 @@ struct StatusLineView: View {
         case .codex: return "Codex"
         case .acp: return "ACP"
         case .localAgent: return "Local"
+        case .flowcy: return "Flowcy"
         }
     }
 
@@ -311,6 +312,8 @@ struct StatusLineView: View {
             }
         case .acp:
             acpUsageSegments()
+        case .flowcy:
+            EmptyView()
         }
     }
 

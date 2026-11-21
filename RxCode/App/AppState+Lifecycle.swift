@@ -1,6 +1,7 @@
 import Foundation
 import struct RxAgentSDK.ClaudeCodeClient
 import os
+import RxAuthSwift
 import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
@@ -13,144 +14,6 @@ struct ThreadFileEditsLoadID: Hashable {
 
 extension AppState {
     // MARK: - Private State
-
-    // MARK: - Window-Scoped Session State Accessors
-
-    func streamState(in window: WindowState) -> SessionStreamState {
-        sessionStates[window.currentSessionId ?? window.newSessionKey] ?? SessionStreamState()
-    }
-
-    func messages(in window: WindowState) -> [ChatMessage] {
-        streamState(in: window).messages
-    }
-
-    func threadFileEditsLoadID(sessionId: String) -> ThreadFileEditsLoadID {
-        ThreadFileEditsLoadID(sessionId: resolveCurrentSessionId(sessionId), revision: threadFileEditsRevision)
-    }
-
-    func loadThreadDiffPreview(sessionId: String) async -> [FileEditSummary] {
-        await loadThreadDiffPreview(threadFileEditsLoadID(sessionId: sessionId))
-    }
-
-    func loadThreadDiffPreview(_ loadID: ThreadFileEditsLoadID) async -> [FileEditSummary] {
-        if let inFlight = threadDiffLoads[loadID] {
-            return await inFlight.value
-        }
-        // The banner and inspector can request the same snapshot concurrently.
-        let read = Task { [threadStoreReader] in
-            await threadStoreReader.loadThreadDiffPreview(sessionId: loadID.sessionId)
-        }
-        threadDiffLoads[loadID] = read
-        defer { threadDiffLoads.removeValue(forKey: loadID) }
-        return await read.value
-    }
-
-    func isStreaming(in window: WindowState) -> Bool {
-        streamState(in: window).isStreaming
-    }
-
-    func isThinking(in window: WindowState) -> Bool {
-        streamState(in: window).isThinking
-    }
-
-    func streamingStartDate(in window: WindowState) -> Date? {
-        streamState(in: window).streamingStartDate
-    }
-
-    func activeModelName(in window: WindowState) -> String? {
-        streamState(in: window).activeModelName
-    }
-
-    func lastTurnContextUsedPercentage(in window: WindowState) -> Double? {
-        streamState(in: window).lastTurnContextUsedPercentage
-    }
-
-    func sessionCostUsd(in window: WindowState) -> Double {
-        streamState(in: window).costUsd
-    }
-
-    func sessionTurns(in window: WindowState) -> Int {
-        streamState(in: window).turns
-    }
-
-    func sessionInputTokens(in window: WindowState) -> Int {
-        streamState(in: window).inputTokens
-    }
-
-    func sessionOutputTokens(in window: WindowState) -> Int {
-        streamState(in: window).outputTokens
-    }
-
-    func sessionCacheCreationTokens(in window: WindowState) -> Int {
-        streamState(in: window).cacheCreationTokens
-    }
-
-    func sessionCacheReadTokens(in window: WindowState) -> Int {
-        streamState(in: window).cacheReadTokens
-    }
-
-    func sessionDurationMs(in window: WindowState) -> Double {
-        streamState(in: window).durationMs
-    }
-
-    func currentSession(in window: WindowState) -> ChatSession? {
-        guard let id = window.currentSessionId else { return nil }
-        guard let summary = allSessionSummaries.first(where: { $0.id == id }) else { return nil }
-        return summary.makeSession()
-    }
-
-    /// Check whether a given session is streaming in the background (not foreground) of this window
-    func isBackgroundStreaming(_ sessionId: String, in window: WindowState) -> Bool {
-        guard sessionId != (window.currentSessionId ?? window.newSessionKey) else { return false }
-        return sessionStates[sessionId]?.isStreaming ?? false
-    }
-
-    /// Returns the set of session IDs currently streaming in the background of this window.
-    func backgroundStreamingSessionIds(in window: WindowState) -> Set<String> {
-        let currentKey = window.currentSessionId ?? window.newSessionKey
-        return Set(sessionStates.compactMap { key, state in
-            (state.isStreaming && key != currentKey) ? key : nil
-        })
-    }
-
-    /// Derive a UI status for the chat row in the project sidebar.
-    func chatStatus(forSessionId id: String, in window: WindowState) -> ChatStatus {
-        if window.pendingPermissions.contains(where: { $0.sessionId == id }) {
-            return .awaitingPermission
-        }
-        // `sessionActivity`, not `sessionStates`: this runs in every sidebar row's
-        // body, and reading `sessionStates` re-rendered them all per stream event.
-        if let activity = sessionActivity[id] {
-            if activity.isStreaming { return .streaming }
-            if activity.hasUncheckedCompletion { return .done }
-        }
-        return .idle
-    }
-
-    func todoProgress(forSessionId id: String) -> ChatTodoProgress? {
-        // Live todos are extracted off the hot path into `sessionActivity`
-        // instead of rescanning the whole transcript per row per render.
-        // Read the persisted fallback from the in-memory index rather than
-        // fetching per call: the sidebar asks this for every visible thread on
-        // every view-graph update, where a SwiftData fetch would land on the
-        // main thread at display-link rate.
-        let recorded = todoProgressBySession[id]
-        if let live = liveTodos(forSessionId: id), live.updatedAt > (recorded?.updatedAt ?? .distantPast) {
-            return live.items.isEmpty ? nil : ChatTodoProgress(snapshot: live)
-        }
-        return recorded.flatMap { $0.total > 0 ? $0 : nil }
-    }
-
-    /// Reload the todo-snapshot index from SwiftData. Driven by
-    /// `todoSnapshotsRevision`, so every existing bump site keeps the index fresh
-    /// without also having to remember to refresh it.
-    func refreshTodoSnapshotIndex() {
-        let progress = threadStore.loadTodoProgressBySession()
-        // Assigning an equal value still fires observation, and this runs on every
-        // todo write — only publish when the answer actually changed.
-        guard progress != todoProgressBySession else { return }
-        todoProgressBySession = progress
-    }
 
     // MARK: - Initialization
 
@@ -170,6 +33,7 @@ extension AppState {
         }
         #endif
         let launchStart = ContinuousClock.now
+        async let cachedBranchStatus = CacheStorageService.shared.loadBranchStatus(workspaceID: activeWorkspace.id)
 
         ThemeStore.shared.current = selectedTheme
         // Settings forms in progress didn't survive the last quit.
@@ -202,17 +66,22 @@ extension AppState {
         // file-edit and todo indexes, queued drafts — is fetched in a single
         // pass on a background context, so a store with thousands of rows no
         // longer blocks the main thread while the window comes up.
-        let snapshot = await threadStoreReader.loadStartupSnapshot()
+        let (snapshot, savedStatus) = await (threadStoreReader.loadStartupSnapshot(), cachedBranchStatus)
         allSessionSummaries = snapshot.summaries
         reviewPassedBySession = snapshot.reviewVerdicts
         threadFileEditPresence = snapshot.fileEditPresence
         todoProgressBySession = snapshot.todoProgress
         persistedQueues = snapshot.queues
+        if !isInitialized {
+            ciBranchesBySessionId = snapshot.branches
+            restoreBranchStatus(savedStatus)
+        }
 
         permissionMode = PermissionMode(rawValue: workspaceDefaults.string(for: "selectedPermissionMode") ?? "") ?? .default
 
         // Permission request routing is handled per-window in initializeWindow's listener.
         isInitialized = true
+        if !AppSupport.isTestProcess { startCIStatusPoller() }
         scheduleDesktopWidgetUpdate()
         resumeReadyTaskDependencies()
 
@@ -267,7 +136,9 @@ extension AppState {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.repos = []
+                guard let self, rxAuth.manager.authState == .unauthenticated else { return }
+                repos = []
+                await clearCIStatus()
             }
         }
 
@@ -294,11 +165,10 @@ extension AppState {
                 await rxAuth.restore()
                 if isSignedIn {
                     startAutopilotWarmup()
+                    startCIStatusPoller()
+                } else {
+                    await clearCIStatus()
                 }
-                // Periodically pull GitHub Actions CI status for open projects
-                // (no-ops until signed in). Notifies on failure and, when enabled,
-                // auto-starts a fix thread.
-                startCIStatusPoller()
                 // Keeps cloud projects' task boards in sync with Autopilot
                 // (no-ops until signed in).
                 startCloudProjectSync()
@@ -450,6 +320,10 @@ extension AppState {
 
     /// Per-window initialization — restore selected project and load session history
     func initializeWindow(_ window: WindowState, selectingProjectId: UUID? = nil) async {
+        let inspectorKey = selectingProjectId.map { "\(AppStorageKeys.rightInspectorLayout).project.\($0.uuidString)" }
+            ?? AppStorageKeys.rightInspectorLayout
+        window.restoreInspectorLayout(forKey: workspaceDefaults.key(inspectorKey))
+
         // Subscribe to permission broadcasts — appends requests to this window's pendingPermissions.
         // subscribe() issues a window-exclusive stream, so events are not stolen across multiple windows.
         Task { [weak self, weak window] in
@@ -577,8 +451,9 @@ extension AppState {
         async let docs: Void = refreshDocsStatuses()
         async let ciUpdates: Void = refreshCIStatuses()
         async let releases: Void = refreshReleaseStatuses()
+        async let models: Void = refreshFlowcyModels()
 
-        _ = await (repos, secrets, docs, ciUpdates, releases)
+        _ = await (repos, secrets, docs, ciUpdates, releases, models)
     }
 
     func seedUITestBriefingIfRequested() {

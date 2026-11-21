@@ -216,24 +216,18 @@ extension AppState {
             }
             return .object(["project_id": .string(id.uuidString), "sync_status": .string(operation == "cloudLink" ? "scheduled" : "inspect_native_state")])
         case "cloudChatModels", "cloudChat":
-            let chat = FlowcyCloudChat(auth: rxAuth)
-            await chat.load()
-            if let error = chat.error { throw IDEToolError.handlerFailed(error) }
+            let models = try await flowcyCloudBackend.fetchModels()
             if operation == "cloudChatModels" {
-                return .array(chat.models.map { .object(["id": .string($0.modelId), "alias": .string($0.alias)]) })
+                return .array(models.map { .object(["id": .string($0.id), "alias": .string($0.displayName)]) })
             }
-            if let model = p["model"]?.stringValue {
-                guard chat.models.contains(where: { $0.id == model }) else { throw IDEToolError.invalidArguments("Model is not in the current Flowcy catalog.") }
-                chat.selectedModel = model
+            guard let model = p["model"]?.stringValue ?? models.first?.id else {
+                throw IDEToolError.notSupported("No Flowcy chat models are configured.")
             }
-            guard chat.selectedModel != nil else { throw IDEToolError.notSupported("No Flowcy chat models are configured.") }
-            chat.send(string("prompt"))
-            do {
-                while chat.streaming { try await Task.sleep(for: .milliseconds(100)) }
-                try Task.checkCancellation()
-            } catch { chat.stop(); throw error }
-            if let error = chat.error { throw IDEToolError.handlerFailed(error) }
-            return .object(["model": .string(chat.selectedModel!), "text": .string(chat.messages.last?.text ?? "")])
+            guard models.contains(where: { $0.id == model }) else {
+                throw IDEToolError.invalidArguments("Model is not in the current Flowcy catalog.")
+            }
+            let text = try await flowcyCloudBackend.reply(model: model, prompt: string("prompt"))
+            return .object(["model": .string(model), "text": .string(text)])
         default: throw IDEToolError.notSupported("No native Flowcy handler for \(operation)")
         }
     }

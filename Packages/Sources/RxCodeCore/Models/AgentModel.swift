@@ -7,6 +7,7 @@ public enum AgentProvider: String, Codable, CaseIterable, Sendable, Hashable {
     /// RxCode's own in-process agent (RxAgentHarness) running a local model
     /// downloaded from Hugging Face.
     case localAgent
+    case flowcy
 
     public var displayName: LocalizedStringResource {
         switch self {
@@ -14,6 +15,7 @@ public enum AgentProvider: String, Codable, CaseIterable, Sendable, Hashable {
         case .codex: return "Codex"
         case .acp: return "ACP"
         case .localAgent: return "RxCode Agent"
+        case .flowcy: return "Flowcy"
         }
     }
 
@@ -37,14 +39,15 @@ public enum AgentProvider: String, Codable, CaseIterable, Sendable, Hashable {
         switch self {
         case .claudeCode: return .cliBacked
         case .codex: return .codexAppServer
-        // Same storage shape as ACP: the agent keeps its own session and
-        // RxCode keeps a replay copy in its JSON store.
-        case .acp, .localAgent: return .acpAgent
+        // These providers use RxCode’s JSON transcript for replay.
+        case .acp, .localAgent, .flowcy: return .acpAgent
         }
     }
 }
 
 public struct AgentModel: Identifiable, Codable, Sendable, Hashable {
+    /// Picker value that lets the Flowcy server choose the model for a chat.
+    public static let flowcyDefaultID = "flowcy-default"
     public let provider: AgentProvider
     public let id: String
     public let displayName: String

@@ -112,7 +112,6 @@ struct TaskProjectSection: View {
         let stories = filteredStories
         if stories.isEmpty {
             emptyState
-            Spacer(minLength: 0)
         } else {
             let displayed = hasActiveFilter ? stories : Array(stories.prefix(TaskOverviewView.previewLimit))
             storyScroll(displayed)
@@ -177,12 +176,13 @@ struct TaskProjectSection: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 8) {
             // Stories the default view filters out still exist.
             let hiddenByView = keyword.isEmpty && !board.stories.isEmpty
             Text(!keyword.isEmpty ? "No stories match." : !cardFilter.isEmpty || cardFilter.hasFilterScript ? "No stories match this filter." : hiddenByView ? "No stories in the default view." : "No stories yet.")
                 .font(.system(size: ClaudeTheme.size(12)))
                 .foregroundStyle(ClaudeTheme.textTertiary)
+                .multilineTextAlignment(.center)
             if keyword.isEmpty && !hiddenByView {
                 Button {
                     openNewStory(mode: nil)
@@ -195,11 +195,12 @@ struct TaskProjectSection: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: 6) {
                 // Only the title carries the drag: the add button and the menu
                 // in the same row have to stay clickable. A tap gesture rather
                 // than a `Button`, which swallows the drag, as the view tabs do.
@@ -212,7 +213,7 @@ struct TaskProjectSection: View {
                     .accessibilityAddTraits(.isButton)
                     .help("Open the project's task views — drag onto another card to reorder")
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 0)
 
                 ProjectCloudButton(project: project, compact: true)
 

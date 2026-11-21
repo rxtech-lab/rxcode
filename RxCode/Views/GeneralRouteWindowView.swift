@@ -10,6 +10,7 @@ import SwiftUI
 struct GeneralRouteWindowRoot: View {
     let workspaceManager: WorkspaceManager
     let workspaceID: String
+    let instanceID: UUID
     let route: GeneralRoute
     var taskDetailProjectId: UUID?
     @Environment(\.controlActiveState) private var controlActiveState
@@ -24,12 +25,12 @@ struct GeneralRouteWindowRoot: View {
             if appState.isInitialized, windowState.isInitialized, isReady {
                 GeneralRouteWindowView(route: route)
                     .hookUI()
-                    .environment(appState)
                     .environment(workspaceManager)
-                    .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .modifier(WorkspaceBrowserHost(appState: appState, windowState: windowState, browserSheetID: instanceID))
                     .generatedVideoSheet(windowState)
+                    .environment(appState)
+                    .environment(windowState)
                     .localStudioSettingsSheet(windowState, appState: appState)
                     .transition(.opacity)
             } else {
@@ -101,11 +102,7 @@ private struct GeneralRouteWindowView: View {
             }
         }
         .navigationTitle(navigationTitleText)
-        .sheet(item: Bindable(windowState).inspectorFile) { file in
-            FileInspectorView(filePath: file.path, fileName: file.name)
-                .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
-                       minHeight: 600, idealHeight: 1000, maxHeight: 1200)
-        }
+        .fileInspectorSheet(windowState)
         .sheet(item: Bindable(windowState).diffFile) { file in
             FileDiffView(
                 filePath: file.path,

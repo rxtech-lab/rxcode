@@ -412,7 +412,8 @@ struct FlowcyMediaTransportTests {
         #expect(items(observed["requests"]).count == 2)
         #expect(items(observed["requests"]).allSatisfy { text($0["key"]) == key })
         let models = try await signedIn.allModels()
-        #expect(models.count == 3)
+        #expect(models.count == 6)
+        #expect(models.filter { $0.id == "fixture-image" }.count == 1)
         #expect(models.first { $0.id == "fixture-image" }?.labels == ["chat", "image"])
         let video = try await signedIn.request("ai/videos", body: .object([
             "model": .string("fixture-video"), "prompt": .string("a waving pet"),
@@ -421,6 +422,50 @@ struct FlowcyMediaTransportTests {
         #expect(text(video["job_id"]) == "flowcy-fixture-video")
         let polled = try await signedIn.request("jobs/flowcy-fixture-video")
         #expect(text(polled["status"]) == "running")
+    }
+
+    @Test("Pet speech loads Flowcy voices and decodes the selected provider's audio",
+          .enabled(if: ProcessInfo.processInfo.environment["RXCODE_MEDIA_SIMULATION_URL"] != nil))
+    @MainActor
+    func simulatedPetSpeech() async throws {
+        let address = try #require(ProcessInfo.processInfo.environment["RXCODE_MEDIA_SIMULATION_URL"])
+        let client = FlowcyMediaClient(baseURL: try #require(URL(string: address))) { _ in "fixture-valid" }
+        let models = try await client.allModels(capability: "speech")
+        #expect(models.count == 4)
+        #expect(models.allSatisfy { $0.labels.contains("audio") })
+        let hd = try #require(models.first { $0.id == "azure-hd-tts" })
+        #expect(try await client.speechVoices(for: hd).map(\.id) == ["en-US-Ava:DragonHDLatestNeural"])
+        let azure = try #require(models.first { $0.id == "azure-neural-tts" })
+        let azureVoices = try await client.speechVoices(for: azure)
+        #expect(azureVoices.map(\.id) == ["fr-FR-DeniseNeural"])
+        let gemini = try #require(models.first { $0.provider == "google" })
+        let geminiVoices = try await client.speechVoices(for: gemini)
+        let gateway = try #require(models.first { $0.provider == "gateway" })
+        let selections = [
+            FlowcySpeechSelection(model: azure, voice: try #require(azureVoices.first)),
+            FlowcySpeechSelection(model: gemini, voice: try #require(geminiVoices.first { $0.id == "Kore" })),
+            FlowcySpeechSelection(model: gateway, voice: .init(id: "fixture-speaker", name: "Fixture Speaker"))
+        ]
+        for selection in selections {
+            var config = PetConfiguration()
+            config.localTTSModelID = "missing-local-voice"
+            config.flowcyVoice = selection
+            let synthesis = config.speechSynthesisConfiguration(client: client)
+            let synthesizer = PetLocalSpeechSynthesizer { synthesis }
+            var audio = Data()
+            for try await frame in try await synthesizer.synthesize("Ready & waiting.") {
+                #expect(frame.format == VoicePCMFormat(sampleRate: 24_000, channels: 1))
+                audio.append(frame.data)
+            }
+            #expect(audio.contains { $0 != 0 })
+        }
+        let chosen = try #require(selections.last)
+        for (prompt, message) in [("rate-limit", "Speech allowance reached"), ("missing-audio", "no speech audio")] {
+            do {
+                _ = try await client.speechFrames(text: prompt, selection: chosen)
+                Issue.record("Unexpected speech success for \(prompt)")
+            } catch { #expect(error.localizedDescription.contains(message)) }
+        }
     }
 
     @Test("Media allowance errors do not retry and non-JSON failures preserve HTTP status",

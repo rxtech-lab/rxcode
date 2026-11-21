@@ -57,6 +57,7 @@ struct PetDailyReportSheet: View {
                                 systemImage: controller.isStandaloneSpeaking ? "speaker.slash.fill" : "speaker.wave.2.fill"
                             )
                         }
+                        .disabled(controller.isMuted)
                     }
 
                     ToolbarItem(placement: .automatic) {

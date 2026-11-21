@@ -22,7 +22,10 @@ Contract assumptions:
 - The catalog may repeat a model once per capability, retaining its original labels. RxCode deduplicates these entries while keeping image/video/audio labels.
 - Image results carry `images[].b64_json` and `mime_type`; video submission returns HTTP 202 with a job ID and poll URL.
 - Allowance errors return HTTP 429 and a readable error. They must not trigger an automatic new generation. Non-JSON errors still retain their HTTP failure status.
+- Pet speech uses the `speech` capability filter and Azure's region-specific voice list. The fixture follows `github-pm/app/api/v1/ai/{voices,speech}/route.ts` for Azure SSML, Gemini speaker names and Gateway voice IDs.
 
 This fixture cannot establish deployed model availability, pricing configuration, actual provider generation quality, live account billing, or real audio playback. Those require separate live verification. No provider generation is performed by these tests.
+
+On 2026-11-20, `FlowcyMediaTransportTests.simulatedPetSpeech` fetched the speech catalog and filtered Azure Neural and HD voices. The stand-in received the selected Azure, Gemini, and Gateway speakers. RxCode decoded its MP3 and WAV fixtures into non-silent 24 kHz mono PCM frames. Both the simulated HTTP 429 and an empty audio payload produced errors in the client.
 
 Observed 2026-11-17 with Postman CLI 1.75.0: both real HTTP tests passed without skips. The simulation log recorded image requests returning 401, 200, 429, and 502, catalog loading, video submission (202), and job polling (200). The rejected bearer was refreshed once with the same idempotency key; the rate-limited operation was attempted once. The broader focused run passed 11 tests, including pixel alignment of all 768 regenerated body-frame pairs. This establishes stand-in transport behavior, not live provider generation.

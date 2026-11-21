@@ -182,10 +182,10 @@
     "Board" : {
 
     },
-    "Branch" : {
+    "Briefing" : {
 
     },
-    "Briefing" : {
+    "Browser" : {
 
     },
     "Bug" : {
@@ -350,6 +350,9 @@
     "First day of the month at 9:00" : {
 
     },
+    "Flowcy" : {
+
+    },
     "Forest (Green)" : {
 
     },
@@ -386,6 +389,9 @@
           }
         }
       }
+    },
+    "Keep at least one commit in the rebase." : {
+
     },
     "Large" : {
       "localizations" : {
@@ -534,6 +540,9 @@
         }
       }
     },
+    "Only commits on the current branch can be reworded." : {
+
+    },
     "Overdue since %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -551,6 +560,9 @@
 
     },
     "Plan" : {
+
+    },
+    "Preview" : {
 
     },
     "Priority" : {
@@ -606,6 +618,9 @@
           }
         }
       }
+    },
+    "Reworded commits need a message." : {
+
     },
     "Run" : {
 
@@ -741,6 +756,12 @@
         }
       }
     },
+    "The first kept commit can’t be squashed or fixed up." : {
+
+    },
+    "The remote “%@” is unavailable." : {
+
+    },
     "The run finished without a final message." : {
 
     },
@@ -759,10 +780,10 @@
     "This project, this machine only" : {
 
     },
-    "This thread" : {
+    "Title" : {
 
     },
-    "Title" : {
+    "Tools" : {
 
     },
     "Unable to Apply Column Options" : {

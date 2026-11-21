@@ -185,6 +185,61 @@ final class ProjectEffortTests: XCTestCase {
         XCTAssertEqual(requests.map(\.effort), ["high", "medium"])
     }
 
+    func testCardEffortValidatesTheModelAndPreservesConcurrentEdits() throws {
+        let project = makeProject("Board")
+        appState.projects = [project]
+        let task = ProjectTask(projectId: project.id, title: "Task",
+                               agent: TaskAgentConfig(provider: .codex, model: "gpt-5.4-mini"))
+        var edited = task
+        edited.title = "Renamed while the picker was open"
+        edited.agent.planMode = true
+        appState.taskBoards[project.id] = TaskBoard(tasks: [edited])
+
+        XCTAssertFalse(appState.updateTaskEffort("xhigh", for: task))
+        XCTAssertTrue(appState.updateTaskEffort("high", for: task))
+        let saved = try XCTUnwrap(appState.task(id: task.id))
+        XCTAssertEqual(saved.title, edited.title)
+        XCTAssertTrue(saved.agent.planMode)
+        XCTAssertEqual(saved.agent.effort, "high")
+        XCTAssertFalse(appState.updateTaskEffort("low", for: task), "An older picker cannot overwrite a newer choice")
+
+        appState.dispatchingTaskIds.insert(task.id)
+        XCTAssertFalse(appState.updateTaskEffort(nil, for: saved))
+        appState.dispatchingTaskIds.remove(task.id)
+        XCTAssertTrue(appState.updateTaskEffort(nil, for: saved))
+        XCTAssertNil(appState.task(id: task.id)?.agent.effort)
+    }
+
+    func testTaskRunUsesTheCardEffortAndReturnsToSettingsAfterReset() async throws {
+        let project = makeProject("Board")
+        appState.projects = [project]
+        appState.selectProject(project, in: window)
+        appState.setSessionEffort("low", in: window)
+        appState.selectedEffort = "medium"
+        appState.memoryEnabled = false
+        let backend = MockAgentBackend(provider: .codex)
+        appState.agentBackendOverrides[.codex] = backend
+        let task = ProjectTask(projectId: project.id, title: "Run", status: .inProgress,
+                               agent: TaskAgentConfig(provider: .codex, model: "gpt-5.4"))
+        // A completion-check thread would send an independent request to the same mock backend.
+        let runColumn = TaskColumn(id: .inProgress, name: "In Progress", triggersChat: true)
+        appState.taskBoards[project.id] = TaskBoard(tasks: [task], columns: [runColumn])
+
+        for level: String? in ["xhigh", nil] {
+            let current = try XCTUnwrap(appState.task(id: task.id))
+            XCTAssertTrue(appState.updateTaskEffort(level, for: current))
+            await appState.startTask(current)
+            let sessionID = try XCTUnwrap(appState.task(id: task.id)?.sessionKey)
+            let streamID = try XCTUnwrap(appState.stateForSession(sessionID).activeStreamId)
+            let completion = await appState.awaitStreamCompletion(streamId: streamID, timeout: 10, acceptsPartial: false)
+            XCTAssertNotNil(completion)
+            XCTAssertNil(completion?.error)
+        }
+        let requests = await backend.receivedRequests
+        XCTAssertEqual(requests.map(\.effort), ["xhigh", "medium"])
+        XCTAssertEqual(effort, "low")
+    }
+
     func testGlobalChatKeepsItsOwnModelPreferencesAcrossLaunches() {
         let project = makeProject("Project")
         appState.projects = [project]

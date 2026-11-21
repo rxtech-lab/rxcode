@@ -1,5 +1,6 @@
 import Foundation
 import os
+import RxAuthSwift
 import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
@@ -27,11 +28,61 @@ extension AppState {
         }
     }
 
-    func availableAgentModelSections() -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
+    func clearFlowcyModels() {
+        flowcyModelRequestID = nil
+        flowcyModelAccountID = nil
+        flowcyModels = nil
+        flowcyModelError = nil
+    }
+
+    func refreshFlowcyModels() async {
+        guard isSignedIn, let account = rxUser?.id else {
+            clearFlowcyModels()
+            return
+        }
+        if flowcyModelAccountID != account { clearFlowcyModels() }
+        guard flowcyModelRequestID == nil else { return }
+        let requestID = UUID()
+        flowcyModelRequestID = requestID
+        flowcyModelAccountID = account
+        flowcyModelError = nil
+        defer { if flowcyModelRequestID == requestID { flowcyModelRequestID = nil } }
+        do {
+            let models = try await flowcyCloudBackend.fetchModels()
+            try Task.checkCancellation()
+            guard flowcyModelRequestID == requestID, isSignedIn, rxUser?.id == account else { return }
+            if models != flowcyModels {
+                flowcyModels = models
+                scheduleMobileSnapshotBroadcast()
+            }
+        } catch {
+            guard !Task.isCancelled, flowcyModelRequestID == requestID, isSignedIn, rxUser?.id == account else { return }
+            flowcyModelError = error.localizedDescription
+        }
+    }
+
+    private var currentFlowcyModels: [AgentModel]? {
+        isSignedIn && flowcyModelAccountID == rxUser?.id ? flowcyModels : nil
+    }
+
+    static func resolvedFlowcyModel(_ model: String, catalog: [AgentModel]?) -> String {
+        // Preserve saved choices during sign-in and while the first catalog request is pending.
+        guard let catalog, model != AgentModel.flowcyDefaultID, !catalog.contains(where: { $0.id == model }) else { return model }
+        return catalog.first?.id ?? AgentModel.flowcyDefaultID
+    }
+
+    func availableAgentModelSections(includeFlowcy: Bool = false) -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
         var sections: [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] = [
             ("claudeCode", AgentProvider.claudeCode.displayNameText, .claudeCode, nil, claudeModels.isEmpty ? Self.availableClaudeModels : claudeModels),
             ("codex", AgentProvider.codex.displayNameText, .codex, nil, Self.availableCodexModels(codexModels)),
         ]
+
+        if includeFlowcy {
+            let serverDefault = AgentModel(provider: .flowcy, id: AgentModel.flowcyDefaultID,
+                                           displayName: "Server Default", description: "Use the default model for your Flowcy account.")
+            let catalog = currentFlowcyModels ?? []
+            sections.append(("flowcy", AgentProvider.flowcy.displayNameText, .flowcy, nil, catalog + [serverDefault]))
+        }
 
         // RxCode's own agent appears once a local model is downloaded.
         if !localModels.installed.isEmpty {
@@ -108,7 +159,7 @@ extension AppState {
     /// The sections a window's model pickers offer: only models of the same
     /// studio once a studio thread has started, otherwise everything.
     func availableAgentModelSections(in window: WindowState) -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
-        let sections = availableAgentModelSections()
+        let sections = availableAgentModelSections(includeFlowcy: true)
         guard let kind = lockedStudioKind(in: window) else { return sections }
         return sections.compactMap { section in
             let models = section.models.filter { localStudioKind($0.id, provider: $0.provider) == kind }
@@ -127,7 +178,7 @@ extension AppState {
         guard provider != selectedAgentProvider else { return }
 
         selectedAgentProvider = provider
-        if let model = availableAgentModelSections()
+        if let model = availableAgentModelSections(includeFlowcy: true)
             .first(where: { $0.provider == provider })?
             .models
             .first?
@@ -138,7 +189,7 @@ extension AppState {
     }
 
     func isModelAvailable(_ model: String, provider: AgentProvider) -> Bool {
-        availableAgentModelSections()
+        availableAgentModelSections(includeFlowcy: true)
             .flatMap(\.models)
             .contains { $0.provider == provider && $0.id == model }
     }
@@ -146,16 +197,18 @@ extension AppState {
     func projectDefaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String)? {
         guard let project,
               let provider = project.isGlobalChat ? globalChatLastAgentProvider : project.lastAgentProvider,
-              let model = project.isGlobalChat ? globalChatLastModel : project.lastModel,
-              isModelAvailable(model, provider: provider)
+              let model = project.isGlobalChat ? globalChatLastModel : project.lastModel
         else {
             return nil
         }
-        return (provider, model)
+        if provider == .flowcy { return (.flowcy, Self.resolvedFlowcyModel(model, catalog: currentFlowcyModels)) }
+        return isModelAvailable(model, provider: provider) ? (provider, model) : nil
     }
 
     func defaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String) {
-        projectDefaultModelSelection(for: project) ?? (selectedAgentProvider, selectedModel)
+        if let selection = projectDefaultModelSelection(for: project) { return selection }
+        let model = selectedAgentProvider == .flowcy ? Self.resolvedFlowcyModel(selectedModel, catalog: currentFlowcyModels) : selectedModel
+        return (selectedAgentProvider, model)
     }
 
     func fallbackModel(for provider: AgentProvider, project: Project?) -> String {
@@ -164,9 +217,9 @@ extension AppState {
             return projectSelection.model
         }
         if selectedAgentProvider == provider {
-            return selectedModel
+            return defaultModelSelection(for: nil).model
         }
-        return availableAgentModelSections()
+        return availableAgentModelSections(includeFlowcy: true)
             .first { $0.provider == provider }?
             .models
             .first?
@@ -239,18 +292,13 @@ extension AppState {
     func setSessionProvider(_ provider: AgentProvider, in window: WindowState) {
         guard provider != effectiveModelSelection(in: window).provider else { return }
 
-        let fallbackModel = availableAgentModelSections()
-            .first { $0.provider == provider }?
-            .models
-            .first?
-            .id
-        let model = selectedAgentProvider == provider ? selectedModel : (fallbackModel ?? selectedModel)
+        let model = fallbackModel(for: provider, project: window.selectedProject)
         setSessionModel(model, provider: provider, in: window)
     }
 
     func modelDisplayName(for model: String, provider: AgentProvider, in window: WindowState) -> String {
         // The local agent reports its raw model id; keep the friendly label instead.
-        if provider != .localAgent, let active = activeModelName(in: window) {
+        if provider != .localAgent && provider != .flowcy, let active = activeModelName(in: window) {
             return active
         }
         return modelDisplayLabel(model, provider: provider)
@@ -356,6 +404,11 @@ extension AppState {
     /// Human-readable label for a model id, resolving ACP keys (`<clientId>::<model>`)
     /// to the client's display name plus the underlying model id ("Default" when empty).
     func modelDisplayLabel(_ model: String, provider: AgentProvider) -> String {
+        if provider == .flowcy {
+            if model == AgentModel.flowcyDefaultID { return "Flowcy · Server Default" }
+            if let info = currentFlowcyModels?.first(where: { $0.id == model }) { return info.displayName }
+            return model
+        }
         if provider == .acp, let parts = acpSelectionParts(for: model) {
             guard let client = acpClients.first(where: { $0.id == parts.clientId }) else {
                 return parts.model.isEmpty ? "ACP · Default" : "ACP · \(parts.model)"

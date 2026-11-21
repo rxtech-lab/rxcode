@@ -394,7 +394,7 @@ nonisolated enum PetVoiceModeKind: String, Codable, CaseIterable, Identifiable, 
         case .codexRealtime:
             "Codex Realtime"
         case .localPipeline:
-            "Local Speech + Custom Agent + Local Voice"
+            "Local Speech + Custom Agent"
         }
     }
 
@@ -410,7 +410,7 @@ nonisolated enum PetVoiceModeKind: String, Codable, CaseIterable, Identifiable, 
         case .codexRealtime:
             "Low-latency bidirectional voice powered by Codex Realtime (WebRTC or WebSocket) with RxCode IDE tools."
         case .localPipeline:
-            "On-device speech recognition paired with any RxCode agent model (Codex, Claude, ACP, or Local Agent) and local voice synthesis."
+            "Speech recognition runs on this Mac. Your general agent answers using the selected speech voice."
         }
     }
 }
@@ -536,7 +536,7 @@ nonisolated struct PetConfiguration: Codable, Equatable, Sendable {
         return "Conversation language: \(language.label) (\(language.id)). Respond and speak in this language, including notification announcements and background updates, unless the user explicitly requests another language. Translate event summaries into this language; keep names and code identifiers intact."
     }
 
-    // Mode 2: Local Speech + Custom Agent + Local Voice Model
+    // Local Speech + Custom Agent, and speech outside a call
     var localSpeechSource: PetLocalSpeechSource = .appleSpeech
     var speechLocaleIdentifier: String = Locale.current.identifier
     var localSTTModelID: String? = nil
@@ -547,6 +547,17 @@ nonisolated struct PetConfiguration: Codable, Equatable, Sendable {
     /// `"system"` for macOS `AVSpeechSynthesizer` fallback, or an installed `LocalModelInfo.id`.
     var localTTSModelID: String = PetConfiguration.systemTTSModelID
     var localTTSVoicePreset: String = "af_heart"
+    /// Nil uses the saved Apple or installed model voice, including for older preferences.
+    var flowcyVoice: FlowcySpeechSelection?
+
+    func usesLocalVoice(modelID: String) -> Bool {
+        flowcyVoice == nil && localTTSModelID == modelID
+    }
+
+    mutating func selectLocalVoice(modelID: String) {
+        localTTSModelID = modelID
+        flowcyVoice = nil
+    }
     /// Optional for compatibility with saved preferences predating seed support.
     /// Legacy negative seeds resolve to the stable default instead of changing each utterance.
     var localTTSSeed: Int? = nil
@@ -563,7 +574,7 @@ nonisolated struct PetConfiguration: Codable, Equatable, Sendable {
     var toolSoundsEnabled: Bool? = nil
     var playsToolSounds: Bool { toolSoundsEnabled ?? true }
 
-    /// Microphone-only mute. Optional for preferences saved before the persistent mute control.
+    /// Mutes pet microphone input and voice output. Older preferences omit this field.
     var isMuted: Bool? = nil
 
     // Audio routing. `nil` follows the macOS system default device.

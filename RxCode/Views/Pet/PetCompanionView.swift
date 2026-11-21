@@ -219,8 +219,9 @@ struct PetCompanionView: View {
                         levelMeter(label: controller.isMuted ? "Microphone muted" : "Microphone level",
                                    systemImage: controller.isMuted ? "mic.slash.fill" : "mic.fill",
                                    value: controller.inputLevel, tint: .cyan, isEnabled: !controller.isMuted)
-                        levelMeter(label: "\(controller.character.displayName) voice level",
-                                   systemImage: "speaker.wave.2.fill", value: controller.outputLevel, tint: .blue)
+                        levelMeter(label: controller.isMuted ? "Speaker muted" : "\(controller.character.displayName) voice level",
+                                   systemImage: controller.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                                   value: controller.outputLevel, tint: .blue, isEnabled: !controller.isMuted)
                     }
                 }
             }
@@ -252,7 +253,9 @@ struct PetCompanionView: View {
             let agent = controller.configuration.customAgent ?? appState.defaultTaskAgent()
             let agentLabel = appState.taskAgentLabel(agent)
             let voiceLabel: String
-            if controller.configuration.localTTSModelID == PetConfiguration.systemTTSModelID {
+            if let selection = controller.configuration.flowcyVoice {
+                voiceLabel = "Flowcy · \(selection.voice.name)"
+            } else if controller.configuration.localTTSModelID == PetConfiguration.systemTTSModelID {
                 voiceLabel = "System Voice"
             } else {
                 voiceLabel = appState.localModels.installed.first {
@@ -420,7 +423,7 @@ struct PetCompanionView: View {
                     .buttonStyle(.bordered)
                     .tint(controller.isVoiceActive ? .red : ClaudeTheme.accent)
 
-                    microphoneButton
+                    muteButton
 
                     if controller.isVoiceActive, let session = controller.voiceSession {
                         if session.activity == .agentSpeaking || controller.isStandaloneSpeaking {
@@ -467,7 +470,7 @@ struct PetCompanionView: View {
         .padding(.top, 8)
     }
 
-    private var microphoneButton: some View {
+    private var muteButton: some View {
         let muted = controller.isMuted
         let live = controller.isVoiceActive && !muted
         return Button {
@@ -503,8 +506,8 @@ struct PetCompanionView: View {
             .animation(.snappy(duration: 0.22), value: live)
         }
         .buttonStyle(.plain)
-        .help(muted ? "Unmute Microphone" : "Mute Microphone (keep conversation connected)")
-        .accessibilityLabel(muted ? "Unmute Microphone" : "Mute Microphone")
+        .help(muted ? "Unmute Microphone and Speaker" : "Mute Microphone and Speaker")
+        .accessibilityLabel(muted ? "Unmute Microphone and Speaker" : "Mute Microphone and Speaker")
     }
 
     private func submitTypedMessage() {

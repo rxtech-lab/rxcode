@@ -50,6 +50,7 @@ final class PetCompanionHook: Hook {
 
         // The active voice assistant receives the original result and owns the summary.
         // Outside voice chat, use the pet's independently configured notification model.
+        let generation = pet.muteGeneration
         func deliver(_ detail: String) {
             let concise = detail.trimmingCharacters(in: .whitespacesAndNewlines)
             let spoken = concise.isEmpty
@@ -60,7 +61,8 @@ final class PetCompanionHook: Hook {
                 spokenText: spoken,
                 mood: .happy,
                 status: .celebrating,
-                action: .openThread(projectId: projectId, sessionId: sessionId)
+                action: .openThread(projectId: projectId, sessionId: sessionId),
+                allowsSpeech: pet.muteGeneration == generation
             )
         }
         if pet.isVoiceActive {

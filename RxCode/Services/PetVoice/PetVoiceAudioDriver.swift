@@ -6,7 +6,7 @@ import RxAgentVoice
 // MARK: - CoreAudio Hardware Driver for VoiceSession
 
 @MainActor
-final class PetVoiceAudioDriver: VoiceAudioDriver {
+class PetVoiceAudioDriver: VoiceAudioDriver {
     // CoreAudio device discovery and graph transitions can block for hundreds of milliseconds.
     // Only access this hardware on the main actor after startup completes; stop disables
     // playback/capture callbacks before handing the graph back to the serial queue.
@@ -23,7 +23,8 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
     var speechPlayback: PetSpeechPlaybackSignal?
     var suppressesCaptureDuringPlayback: Bool = true
 
-    private var captureEnabled = false
+    private(set) var captureEnabled = false
+    private(set) var isOutputMuted = false
     private var isStarted = false
     private var frameContinuation: AsyncStream<VoiceAudioFrame>.Continuation?
     private var pendingOutputBuffers = 0
@@ -34,7 +35,12 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
     private var inputDeviceUID: String?
     private var outputDeviceUID: String?
 
-    var realtimeDevice: PetRTCDevice?
+    var realtimeDevice: PetRTCDevice? {
+        didSet {
+            realtimeDevice?.captureEnabled = captureEnabled
+            realtimeDevice?.outputMuted = isOutputMuted
+        }
+    }
     var captureDidChange: ((Bool) -> Void)? {
         didSet { captureDidChange?(captureEnabled) }
     }
@@ -130,7 +136,12 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
         throw CancellationError()
     }
 
-    func play(_ frame: VoiceAudioFrame) throws {
+    final func play(_ frame: VoiceAudioFrame) throws {
+        guard !isOutputMuted else { return }
+        try schedulePlayback(frame)
+    }
+
+    func schedulePlayback(_ frame: VoiceAudioFrame) throws {
         guard isStarted else { return }
         guard frame.data.count >= 2 else { return }
 
@@ -213,7 +224,7 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
     }
 
     func playToolCue() {
-        guard isStarted, engine.isRunning, !hasPendingPlayback else { return }
+        guard !isOutputMuted, isStarted, engine.isRunning, !hasPendingPlayback else { return }
         guard let buffer = Self.makeToolChimeBuffer(format: playbackFormat) else { return }
         cuePlayer.stop()
         cuePlayer.play()
@@ -229,7 +240,7 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
     /// ducked or dropped by the capture session. Returns `false` when the engine isn't running.
     @discardableResult
     func playConnectedCue() -> Bool {
-        guard isStarted, engine.isRunning,
+        guard !isOutputMuted, isStarted, engine.isRunning,
               let buffer = Self.makeConnectedChimeBuffer(format: playbackFormat) else { return false }
         if !cuePlayer.isPlaying {
             cuePlayer.play()
@@ -254,9 +265,20 @@ final class PetVoiceAudioDriver: VoiceAudioDriver {
 
     func setCaptureEnabled(_ enabled: Bool) {
         captureEnabled = enabled
+        realtimeDevice?.captureEnabled = enabled
         captureDidChange?(enabled)
         if !enabled {
             meters?.input = 0
+        }
+    }
+
+    func setOutputMuted(_ muted: Bool) {
+        guard isOutputMuted != muted else { return }
+        isOutputMuted = muted
+        realtimeDevice?.outputMuted = muted
+        if muted {
+            flush()
+            stopToolCue()
         }
     }
 

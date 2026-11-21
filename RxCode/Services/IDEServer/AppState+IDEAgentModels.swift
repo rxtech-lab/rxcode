@@ -4,7 +4,7 @@ import RxCodeCore
 extension AppState {
     @MainActor
     func handleListAgentModels() -> JSONValue {
-        let sections = availableAgentModelSections()
+        let sections = availableAgentModelSections(includeFlowcy: true)
         let providers: [JSONValue] = AgentProvider.allCases.map { provider in
             let groups: [JSONValue] = sections.filter { $0.provider == provider }.map { section in
                 let client = provider == .acp ? acpClients.first { client in
@@ -18,6 +18,7 @@ extension AppState {
                     source = client?.models.isEmpty == true && (client?.modelOptions?.isEmpty ?? true)
                         ? "client_default" : "configured"
                 case .localAgent: source = "downloaded"
+                case .flowcy: source = section.models.count > 1 ? "discovered" : "server_default"
                 }
                 return .object([
                     "id": .string(section.id),

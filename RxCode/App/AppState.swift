@@ -46,6 +46,8 @@ final class AppState: IDEToolHandling {
     /// unchecked-completion flag, live todos). Only published when a value
     /// actually changes, so views reading it don't re-render per stream event.
     var sessionActivity: [String: SessionActivity] = [:]
+    /// Mounted chat views in a key window, keyed by view so a disappearing chat only removes itself.
+    @ObservationIgnored var viewedChatSessions: [UUID: String] = [:]
 
     @ObservationIgnored var sessionActivityTodoFingerprints: [String: SessionActivity.TodoFingerprint] = [:]
     @ObservationIgnored var sessionActivityTodoRefreshTask: Task<Void, Never>?
@@ -118,18 +120,8 @@ final class AppState: IDEToolHandling {
     /// Keeps file-change and commit indicators in memory for sidebar rows.
     var threadFileEditPresence: [String: ThreadFileEditPresence] = [:]
 
-    /// Bumped each time a todo snapshot row is upserted in SwiftData (MCP
-    /// `ide__set_todos`, Codex `.todoSnapshot` events, in-message TodoWrite
-    /// persistence). The toolbar's `TodoProgressToolbarItem` reads this so
-    /// SwiftUI re-runs the `fetchTodoSnapshot` method when the snapshot
-    /// changes without an accompanying observable property mutation.
-    var todoSnapshotsRevision: Int = 0 {
-        didSet { refreshTodoSnapshotIndex() }
-    }
-
-    /// Persisted todo progress by session id. Kept in sync with
-    /// `todoSnapshotsRevision` so the sidebar's per-row progress ring reads from
-    /// memory rather than fetching a snapshot per row per view update.
+    /// Persisted todo progress by session id. Loaded once at launch and updated
+    /// per session as progress changes.
     var todoProgressBySession: [String: ChatTodoProgress] = [:]
 
     /// Bumped each time a custom context-menu item is created, edited, toggled,
@@ -240,6 +232,10 @@ final class AppState: IDEToolHandling {
 
     var claudeModels: [AgentModel] = []
     var codexModels: [AgentModel] = []
+    var flowcyModels: [AgentModel]?
+    var flowcyModelAccountID: String?
+    var flowcyModelRequestID: UUID?
+    var flowcyModelError: String?
 
     // MARK: - ACP
 
@@ -414,16 +410,15 @@ final class AppState: IDEToolHandling {
     /// `AppState+CIStatus.swift`. Held in memory only.
     var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
 
-    /// Latest CI/PR status keyed by `owner/repo#branch`, covering current
-    /// branches and branches from briefings and project chats.
-    var ciStatusByBranchKey: [String: ProjectCIStatus] = [:]
+    /// Branch and thread badges restored with the sidebar and refreshed by the CI poller.
+    var branchStatus = BranchStatusSnapshot(accountID: nil)
 
     /// Recorded branches by session ID, so thread rows can find their PR without
     /// querying Git or SwiftData during rendering.
     var ciBranchesBySessionId: [String: [String]] = [:]
 
-    var inferredPullRequestsBySessionId: [String: ThreadPullRequest] = [:]
     @ObservationIgnored let threadPullRequestMatcher = ThreadPullRequestMatcher()
+    @ObservationIgnored var ciStatusRequestID: UUID?
 
     /// Bumped after every CI refresh so views observing CI status recompute,
     /// mirroring the `branchBriefingRevision` pattern.
@@ -574,19 +569,6 @@ final class AppState: IDEToolHandling {
     /// computed in the background. Drives rate-limit advice in the status line.
     var rateLimitProviderStats: [AgentProvider: RateLimitTaskCostSummary] = [:]
     @ObservationIgnored var rateLimitProviderStatsTask: Task<Void, Never>?
-
-    /// Sessions currently streaming, anywhere across all windows.
-    /// Reads `sessionActivity` (not `sessionStates`) so the menu bar label doesn't
-    /// re-render its image on every stream event.
-    var inProgressSessionCount: Int {
-        sessionActivity.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
-    }
-
-    /// Sessions whose stream finished but the user hasn't selected since. Cleared
-    /// on session select via `hasUncheckedCompletion`.
-    var uncheckedFinishedSessionCount: Int {
-        sessionActivity.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
-    }
 
     // MARK: - Permissions
 
@@ -768,6 +750,7 @@ final class AppState: IDEToolHandling {
     // MARK: - Services
 
     var rxAuth: RxAuthService
+    let flowcyCloudBackend: FlowcyCloudBackend
     var autopilot: AutopilotService
     var secrets: SecretsService
     var ciUpdates: CIUpdateService
@@ -843,6 +826,7 @@ final class AppState: IDEToolHandling {
     /// to scrub stale entries out of each window's in-memory queue mirror.
     struct WeakWindowRef { weak var window: WindowState? }
     var liveWindowRefs: [WeakWindowRef] = []
+    @ObservationIgnored var designSessions: [ObjectIdentifier: WorkspaceDesignSession] = [:]
 
     var mobileSnapshotBroadcastTask: Task<Void, Never>?
     /// Pending debounced `taskBoardUpdate` pushes, one per project.
@@ -1046,6 +1030,7 @@ final class AppState: IDEToolHandling {
         )
         let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
         self.rxAuth = rxAuth
+        self.flowcyCloudBackend = FlowcyCloudBackend(auth: rxAuth, permission: permission)
         self.autopilot = AutopilotService(rxAuth: rxAuth)
         self.secrets = SecretsService(rxAuth: rxAuth)
         self.ciUpdates = CIUpdateService(rxAuth: rxAuth)

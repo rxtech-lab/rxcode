@@ -220,7 +220,7 @@ public struct CIFailingWorkflow: Codable, Sendable, Hashable {
 
 /// State of the pull request associated with a branch, as tracked by autopilot
 /// from GitHub webhooks. `merged` is distinct from `closed` (closed-without-merge).
-public enum PRState: String, Sendable, Hashable {
+public enum PRState: String, Codable, Sendable, Hashable {
     case open
     case closed
     case merged

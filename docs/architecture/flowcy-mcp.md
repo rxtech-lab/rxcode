@@ -32,7 +32,7 @@ All agent backends receive `ide__flowcy_catalog`, `ide__flowcy`, `ide__get_ci_st
 | Project UI flows and cached feature availability | `projectAutopilotStatus`, `projectSecretsSetup`, `projectDocsSetup`, `projectDocsSearch`, `projectReleaseSetup`, `projectReleaseCreate` |
 | Notification quota and verified recipient management | `notificationUsage`, `trustedEmails`, `trustedEmailAdd`, `trustedEmailRemove` |
 | Notification sending and attachment handling | Existing `ide__send_notification` and briefing tools; attachments keep the native presigned upload path. Sending requires an explicit user request under the existing tool policy |
-| Flowcy model catalog and cloud chat | `cloudChatModels`, `cloudChat`; uses a separate ephemeral native chat, current server catalog, account quota, and cancellation. No local tools are supplied to cloud chat |
+| Flowcy model catalog and cloud chat | `cloudChatModels` reads the account catalog. The `cloudChat` MCP operation sends a one-shot text prompt. Interactive Flowcy project chats can run terminal commands in the active checkout through the Mac permission queue. |
 | Cloud usage dashboards | Existing `ide__get_integration_usage` and `ide__usage_cards`; these are separate from live CI progress |
 
 Mutating operations show the existing native confirmation sheet with their operation and parameters before executing. Cancellation performs no service mutation. Opening a native UI reports `awaiting_user`; it does not claim the user finished the action. Native passkey authorization and server account/repository permissions are retained. No sign-in, token refresh, or permission bypass is introduced.

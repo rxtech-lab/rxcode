@@ -51,7 +51,7 @@
 
 - (void)recordPCM:(NSData *)pcm {
     id<RTCAudioDeviceDelegate> delegate = self.audioDelegate;
-    if (!delegate || !self.isRecording) return;
+    if (!delegate || !self.isRecording || !self.captureEnabled) return;
     AudioUnitRenderActionFlags flags = 0;
     AudioTimeStamp timestamp = {.mHostTime = AudioGetCurrentHostTime(), .mFlags = kAudioTimeStampHostTimeValid};
     AudioBufferList list = {1, {{1, (UInt32)pcm.length, (void *)pcm.bytes}}};
@@ -70,7 +70,13 @@
                 return noErr;
             }
             AudioUnitRenderActionFlags flags = 0;
-            return delegate.getPlayoutData(&flags, time, 0, count, data);
+            OSStatus status = delegate.getPlayoutData(&flags, time, 0, count, data);
+            // Keep draining WebRTC so unmuting resumes at the current sample.
+            if (self.outputMuted) {
+                *silence = YES;
+                memset(data->mBuffers[0].mData, 0, data->mBuffers[0].mDataByteSize);
+            }
+            return status;
         }];
 }
 @end

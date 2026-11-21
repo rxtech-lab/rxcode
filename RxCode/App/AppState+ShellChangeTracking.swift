@@ -8,9 +8,7 @@ import RxCodeSync
 
 extension AppState {
 
-    /// Resolves the live OS root PID of a streaming agent backend when dedicated
-    /// to a single session/stream. Returns `nil` for `.localAgent` so concurrent
-    /// in-process local agent streams never share RxCode's own `getpid()`.
+    /// Returns the root PID of a subprocess dedicated to this stream.
     func streamRootPid(provider: AgentProvider, streamId: UUID) async -> Int32? {
         guard agentBackendOverrides[provider] == nil else { return nil }
         switch provider {
@@ -20,7 +18,7 @@ extension AppState {
             return await codex.rootPid(for: streamId)
         case .acp:
             return await acp.rootPid(for: streamId)
-        case .localAgent:
+        case .localAgent, .flowcy:
             return nil
         }
     }
@@ -55,7 +53,7 @@ extension AppState {
                 cwd: cwd,
                 rootPid: initialPid
             )
-            if initialPid == nil, agentProvider != .localAgent {
+            if initialPid == nil, agentProvider != .localAgent, agentProvider != .flowcy {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 guard let self,
                       let spawnedPid = await self.streamRootPid(provider: agentProvider, streamId: streamId)

@@ -284,6 +284,7 @@ struct ProjectChatRow: View {
         .task(id: changeTotalsLoadID) { await loadChangeTotals() }
         .help(taskCompletionChip.map { "\(displayTitle) — \($0.text)" } ?? displayTitle)
         .onTapGesture { onSelect() }
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
         .contextMenu { rowMenu }
     }
 

@@ -3,96 +3,152 @@ import RxCodeCore
 
 // MARK: - InspectorContentView
 
-/// Inspector-mode body for the right sidebar: Terminal, Run and Views, switched by
-/// `windowState.inspectorTab`. State for the terminal process and reset/clear
-/// triggers is owned by the parent (`RightInspectorPanel`) so header action
-/// buttons can drive them.
+/// Content for a Terminal, Run, or Views tab. Terminal sessions belong to the tab.
 struct InspectorContentView: View {
+    @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
-    let terminals: [InspectorTerminal]
-    let activeTerminalId: UUID?
-    let terminalFocusID: UUID?
-    let onSelectTerminal: (UUID) -> Void
-    let onCloseTerminal: (UUID) -> Void
-    let onAddTerminal: () -> Void
-    let onRenameTerminal: (UUID, String) -> Void
+    let tab: InspectorToolLayout.Tab
+    let isFocused: Bool
+    let store: InspectorTerminalStore
+    @State private var terminalFocusID: UUID?
+    @State private var draggingTerminalID: UUID?
 
-    private var activeTerminal: InspectorTerminal? {
-        guard let activeTerminalId else { return nil }
-        return terminals.first { $0.id == activeTerminalId }
+    private var terminalKey: InspectorTerminalStore.Key {
+        .init(tabID: tab.id, sessionID: windowState.currentSessionId ?? windowState.newSessionKey)
+    }
+
+    private var runs: [RunTask] { appState.runService.tasks }
+
+    private var showsLiveRunTerminal: Bool {
+        // A run owns one AppKit view. When multiple panes display the same
+        // run, give that view to the focused pane and show its log in the others.
+        func runID(for tabID: UUID) -> UUID? {
+            let stored = windowState.inspectorRunTaskIDs[tabID]
+            return runs.first(where: { $0.id == stored })?.id ?? runs.first?.id
+        }
+        let selectedRun = runID(for: tab.id)
+        let layout = windowState.inspectorLayout.tools
+        let contenders = layout.panes.compactMap(\.selectedTab).filter {
+            $0.tool == .run && runID(for: $0.id) == selectedRun
+        }
+        let focused = layout.selectedTab?.id
+        return (contenders.first { $0.id == focused } ?? contenders.first)?.id == tab.id
     }
 
     var body: some View {
-        switch windowState.inspectorTab {
-        case .terminal:
-            VStack(spacing: 0) {
-                if !terminals.isEmpty {
-                    terminalTabBar
-                }
-                Group {
-                    if let activeTerminal {
+        VStack(spacing: 0) {
+            switch tab.tool {
+            case .terminal:
+                if let session = store.sessions[terminalKey], let activeTerminal = session.active {
+                    terminalTabBar(session)
+                    Group {
                         EmbeddedTerminalView(
                             executable: "/bin/zsh",
                             arguments: ["-il"],
                             currentDirectory: windowState.selectedProject?.path,
                             process: activeTerminal.process,
-                            focusTrigger: terminalFocusID
+                            focusTrigger: isFocused ? terminalFocusID : nil,
+                            autofocus: isFocused
                         )
                         .id(activeTerminal.resetID)
                     }
+                    .padding(8)
+                    .background(ClaudeTheme.codeBackground)
                 }
-                .padding(8)
-                .background(ClaudeTheme.codeBackground)
+            case .run:
+                RunOutputInspectorView(
+                    selectedTaskID: Binding(
+                        get: { windowState.inspectorRunTaskIDs[tab.id] },
+                        set: { windowState.inspectorRunTaskIDs[tab.id] = $0 }
+                    ),
+                    showsLiveTerminal: showsLiveRunTerminal
+                )
+            case .views:
+                AgentViewsInspectorView()
             }
-        case .run:
-            RunOutputInspectorView()
-        case .views:
-            AgentViewsInspectorView()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: tab.tool == .terminal ? terminalKey : nil) {
+            if tab.tool == .terminal { store.ensureSession(terminalKey) }
+        }
+        .onChange(of: isFocused && tab.tool == .terminal, initial: true) { _, active in
+            if active { terminalFocusID = UUID() }
+        }
+        .onChange(of: windowState.clearTerminalRequest) { _, _ in
+            if isFocused && tab.tool == .terminal { store.clearTerminal(in: terminalKey) }
+        }
+        .background {
+            if isFocused, tab.tool == .terminal {
+                Button("New Terminal", action: addTerminal)
+                    .keyboardShortcut("t", modifiers: .command)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
-    @ViewBuilder
-    private var terminalTabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(Array(terminals.enumerated()), id: \.element.id) { index, terminal in
-                    TerminalTabChip(
-                        title: terminal.customTitle ?? "Terminal \(index + 1)",
-                        isActive: terminal.id == activeTerminalId,
-                        canClose: terminals.count > 1,
-                        onSelect: { onSelectTerminal(terminal.id) },
-                        onClose: { onCloseTerminal(terminal.id) },
-                        onRename: { newTitle in onRenameTerminal(terminal.id, newTitle) }
-                    )
-                }
-                Button(action: onAddTerminal) {
-                    Image(systemName: "plus")
-                        .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                        .frame(width: 22, height: 22)
-                        .background(
-                            ClaudeTheme.surfaceSecondary.opacity(0.5),
-                            in: RoundedRectangle(cornerRadius: 6)
+    private func addTerminal() {
+        windowState.inspectorLayout.tools.select(tab.id)
+        store.addTerminal(in: terminalKey)
+        terminalFocusID = UUID()
+    }
+
+    private func terminalTabBar(_ session: InspectorTerminalStore.Session) -> some View {
+        HStack(spacing: 2) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(session.terminals) { terminal in
+                        TerminalTabChip(
+                            title: terminal.title,
+                            isActive: terminal.id == session.activeID,
+                            canClose: session.terminals.count > 1,
+                            onSelect: {
+                                windowState.inspectorLayout.tools.select(tab.id)
+                                store.selectTerminal(terminal.id, in: terminalKey)
+                                terminalFocusID = UUID()
+                            },
+                            onClose: { store.closeTerminal(terminal.id, in: terminalKey) },
+                            onRename: { store.renameTerminal(terminal.id, title: $0, in: terminalKey) }
                         )
+                        .workspaceReorderableTab(id: terminal.id, draggingID: $draggingTerminalID) { dragged, target in
+                            store.moveTerminal(dragged, to: target, in: terminalKey)
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("New Terminal (⌘T)")
+                .frame(height: 30)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2, perform: addTerminal)
+                    .accessibilityHidden(true)
+            }
+            .workspaceTabStripDropArea(draggingID: $draggingTerminalID) { dragged, target in
+                store.moveTerminal(dragged, to: target, in: terminalKey)
+            }
+            WorkspaceTabStripButton(systemImage: "plus", help: "New Terminal (⌘T)", action: addTerminal)
         }
-        .background(ClaudeTheme.surfaceElevated)
+        .padding(.horizontal, 8)
+        .background(ClaudeTheme.codeBackground)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(ClaudeTheme.borderSubtle.opacity(0.5))
                 .frame(height: 0.5)
+        }
+        .onChange(of: session.terminals.map(\.id)) { _, ids in
+            if let draggingTerminalID, !ids.contains(draggingTerminalID) { self.draggingTerminalID = nil }
         }
     }
 }
 
 // MARK: - TerminalTabChip
 
+/// A terminal session tab: a quiet label with an accent underline when active,
+/// one level below the tool tabs above it.
 private struct TerminalTabChip: View {
     let title: String
     let isActive: Bool
@@ -115,16 +171,22 @@ private struct TerminalTabChip: View {
         isEditing = false
     }
 
+    private func beginRename() {
+        draft = title
+        isEditing = true
+        DispatchQueue.main.async { fieldFocused = true }
+    }
+
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "apple.terminal")
-                .font(.system(size: ClaudeTheme.size(10)))
-                .foregroundStyle(isActive ? ClaudeTheme.textOnAccent : ClaudeTheme.textTertiary)
+        HStack(spacing: 5) {
+            Image(systemName: "terminal")
+                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                .foregroundStyle(isActive ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
             if isEditing {
                 TextField("", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .foregroundStyle(isActive ? ClaudeTheme.textOnAccent : ClaudeTheme.textPrimary)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .frame(minWidth: 60, idealWidth: 90)
                     .focused($fieldFocused)
                     .onSubmit(commit)
@@ -134,45 +196,31 @@ private struct TerminalTabChip: View {
                     }
             } else {
                 Text(title)
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .foregroundStyle(isActive ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
+                    .font(.system(size: ClaudeTheme.size(11), weight: isActive ? .medium : .regular))
+                    .foregroundStyle(isActive || isHovering ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                     .lineLimit(1)
             }
-            if canClose, !isEditing, isHovering || isActive {
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: ClaudeTheme.size(9), weight: .bold))
-                        .foregroundStyle(isActive ? ClaudeTheme.textOnAccent.opacity(0.8) : ClaudeTheme.textTertiary)
-                        .frame(width: 14, height: 14)
-                }
-                .buttonStyle(.plain)
-                .help("Close Terminal")
+            if canClose {
+                WorkspaceTabCloseButton(isVisible: !isEditing && (isHovering || isActive),
+                                        help: "Close Terminal", action: onClose)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isActive ? ClaudeTheme.accent : (isHovering ? ClaudeTheme.surfaceSecondary : Color.clear))
-        )
+        .padding(.leading, 10)
+        .padding(.trailing, canClose ? 4 : 10)
+        .workspaceUnderlineTab(selected: isActive, hovered: isHovering)
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            draft = title
-            isEditing = true
-            DispatchQueue.main.async { fieldFocused = true }
-        }
+        .onTapGesture(count: 2, perform: beginRename)
         .onTapGesture { if !isEditing { onSelect() } }
         .contextMenu {
-            Button("Rename…") {
-                draft = title
-                isEditing = true
-                DispatchQueue.main.async { fieldFocused = true }
-            }
+            Button("Rename…", action: beginRename)
             if canClose {
                 Button("Close Terminal", role: .destructive, action: onClose)
             }
         }
         .onHover { isHovering = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
     }
 }
 

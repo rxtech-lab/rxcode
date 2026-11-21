@@ -25,55 +25,6 @@ extension FocusedValues {
     }
 }
 
-// MARK: - WorkspaceWindowValue
-
-/// Identifies which workspace a main window is bound to. The primary
-/// `WindowGroup` is keyed by this value so each workspace gets its own window
-/// (and its own `AppState`), and reopening the same workspace refocuses its
-/// existing window rather than spawning a duplicate.
-struct WorkspaceWindowValue: Codable, Hashable {
-    let workspaceID: String
-}
-
-// MARK: - ProjectWindowValue
-
-struct ProjectWindowValue: Codable, Hashable {
-    let projectId: UUID
-    let instanceId: UUID
-    /// Workspace that owns this project, so a detached project window resolves
-    /// the correct per-workspace `AppState`.
-    var workspaceID: String?
-}
-
-// MARK: - ChatWindowValue
-
-/// Identifies a detached Chat-tab window. `instanceId` lets the user open
-/// several independent chat windows for the same workspace.
-struct ChatWindowValue: Codable, Hashable {
-    let instanceId: UUID
-    var workspaceID: String?
-    var sessionId: String? = nil
-    var localModelID: String? = nil
-}
-
-// MARK: - GeneralRouteWindowValue
-
-/// Identifies a detached General-route window (Projects, Briefing, Scheduled)
-/// opened from the sidebar row's context menu. `instanceId` lets the user open
-/// several independent windows for the same route.
-struct GeneralRouteWindowValue: Codable, Hashable {
-    let route: GeneralRoute
-    let instanceId: UUID
-    var workspaceID: String?
-    var taskDetailProjectId: UUID?
-}
-
-// MARK: - TerminalWindowValue
-
-struct TerminalWindowValue: Codable, Hashable {
-    let path: String
-}
-
 // MARK: - App
 
 @main
@@ -185,6 +136,7 @@ struct RxCodeApp: App {
                 ChatWindowRoot(
                     workspaceManager: workspaceManager,
                     workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    instanceID: value.instanceId,
                     sessionId: value.sessionId,
                     localModelID: value.localModelID
                 )
@@ -203,6 +155,7 @@ struct RxCodeApp: App {
                 GeneralRouteWindowRoot(
                     workspaceManager: workspaceManager,
                     workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    instanceID: value.instanceId,
                     route: value.route,
                     taskDetailProjectId: value.taskDetailProjectId
                 )
@@ -213,6 +166,20 @@ struct RxCodeApp: App {
         }
         .defaultSize(width: 1000, height: 700)
         .windowStyle(.hiddenTitleBar)
+
+        // Full Git workflow window (history graph, rebase, branches) for one checkout.
+        WindowGroup(id: "git-window", for: GitWindowValue.self) { $value in
+            if let value {
+                GitWindowRoot(
+                    workspaceManager: workspaceManager,
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    path: value.path
+                )
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+                .modifier(DownloadWindowPresenter())
+            }
+        }
+        .defaultSize(width: 1280, height: 800)
 
         // Detached terminal window — opened from the toolbar.
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
@@ -315,12 +282,12 @@ struct MainWindowRoot: View {
         ZStack {
             if appState.isInitialized {
                 MainView()
-                    .environment(appState)
                     .environment(workspaceManager)
-                    .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .modifier(WorkspaceBrowserHost(appState: appState, windowState: windowState))
                     .generatedVideoSheet(windowState)
+                    .environment(appState)
+                    .environment(windowState)
                     .localStudioSettingsSheet(windowState, appState: appState)
                     .transition(.opacity)
             } else {
@@ -394,7 +361,12 @@ struct MainWindowRoot: View {
 /// `openURL` handler shared by full workspace windows: routes RxCode setup
 /// deep links to the matching sheet and everything else to `openMarkdownLink`.
 @MainActor
-func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> OpenURLAction {
+func workspaceOpenURLAction(
+    appState: AppState,
+    windowState: WindowState,
+    openDocument: ((URL) -> Void)? = nil,
+    openWebPage: @escaping (URL) -> Void
+) -> OpenURLAction {
     OpenURLAction { url in
         if let request = LocalModelSheetRequest.parse(url) {
             appState.localModelSheetRequest = request
@@ -416,17 +388,30 @@ func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> Ope
             appState.ciSetupRequest = request
             return .handled
         }
-        return openMarkdownLink(url, in: windowState)
+        return openMarkdownLink(url, in: windowState, openDocument: openDocument, openWebPage: openWebPage)
     }
 }
 
 @MainActor
-private func openMarkdownLink(_ url: URL, in windowState: WindowState) -> OpenURLAction.Result {
+private func openMarkdownLink(
+    _ url: URL,
+    in windowState: WindowState,
+    openDocument: ((URL) -> Void)?,
+    openWebPage: (URL) -> Void
+) -> OpenURLAction.Result {
     if let fileLink = LocalFileLink.parse(url) {
         let fileName = URL(fileURLWithPath: fileLink.path).lastPathComponent
         // The inspector previews text; videos get a player.
         if GeneratedVideoSheet.canPlay(path: fileLink.path) {
             windowState.playingVideo = PreviewFile(path: fileLink.path, name: fileName)
+            return .handled
+        }
+        // Windows with a right inspector preview regular files there instead of a sheet.
+        var isDirectory: ObjCBool = false
+        if let openDocument,
+           FileManager.default.fileExists(atPath: fileLink.path, isDirectory: &isDirectory),
+           !isDirectory.boolValue {
+            openDocument(URL(fileURLWithPath: fileLink.path))
             return .handled
         }
         windowState.inspectorFile = PreviewFile(
@@ -440,8 +425,11 @@ private func openMarkdownLink(_ url: URL, in windowState: WindowState) -> OpenUR
     if url.scheme == nil || url.scheme!.isEmpty {
         finalURL = URL(string: "https://\(url.absoluteString)") ?? url
     }
-    NSWorkspace.shared.open(finalURL)
-    return .handled
+    if WorkspaceBrowser.isWebURL(finalURL) {
+        openWebPage(finalURL)
+        return .handled
+    }
+    return .systemAction
 }
 
 // MARK: - Settings Window Root
@@ -553,12 +541,12 @@ struct ProjectWindowRoot: View {
         ZStack {
             if appState.isInitialized {
                 MainView()
-                    .environment(appState)
                     .environment(workspaceManager)
-                    .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .modifier(WorkspaceBrowserHost(appState: appState, windowState: windowState))
                     .generatedVideoSheet(windowState)
+                    .environment(appState)
+                    .environment(windowState)
                     .localStudioSettingsSheet(windowState, appState: appState)
                     .transition(.opacity)
             } else {
@@ -607,6 +595,7 @@ struct ProjectWindowRoot: View {
 struct ChatWindowRoot: View {
     let workspaceManager: WorkspaceManager
     let workspaceID: String
+    let instanceID: UUID
     var sessionId: String? = nil
     var localModelID: String? = nil
     @Environment(\.controlActiveState) private var controlActiveState
@@ -619,18 +608,19 @@ struct ChatWindowRoot: View {
         ZStack {
             if appState.isInitialized, windowState.isInitialized {
                 GlobalChatView()
+                    .fileInspectorSheet(windowState)
                     .hookUI()
-                    .environment(appState)
                     .environment(workspaceManager)
-                    .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
+                    .modifier(WorkspaceBrowserHost(appState: appState, windowState: windowState, browserSheetID: instanceID))
                     .sheet(item: Bindable(appState).localModelSheetRequest) { request in
                         LocalModelsSheet(initialModel: request)
                             .localModelsSheetFrame()
                             .environment(appState)
                     }
                     .generatedVideoSheet(windowState)
+                    .environment(appState)
+                    .environment(windowState)
                     .localStudioSettingsSheet(windowState, appState: appState)
                     .navigationTitle(navigationTitleText)
                     .transition(.opacity)

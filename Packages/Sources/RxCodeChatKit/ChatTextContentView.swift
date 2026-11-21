@@ -4,6 +4,7 @@ import RxCodeCore
 /// Renders inline chat text — plain strings, pre-built attributed strings, or
 /// inline-only markdown — using native SwiftUI `Text`.
 public struct ChatTextContentView: View {
+    @Environment(\.openURL) private var inheritedOpenURL
     enum Content {
         case plain(String)
         case attributed(AttributedString)
@@ -96,8 +97,8 @@ public struct ChatTextContentView: View {
             .lineLimit(maximumNumberOfLines)
             .textSelection(.enabled)
             .environment(\.openURL, OpenURLAction { url in
-                guard let openURL else { return .systemAction }
-                return openURL(url) ? .handled : .systemAction
+                if openURL?(url) != true { inheritedOpenURL(url) }
+                return .handled
             })
     }
 

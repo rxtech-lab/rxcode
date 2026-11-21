@@ -148,6 +148,8 @@ extension AppState {
             return await claude.generatePlainSummary(prompt: prompt, model: agent.model ?? "haiku", limit: 2000)
         case .codex:
             return await codex.generateCodexPlainSummary(prompt: prompt, model: agent.model)
+        case .flowcy:
+            return nil
         case .localAgent:
             // Suggestions are one-shot calls; a local model would first have to
             // load, so they are not offered on it.

@@ -246,6 +246,8 @@ final class RunService {
                 existing.terminate()
             }
         }
+        // A re-run keeps its tab position in the inspector.
+        let previousIndex = tasks.firstIndex { $0.profile.id == profile.id && $0.project.id == project.id }
         tasks.removeAll { $0.profile.id == profile.id && $0.project.id == project.id }
 
         let cwd = RunTaskExecutor.resolveWorkingDirectory(
@@ -283,7 +285,7 @@ final class RunService {
                 }
             }
         )
-        tasks.insert(task, at: 0)
+        tasks.insert(task, at: min(previousIndex ?? 0, tasks.count))
         task.start()
         onTasksChanged?()
         return task
@@ -301,6 +303,12 @@ final class RunService {
 
     func task(id: UUID) -> RunTask? {
         tasks.first { $0.id == id }
+    }
+
+    /// Moves a task into another task's slot, or to the end when `target` is nil.
+    func move(taskId: UUID, to target: UUID?) {
+        guard tasks.moveTab(taskId, to: target) != nil else { return }
+        onTasksChanged?()
     }
 
     /// Remove a finished task from the list. No-op while running.

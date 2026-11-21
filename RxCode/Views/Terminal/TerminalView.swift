@@ -40,6 +40,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     var onProcessTerminated: ((Int32) -> Void)?
     var process: TerminalProcess?
     var focusTrigger: UUID? = nil
+    var autofocus = true
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         if let tv = process?.terminalView, process?.terminated == false {
@@ -73,8 +74,10 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         }
 
         // Auto-focus after being added to the window
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            tv.window?.makeFirstResponder(tv)
+        if autofocus {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                tv.window?.makeFirstResponder(tv)
+            }
         }
 
         return tv

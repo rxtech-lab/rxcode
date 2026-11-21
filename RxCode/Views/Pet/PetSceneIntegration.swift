@@ -62,7 +62,7 @@ struct PetSettingsSection: View {
 
                 Button("Voices…") {
                     petController.openWindowAction = { id in openWindow(id: id) }
-                    petController.openSettingsWindow(tab: .voices)
+                    petController.openSpeechVoicePicker()
                 }
 
                 Button("Open Companion") {
@@ -105,7 +105,7 @@ struct PetCommands: Commands {
             }
             .keyboardShortcut("v", modifiers: [.command, .option])
 
-            Button(controller.isMuted ? "Unmute Microphone" : "Mute Microphone") {
+            Button(controller.isMuted ? "Unmute Microphone and Speaker" : "Mute Microphone and Speaker") {
                 controller.toggleMute()
             }
 
@@ -127,7 +127,7 @@ struct PetCommands: Commands {
 
             Button("Manage Voices…") {
                 controller.openWindowAction = { id in openWindow(id: id) }
-                controller.openSettingsWindow(tab: .voices)
+                controller.openSpeechVoicePicker()
             }
 
             Button("Pet & Voice Settings…") {

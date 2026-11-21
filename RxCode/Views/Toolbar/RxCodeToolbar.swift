@@ -36,7 +36,6 @@ struct RxCodeToolbarContent: ToolbarContent {
                     let path = windowState.selectedProject?.path ?? ""
                     openWindow(id: "terminal-window", value: TerminalWindowValue(path: path))
                 } else {
-                    windowState.inspectorMode = .inspector
                     windowState.inspectorTab = .terminal
                     appState.showRightSidebar = true
                 }
@@ -44,9 +43,9 @@ struct RxCodeToolbarContent: ToolbarContent {
                 Image(systemName: "apple.terminal")
             }
             .help("Open Terminal (\u{2325}-click for window)")
+            .accessibilityIdentifier("open-terminal-button")
 
             Button {
-                windowState.inspectorMode = .inspector
                 windowState.inspectorTab = .views
                 appState.showRightSidebar = true
             } label: {

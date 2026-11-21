@@ -8,13 +8,13 @@ import SwiftUI
 /// on both iPhone and iPad. The same board UI supports
 /// desktop-backed and direct cloud projects. Agent runs require a connected Mac.
 struct MobileTaskBoardView: View {
-    @EnvironmentObject private var state: MobileAppState
+    @EnvironmentObject var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isTaskSyncSuspended) private var isTaskSyncSuspended
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var taskCardNamespace
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Namespace var taskCardNamespace
     let projectID: UUID
     /// Opens a chat thread in the host (after this board is dismissed).
     var onOpenChat: ((String) -> Void)?
@@ -29,16 +29,16 @@ struct MobileTaskBoardView: View {
     @State private var mode: Mode = .tasks
     @State private var selectedViewID: UUID?
     @State private var editingView: MobileViewEditorPayload?
-    @State private var searchText = ""
+    @State var searchText = ""
     @State private var isLoading = false
-    @State private var errorMessage: String?
-    @State private var editingTask: ProjectTask?
-    @State private var editingStory: ProjectStory?
+    @State var errorMessage: String?
+    @State var editingTask: ProjectTask?
+    @State var editingStory: ProjectStory?
     @State private var aiCreationMode: Mode?
     @State private var pendingAITask: ProjectTask?
     @State private var pendingAIStory: ProjectStory?
     @State private var showingQuickAdd = false
-    @State private var collapsedColumns: Set<TaskStatus> = []
+    @State var collapsedColumns: Set<TaskStatus> = []
     @State private var showingColumnOrder = false
     @State private var runRequest: MobileTaskRunRequest?
     @State private var taskMovesInFlight = 0
@@ -52,7 +52,7 @@ struct MobileTaskBoardView: View {
         return "\(owner)|\(project?.cloudId ?? projectID.uuidString)"
     }
 
-    private var visibleColumns: [TaskColumn] {
+    var visibleColumns: [TaskColumn] {
         let columns = currentView.visibleColumns(in: board.effectiveColumns)
         let orders = (try? JSONDecoder().decode([String: [TaskStatus]].self, from: savedColumnOrders)) ?? [:]
         let ranks = Dictionary((orders[columnOrderScope] ?? []).enumerated().map { ($0.element, $0.offset) },
@@ -68,11 +68,11 @@ struct MobileTaskBoardView: View {
         TaskColumnFilter.scope(project: columnOrderScope, viewID: currentView.id, columnID: column.id)
     }
 
-    private func localFilter(_ column: TaskColumn) -> TaskColumnFilter {
+    func localFilter(_ column: TaskColumn) -> TaskColumnFilter {
         TaskColumnFilter.load(from: savedColumnFilters, scope: filterScope(column))
     }
 
-    private func columnTasks(_ column: TaskColumn) -> [ProjectTask] {
+    func columnTasks(_ column: TaskColumn) -> [ProjectTask] {
         let filter = localFilter(column)
         return currentView.sort(for: column.id).sorted(board.tasks(in: column.id).filter {
             snapshotContains($0.id, story: false) && currentView.matches($0)
@@ -80,7 +80,7 @@ struct MobileTaskBoardView: View {
         })
     }
 
-    private func columnOptions(_ column: TaskColumn) -> some View {
+    func columnOptions(_ column: TaskColumn) -> some View {
         TaskColumnOptionsButton(column: column, board: board, sort: currentView.sort(for: column.id), filterScope: filterScope(column)) { sort in
             var view = currentView
             view.columnSorts[column.id.rawValue] = sort
@@ -92,14 +92,14 @@ struct MobileTaskBoardView: View {
         state.taskProjects.first { $0.id == projectID }
     }
 
-    private var board: TaskBoard {
+    var board: TaskBoard {
         state.taskBoard(for: projectID)
     }
 
     private var views: [TaskSavedView] { board.visibleViews }
 
     /// The picked view, else the project's default view.
-    private var currentView: TaskSavedView {
+    var currentView: TaskSavedView {
         views.first { $0.id == selectedViewID } ?? views.first(where: \.isDefault) ?? views.first ?? .defaultView
     }
 
@@ -109,11 +109,11 @@ struct MobileTaskBoardView: View {
         return (story ? snapshot.stories : snapshot.tasks).contains { $0.caseInsensitiveCompare(id.uuidString) == .orderedSame }
     }
 
-    private var visibleTasks: [ProjectTask] {
+    var visibleTasks: [ProjectTask] {
         board.tasks.filter { snapshotContains($0.id, story: false) && currentView.matches($0) && $0.matches(keyword: searchText) }
     }
 
-    private var visibleStories: [ProjectStory] {
+    var visibleStories: [ProjectStory] {
         board.stories.filter {
             snapshotContains($0.id, story: true) && currentView.matches($0, rolledUpStatus: board.rolledUpStatus(for: $0))
                 && $0.matches(keyword: searchText)
@@ -121,7 +121,7 @@ struct MobileTaskBoardView: View {
     }
 
     /// Track placement only, so polling metadata does not animate every card.
-    private var taskCardLayout: [[UUID]] {
+    var taskCardLayout: [[UUID]] {
         visibleColumns.map { column in
             columnTasks(column).map(\.id)
         }
@@ -237,7 +237,7 @@ struct MobileTaskBoardView: View {
     }
 
     @ViewBuilder
-    private var boardContent: some View {
+    var boardContent: some View {
         if hasLoaded && views.isEmpty {
             ContentUnavailableView("All Views Hidden", systemImage: "eye.slash",
                 description: Text("Use Hidden Views to restore a view."))
@@ -309,238 +309,10 @@ struct MobileTaskBoardView: View {
         .pickerStyle(.segmented)
     }
 
-    // MARK: - Kanban
-
-    /// Scrolls horizontally only; each column fits the visible height and
-    /// scrolls its own cards, so the last card is never cut off.
-    private var kanbanBoard: some View {
-        GeometryReader { proxy in
-            ScrollView(.horizontal) {
-                // Keep column destinations alive for moves across the board.
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(visibleColumns) { column in
-                        kanbanColumn(column, height: max(proxy.size.height, 0))
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.86), value: taskCardLayout)
-        .clipped()
-        .background(Color(.systemGroupedBackground))
-        .accessibilityIdentifier("tasks-ipad-kanban")
-    }
-
-    private func kanbanColumn(_ column: TaskColumn, height: CGFloat) -> some View {
-        let tasks = columnTasks(column)
-        return TaskKanbanColumnContent(
-            headerSpacing: 0,
-            cardInsets: EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8)
-        ) {
-            HStack(spacing: 6) {
-                Image(systemName: column.systemImage)
-                    .foregroundStyle(column.tint)
-                Text(column.name)
-                    .font(.subheadline.weight(.semibold))
-                Text("\(tasks.count)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                Spacer()
-                columnOptions(column)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("task-column-\(column.id.rawValue)")
-
-        } cards: {
-            if tasks.isEmpty {
-                ContentUnavailableView("No Matching Tasks", systemImage: "line.3.horizontal.decrease.circle",
-                    description: Text("Change this column’s filters or add a task."))
-                    .frame(maxWidth: .infinity, minHeight: max(0, height - 80))
-            }
-            ForEach(tasks) { task in
-                MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
-                    MobileTaskRow(task: task, board: board)
-                        .mobileCardMenuInset()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(
-                            Color(.secondarySystemGroupedBackground),
-                            in: RoundedRectangle(cornerRadius: 10)
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-                .matchedGeometryEffect(
-                    id: task.id,
-                    in: taskCardNamespace,
-                    properties: reduceMotion ? [] : .frame
-                )
-                .transition(.identity)
-                .modifier(MobileTaskActions(
-                    task: task,
-                    board: board,
-                    onEdit: { editingTask = task },
-                    onOpenChat: openChat,
-                    onError: { errorMessage = $0 }
-                ))
-                .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task) && state.canEditCard(task)))
-                .mobileLegacyDrop { items, _ in
-                    drop(items, before: task, in: column.id)
-                }
-                .mobileReorderItem()
-                .moveDisabled(board.isStatusLocked(task) || currentView.sort(for: column.id).field != .manual)
-            }
-            .mobileReorderable()
-        }
-        .frame(width: 300, height: height, alignment: .top)
-        // Keep scrolling cards inside the column's rounded corners.
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .background(column.tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(column.tint.opacity(0.18)))
-        .contentShape(Rectangle())
-        .mobileTaskReorderContainer(status: column.id, move: reorderTasks)
-        // Dropping anywhere else in the column appends to its end.
-        .mobileLegacyDrop { items, _ in
-            drop(items, before: nil, in: column.id)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("task-kanban-column-\(column.id.rawValue)")
-    }
-
-    // MARK: - Tasks
-
-    private var tableSection: some View {
-        Section {
-            ForEach(visibleTasks.sorted { lhs, rhs in
-                let left = board.columnIndex(of: board.resolvedStatus(of: lhs))
-                let right = board.columnIndex(of: board.resolvedStatus(of: rhs))
-                return left == right ? lhs.sortIndex < rhs.sortIndex : left < right
-            }) { task in
-                MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
-                    MobileTaskRow(task: task, board: board)
-                        .mobileCardMenuInset()
-                }
-                .modifier(MobileTaskActions(
-                    task: task,
-                    board: board,
-                    onEdit: { editingTask = task },
-                    onOpenChat: openChat,
-                    onError: { errorMessage = $0 }
-                ))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var taskSections: some View {
-        ForEach(visibleColumns) { column in
-            let tasks = columnTasks(column)
-            if !tasks.isEmpty || searchText.isEmpty || !localFilter(column).isEmpty {
-                Section {
-                    if !collapsedColumns.contains(column.id) {
-                        ForEach(tasks) { task in
-                            MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
-                                MobileTaskRow(task: task, board: board)
-                                    .mobileCardMenuInset()
-                            }
-                            .modifier(MobileTaskActions(
-                                task: task,
-                                board: board,
-                                onEdit: { editingTask = task },
-                                onOpenChat: openChat,
-                                onError: { errorMessage = $0 }
-                            ))
-                            .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task) && state.canEditCard(task)))
-                            .mobileLegacyDrop { items, _ in
-                                drop(items, before: task, in: column.id)
-                            }
-                            .mobileReorderItem()
-                            .moveDisabled(board.isStatusLocked(task) || currentView.sort(for: column.id).field != .manual)
-                        }
-                        .mobileReorderable(collectionID: column.id)
-                    }
-                } header: {
-                    columnHeader(column, count: tasks.count)
-                        .mobileLegacyDrop { items, _ in
-                            drop(items, before: nil, in: column.id)
-                        }
-                }
-            }
-        }
-    }
-
-    private func columnHeader(_ column: TaskColumn, count: Int) -> some View {
-        HStack {
-            Button {
-                withAnimation {
-                    if collapsedColumns.contains(column.id) {
-                        collapsedColumns.remove(column.id)
-                    } else {
-                        collapsedColumns.insert(column.id)
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: column.systemImage)
-                        .foregroundStyle(column.tint)
-                    Text(column.name)
-                    Text("\(count)")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(collapsedColumns.contains(column.id) ? 0 : 90))
-                        .foregroundStyle(.secondary)
-                }
-                .font(.footnote.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("task-column-\(column.id.rawValue)")
-        columnOptions(column)
-        }
-    }
-
-    // MARK: - Stories
-
-    @ViewBuilder
-    private var storySection: some View {
-        let rollups = board.storyRollups()
-        let stories = visibleStories.sorted { $0.updatedAt > $1.updatedAt }
-        Section {
-            ForEach(stories) { story in
-                MobileTaskDetailButton(route: MobileTaskRoute.story(projectID: projectID, storyID: story.id), onOpenChat: openChat) {
-                    MobileStoryRow(story: story, board: board, rollup: rollups[story.id])
-                        .mobileCardMenuInset()
-                }
-                .overlay(alignment: .topTrailing) {
-                    if state.canEditCard(story) {
-                        MobileCardMenu(label: "Story Actions", identifier: "story-actions-\(story.id)") {
-                            Button {
-                                editingStory = story
-                            } label: {
-                                Label("Edit", systemImage: "pencil")
-                            }
-                            Divider()
-                            Button(role: .destructive) {
-                                perform { try await state.deleteStory(story) }
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Chrome
 
     @ViewBuilder
-    private var boardStatusContent: some View {
+    var boardStatusContent: some View {
         if !hasLoaded && isLoading {
             ProgressView("Loading tasks…")
         } else if hasLoaded {
@@ -701,7 +473,7 @@ struct MobileTaskBoardView: View {
         }
     }
 
-    private func perform(_ operation: @escaping () async throws -> Void) {
+    func perform(_ operation: @escaping () async throws -> Void) {
         Task {
             do {
                 try await operation()
@@ -801,7 +573,7 @@ struct MobileTaskBoardView: View {
         viewFeedback = "Column order saved"
     }
 
-    private func reorderTasks(_ sources: [UUID], before target: UUID?, in status: TaskStatus) {
+    func reorderTasks(_ sources: [UUID], before target: UUID?, in status: TaskStatus) {
         let isManual = currentView.sort(for: status).field == .manual
         let destination = isManual ? target.flatMap { id in board.tasks.first { $0.id == id } } : nil
         guard isManual || sources.allSatisfy({ id in
@@ -847,7 +619,7 @@ struct MobileTaskBoardView: View {
 
     /// Handles a task card dropped on a row (placed before it) or a column
     /// header (appended to the column).
-    private func drop(_ items: [String], before target: ProjectTask?, in status: TaskStatus) -> Bool {
+    func drop(_ items: [String], before target: ProjectTask?, in status: TaskStatus) -> Bool {
         guard !currentView.hasFilterScript else { return false }
         guard let taskID = items.first.flatMap(UUID.init(uuidString:)),
               let task = board.tasks.first(where: { $0.id == taskID })
@@ -869,7 +641,7 @@ struct MobileTaskBoardView: View {
         return true
     }
 
-    private func openChat(_ sessionID: String) {
+    func openChat(_ sessionID: String) {
         onOpenChat?(sessionID)
         if isModal { dismiss() }
     }

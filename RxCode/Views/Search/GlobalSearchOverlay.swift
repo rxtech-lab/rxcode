@@ -42,16 +42,16 @@ struct GlobalSearchOverlay: View {
     /// Docs results live alongside threads in a single, unified result list —
     /// one query searches on-device threads and github-pm's docs index at once,
     /// with no scope to pick.
-    @State private var docsHits: [DocsSearchHit] = []
+    @State var docsHits: [DocsSearchHit] = []
     @State private var docsError: String?
-    @State private var selectedDoc: DocsSearchHit?
+    @State var selectedDoc: DocsSearchHit?
 
     private var isSearching: Bool { isSearchingThreads || isSearchingDocs }
 
     /// Flattened selectable rows in display order. Drives arrow-key navigation
     /// and Enter activation; recomputed on every render so it stays in sync
     /// with the current results.
-    private enum SelectableRow: Hashable {
+    enum SelectableRow: Hashable {
         case inThread(UUID)
         case thread(String)
         case doc(String)
@@ -464,7 +464,7 @@ struct GlobalSearchOverlay: View {
         .id(row)
     }
 
-    private func rowBackground(isSelected: Bool) -> some View {
+    func rowBackground(isSelected: Bool) -> some View {
         RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
             .fill(isSelected ? ClaudeTheme.accent.opacity(0.14) : ClaudeTheme.surfacePrimary)
             .overlay(
@@ -476,7 +476,7 @@ struct GlobalSearchOverlay: View {
     /// Show the cosine similarity as a 0–100 chip. Negative scores clamp to 0;
     /// they're rare but possible since NLEmbedding outputs aren't strictly
     /// positive-only.
-    private func scoreBadge(_ score: Float) -> some View {
+    func scoreBadge(_ score: Float) -> some View {
         let clamped = max(0, min(1, score))
         let pct = Int((clamped * 100).rounded())
         return Text("\(pct)%")
@@ -500,7 +500,7 @@ struct GlobalSearchOverlay: View {
         return Self.inlineMarkdown(cleaned)
     }
 
-    private static func inlineMarkdown(_ text: String) -> AttributedString {
+    static func inlineMarkdown(_ text: String) -> AttributedString {
         if let attr = try? AttributedString(
             markdown: text,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -508,75 +508,6 @@ struct GlobalSearchOverlay: View {
             return attr
         }
         return AttributedString(text)
-    }
-
-    // MARK: - Docs section
-
-    private var docsSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: "books.vertical.fill")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                Text("Documentation")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .textCase(.uppercase)
-                Text("· \(docsHits.count)")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 2)
-
-            VStack(spacing: 2) {
-                ForEach(docsHits) { hit in
-                    docsRow(hit: hit)
-                }
-            }
-        }
-    }
-
-    private func docsRow(hit: DocsSearchHit) -> some View {
-        let row: SelectableRow = .doc(hit.id)
-        let isSelected = currentSelection() == row
-        return Button {
-            selectedDoc = hit
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: ClaudeTheme.size(13)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(hit.title ?? hit.docId)
-                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.textPrimary)
-                            .lineLimit(1)
-                        if let score = hit.score { scoreBadge(Float(score)) }
-                    }
-                    if let repo = hit.repository {
-                        Text(repo)
-                            .font(.system(size: ClaudeTheme.size(11)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    }
-                    if let snippet = hit.snippet, !snippet.isEmpty {
-                        Text(Self.inlineMarkdown(snippet))
-                            .font(.system(size: ClaudeTheme.size(12)))
-                            .foregroundStyle(ClaudeTheme.textSecondary)
-                            .lineLimit(3)
-                    }
-                }
-                Spacer(minLength: 8)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(rowBackground(isSelected: isSelected))
-            .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
-        }
-        .buttonStyle(.plain)
-        .id(row)
     }
 
     // MARK: - Footer
@@ -605,7 +536,7 @@ struct GlobalSearchOverlay: View {
         windowState.showGlobalSearch = false
     }
 
-    private func currentSelection() -> SelectableRow? {
+    func currentSelection() -> SelectableRow? {
         let rows = flatRows
         guard !rows.isEmpty else { return nil }
         let clamped = max(0, min(selectedIndex, rows.count - 1))

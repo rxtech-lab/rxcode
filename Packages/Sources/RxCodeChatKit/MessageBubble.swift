@@ -5,6 +5,7 @@ import RxCodeCore
 
 struct MessageBubble: View {
     @Environment(ChatBridge.self) private var chatBridge
+    @Environment(\.openURL) private var openWorkspaceLink
     let message: ChatMessage
     @State private var isCopied = false
     @State private var cursorVisible = true
@@ -258,7 +259,8 @@ struct MessageBubble: View {
                             guard url.scheme == "rxcode-image",
                                   let index = Int(url.host ?? ""),
                                   let path = imagePath(forChipIndex: index) else {
-                                return .systemAction
+                                openWorkspaceLink(url)
+                                return .handled
                             }
                             previewImagePath = path
                             return .handled

@@ -1,444 +1,224 @@
-import AppKit
-import SwiftUI
 import RxCodeCore
-
-// MARK: - Changes (combined Unstaged + Staged + commit composer)
-
-/// Combined view that lists unstaged files on top and staged files at the
-/// bottom, with multi-select Stage/Unstage actions and a commit composer at
-/// the bottom. Generates commit messages via the configured summarization
-/// provider.
-enum ChangeSectionFocus: Hashable {
-    case unstaged
-    case staged
-}
+import SwiftUI
 
 struct ChangesView: View {
+    var body: some View {
+        RepositoryContent { tree in
+            WorkingTreeChanges(tree: tree)
+                .id(tree.head)
+        }
+    }
+}
+
+private struct WorkingTreeChanges: View {
+    let tree: GitWorkingTree
+    @Environment(\.openWindow) private var openWindow
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @Environment(RepositoryStatus.self) private var repository
+    @State private var showsStaged: Bool
+    @State private var selection = Set<String>()
+    @State private var showsCommit = false
+    @State private var draft = ""
+    @State private var operation: LocalizedStringResource?
+    @State private var error: String?
 
-    @State private var unstaged: [GitChangeFile] = []
-    @State private var staged: [GitChangeFile] = []
-    @State private var selectedUnstaged: Set<String> = []
-    @State private var selectedStaged: Set<String> = []
-    @State private var commitMessage: String = ""
-    @State private var isLoading = true
-    @State private var isBusy = false
-    @State private var isGenerating = false
-    @State private var isPushing = false
-    @State private var errorMessage: String?
-    @State private var upstream: GitHelper.UpstreamStatus?
-    @State private var headWatcher: (any DispatchSourceFileSystemObject)?
-    @State private var indexWatcher: (any DispatchSourceFileSystemObject)?
-    @State private var refreshTask: Task<Void, Never>?
-    @FocusState private var focusedSection: ChangeSectionFocus?
+    init(tree: GitWorkingTree) {
+        self.tree = tree
+        _showsStaged = State(initialValue: tree.changes.unstaged.isEmpty && !tree.changes.staged.isEmpty)
+    }
+
+    private var files: [GitChangeFile] { showsStaged ? tree.changes.staged : tree.changes.unstaged }
+    private var clean: Bool { tree.changes.unstaged.isEmpty && tree.changes.staged.isEmpty }
 
     var body: some View {
-        if let project = windowState.selectedProject {
-            content(projectPath: project.path)
-                .task(id: project.path) { await refresh(at: project.path) }
-                .onChange(of: appState.isStreaming(in: windowState)) { old, new in
-                    if old && !new { triggerRefresh(at: project.path) }
-                }
-                .onAppear {
-                    startWatching(at: project.path)
-                    AnalyticsService.shared.log(.diffViewOpened, parameters: [
-                        "project_id": project.id.uuidString,
-                        "surface": "inspector_changes",
-                    ])
-                }
-                .onDisappear { stopWatching() }
-                .onChange(of: project.path) { _, newPath in
-                    Task { @MainActor in
-                        stopWatching()
-                        startWatching(at: newPath)
-                    }
-                }
-        } else {
-            InspectorEmptyState(
-                title: "No project selected",
-                message: "Select a project to review changes."
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func content(projectPath: String) -> some View {
         VStack(spacing: 0) {
-            ChangeSection(
-                title: "Unstaged",
-                actionTitle: "Stage",
-                files: unstaged,
-                selection: $selectedUnstaged,
-                emptyMessage: "Working tree matches the index.",
-                isBusy: isBusy,
-                onAction: { await stageSelected(at: projectPath) },
-                onFocus: { focusedSection = .unstaged },
-                onEmptyTap: clearAllSelections
-            )
-            .focusable()
-            .focused($focusedSection, equals: .unstaged)
-
-            Divider()
-
-            ChangeSection(
-                title: "Staged",
-                actionTitle: "Unstage",
-                files: staged,
-                selection: $selectedStaged,
-                emptyMessage: "Nothing in the index.",
-                isBusy: isBusy,
-                onAction: { await unstageSelected(at: projectPath) },
-                onFocus: { focusedSection = .staged },
-                onEmptyTap: clearAllSelections
-            )
-            .focusable()
-            .focused($focusedSection, equals: .staged)
-
-            Divider()
-
-            commitComposer(projectPath: projectPath)
-        }
-        .overlay(alignment: .top) {
-            if isLoading && unstaged.isEmpty && staged.isEmpty {
-                ProgressView().controlSize(.small).padding(.top, 20)
-            }
-        }
-        .background(selectAllShortcut)
-    }
-
-    /// Cmd+A hooks up to whichever section is currently focused. Hidden button
-    /// avoids stealing focus from the visible UI. Disabled when no section is
-    /// focused (e.g. the commit-message editor or another field has focus) so
-    /// the keystroke falls through to the focused field's native select-all
-    /// instead of grabbing the unstaged list.
-    @ViewBuilder
-    private var selectAllShortcut: some View {
-        Button("Select All in Section") {
-            selectAllInFocusedSection()
-        }
-        .keyboardShortcut("a", modifiers: .command)
-        .disabled(focusedSection == nil)
-        .frame(width: 0, height: 0)
-        .opacity(0)
-        .accessibilityHidden(true)
-    }
-
-    private func clearAllSelections() {
-        selectedUnstaged.removeAll()
-        selectedStaged.removeAll()
-    }
-
-    private func selectAllInFocusedSection() {
-        switch focusedSection {
-        case .unstaged:
-            selectedUnstaged = Set(unstaged.map { $0.displayPath })
-        case .staged:
-            selectedStaged = Set(staged.map { $0.displayPath })
-        case .none:
-            // No section focused — the shortcut is disabled in this state, so
-            // the keystroke is handled by whatever field has focus instead.
-            break
-        }
-    }
-
-    // MARK: - Commit composer
-
-    @ViewBuilder
-    private func commitComposer(projectPath: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("Commit message")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                Spacer()
-                Button {
-                    Task { await generateMessage(at: projectPath) }
-                } label: {
-                    HStack(spacing: 4) {
-                        if isGenerating {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            Image(systemName: "sparkles")
-                        }
-                        Text("Generate")
-                    }
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                }
-                .buttonStyle(.borderless)
-                .disabled(isGenerating || staged.isEmpty)
-                .help("Generate a commit message from the staged diff")
-            }
-
-            TextEditor(text: $commitMessage)
-                .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 60, maxHeight: 120)
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                        .fill(ClaudeTheme.surfaceSecondary.opacity(0.5))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                        .strokeBorder(ClaudeTheme.borderSubtle.opacity(0.6), lineWidth: 0.5)
-                )
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.statusError)
-                    .lineLimit(3)
-            }
-
-            HStack(spacing: 8) {
-                upstreamStatusLabel
-                Spacer()
-                Button {
-                    Task { await push(at: projectPath) }
-                } label: {
-                    HStack(spacing: 4) {
-                        if isPushing {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            Image(systemName: pushIconName)
-                        }
-                        Text(pushLabel)
-                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.bordered)
-                .disabled(isBusy || isPushing || !canPush)
-                .help(pushHelp)
-
-                Button {
-                    Task { await commit(at: projectPath) }
-                } label: {
-                    HStack(spacing: 4) {
-                        if isBusy {
-                            ProgressView().controlSize(.mini)
-                        }
-                        Text("Commit \(staged.count > 0 ? "(\(staged.count))" : "")")
-                            .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(ClaudeTheme.accent)
-                .disabled(isBusy || staged.isEmpty || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    @ViewBuilder
-    private var upstreamStatusLabel: some View {
-        if let upstream {
-            HStack(spacing: 4) {
+            HStack(spacing: 7) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                Text(upstream.branch)
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium, design: .monospaced))
-                Text("·")
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                Text(upstreamSummary(upstream))
-                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.accent)
+                Text(tree.isDetached ? String(localized: "Detached at \(tree.head)") : tree.head)
+                    .font(.headline.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                Button {
+                    openWindow(id: "git-window", value: GitWindowValue(path: tree.root, workspaceID: appState.activeWorkspace.id))
+                } label: { Image(systemName: "point.3.connected.trianglepath.dotted") }
+                .buttonStyle(.borderless)
+                .help("Open Git history, branches, and rebase tools")
+                .accessibilityLabel("Open Git Window")
+                Button {
+                    if let path = repository.path { Task { await repository.refresh(at: path) } }
+                } label: { Image(systemName: "arrow.clockwise") }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Refresh changes")
             }
-            .foregroundStyle(ClaudeTheme.textTertiary)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            HStack(spacing: 0) {
+                WorkspaceUnderlineTabPicker(options: [false, true], selection: $showsStaged) { staged, selected in
+                    WorkspaceUnderlineTabLabel(
+                        title: staged ? "Staged" : "Unstaged",
+                        count: staged ? tree.changes.staged.count : tree.changes.unstaged.count,
+                        isSelected: selected
+                    )
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .overlay(alignment: .bottom) { Divider() }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Change list")
+            .onChange(of: showsStaged) { selection.removeAll() }
+
+            if files.isEmpty {
+                ContentUnavailableView {
+                    if clean {
+                        Label("Working tree clean", systemImage: "checkmark.circle")
+                    } else if showsStaged {
+                        Label("No staged changes", systemImage: "tray")
+                    } else {
+                        Label("No unstaged changes", systemImage: "checkmark.circle")
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                fileList
+                HStack {
+                    Button("Show Diff") { showDiff(selection) }
+                        .disabled(selection.count != 1)
+                    Spacer()
+                    Button(showsStaged ? "Unstage Selected" : "Stage Selected") { changeStage() }
+                        .disabled(selection.isEmpty)
+                }
+                .controlSize(.small)
+                .padding(10)
+            }
+
+            Divider()
+            HStack(spacing: 6) {
+                syncStatus
+                Spacer(minLength: 0)
+                if let tracking = tree.upstream, !tracking.remotes.isEmpty || tracking.upstream != nil {
+                    Button(tracking.upstream == nil ? "Publish" : "Push") { push(tracking) }
+                        .disabled(tracking.upstream != nil && tracking.ahead == 0)
+                        .help(tracking.upstream ?? String(localized: "Publish this branch to its remote"))
+                }
+                Button("Commit…") { showsCommit = true }
+                    .buttonStyle(.borderedProminent)
+                    .tint(ClaudeTheme.accent)
+                    .disabled(tree.changes.staged.isEmpty)
+            }
+            .controlSize(.small)
+            .padding(10)
+        }
+        .disabled(operation != nil)
+        .overlay { GitOperationOverlay(operation: operation) }
+        .onChange(of: files) {
+            selection.formIntersection(files.map(\.displayPath))
+        }
+        .sheet(isPresented: $showsCommit) {
+            GitCommitSheet(tree: tree, message: $draft)
+        }
+        .alert("Git operation failed", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") { error = nil }
+        } message: { Text(error ?? "") }
+        .onAppear {
+            AnalyticsService.shared.log(.diffViewOpened, parameters: [
+                "project_id": windowState.selectedProject?.id.uuidString ?? "",
+                "surface": "inspector_changes",
+            ])
+        }
+    }
+
+    private var fileList: some View {
+        List(files, selection: $selection) { file in
+            ChangeFileRow(file: file)
+                .tag(file.displayPath)
+        }
+        .listStyle(.inset)
+        .contextMenu(forSelectionType: String.self) { paths in
+            if paths.count == 1 {
+                Button("Show Diff") { showDiff(paths) }
+            }
+        } primaryAction: { paths in showDiff(paths) }
+    }
+
+    private func showDiff(_ paths: Set<String>) {
+        guard paths.count == 1, let file = files.first(where: { paths.contains($0.displayPath) }) else { return }
+        windowState.diffFile = PreviewFile(path: file.path, name: file.name, gitDiffMode: file.diffMode)
+    }
+
+    @ViewBuilder private var syncStatus: some View {
+        if let tracking = tree.upstream {
+            Group {
+                if tracking.upstream == nil {
+                    Text(tracking.remotes.isEmpty ? "Local only" : "No upstream")
+                } else if tracking.ahead == 0 && tracking.behind == 0 {
+                    Label("Up to date", systemImage: "checkmark.icloud")
+                } else {
+                    HStack(spacing: 5) {
+                        if tracking.ahead > 0 { Label("\(tracking.ahead)", systemImage: "arrow.up") }
+                        if tracking.behind > 0 { Label("\(tracking.behind)", systemImage: "arrow.down") }
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
             .lineLimit(1)
-            .truncationMode(.tail)
+            .help(tracking.upstream ?? String(localized: "No upstream branch configured"))
         }
     }
 
-    private func upstreamSummary(_ status: GitHelper.UpstreamStatus) -> String {
-        if status.upstream == nil {
-            return status.remotes.isEmpty ? "no remote" : "no upstream"
-        }
-        switch (status.ahead, status.behind) {
-        case (0, 0): return "up to date"
-        case (let a, 0): return "↑\(a)"
-        case (0, let b): return "↓\(b)"
-        case (let a, let b): return "↑\(a) ↓\(b)"
+    private func changeStage() {
+        let paths = files.filter { selection.contains($0.displayPath) }.flatMap(\.pathspecs)
+        guard !paths.isEmpty else { return }
+        let unstage = showsStaged
+        perform(unstage ? "Unstaging files…" : "Staging files…") {
+            if unstage { return await GitHelper.unstage(paths: paths, at: tree.root) }
+            return await GitHelper.stage(paths: paths, at: tree.root)
         }
     }
 
-    private var canPush: Bool {
-        guard let upstream else { return false }
-        if upstream.upstream == nil {
-            // Need at least one remote to create an upstream.
-            return !upstream.remotes.isEmpty
-        }
-        return upstream.ahead > 0
-    }
-
-    private var pushLabel: String {
-        guard let upstream else { return "Push" }
-        return upstream.upstream == nil ? "Publish" : "Push"
-    }
-
-    private var pushIconName: String {
-        guard let upstream else { return "arrow.up" }
-        return upstream.upstream == nil ? "icloud.and.arrow.up" : "arrow.up"
-    }
-
-    private var pushHelp: String {
-        guard let upstream else { return "Push the current branch" }
-        if upstream.upstream == nil {
-            if upstream.remotes.isEmpty {
-                return "No remote configured. Add one with `git remote add origin <url>`."
+    private func push(_ tracking: GitHelper.UpstreamStatus) {
+        perform(tracking.upstream == nil ? "Publishing branch…" : "Pushing commits…") {
+            if tracking.upstream != nil {
+                let ref = "refs/heads/\(tracking.branch)"
+                let format = "--format=%(upstream:remotename)%00%(upstream:remoteref)"
+                let target = await GitHelper.run(["for-each-ref", format, ref], at: tree.root)?
+                    .trimmingCharacters(in: .newlines).split(separator: "\0")
+                guard let target, target.count == 2 else { return String(localized: "The upstream branch is unavailable.") }
+                return await GitHelper.runWithError(["push", "--", String(target[0]), "\(ref):\(target[1])"], at: tree.root)
             }
-            let remote = upstream.remotes.contains("origin") ? "origin" : (upstream.remotes.first ?? "origin")
-            return "Push and track \(remote)/\(upstream.branch)"
-        }
-        if upstream.ahead == 0 {
-            return "Nothing to push — local matches \(upstream.upstream ?? "upstream")"
-        }
-        return "Push \(upstream.ahead) commit\(upstream.ahead == 1 ? "" : "s") to \(upstream.upstream ?? "upstream")"
-    }
-
-    // MARK: - Actions
-
-    private func stageSelected(at projectPath: String) async {
-        let paths = selectedUnstaged.sorted()
-        guard !paths.isEmpty else { return }
-        isBusy = true
-        errorMessage = nil
-        let err = await GitHelper.stage(paths: paths, at: projectPath)
-        isBusy = false
-        if let err {
-            errorMessage = err
-        } else {
-            selectedUnstaged.removeAll()
-            await refresh(at: projectPath)
+            guard let remote = tracking.remotes.contains("origin") ? "origin" : tracking.remotes.first else { return nil }
+            return await GitHelper.push(at: tree.root, remote: remote, branch: tracking.branch, setUpstream: true)
         }
     }
 
-    private func unstageSelected(at projectPath: String) async {
-        let paths = selectedStaged.sorted()
-        guard !paths.isEmpty else { return }
-        isBusy = true
-        errorMessage = nil
-        let err = await GitHelper.unstage(paths: paths, at: projectPath)
-        isBusy = false
-        if let err {
-            errorMessage = err
-        } else {
-            selectedStaged.removeAll()
-            await refresh(at: projectPath)
+    private func perform(_ label: LocalizedStringResource, action: @escaping () async -> String?) {
+        guard operation == nil, let path = repository.path else { return }
+        operation = label
+        Task {
+            error = await action()
+            await repository.refresh(at: path)
+            operation = nil
         }
     }
+}
 
-    private func commit(at projectPath: String) async {
-        isBusy = true
-        errorMessage = nil
-        let err = await GitHelper.commit(message: commitMessage, at: projectPath)
-        isBusy = false
-        if let err {
-            errorMessage = err
-        } else {
-            commitMessage = ""
-            await refresh(at: projectPath)
+struct GitOperationOverlay: View {
+    let operation: LocalizedStringResource?
+
+    var body: some View {
+        if let operation {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(operation)
+            }
+            .padding()
+            .background(.regularMaterial, in: .rect(cornerRadius: 10))
         }
-    }
-
-    private func push(at projectPath: String) async {
-        guard let upstream else { return }
-        isPushing = true
-        errorMessage = nil
-        let setUpstream = upstream.upstream == nil
-        let remote = upstream.remotes.contains("origin") ? "origin" : (upstream.remotes.first ?? "origin")
-        let err = await GitHelper.push(
-            at: projectPath,
-            remote: remote,
-            branch: upstream.branch,
-            setUpstream: setUpstream
-        )
-        isPushing = false
-        if let err {
-            errorMessage = err
-        } else {
-            await refresh(at: projectPath)
-        }
-    }
-
-    private func generateMessage(at projectPath: String) async {
-        guard !staged.isEmpty else { return }
-        isGenerating = true
-        errorMessage = nil
-        async let diffTask = GitHelper.stagedDiff(at: projectPath)
-        async let statTask = GitHelper.stagedStat(at: projectPath)
-        let (diff, stat) = await (diffTask, statTask)
-        let fileSummary = staged.map { "\($0.statusChar) \($0.displayPath)" }.joined(separator: "\n")
-        let result = await appState.generateCommitMessage(
-            diff: diff,
-            stat: stat,
-            fileSummary: fileSummary
-        )
-        isGenerating = false
-        if let result, !result.isEmpty {
-            commitMessage = result
-        } else {
-            errorMessage = "Commit message generation is unavailable. Configure a summarization provider in Settings."
-        }
-    }
-
-    // MARK: - Refresh + watching
-
-    private func triggerRefresh(at projectPath: String) {
-        refreshTask?.cancel()
-        refreshTask = Task { await refresh(at: projectPath) }
-    }
-
-    private func refresh(at projectPath: String) async {
-        isLoading = true
-        async let filesTask = Task.detached(priority: .userInitiated) {
-            await loadAllChangedFiles(at: projectPath)
-        }.value
-        async let upstreamTask = Task.detached(priority: .userInitiated) {
-            await GitHelper.upstreamStatus(at: projectPath)
-        }.value
-        let (result, upstreamResult) = await (filesTask, upstreamTask)
-        guard !Task.isCancelled else { return }
-        unstaged = result.unstaged
-        staged = result.staged
-        upstream = upstreamResult
-        // Drop selections for files that no longer appear.
-        let unstagedPaths = Set(unstaged.map { $0.displayPath })
-        let stagedPaths = Set(staged.map { $0.displayPath })
-        selectedUnstaged.formIntersection(unstagedPaths)
-        selectedStaged.formIntersection(stagedPaths)
-        isLoading = false
-    }
-
-    private func startWatching(at projectPath: String) {
-        headWatcher = makeWatcher(path: projectPath + "/.git/HEAD", projectPath: projectPath)
-        indexWatcher = makeWatcher(path: projectPath + "/.git/index", projectPath: projectPath)
-    }
-
-    private func stopWatching() {
-        headWatcher?.cancel()
-        indexWatcher?.cancel()
-        headWatcher = nil
-        indexWatcher = nil
-    }
-
-    private func makeWatcher(path: String, projectPath: String) -> (any DispatchSourceFileSystemObject)? {
-        let fd = open(path, O_EVTONLY)
-        guard fd != -1 else { return nil }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename, .attrib],
-            queue: .main
-        )
-        source.setEventHandler {
-            triggerRefresh(at: projectPath)
-        }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        return source
     }
 }

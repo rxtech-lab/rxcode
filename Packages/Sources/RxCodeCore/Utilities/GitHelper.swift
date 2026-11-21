@@ -57,8 +57,13 @@ public enum GitHelper {
     /// never exits, so the await never returns — which wedged every caller
     /// queued behind it (e.g. the workspace change tracker actor, and with it
     /// every new agent stream in that workspace).
-    static func execute(_ args: [String], at path: String, input: Data? = nil) async -> ProcessOutput? {
-        let environment = gitEnvironment()
+    static func execute(
+        _ args: [String],
+        at path: String,
+        input: Data? = nil,
+        environment overrides: [String: String] = [:]
+    ) async -> ProcessOutput? {
+        let environment = gitEnvironment().merging(overrides) { _, override in override }
         return await withCheckedContinuation { (continuation: CheckedContinuation<ProcessOutput?, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: executeBlocking(args, at: path, environment: environment, input: input))
@@ -190,13 +195,13 @@ public enum GitHelper {
     /// combined output on failure.
     public static func stage(paths: [String], at repoPath: String) async -> String? {
         guard !paths.isEmpty else { return nil }
-        return await runWithError(["add", "--"] + paths, at: repoPath)
+        return await runWithError(["--literal-pathspecs", "add", "--"] + paths, at: repoPath)
     }
 
-    /// Unstages the given paths (`git reset HEAD --`). Returns nil on success.
+    /// Omitting the revision also supports unstaging before the repository's first commit.
     public static func unstage(paths: [String], at repoPath: String) async -> String? {
         guard !paths.isEmpty else { return nil }
-        return await runWithError(["reset", "HEAD", "--"] + paths, at: repoPath)
+        return await runWithError(["--literal-pathspecs", "reset", "--"] + paths, at: repoPath)
     }
 
     /// Commits the staged index with the given message. Returns nil on success
@@ -222,8 +227,12 @@ public enum GitHelper {
 
     /// Runs a git command and returns nil on success or combined stdout+stderr
     /// trimmed on non-zero exit.
-    private static func runWithError(_ args: [String], at path: String) async -> String? {
-        guard let output = await execute(args, at: path) else {
+    public static func runWithError(
+        _ args: [String],
+        at path: String,
+        environment: [String: String] = [:]
+    ) async -> String? {
+        guard let output = await execute(args, at: path, environment: environment) else {
             return "Failed to launch git \(args.first ?? "")"
         }
         if output.status == 0 { return nil }

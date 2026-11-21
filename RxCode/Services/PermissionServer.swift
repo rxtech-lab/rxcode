@@ -49,6 +49,7 @@ actor PermissionServer {
         /// Kept so a broad grant (session tool / Bash allowlist) can resolve sibling
         /// requests that were already queued when the user made the decision.
         let toolInput: [String: JSONValue]
+        let autoApproveReadOnlyBash: Bool
         /// Populated by `respondAskUserQuestion` so the hook response can carry back
         /// the user's answer as `updatedInput`.
         var updatedInput: JSONValue?
@@ -274,7 +275,8 @@ actor PermissionServer {
             guard let reason = await autoApproveReason(
                 sessionId: entry.sessionId,
                 toolName: entry.toolName,
-                toolInput: entry.toolInput
+                toolInput: entry.toolInput,
+                autoApproveReadOnlyBash: entry.autoApproveReadOnlyBash
             ) else { continue }
             // Re-check: the entry may have been resolved while awaiting the allowlist load.
             guard let entry = pending.removeValue(forKey: id) else { continue }
@@ -295,13 +297,15 @@ actor PermissionServer {
         sessionId: String?,
         toolName: String,
         toolInput: [String: JSONValue],
-        mode: PermissionMode?
+        mode: PermissionMode?,
+        autoApproveReadOnlyBash: Bool = true
     ) async -> PermissionDecision {
         // Honor grants the user already made ("Allow this tool for the session",
         // "Always allow this command", auto mode) so non-Claude transports don't
         // re-prompt for every call.
         if pending[toolUseId] == nil,
-           let reason = await autoApproveReason(sessionId: sessionId, toolName: toolName, toolInput: toolInput) {
+           let reason = await autoApproveReason(sessionId: sessionId, toolName: toolName, toolInput: toolInput,
+                                                autoApproveReadOnlyBash: autoApproveReadOnlyBash) {
             logger.info("Auto-approved \(toolName) \(toolUseId): \(reason)")
             return .allow
         }
@@ -318,9 +322,27 @@ actor PermissionServer {
             sessionId: sessionId,
             toolName: toolName,
             toolInput: toolInput,
+            autoApproveReadOnlyBash: autoApproveReadOnlyBash,
             emit: request
         )
         return outcome.decision
+    }
+
+    /// Desktop commands run in a real shell. Ask and Accept Edits require an explicit
+    /// grant for the command. Consult the live session mode for changes between calls.
+    func requestDesktopShellDecision(id: String, sessionId: String, command: String, mode: PermissionMode) async -> PermissionDecision {
+        let effectiveMode = sessionRegistry[sessionId]?.mode ?? mode
+        switch effectiveMode {
+        case .auto, .bypassPermissions: return .allow
+        case .plan: return .deny
+        case .default, .acceptEdits:
+            return await withTaskCancellationHandler {
+                await requestDecision(toolUseId: id, sessionId: sessionId, toolName: "Bash", toolInput: ["command": .string(command)],
+                                      mode: effectiveMode, autoApproveReadOnlyBash: false)
+            } onCancel: {
+                Task { await self.respond(toolUseId: id, decision: .deny) }
+            }
+        }
     }
 
     /// Surface an `AskUserQuestion`-shaped prompt for transports that are not a
@@ -359,7 +381,8 @@ actor PermissionServer {
     // MARK: - Auto-approve
 
     /// Determines whether the request should be auto-approved. Returns a reason string if approved, or nil otherwise.
-    private func autoApproveReason(sessionId: String?, toolName: String, toolInput: [String: JSONValue]) async -> String? {
+    private func autoApproveReason(sessionId: String?, toolName: String, toolInput: [String: JSONValue],
+                                   autoApproveReadOnlyBash: Bool = true) async -> String? {
         // Computer control requires an explicit session grant, even in Auto mode.
         if ComputerUsePresentation.recognizes(toolName) {
             guard let sid = sessionId,
@@ -387,7 +410,7 @@ actor PermissionServer {
 
         if toolName == "Bash",
            let command = toolInput["command"]?.stringValue {
-            if BashSafety.isSafeReadOnly(command: command) {
+            if autoApproveReadOnlyBash && BashSafety.isSafeReadOnly(command: command) {
                 return "Safe read-only command"
             }
             await loadBashAllowlistIfNeeded()
@@ -540,8 +563,10 @@ actor PermissionServer {
         sessionId: String?,
         toolName: String,
         toolInput: [String: JSONValue],
+        autoApproveReadOnlyBash: Bool = true,
         emit request: PermissionRequest
     ) async -> DecisionOutcome {
+        guard !Task.isCancelled else { return DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil) }
         let isFirst = pending[toolUseId] == nil
         // ExitPlanMode owns its own inline plan card so it skips the generic broadcast.
         // AskUserQuestion now flows through the same queue as permissions — the UI distinguishes
@@ -561,6 +586,7 @@ actor PermissionServer {
                     sessionId: sessionId,
                     toolName: toolName,
                     toolInput: toolInput,
+                    autoApproveReadOnlyBash: autoApproveReadOnlyBash,
                     updatedInput: nil,
                     reasonOverride: nil
                 )
@@ -753,86 +779,5 @@ actor PermissionServer {
 private extension Data {
     nonisolated func contains(_ other: Data) -> Bool {
         range(of: other) != nil
-    }
-}
-
-// MARK: - Request / Response Codables
-
-/// The JSON body sent by the Claude CLI hook.
-private struct HookRequestBody: Decodable {
-    let hookEventName: String
-    let toolName: String
-    let toolInput: [String: JSONValue]
-    let toolUseId: String
-    let sessionId: String?
-
-    enum CodingKeys: String, CodingKey {
-        case hookEventName = "hook_event_name"
-        case toolName = "tool_name"
-        case toolInput = "tool_input"
-        case toolUseId = "tool_use_id"
-        case sessionId = "session_id"
-    }
-
-    nonisolated init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        hookEventName = try c.decode(String.self, forKey: .hookEventName)
-        toolName = try c.decode(String.self, forKey: .toolName)
-        toolInput = try c.decode([String: JSONValue].self, forKey: .toolInput)
-        toolUseId = try c.decode(String.self, forKey: .toolUseId)
-        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
-    }
-}
-
-/// The JSON response body returned to the Claude CLI.
-private struct HookResponseBody: Encodable {
-    let hookSpecificOutput: HookOutput
-
-    struct HookOutput: Encodable {
-        let hookEventName: String
-        let permissionDecision: String
-        let permissionDecisionReason: String
-        /// When non-nil, the CLI replaces the original tool input with this value.
-        /// Used for AskUserQuestion to inject the user's answers.
-        let updatedInput: JSONValue?
-
-        nonisolated func encode(to encoder: Encoder) throws {
-            var c = encoder.container(keyedBy: CodingKeys.self)
-            try c.encode(hookEventName, forKey: .hookEventName)
-            try c.encode(permissionDecision, forKey: .permissionDecision)
-            try c.encode(permissionDecisionReason, forKey: .permissionDecisionReason)
-            if let updatedInput {
-                try c.encode(updatedInput, forKey: .updatedInput)
-            }
-        }
-
-        enum CodingKeys: String, CodingKey {
-            case hookEventName, permissionDecision, permissionDecisionReason, updatedInput
-        }
-    }
-
-    nonisolated func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(hookSpecificOutput, forKey: .hookSpecificOutput)
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case hookSpecificOutput
-    }
-}
-
-// MARK: - Errors
-
-enum PermissionServerError: LocalizedError {
-    case noAvailablePort
-    case connectionClosed
-    case malformedRequest
-
-    var errorDescription: String? {
-        switch self {
-        case .noAvailablePort: return "No available port in range 19836–19846"
-        case .connectionClosed: return "Connection closed unexpectedly"
-        case .malformedRequest: return "Malformed HTTP request"
-        }
     }
 }

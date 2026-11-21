@@ -115,8 +115,8 @@ struct PetScheduledReportTests {
         reopened.runDueScheduledTasks(since: .now, now: .now.addingTimeInterval(3_600))
         #expect(reopened.scheduledPetChecksInFlight.isEmpty)
         #expect(reopened.scheduledTaskRuns.count == 1)
-        // A silent-output preference intentionally delivers the caption without opening capture.
-        pet.configuration.proactiveMode = .bubbleOnly
+        // Persistent mute delivers the caption even with spoken notifications selected.
+        pet.configuration.proactiveMode = .voiceAndBubble
         reopened.deliverPendingPetReports(pet: pet)
         reopened.deliverPendingPetReports(pet: pet)
         try await waitFor { reopened.scheduledTasks[0].petReportDeliveredAt != nil }

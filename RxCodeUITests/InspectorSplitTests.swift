@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class InspectorSplitTests: XCTestCase {
-    private func launchInspector(project: URL? = nil) throws -> XCUIApplication {
+    private func launchInspector(project: URL? = nil, width: Int = 600) throws -> XCUIApplication {
         continueAfterFailure = false
         let workspace = "inspector-split-ui-test"
         let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -30,7 +30,7 @@ final class InspectorSplitTests: XCTestCase {
             "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
             "-ApplePersistenceIgnoreState", "YES", "-workspace.\(workspace).rightInspectorLayout", "",
             "-workspace.\(workspace).onboardingCompleted", "YES", "-showMenuBarExtra", "NO", "-SUEnableAutomaticChecks", "NO",
-            "-workspace.\(workspace).showRightSidebar", "YES", "-workspace.\(workspace).rightInspectorWidth", "600",
+            "-workspace.\(workspace).showRightSidebar", "YES", "-workspace.\(workspace).rightInspectorWidth", String(width),
             "-inspectorMode", "Inspector", "-inspectorTab", "Run",
         ]
         app.launch()
@@ -44,6 +44,65 @@ final class InspectorSplitTests: XCTestCase {
             XCTAssertTrue(whatsNew.waitForNonExistence(timeout: 5))
         }
         return app
+    }
+
+    func testSidebarGitChangesCanReturnToTools() throws {
+        continueAfterFailure = false
+        let project = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: project) }
+
+        let gitDirectory = project.appending(path: ".git")
+        for directory in ["objects", "refs"] {
+            try FileManager.default.createDirectory(at: gitDirectory.appending(path: directory), withIntermediateDirectories: true)
+        }
+        try "ref: refs/heads/main\n".write(to: gitDirectory.appending(path: "HEAD"), atomically: true, encoding: .utf8)
+
+        let app = try launchInspector(project: project, width: 420)
+        let changes = app.buttons["sidebar-git-changes"]
+        XCTAssertTrue(changes.waitForExistence(timeout: 10))
+        changes.click()
+
+        let changesTab = app.buttons["inspector-destination-review"]
+        XCTAssertTrue(changesTab.wait(for: \.isSelected, toEqual: true, timeout: 5))
+        assertInspectorNavigationIsVisible(in: app)
+        app.buttons["inspector-destination-inspector"].click()
+
+        let run = app.descendants(matching: .any).matching(identifier: "inspector-tool-run").firstMatch
+        XCTAssertTrue(run.wait(for: \.isSelected, toEqual: true, timeout: 5))
+    }
+
+    func testInspectorToolbarShortcutsKeepTheSameSidebarLayout() throws {
+        let app = try launchInspector(width: 420)
+        let toggle = app.buttons["toggle-inspector-button"]
+        let panel = app.descendants(matching: .any).matching(identifier: "inspector-destination-pane").firstMatch
+        let tools = app.buttons["inspector-destination-inspector"]
+
+        for (shortcut, tool) in [("open-terminal-button", "terminal"), ("open-views-button", "views")] {
+            toggle.click()
+            XCTAssertTrue(panel.waitForNonExistence(timeout: 5))
+            app.buttons[shortcut].click()
+            let selected = app.buttons["inspector-tool-\(tool)"]
+            XCTAssertTrue(selected.wait(for: \.isSelected, toEqual: true, timeout: 5))
+            assertInspectorNavigationIsVisible(in: app)
+            let shortcutFrame = panel.frame
+            let shortcutToolsFrame = tools.frame
+
+            toggle.click()
+            XCTAssertTrue(panel.waitForNonExistence(timeout: 5))
+            toggle.click()
+            XCTAssertTrue(selected.wait(for: \.isSelected, toEqual: true, timeout: 5))
+            assertInspectorNavigationIsVisible(in: app)
+            XCTAssertEqual(panel.frame, shortcutFrame)
+            XCTAssertEqual(tools.frame, shortcutToolsFrame)
+        }
+    }
+
+    private func assertInspectorNavigationIsVisible(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let tools = app.buttons["inspector-destination-inspector"]
+        let panel = app.descendants(matching: .any).matching(identifier: "inspector-destination-pane").firstMatch
+        XCTAssertGreaterThanOrEqual(tools.frame.minY, app.toolbars.firstMatch.frame.maxY, file: file, line: line)
+        XCTAssertEqual(panel.frame.maxX, app.windows.firstMatch.frame.maxX, accuracy: 1, file: file, line: line)
+        XCTAssertTrue(tools.isHittable, file: file, line: line)
     }
 
     func testSidebarBranchesDismissWithTheInspectorShownAndHidden() throws {

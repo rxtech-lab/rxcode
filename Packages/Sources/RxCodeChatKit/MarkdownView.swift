@@ -61,8 +61,7 @@ extension MarkdownStyle {
     }
 }
 
-/// Renders markdown text through the pure SwiftUI markdown package while
-/// preserving the historical ChatKit entry point.
+/// Renders formatted Markdown in chat, document previews, and other surfaces.
 public struct MarkdownContentView: View {
     let text: String
     let showsTrailingCursor: Bool
@@ -94,6 +93,29 @@ public struct MarkdownContentView: View {
     }
 
     public var body: some View {
+        content.tint(ClaudeTheme.accent)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        if !showsTrailingCursor && !fadeNewText && text.contains(where: \.isNewline) {
+            SelectableMarkdownView(
+                text: text,
+                baseURL: baseURL,
+                style: style,
+                expandsHorizontally: expandsHorizontally,
+                onOpenLink: onOpenLink
+            )
+        } else {
+            swiftUIMarkdown
+        }
+        #else
+        swiftUIMarkdown
+        #endif
+    }
+
+    private var swiftUIMarkdown: some View {
         MarkdownView(
             text: text,
             showsTrailingCursor: showsTrailingCursor,
@@ -104,7 +126,6 @@ public struct MarkdownContentView: View {
             expandsHorizontally: expandsHorizontally,
             onOpenLink: onOpenLink
         )
-        .tint(ClaudeTheme.accent)
     }
 }
 

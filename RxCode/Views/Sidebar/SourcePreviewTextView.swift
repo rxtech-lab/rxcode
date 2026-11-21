@@ -102,18 +102,6 @@ final class SourcePreviewTextView: NSTextView {
         (enclosingScrollView?.verticalRulerView as? SourceLineNumberRuler)?.updateWidth(for: content.lineStarts.count)
     }
 
-    func containsSelectedText(at point: NSPoint) -> Bool {
-        guard let layout = layoutManager, let container = textContainer else { return false }
-        let origin = textContainerOrigin
-        let location = NSPoint(x: point.x - origin.x, y: point.y - origin.y)
-        let index = layout.glyphIndex(for: location, in: container)
-        guard index < layout.numberOfGlyphs else { return false }
-        let glyph = NSRange(location: index, length: 1)
-        guard layout.boundingRect(forGlyphRange: glyph, in: container).contains(location) else { return false }
-        let characters = layout.characterRange(forGlyphRange: glyph, actualGlyphRange: nil)
-        return selectedRanges.contains { NSIntersectionRange($0.rangeValue, characters).length > 0 }
-    }
-
     var selectedExcerpt: PreviewExcerpt? {
         guard let source else { return nil }
         let ranges = selectedRanges.map(\.rangeValue).filter { $0.length > 0 }
@@ -124,6 +112,20 @@ final class SourcePreviewTextView: NSTextView {
         let lastLine = source.lineNumber(at: NSMaxRange(last) - 1)
         let location = firstLine == lastLine ? "Line \(firstLine)" : "Lines \(firstLine)–\(lastLine)"
         return PreviewExcerpt(passage, location: location)
+    }
+}
+
+extension NSTextView {
+    func containsSelectedText(at point: NSPoint) -> Bool {
+        guard let layout = layoutManager, let container = textContainer else { return false }
+        let origin = textContainerOrigin
+        let location = NSPoint(x: point.x - origin.x, y: point.y - origin.y)
+        let index = layout.glyphIndex(for: location, in: container)
+        guard index < layout.numberOfGlyphs else { return false }
+        let glyph = NSRange(location: index, length: 1)
+        guard layout.boundingRect(forGlyphRange: glyph, in: container).contains(location) else { return false }
+        let characters = layout.characterRange(forGlyphRange: glyph, actualGlyphRange: nil)
+        return selectedRanges.contains { NSIntersectionRange($0.rangeValue, characters).length > 0 }
     }
 }
 

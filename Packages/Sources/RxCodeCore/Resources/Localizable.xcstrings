@@ -106,9 +106,6 @@
     "ACP" : {
 
     },
-    "Add a remote before publishing this branch." : {
-
-    },
     "All" : {
 
     },
@@ -762,10 +759,10 @@
     "The first kept commit can’t be squashed or fixed up." : {
 
     },
-    "The run finished without a final message." : {
+    "The remote “%@” is unavailable." : {
 
     },
-    "The upstream branch is unavailable." : {
+    "The run finished without a final message." : {
 
     },
     "This has been completed" : {

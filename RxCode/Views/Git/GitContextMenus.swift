@@ -88,12 +88,10 @@ struct GitLocalBranchContextMenu: View {
         }
         .disabled(branch.isCurrent)
         Divider()
-        Button(branch.upstream == nil ? "Publish Branch" : "Push") {
-            store.perform("Pushing…") {
-                await GitWorkflow.push(branch: branch, remote: store.defaultRemote, force: false, at: store.root)
-            }
+        Button(branch.upstream == nil ? "Publish Branch…" : "Push…") {
+            store.sheet = .push(.branch(branch))
         }
-        .disabled(branch.upstream == nil && store.defaultRemote == nil)
+        .disabled(store.snapshot.remotes.isEmpty)
         Button("Rename…") { store.sheet = .renameBranch(branch.name) }
         Button("Delete…", role: .destructive) { store.confirmation = .deleteBranch(branch.name) }
             .disabled(branch.isCurrent)
@@ -135,11 +133,10 @@ struct GitTagContextMenu: View {
         Button("Checkout Tag") {
             store.perform("Checking out tag…") { await GitWorkflow.checkoutDetached("refs/tags/\(tag.name)", at: store.root) }
         }
-        if let remote = store.defaultRemote {
-            Button("Push to \(remote)") {
-                store.perform("Pushing tag…") { await GitWorkflow.pushTag(tag.name, remote: remote, at: store.root) }
-            }
+        Button("Push Tag…") {
+            store.sheet = .push(.tag(tag))
         }
+        .disabled(store.snapshot.remotes.isEmpty)
         Divider()
         Button("Delete…", role: .destructive) { store.confirmation = .deleteTag(tag.name) }
     }

@@ -46,16 +46,16 @@ struct GitHistoryGraphView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Graph").frame(width: graphColumnWidth, alignment: .leading)
-            Text("Description").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Commit").frame(maxWidth: .infinity, alignment: .leading)
             Text("Author").frame(width: 130, alignment: .leading)
-            Text("Date").frame(width: 120, alignment: .leading)
-            Text("Commit").frame(width: 64, alignment: .leading)
+            Text("SHA").frame(width: 64, alignment: .leading)
+            Text("Date").frame(width: 144, alignment: .leading)
         }
         .font(.caption.weight(.medium))
         .foregroundStyle(ClaudeTheme.textSecondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
+        .background(ClaudeTheme.surfacePrimary)
     }
 
     private var list: some View {
@@ -133,14 +133,14 @@ private struct GitHistoryRow: View {
                 .lineLimit(1)
                 .frame(width: 130, alignment: .leading)
                 .foregroundStyle(ClaudeTheme.textSecondary)
-            Text(commit.authorDate.formatted(date: .abbreviated, time: .shortened))
-                .lineLimit(1)
-                .frame(width: 120, alignment: .leading)
-                .foregroundStyle(ClaudeTheme.textSecondary)
             Text(commit.shortID)
                 .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
                 .frame(width: 64, alignment: .leading)
                 .foregroundStyle(ClaudeTheme.textTertiary)
+            Text(commit.authorDate.formatted(date: .abbreviated, time: .shortened))
+                .lineLimit(1)
+                .frame(width: 144, alignment: .leading)
+                .foregroundStyle(ClaudeTheme.textSecondary)
         }
         .font(.system(size: ClaudeTheme.size(12)))
         .padding(.horizontal, 10)
@@ -148,6 +148,7 @@ private struct GitHistoryRow: View {
         .background(isSelected ? ClaudeTheme.accent.opacity(0.18) : Color.clear)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(commit.subject), \(commit.authorName), \(commit.shortID)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

@@ -43,6 +43,7 @@ struct RxCodeToolbarContent: ToolbarContent {
                 Image(systemName: "apple.terminal")
             }
             .help("Open Terminal (\u{2325}-click for window)")
+            .accessibilityIdentifier("open-terminal-button")
 
             Button {
                 windowState.inspectorTab = .views

@@ -1,15 +1,14 @@
-import AppKit
 import RxCodeCore
 import SwiftUI
 
 struct RightInspectorPanel: View {
     let width: CGFloat
+    let toolbarInset: CGFloat
 
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(WorkspaceDesignSession.self) private var design
     @State private var terminals = InspectorTerminalStore()
-    @State private var toolbarInset: CGFloat = 0
 
     private var isShowing: Bool { appState.showRightSidebar }
 
@@ -28,11 +27,6 @@ struct RightInspectorPanel: View {
                         .environment(design.inspectorBrowser)
                 }
             }
-        }
-        .padding(.top, toolbarInset)
-        .background {
-            InspectorToolbarInsetReader { toolbarInset = $0 }
-                .allowsHitTesting(false)
         }
         .background(ClaudeTheme.surfaceElevated)
         .overlay(alignment: .leading) {
@@ -57,14 +51,15 @@ struct RightInspectorPanel: View {
 
     private func header(for pane: InspectorDestinationLayout.Pane, actions: InspectorPaneTabActions<InspectorDestinationDrag>) -> some View {
         let mode = pane.selectedTab
+        let isFirstPane = pane.id == windowState.inspectorLayout.destinations.panes.first?.id
         return HStack(spacing: 6) {
             InspectorDestinationBar(pane: pane, actions: actions)
-            if pane.id == windowState.inspectorLayout.destinations.panes.first?.id {
+            if isFirstPane {
                 panelControls
             }
         }
         .padding(.horizontal, 10)
-        .padding(.top, 10)
+        .padding(.top, 10 + (isFirstPane ? toolbarInset : 0))
         .padding(.bottom, mode == .inspector ? 0 : 10)
         .background(ClaudeTheme.surfaceSecondary.opacity(0.4))
         .overlay(alignment: .bottom) {
@@ -90,51 +85,5 @@ struct RightInspectorPanel: View {
             appState.showRightSidebar = false
         }
         .accessibilityLabel("Hide inspector")
-    }
-}
-
-/// Keeps the header below the toolbar when the window draws its background into the title bar.
-private struct InspectorToolbarInsetReader: NSViewRepresentable {
-    let onChange: (CGFloat) -> Void
-
-    func makeNSView(context: Context) -> MeasuringView { MeasuringView() }
-
-    func updateNSView(_ view: MeasuringView, context: Context) {
-        view.onChange = onChange
-        view.measureAfterLayout()
-    }
-
-    final class MeasuringView: NSView {
-        var onChange: ((CGFloat) -> Void)?
-        private var observation: NSKeyValueObservation?
-        private var measurementPending = false
-        private var reportedInset: CGFloat = 0
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            observation = window?.observe(\.contentLayoutRect, options: [.new]) { [weak self] _, _ in
-                DispatchQueue.main.async { self?.measureAfterLayout() }
-            }
-            measureAfterLayout()
-        }
-
-        override func layout() {
-            super.layout()
-            measureAfterLayout()
-        }
-
-        func measureAfterLayout() {
-            guard !measurementPending else { return }
-            measurementPending = true
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                measurementPending = false
-                guard let window else { return }
-                let inset = max(0, convert(bounds, to: nil).maxY - window.contentLayoutRect.maxY)
-                guard inset != reportedInset else { return }
-                reportedInset = inset
-                onChange?(inset)
-            }
-        }
     }
 }

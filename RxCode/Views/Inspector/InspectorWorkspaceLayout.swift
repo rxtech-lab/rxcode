@@ -1,3 +1,4 @@
+import AppKit
 import RxCodeCore
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct InspectorWorkspaceLayout<Content: View>: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @GestureState private var resizeTranslation: CGFloat = 0
+    @State private var toolbarInset: CGFloat = 0
     let inspectorStarted: Bool
     @ViewBuilder var content: Content
 
@@ -30,26 +32,33 @@ struct InspectorWorkspaceLayout<Content: View>: View {
                 maxAllowedWidth: maxWidth
             ))
             let inspectorWidth = expanded ? max(savedWidth, windowState.detailColumnWidth) : panelWidth
+            let reservedWidth = showing && !expanded ? panelWidth : 0
 
-            // A ZStack keeps the panel's identity, and its terminals, across modes.
             ZStack(alignment: .trailing) {
+                // Keep the inspector at the window edge when the navigation split
+                // view needs more width than the space left beside it.
                 content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.trailing, showing && !expanded ? panelWidth : 0)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.trailing, reservedWidth)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
 
                 if inspectorStarted {
-                    RightInspectorPanel(width: showing ? inspectorWidth : 0)
-                    .overlay(alignment: .leading) {
-                        if showing, !expanded {
-                            resizeHandle(savedWidth: savedWidth, maxWidth: maxWidth)
+                    RightInspectorPanel(width: showing ? inspectorWidth : 0, toolbarInset: toolbarInset)
+                        .overlay(alignment: .leading) {
+                            if showing, !expanded {
+                                resizeHandle(savedWidth: savedWidth, maxWidth: maxWidth)
+                            }
                         }
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        if expanded, showsFloatingChat {
-                            FloatingChatBubble()
+                        .overlay(alignment: .bottomTrailing) {
+                            if expanded, showsFloatingChat {
+                                FloatingChatBubble()
+                            }
                         }
-                    }
                 }
+            }
+            .background {
+                InspectorToolbarInsetReader { toolbarInset = $0 }
+                    .allowsHitTesting(false)
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.9), value: expanded)
         }
@@ -77,6 +86,56 @@ struct InspectorWorkspaceLayout<Content: View>: View {
                     }
             )
             .accessibilityHidden(true)
+    }
+}
+
+/// Reports the portion of the full-size window covered by its title bar and toolbar.
+private struct InspectorToolbarInsetReader: NSViewRepresentable {
+    let onChange: (CGFloat) -> Void
+
+    func makeNSView(context: Context) -> MeasuringView {
+        let view = MeasuringView()
+        view.onChange = onChange
+        return view
+    }
+
+    func updateNSView(_ view: MeasuringView, context: Context) {
+        view.onChange = onChange
+        view.measureAfterLayout()
+    }
+
+    final class MeasuringView: NSView {
+        var onChange: ((CGFloat) -> Void)?
+        private var observation: NSKeyValueObservation?
+        private var measurementPending = false
+        private var reportedInset: CGFloat = 0
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observation = window?.observe(\.contentLayoutRect, options: [.new]) { [weak self] _, _ in
+                DispatchQueue.main.async { self?.measureAfterLayout() }
+            }
+            measureAfterLayout()
+        }
+
+        override func layout() {
+            super.layout()
+            measureAfterLayout()
+        }
+
+        func measureAfterLayout() {
+            guard !measurementPending else { return }
+            measurementPending = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                measurementPending = false
+                guard let window, let onChange else { return }
+                let inset = max(0, window.frame.height - window.contentLayoutRect.maxY)
+                guard inset != reportedInset else { return }
+                reportedInset = inset
+                onChange(inset)
+            }
+        }
     }
 }
 

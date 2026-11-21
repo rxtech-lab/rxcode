@@ -47,7 +47,7 @@ struct GitWindowRoot: View {
 
 struct GitWorkflowView: View {
     @State private var store: GitWorkflowStore
-    @State private var selectedChange: GitChangeFile?
+    @State private var commitTab: GitCommitDetailTab = .changes
     @Environment(RepositoryStatus.self) private var repository
 
     init(root: String) {
@@ -58,12 +58,10 @@ struct GitWorkflowView: View {
         NavigationSplitView {
             GitWorkflowSidebar(store: store)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
-        } content: {
-            content
-                .navigationSplitViewColumnWidth(min: 420, ideal: 640)
         } detail: {
-            detail
+            workspacePane
         }
+        .navigationSplitViewStyle(.balanced)
         .navigationTitle((store.root as NSString).lastPathComponent)
         .navigationSubtitle(store.snapshot.currentBranch ?? store.snapshot.headCommit.map { String(localized: "Detached at \(String($0.prefix(7)))") } ?? "")
         .toolbar { toolbar }
@@ -94,43 +92,44 @@ struct GitWorkflowView: View {
         } message: { Text(store.error ?? "") }
     }
 
-    // MARK: Columns
+    // MARK: Workspace
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private var workspacePane: some View {
         switch store.selection {
         case .localChanges:
-            GitLocalChangesView(store: store, selectedChange: $selectedChange)
+            GitLocalChangesView(store: store)
         case .stash(let selector):
             if let stash = store.snapshot.stashes.first(where: { $0.selector == selector }) {
-                GitStashSummaryView(stash: stash, store: store)
+                HSplitView {
+                    GitStashSummaryView(stash: stash, store: store)
+                        .frame(minWidth: 240, idealWidth: 300, maxHeight: .infinity)
+                    GitStashDiffView(stash: stash, root: store.root)
+                        .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else {
                 ContentUnavailableView("Stash not found", systemImage: "archivebox")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         default:
-            GitHistoryGraphView(store: store)
+            GeometryReader { geometry in
+                let historyHeight = min(300, geometry.size.height * 0.4)
+                VSplitView {
+                    GitHistoryGraphView(store: store)
+                        .frame(minHeight: historyHeight, maxHeight: .infinity)
+                    commitPane
+                        .frame(minHeight: 200, idealHeight: geometry.size.height - historyHeight, maxHeight: .infinity)
+                        .layoutPriority(1)
+                }
+            }
         }
     }
 
-    @ViewBuilder private var detail: some View {
-        switch store.selection {
-        case .localChanges:
-            GitLocalChangeDiffView(file: selectedChange)
-        case .stash(let selector):
-            if let stash = store.snapshot.stashes.first(where: { $0.selector == selector }) {
-                GitStashDiffView(stash: stash, root: store.root)
-            } else {
-                Color.clear
-            }
-        default:
-            if let commit = store.selectedCommit {
-                GitCommitDetailView(commit: commit, store: store)
-                    .id(commit.id)
-            } else {
-                ContentUnavailableView("Select a commit", systemImage: "point.3.connected.trianglepath.dotted",
-                                       description: Text("Right-click a commit to reword, rebase, cherry-pick, or reset."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+    @ViewBuilder private var commitPane: some View {
+        if let commit = store.selectedCommit {
+            GitCommitDetailView(commit: commit, store: store, tab: $commitTab)
+        } else {
+            ContentUnavailableView("Select a commit", systemImage: "point.3.connected.trianglepath.dotted")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -156,19 +155,13 @@ struct GitWorkflowView: View {
             .help(pullHelp)
             .disabled(store.currentBranch?.upstream == nil)
 
-            Menu {
-                Button("Push") { push(force: false) }
-                Button("Force Push (with Lease)…") {
-                    if let branch = store.currentBranch { store.confirmation = .forcePush(branch) }
+            Button("Push…", systemImage: "arrow.up.circle") {
+                if let branch = store.currentBranch {
+                    store.sheet = .push(.branch(branch))
                 }
-                .disabled(store.currentBranch?.upstream == nil)
-            } label: {
-                Label("Push", systemImage: "arrow.up.circle")
-            } primaryAction: {
-                push(force: false)
             }
-            .help(pushHelp)
-            .disabled(store.currentBranch == nil || (store.currentBranch?.upstream == nil && store.defaultRemote == nil))
+            .help("Choose a remote and push options")
+            .disabled(store.currentBranch == nil || store.snapshot.remotes.isEmpty)
 
             Button("Stash", systemImage: "archivebox") { store.sheet = .stash }
                 .help("Stash uncommitted changes")
@@ -193,22 +186,8 @@ struct GitWorkflowView: View {
         return branch.behind > 0 ? String(localized: "Pull \(branch.behind) commits from \(upstream)") : String(localized: "Pull from \(upstream)")
     }
 
-    private var pushHelp: String {
-        guard let branch = store.currentBranch else { return String(localized: "Check out a branch to push") }
-        guard let upstream = branch.upstream else { return String(localized: "Publish \(branch.name)") }
-        return branch.ahead > 0 ? String(localized: "Push \(branch.ahead) commits to \(upstream)") : String(localized: "Push to \(upstream)")
-    }
-
     private func pull(_ strategy: GitWorkflow.PullStrategy) {
         store.perform("Pulling…") { await GitWorkflow.pull(strategy, at: store.root) }
-    }
-
-    private func push(force: Bool) {
-        guard let branch = store.currentBranch else { return }
-        let remote = store.defaultRemote
-        store.perform(force ? "Force pushing…" : "Pushing…") {
-            await GitWorkflow.push(branch: branch, remote: remote, force: force, at: store.root)
-        }
     }
 
     // MARK: Sheets
@@ -219,6 +198,8 @@ struct GitWorkflowView: View {
             if case .ready(let tree) = repository.state {
                 GitWindowCommitSheet(tree: tree, store: store)
             }
+        case .push(let source):
+            GitPushSheet(store: store, source: source)
         case .createBranch(let start, let label):
             GitCreateBranchSheet(store: store, startPoint: start, label: label)
         case .renameBranch(let name):
@@ -233,6 +214,8 @@ struct GitWorkflowView: View {
             GitStashSheet(store: store)
         case .addRemote:
             GitAddRemoteSheet(store: store)
+        case .searchTags:
+            GitTagSearchSheet(store: store)
         }
     }
 
@@ -247,7 +230,6 @@ struct GitWorkflowView: View {
         case .deleteRemoteBranch(let branch): return String(localized: "Delete “\(branch.refName)” from the remote?")
         case .deleteTag(let name): return String(localized: "Delete tag “\(name)”?")
         case .dropStash(let stash): return String(localized: "Drop \(stash.selector)?")
-        case .forcePush(let branch): return String(localized: "Force push “\(branch.name)”?")
         case .discard(let files): return String(localized: "Discard changes in \(files.count) files?")
         case .removeRemote(let name): return String(localized: "Remove remote “\(name)”?")
         }
@@ -258,7 +240,6 @@ struct GitWorkflowView: View {
         case .reset: String(localized: "Reset")
         case .deleteBranch, .deleteRemoteBranch, .deleteTag: String(localized: "Delete")
         case .dropStash: String(localized: "Drop")
-        case .forcePush: String(localized: "Force Push")
         case .discard: String(localized: "Discard")
         case .removeRemote: String(localized: "Remove")
         }
@@ -277,7 +258,6 @@ struct GitWorkflowView: View {
         case .deleteRemoteBranch: return String(localized: "Removes the branch for everyone using this remote.")
         case .deleteTag: return String(localized: "Only the local tag is deleted.")
         case .dropStash(let stash): return stash.message
-        case .forcePush: return String(localized: "Overwrites the remote branch. The push fails if someone else pushed in the meantime.")
         case .discard(let files): return files.prefix(8).map(\.displayPath).joined(separator: "\n") + String(localized: "\nThis can’t be undone.")
         case .removeRemote: return String(localized: "Remote-tracking branches for this remote are removed.")
         }
@@ -300,9 +280,6 @@ struct GitWorkflowView: View {
         case .dropStash(let stash):
             store.perform("Dropping stash…") { await GitWorkflow.dropStash(stash, at: root) }
             if store.selection == .stash(stash.selector) { store.selection = .allCommits }
-        case .forcePush(let branch):
-            let remote = store.defaultRemote
-            store.perform("Force pushing…") { await GitWorkflow.push(branch: branch, remote: remote, force: true, at: root) }
         case .discard(let files):
             let untracked = files.filter { $0.diffMode == .untracked }.flatMap(\.pathspecs)
             let tracked = files.filter { $0.diffMode == .unstaged }.flatMap(\.pathspecs)

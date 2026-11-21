@@ -21,7 +21,7 @@ public struct GitRepositorySnapshot: Equatable, Sendable {
 
 /// Read-only queries for the Git workflow window.
 public enum GitRepositoryLoader {
-    static let branchFormat = "--format=%(refname:short)%1f%(upstream:short)%1f%(HEAD)%1f%(upstream:track)%1f%(objectname)"
+    static let branchFormat = "--format=%(refname:lstrip=2)%1f%(upstream:short)%1f%(HEAD)%1f%(upstream:track)%1f%(objectname)%1f%(upstream:remotename)%1f%(upstream:remoteref)"
 
     public static func snapshot(at root: String) async -> GitRepositorySnapshot {
         async let branch = GitHelper.currentBranch(at: root)
@@ -30,7 +30,7 @@ public enum GitRepositoryLoader {
         async let remoteRefs = GitHelper.run(["for-each-ref", "--format=%(refname)%1f%(objectname)", "refs/remotes"], at: root)
         async let remoteNames = GitHelper.run(["remote"], at: root)
         async let tagRefs = GitHelper.run(
-            ["for-each-ref", "--sort=-creatordate", "--format=%(refname:short)%1f%(objectname)%1f%(*objectname)", "refs/tags"],
+            ["for-each-ref", "--sort=-creatordate", "--format=%(refname:lstrip=2)%1f%(objectname)%1f%(*objectname)", "refs/tags"],
             at: root
         )
         async let stashList = GitHelper.run(["stash", "list", "--format=%gd%x1f%s%x1f%H"], at: root)
@@ -117,6 +117,20 @@ public enum GitRepositoryLoader {
         return GitHistoryParser.parseNameStatus(raw)
     }
 
+    public static func trackedPaths(in commit: GitCommit, at root: String) async -> [String] {
+        let raw = await GitHelper.run(["ls-tree", "-r", "-z", "--name-only", "--full-tree", commit.id], at: root)
+        return (raw ?? "").split(separator: "\0").map(String.init)
+    }
+
+    public static func fileText(at path: String, in commit: GitCommit, root: String) async -> String? {
+        let object = "\(commit.id):\(path)"
+        guard let rawSize = await GitHelper.run(["cat-file", "-s", object], at: root),
+              let size = Int(rawSize.trimmingCharacters(in: .newlines)), size <= 256 * 1024,
+              let text = await GitHelper.run(["cat-file", "blob", object], at: root),
+              !text.contains("\0") else { return nil }
+        return text
+    }
+
     public static func diff(of file: GitCommitFile, in commit: GitCommit, at root: String) async -> String {
         let paths = [file.path] + (file.originalPath.map { [$0] } ?? [])
         if let parent = commit.parents.first {
@@ -160,21 +174,20 @@ public enum GitWorkflow {
         return await GitHelper.runWithError(["pull", flag], at: root, environment: nonInteractive)
     }
 
-    /// Pushes `branch` to its upstream, or publishes it to `remote` when it has none.
-    public static func push(branch: GitLocalBranch, remote: String?, force: Bool, at root: String) async -> String? {
-        var args = ["push"]
-        if force { args.append("--force-with-lease") }
-        if branch.upstream == nil {
-            guard let remote else { return String(localized: "Add a remote before publishing this branch.") }
-            args += ["-u", remote, "refs/heads/\(branch.name):refs/heads/\(branch.name)"]
-        } else {
-            let format = "--format=%(upstream:remotename)%00%(upstream:remoteref)"
-            let target = await GitHelper.run(["for-each-ref", format, "refs/heads/\(branch.name)"], at: root)?
-                .trimmingCharacters(in: .newlines).split(separator: "\0")
-            guard let target, target.count == 2 else { return String(localized: "The upstream branch is unavailable.") }
-            args += ["--", String(target[0]), "refs/heads/\(branch.name):\(target[1])"]
-        }
-        return await GitHelper.runWithError(args, at: root)
+    public static func push(
+        branch: GitLocalBranch,
+        remote: String,
+        force: Bool,
+        pushAllTags: Bool = false,
+        at root: String
+    ) async -> String? {
+        let destination = branch.pushDestination(on: remote)
+        var options: [String] = []
+        if branch.upstream == nil { options.append("--set-upstream") }
+        // Scope the lease to the branch when the same push also includes tags.
+        if force { options.append("--force-with-lease=\(destination)") }
+        if pushAllTags { options.append("--tags") }
+        return await push("\(branch.refName):\(destination)", to: remote, options: options, at: root)
     }
 
     public static func checkout(_ ref: String, at root: String) async -> String? {
@@ -252,7 +265,14 @@ public enum GitWorkflow {
     }
 
     public static func pushTag(_ name: String, remote: String, at root: String) async -> String? {
-        await GitHelper.runWithError(["push", remote, "refs/tags/\(name)"], at: root)
+        await push("refs/tags/\(name)", to: remote, at: root)
+    }
+
+    private static func push(_ refspec: String, to remote: String, options: [String] = [], at root: String) async -> String? {
+        guard await GitHelper.run(["remote", "get-url", "--push", "--", remote], at: root) != nil else {
+            return String(localized: "The remote “\(remote)” is unavailable.")
+        }
+        return await GitHelper.runWithError(["push"] + options + ["--", remote, refspec], at: root)
     }
 
     public static func stash(message: String, includeUntracked: Bool, at root: String) async -> String? {

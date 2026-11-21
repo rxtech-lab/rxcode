@@ -28,9 +28,27 @@ enum GitSidebarItem: Hashable {
     }
 }
 
-/// Create, update, and history-editing flows, each in its own sheet.
+enum GitPushSource {
+    case branch(GitLocalBranch)
+    case tag(GitTag)
+
+    var branch: GitLocalBranch? {
+        if case .branch(let branch) = self { return branch }
+        return nil
+    }
+
+    var name: String {
+        switch self {
+        case .branch(let branch): branch.name
+        case .tag(let tag): tag.name
+        }
+    }
+}
+
+/// Flows presented in their own sheets.
 enum GitSheet: Identifiable {
     case commit
+    case push(GitPushSource)
     case createBranch(startPoint: String, label: String)
     case renameBranch(String)
     case createTag(GitCommit)
@@ -38,10 +56,13 @@ enum GitSheet: Identifiable {
     case interactiveRebase(base: GitCommit, steps: [GitRebaseStep])
     case stash
     case addRemote
+    case searchTags
 
     var id: String {
         switch self {
         case .commit: "commit"
+        case .push(.branch(let branch)): "push-branch-\(branch.name)"
+        case .push(.tag(let tag)): "push-tag-\(tag.name)"
         case .createBranch(let start, _): "branch-\(start)"
         case .renameBranch(let name): "rename-\(name)"
         case .createTag(let commit): "tag-\(commit.id)"
@@ -49,6 +70,7 @@ enum GitSheet: Identifiable {
         case .interactiveRebase(let base, _): "rebase-\(base.id)"
         case .stash: "stash"
         case .addRemote: "remote"
+        case .searchTags: "search-tags"
         }
     }
 }
@@ -60,7 +82,6 @@ enum GitConfirmation: Identifiable {
     case deleteRemoteBranch(GitRemoteBranch)
     case deleteTag(String)
     case dropStash(GitStash)
-    case forcePush(GitLocalBranch)
     case discard([GitChangeFile])
     case removeRemote(String)
 
@@ -71,7 +92,6 @@ enum GitConfirmation: Identifiable {
         case .deleteRemoteBranch(let branch): "delete-remote-\(branch.id)"
         case .deleteTag(let name): "delete-tag-\(name)"
         case .dropStash(let stash): "drop-\(stash.id)"
-        case .forcePush(let branch): "force-\(branch.name)"
         case .discard(let files): "discard-\(files.map(\.id).joined(separator: ","))"
         case .removeRemote(let name): "remove-remote-\(name)"
         }
@@ -151,28 +171,27 @@ final class GitWorkflowStore {
     func reloadHistory() async {
         let token = UUID()
         historyToken = token
-        let newCommits = await loadHistory()
+        guard selection.showsHistory else {
+            isLoadingHistory = false
+            return
+        }
+        isLoadingHistory = true
+        defer { if token == historyToken { isLoadingHistory = false } }
+        let newCommits = await GitRepositoryLoader.history(at: root, ref: selection.historyRef, limit: limit)
         guard token == historyToken, !Task.isCancelled else { return }
         apply(newCommits)
     }
 
-    private func loadHistory() async -> [GitCommit] {
-        guard selection.showsHistory else { return commits }
-        isLoadingHistory = true
-        defer { isLoadingHistory = false }
-        return await GitRepositoryLoader.history(at: root, ref: selection.historyRef, limit: limit)
-    }
-
     private func apply(_ newCommits: [GitCommit]) {
         canLoadMore = newCommits.count >= limit
+        if !newCommits.contains(where: { $0.id == selectedCommitID }) {
+            selectedCommitID = newCommits.first?.id
+        }
         guard newCommits != commits else { return }
         commits = newCommits
         rows = GitGraphLayout.layout(newCommits)
         graphWidth = max(1, rows.map(\.width).max() ?? 1)
         headAncestors = ancestors(of: snapshot.headCommit, in: newCommits)
-        if let selectedCommitID, !newCommits.contains(where: { $0.id == selectedCommitID }) {
-            self.selectedCommitID = nil
-        }
     }
 
     private func ancestors(of head: String?, in commits: [GitCommit]) -> Set<String> {

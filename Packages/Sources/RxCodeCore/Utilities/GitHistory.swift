@@ -85,18 +85,38 @@ public struct GitLocalBranch: Identifiable, Hashable, Sendable {
     public var id: String { name }
     public let name: String
     public let upstream: String?
+    public let upstreamRemote: String?
+    public let upstreamRef: String?
     public let ahead: Int
     public let behind: Int
     public let isCurrent: Bool
     public let tip: String
 
-    public init(name: String, upstream: String?, ahead: Int, behind: Int, isCurrent: Bool, tip: String) {
+    public init(
+        name: String,
+        upstream: String?,
+        ahead: Int,
+        behind: Int,
+        isCurrent: Bool,
+        tip: String,
+        upstreamRemote: String? = nil,
+        upstreamRef: String? = nil
+    ) {
         self.name = name
         self.upstream = upstream
+        self.upstreamRemote = upstreamRemote
+        self.upstreamRef = upstreamRef
         self.ahead = ahead
         self.behind = behind
         self.isCurrent = isCurrent
         self.tip = tip
+    }
+
+    public var refName: String { "refs/heads/\(name)" }
+
+    public func pushDestination(on remote: String) -> String {
+        if upstreamRemote == remote, let upstreamRef { return upstreamRef }
+        return refName
     }
 }
 
@@ -264,7 +284,9 @@ public enum GitHistoryParser {
                 ahead: counts.ahead,
                 behind: counts.behind,
                 isCurrent: fields[2] == "*",
-                tip: fields[4]
+                tip: fields[4],
+                upstreamRemote: fields.count > 5 && !fields[5].isEmpty ? fields[5] : nil,
+                upstreamRef: fields.count > 6 && !fields[6].isEmpty ? fields[6] : nil
             )
         }
     }

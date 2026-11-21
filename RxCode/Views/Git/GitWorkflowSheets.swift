@@ -1,6 +1,8 @@
 import RxCodeCore
 import SwiftUI
 
+private typealias GitFormConfirmation = (title: LocalizedStringResource, message: LocalizedStringResource)
+
 /// Shared chrome for the Git window's create and edit sheets: title, Cancel and
 /// confirm buttons, a progress overlay while git runs, and an error alert.
 private struct GitFormSheet<Content: View>: View {
@@ -8,11 +10,13 @@ private struct GitFormSheet<Content: View>: View {
     let confirmTitle: LocalizedStringResource
     let progressTitle: LocalizedStringResource
     let canConfirm: Bool
+    var confirmation: GitFormConfirmation? = nil
     let store: GitWorkflowStore
     let action: () async -> String?
     @ViewBuilder let content: () -> Content
     @Environment(\.dismiss) private var dismiss
     @State private var running = false
+    @State private var isConfirming = false
     @State private var error: String?
 
     var body: some View {
@@ -26,8 +30,14 @@ private struct GitFormSheet<Content: View>: View {
                         Button("Cancel") { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(String(localized: confirmTitle)) { run() }
-                            .disabled(!canConfirm || running)
+                        Button(String(localized: confirmTitle)) {
+                            if confirmation == nil {
+                                run()
+                            } else {
+                                isConfirming = true
+                            }
+                        }
+                        .disabled(!canConfirm || running)
                     }
                 }
         }
@@ -35,6 +45,17 @@ private struct GitFormSheet<Content: View>: View {
         .disabled(running)
         .interactiveDismissDisabled(running)
         .overlay { GitOperationOverlay(operation: running ? progressTitle : nil) }
+        .confirmationDialog(
+            String(localized: confirmation?.title ?? confirmTitle),
+            isPresented: $isConfirming,
+            titleVisibility: .visible,
+            presenting: confirmation
+        ) { _ in
+            Button(String(localized: confirmTitle), role: .destructive) { run() }
+            Button("Cancel", role: .cancel) {}
+        } message: { confirmation in
+            Text(confirmation.message)
+        }
         .alert("Git operation failed", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
@@ -51,6 +72,81 @@ private struct GitFormSheet<Content: View>: View {
             } else {
                 dismiss()
             }
+        }
+    }
+}
+
+struct GitPushSheet: View {
+    let store: GitWorkflowStore
+    let source: GitPushSource
+    @State private var selectedRemote: String?
+    @State private var force = false
+    @State private var pushAllTags = false
+
+    init(store: GitWorkflowStore, source: GitPushSource) {
+        self.store = store
+        self.source = source
+        let trackingRemote = source.branch?.upstreamRemote.flatMap { remote in
+            store.snapshot.remotes.contains(remote) ? remote : nil
+        }
+        _selectedRemote = State(initialValue: trackingRemote ?? store.defaultRemote)
+    }
+
+    private var remote: String? {
+        selectedRemote.flatMap { store.snapshot.remotes.contains($0) ? $0 : nil }
+    }
+
+    private var destinationBranch: String {
+        guard let branch = source.branch, let remote else { return source.name }
+        let ref = branch.pushDestination(on: remote)
+        return ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
+    }
+
+    private var forceConfirmation: GitFormConfirmation? {
+        guard force, let remote else { return nil }
+        return (
+            "Force push to “\(remote)/\(destinationBranch)”?",
+            "Git checks the remote branch against your local remote-tracking ref before rewriting it."
+        )
+    }
+
+    var body: some View {
+        let isBranch = source.branch != nil
+        GitFormSheet(
+            title: isBranch ? "Push Branch" : "Push Tag",
+            confirmTitle: force ? "Force Push" : "Push",
+            progressTitle: force ? "Force pushing…" : "Pushing…",
+            canConfirm: remote != nil,
+            confirmation: forceConfirmation,
+            store: store,
+            action: push
+        ) {
+            LabeledContent(isBranch ? "Branch" : "Tag", value: source.name)
+            Picker("Remote", selection: Binding(get: { remote }, set: { selectedRemote = $0 })) {
+                if remote == nil {
+                    Text("Select a remote").tag(nil as String?)
+                }
+                ForEach(store.snapshot.remotes, id: \.self) { remote in
+                    Text(remote).tag(Optional(remote))
+                }
+            }
+            if isBranch {
+                if destinationBranch != source.name {
+                    LabeledContent("Destination branch", value: destinationBranch)
+                }
+                Toggle("Force push (with lease)", isOn: $force)
+                Toggle("Push all tags", isOn: $pushAllTags)
+            }
+        }
+    }
+
+    private func push() async -> String? {
+        guard let remote else { return String(localized: "Select a remote before pushing.") }
+        switch source {
+        case .branch(let branch):
+            return await GitWorkflow.push(branch: branch, remote: remote, force: force, pushAllTags: pushAllTags, at: store.root)
+        case .tag(let tag):
+            return await GitWorkflow.pushTag(tag.name, remote: remote, at: store.root)
         }
     }
 }
@@ -134,6 +230,57 @@ struct GitCreateTagSheet: View {
                     .frame(minHeight: 80)
             }
         }
+    }
+}
+
+struct GitTagSearchSheet: View {
+    let store: GitWorkflowStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+
+    private var results: [GitTag] {
+        let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return search.isEmpty ? store.snapshot.tags : store.snapshot.tags.filter { $0.name.localizedCaseInsensitiveContains(search) }
+    }
+
+    var body: some View {
+        let tags = results
+        NavigationStack {
+            VStack(spacing: 0) {
+                TextField("Search tags", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($searchFocused)
+                    .padding(12)
+                Divider()
+                if tags.isEmpty {
+                    ContentUnavailableView.search(text: query)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(tags) { tag in
+                        Button {
+                            store.selection = .tag(tag.name)
+                            dismiss()
+                        } label: {
+                            GitTagRow(tag: tag)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .listStyle(.inset)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle("Search Tags")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+            .defaultFocus($searchFocused, true)
+        }
+        .frame(minWidth: 460, idealWidth: 520, maxWidth: .infinity, minHeight: 320, idealHeight: 480, maxHeight: .infinity)
     }
 }
 

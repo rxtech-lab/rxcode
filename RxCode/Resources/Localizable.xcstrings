@@ -458,16 +458,6 @@
         }
       }
     },
-    "%@ (%lld)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ (%2$lld)"
-          }
-        }
-      }
-    },
     "%@ (current branch)" : {
 
     },
@@ -5426,6 +5416,9 @@
     "Change task model" : {
 
     },
+    "Changes" : {
+
+    },
     "Changes appear here as you edit. Click the card to preview its details." : {
 
     },
@@ -5550,9 +5543,6 @@
           }
         }
       }
-    },
-    "Check out a branch to push" : {
-
     },
     "Check out after creating" : {
 
@@ -5707,6 +5697,9 @@
           }
         }
       }
+    },
+    "Choose a remote and push options" : {
+
     },
     "Choose a setup agent in the studio's Engine & Setup settings first. RxCode's local agent can't read model cards." : {
 
@@ -6747,6 +6740,9 @@
     "Collapse chats in %@" : {
 
     },
+    "Collapsed" : {
+
+    },
     "Color" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6917,6 +6913,9 @@
       }
     },
     "Commit changes" : {
+
+    },
+    "Commit details" : {
 
     },
     "Commit Files" : {
@@ -9816,6 +9815,9 @@
         }
       }
     },
+    "Destination branch" : {
+
+    },
     "Detached at %@" : {
 
     },
@@ -11699,6 +11701,9 @@
     "Expand to full width" : {
 
     },
+    "Expanded" : {
+
+    },
     "Expected 5 fields (minute hour day month weekday), found %lld." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -12089,6 +12094,9 @@
           }
         }
       }
+    },
+    "File Tree" : {
+
     },
     "Filename" : {
       "localizations" : {
@@ -12663,11 +12671,18 @@
     "Force Push" : {
 
     },
-    "Force push “%@”?" : {
+    "Force push (with lease)" : {
 
     },
-    "Force Push (with Lease)…" : {
-
+    "Force push to “%@/%@”?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Force push to “%1$@/%2$@”?"
+          }
+        }
+      }
     },
     "Force pushing…" : {
 
@@ -12983,6 +12998,9 @@
     "GGUF models run on llama.cpp; MLX models run on Apple's MLX." : {
 
     },
+    "Git checks the remote branch against your local remote-tracking ref before rewriting it." : {
+
+    },
     "Git operation failed" : {
 
     },
@@ -13236,9 +13254,6 @@
 
     },
     "Grant Screen Recording Access…" : {
-
-    },
-    "Graph" : {
 
     },
     "Hard — discard all changes" : {
@@ -16427,9 +16442,6 @@
         }
       }
     },
-    "Merge commits list changes against their first parent." : {
-
-    },
     "Merge in progress" : {
 
     },
@@ -18663,6 +18675,9 @@
     "No staged changes" : {
 
     },
+    "No staged files" : {
+
+    },
     "No status" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18920,6 +18935,9 @@
         }
       }
     },
+    "No tracked files" : {
+
+    },
     "No trusted emails yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18947,6 +18965,9 @@
       }
     },
     "No unstaged changes" : {
+
+    },
+    "No unstaged files" : {
 
     },
     "No upstream" : {
@@ -20266,9 +20287,6 @@
         }
       }
     },
-    "Overwrites the remote branch. The push fails if someone else pushed in the meantime." : {
-
-    },
     "Package" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -21501,10 +21519,7 @@
     "Publish" : {
 
     },
-    "Publish %@" : {
-
-    },
-    "Publish Branch" : {
+    "Publish Branch…" : {
 
     },
     "Publish this branch to its remote" : {
@@ -21566,15 +21581,17 @@
         }
       }
     },
-    "Push %lld commits to %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Push %1$lld commits to %2$@"
-          }
-        }
-      }
+    "Push all tags" : {
+
+    },
+    "Push Branch" : {
+
+    },
+    "Push Tag" : {
+
+    },
+    "Push Tag…" : {
+
     },
     "Push the branch and open a pull request from this briefing" : {
       "localizations" : {
@@ -21592,9 +21609,6 @@
         }
       }
     },
-    "Push to %@" : {
-
-    },
     "Push to the remote automatically, or keep the commit local." : {
       "localizations" : {
         "ko" : {
@@ -21611,10 +21625,10 @@
         }
       }
     },
-    "Pushing commits…" : {
+    "Push…" : {
 
     },
-    "Pushing tag…" : {
+    "Pushing commits…" : {
 
     },
     "Pushing…" : {
@@ -22430,7 +22444,6 @@
 
     },
     "Remote" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -23482,9 +23495,6 @@
 
     },
     "Rewording commit…" : {
-
-    },
-    "Right-click a commit to reword, rebase, cherry-pick, or reset." : {
 
     },
     "Rotate token & reinstall" : {
@@ -24723,6 +24733,12 @@
         }
       }
     },
+    "Search tags" : {
+
+    },
+    "Search Tags" : {
+
+    },
     "Search tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -24939,6 +24955,12 @@
           }
         }
       }
+    },
+    "Select a remote" : {
+
+    },
+    "Select a remote before pushing." : {
+
     },
     "Select a script…" : {
       "localizations" : {
@@ -25771,6 +25793,9 @@
           }
         }
       }
+    },
+    "Show %lld More" : {
+
     },
     "Show %lld more older stories (%lld hidden)" : {
       "localizations" : {

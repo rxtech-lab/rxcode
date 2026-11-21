@@ -23,10 +23,14 @@ struct PreviewExcerpt: Identifiable {
         let windowPoint = hit.window?.convertPoint(fromScreen: screenPoint) ?? .zero
         for view in sequence(first: hit, next: { $0.superview }) {
             if view is NSRulerView { return nil }
-            if let source = view as? SourcePreviewTextView {
-                if requireSelectionAtPoint, !source.containsSelectedText(at: source.convert(windowPoint, from: nil)) { return nil }
-                var excerpt = source.selectedExcerpt
-                if keepingSelection { excerpt?.highlight = .text(in: source) }
+            if let text = view as? NSTextView, text.isSelectable, !text.isEditable {
+                if requireSelectionAtPoint, !text.containsSelectedText(at: text.convert(windowPoint, from: nil)) { return nil }
+                var excerpt = if let source = text as? SourcePreviewTextView {
+                    source.selectedExcerpt
+                } else {
+                    Self(text.accessibilitySelectedText())
+                }
+                if keepingSelection { excerpt?.highlight = .text(in: text) }
                 return excerpt
             }
             if let liveText = view as? ImageAnalysisOverlayView {

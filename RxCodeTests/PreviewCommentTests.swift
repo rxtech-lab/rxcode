@@ -132,23 +132,35 @@ final class PreviewCommentTests: XCTestCase {
         XCTAssertNotEqual(try pixels(), before)
     }
 
-    func testCommentEditorAnchorsAtTheSelectionInItsOwnWindow() throws {
+    func testCommentEditorAnchorsAtTheSelectionInItsOwnWindow() async throws {
         let host = NSWindow(contentRect: CGRect(x: 120, y: 160, width: 380, height: 200),
                             styleMask: [.titled], backing: .buffered, defer: false)
-        host.contentView = NSHostingView(rootView: MarkdownPreviewView(content: "**Blue** lantern"))
+        host.contentView = NSHostingView(rootView: MarkdownPreviewView(content: "**Blue** lantern\n\nSilver moon."))
         host.orderFront(nil)
         defer { host.orderOut(nil) }
         let root = try XCTUnwrap(host.contentView)
-        let point = CGPoint(x: 35, y: 160)
-        let screenPoint = host.convertPoint(toScreen: point)
+        root.layoutSubtreeIfNeeded()
+        func selectableText(in view: NSView) -> NSTextView? {
+            (view as? NSTextView) ?? view.subviews.lazy.compactMap { selectableText(in: $0) }.first
+        }
+        let text = try XCTUnwrap(selectableText(in: root))
+        let passage = "Blue lantern\nSilver moon."
+        let selection = NSRange(try XCTUnwrap(text.string.range(of: passage)), in: text.string)
+        text.setSelectedRange(selection)
+        let bounds = text.firstRect(forCharacterRange: NSRange(location: selection.location, length: 1), actualRange: nil)
+        let screenPoint = CGPoint(x: bounds.midX, y: bounds.midY)
+        let excerpt = await PreviewExcerpt.read(in: text, at: screenPoint, keepingSelection: true, requireSelectionAtPoint: true)
+        XCTAssertEqual(excerpt?.text, passage)
+        XCTAssertNotNil(excerpt?.highlight)
         let panel = NSPopover()
         panel.animates = false
         defer { panel.performClose(nil) }
-        let editor = PreviewCommentPopover(url: URL(fileURLWithPath: "/tmp/notes.md"), excerpt: PreviewExcerpt("Blue")) {}
+        let editor = PreviewCommentPopover(url: URL(fileURLWithPath: "/tmp/notes.md"), excerpt: excerpt) {}
         panel.showComment(editor.environment(AppState(startBackgroundServices: false)).environment(WindowState()),
                           at: screenPoint, in: host)
         XCTAssertTrue(panel.isShown)
-        XCTAssertEqual(panel.positioningRect, NSRect(origin: root.convert(point, from: nil), size: NSSize(width: 1, height: 1)))
+        let origin = root.convert(host.convertPoint(fromScreen: screenPoint), from: nil)
+        XCTAssertEqual(panel.positioningRect, NSRect(origin: origin, size: NSSize(width: 1, height: 1)))
     }
 
     func testSourceSelectionAndNativeCopyContainOnlyFileText() {

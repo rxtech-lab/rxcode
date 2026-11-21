@@ -141,10 +141,14 @@ struct TaskOverviewView: View {
 
     /// How many stories each project group shows before "View all".
     static let previewLimit = 10
-    /// Every project card has the same width; cards sit in one row that
-    /// scrolls horizontally, like GitHub Projects board columns.
+    /// Cards share a width and fit inside the viewport when the inspector is open.
     static let cardWidth: CGFloat = 360
     static let cardSpacing: CGFloat = 16
+    private static let cardInset: CGFloat = 16
+
+    private static func cardWidth(in viewportWidth: CGFloat) -> CGFloat {
+        min(cardWidth, max(0, viewportWidth - 2 * cardInset))
+    }
 
     private var newItemProjectId: UUID {
         windowState.selectedProject?.id ?? appState.projects.first?.id ?? UUID()
@@ -184,7 +188,7 @@ struct TaskOverviewView: View {
                                     hiddenCardFeedback = project
                                 }
                             )
-                                .frame(width: Self.cardWidth)
+                                .containerRelativeFrame(.horizontal) { width, _ in Self.cardWidth(in: width) }
                                 .frame(maxHeight: .infinity)
                                 .transition(.scale(scale: 0.96).combined(with: .opacity))
                         }
@@ -193,12 +197,12 @@ struct TaskOverviewView: View {
                         if keyword.trimmingCharacters(in: .whitespaces).isEmpty {
                             ForEach(appState.visibleUnopenedCloudProjects) { cloud in
                                 CloudProjectCard(cloud: cloud)
-                                    .frame(width: Self.cardWidth)
+                                    .containerRelativeFrame(.horizontal) { width, _ in Self.cardWidth(in: width) }
                                     .transition(.scale(scale: 0.96).combined(with: .opacity))
                             }
                         }
                     }
-                    .padding(16)
+                    .padding(Self.cardInset)
                     .frame(maxHeight: .infinity, alignment: .topLeading)
                     // Filtering drops non-matching projects; the rest slide
                     // together instead of jumping.
@@ -215,6 +219,7 @@ struct TaskOverviewView: View {
                 }
                 .defaultScrollAnchor(.leading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .accessibilityIdentifier("task-overview-projects")
             }
         }
         .background(backdrop)
@@ -284,19 +289,33 @@ struct TaskOverviewView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        ViewThatFits(in: .horizontal) {
+            headerRow(labelStyle: .titleAndIcon, compact: false)
+            headerRow(labelStyle: .iconOnly, compact: true)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func headerRow<Style: LabelStyle>(labelStyle: Style, compact: Bool) -> some View {
+        HStack(spacing: compact ? 6 : 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Tasks")
                     .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textPrimary)
-                Text("All projects")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+                if !compact {
+                    Text("All projects")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                }
             }
+            .lineLimit(1)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             TaskProjectVisibilityButton()
+                .labelStyle(labelStyle)
 
             Menu {
                 Button {
@@ -321,8 +340,10 @@ struct TaskOverviewView: View {
                 }
             } label: {
                 Label("Project", systemImage: "folder.badge.plus")
+                    .labelStyle(labelStyle)
             }
             .menuStyle(.button)
+            .menuIndicator(compact ? .hidden : .automatic)
             .buttonStyle(.bordered)
             .fixedSize()
             .help("Create a project on this Mac or in the cloud")
@@ -335,8 +356,10 @@ struct TaskOverviewView: View {
                 )
             } label: {
                 Label("New", systemImage: "plus")
+                    .labelStyle(labelStyle)
             }
             .menuStyle(.button)
+            .menuIndicator(compact ? .hidden : .automatic)
             .buttonStyle(.borderedProminent)
             .fixedSize()
             .help("New task or story, written with AI or in a form")
@@ -350,8 +373,7 @@ struct TaskOverviewView: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .controlSize(compact ? .small : .regular)
     }
 
     private func openNewStory(mode: TaskCreationMode?) {

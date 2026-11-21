@@ -132,6 +132,7 @@ struct GitWorkflowIntegrationTests {
         process.standardError = FileHandle.nullDevice
         try process.run()
         process.waitUntilExit()
+        try #require(process.terminationStatus == 0, "git \(args.joined(separator: " ")) failed")
     }
 
     private func makeRepo(commits: [String]) throws -> URL {
@@ -151,6 +152,71 @@ struct GitWorkflowIntegrationTests {
 
     private func subjects(at root: URL) async -> [String] {
         await GitRepositoryLoader.history(at: root.path, ref: "HEAD", limit: 50).map(\.subject)
+    }
+
+    private func addRemote(_ name: String, to repo: URL) throws -> URL {
+        let remote = repo.appending(path: ".git/test-remotes/\(name)")
+        try git(["init", "-q", "--bare", "-b", "main", remote.path], at: repo)
+        try git(["remote", "add", name, remote.path], at: repo)
+        return remote
+    }
+
+    @Test("A push uses the selected remote and preserves the branch's existing upstream")
+    func pushToSelectedRemote() async throws {
+        let repo = try makeRepo(commits: ["one", "two"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let origin = try addRemote("origin", to: repo)
+        let backup = try addRemote("team/backup", to: repo)
+        try git(["push", "-q", "origin", "HEAD^:refs/heads/release"], at: repo)
+        try git(["branch", "--set-upstream-to=origin/release", "main"], at: repo)
+        try git(["tag", "main"], at: repo)
+        try git(["tag", "releases/v1", "HEAD^"], at: repo)
+
+        let branch = try #require(await GitRepositoryLoader.snapshot(at: repo.path).currentLocalBranch)
+        #expect(branch.name == "main")
+        #expect(branch.upstreamRemote == "origin")
+        #expect(await GitWorkflow.push(branch: branch, remote: "team/backup", force: false, pushAllTags: true, at: repo.path) == nil)
+
+        let backupSnapshot = await GitRepositoryLoader.snapshot(at: backup.path)
+        #expect(backupSnapshot.localBranches.map(\.name) == ["main"])
+        #expect(backupSnapshot.localBranches.first?.tip == branch.tip)
+        #expect(Set(backupSnapshot.tags.map(\.name)) == ["main", "releases/v1"])
+        #expect(await GitRepositoryLoader.snapshot(at: repo.path).currentLocalBranch?.upstream == "origin/release")
+
+        #expect(await GitWorkflow.push(branch: branch, remote: "origin", force: false, at: repo.path) == nil)
+        let originSnapshot = await GitRepositoryLoader.snapshot(at: origin.path)
+        #expect(originSnapshot.localBranches.map(\.name) == ["release"])
+        #expect(originSnapshot.localBranches.first?.tip == branch.tip)
+        #expect(originSnapshot.tags.isEmpty)
+    }
+
+    @Test("Force push with tags protects the lease and existing tags")
+    func forcePushWithTags() async throws {
+        let repo = try makeRepo(commits: ["one", "two"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let origin = try addRemote("origin", to: repo)
+        try git(["tag", "stable"], at: repo)
+        let unpublished = try #require(await GitRepositoryLoader.snapshot(at: repo.path).currentLocalBranch)
+        #expect(await GitWorkflow.push(branch: unpublished, remote: "origin", force: false, pushAllTags: true, at: repo.path) == nil)
+        #expect(await GitRepositoryLoader.snapshot(at: repo.path).currentLocalBranch?.upstream == "origin/main")
+
+        try git(["reset", "--hard", "HEAD^"], at: repo)
+        try git(["tag", "older"], at: repo)
+        let branch = try #require(await GitRepositoryLoader.snapshot(at: repo.path).currentLocalBranch)
+        #expect(await GitWorkflow.push(branch: branch, remote: "origin", force: true, pushAllTags: true, at: repo.path) == nil)
+        let pushed = await GitRepositoryLoader.snapshot(at: origin.path)
+        #expect(pushed.currentLocalBranch?.tip == branch.tip)
+        #expect(Set(pushed.tags.map(\.name)) == ["older", "stable"])
+
+        try git(["update-ref", "refs/heads/main", unpublished.tip], at: origin)
+        #expect(await GitWorkflow.push(branch: branch, remote: "origin", force: true, at: repo.path) != nil)
+        #expect(await GitRepositoryLoader.snapshot(at: origin.path).currentLocalBranch?.tip == unpublished.tip)
+
+        try git(["fetch", "-q", "origin"], at: repo)
+        try git(["tag", "-f", "stable"], at: repo)
+        #expect(await GitWorkflow.push(branch: branch, remote: "origin", force: true, pushAllTags: true, at: repo.path) != nil)
+        let afterConflict = await GitRepositoryLoader.snapshot(at: origin.path)
+        #expect(afterConflict.tags.first { $0.name == "stable" }?.tip == unpublished.tip)
     }
 
     @Test("Reword an older commit without an editor")

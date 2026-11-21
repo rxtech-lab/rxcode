@@ -5,7 +5,6 @@ import SwiftUI
 /// Working tree changes: stage, unstage, discard, stash, and commit.
 struct GitLocalChangesView: View {
     let store: GitWorkflowStore
-    @Binding var selectedChange: GitChangeFile?
     @Environment(RepositoryStatus.self) private var repository
     @State private var selection = Set<String>()
 
@@ -21,7 +20,7 @@ struct GitLocalChangesView: View {
         }
     }
 
-    private static func tag(_ file: GitChangeFile) -> String {
+    private nonisolated static func tag(_ file: GitChangeFile) -> String {
         (file.diffMode == .staged ? "s:" : "u:") + file.displayPath
     }
 
@@ -30,88 +29,96 @@ struct GitLocalChangesView: View {
         let staged = tree.changes.staged
         let all = unstaged + staged
         let selected = all.filter { selection.contains(Self.tag($0)) }
+        let discardable = selected.filter { $0.diffMode != .staged }
         return VStack(spacing: 0) {
             if all.isEmpty {
                 ContentUnavailableView("Working tree clean", systemImage: "checkmark.circle",
                                        description: Text("There are no uncommitted changes."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $selection) {
-                    if !unstaged.isEmpty {
-                        Section {
-                            ForEach(unstaged) { ChangeFileRow(file: $0).tag(Self.tag($0)) }
-                        } header: {
-                            sectionHeader("Unstaged", count: unstaged.count, action: "Stage All") {
-                                stage(unstaged, tree: tree)
-                            }
-                        }
+                HSplitView {
+                    VSplitView {
+                        changesPane(files: unstaged, staged: false) { stage($0, tree: tree) }
+                            .frame(minHeight: 100, idealHeight: 330, maxHeight: .infinity)
+                        changesPane(files: staged, staged: true) { unstage($0, tree: tree) }
+                            .frame(minHeight: 100, idealHeight: 240, maxHeight: .infinity)
                     }
-                    if !staged.isEmpty {
-                        Section {
-                            ForEach(staged) { ChangeFileRow(file: $0).tag(Self.tag($0)) }
-                        } header: {
-                            sectionHeader("Staged", count: staged.count, action: "Unstage All") {
-                                unstage(staged, tree: tree)
-                            }
-                        }
+                    .frame(minWidth: 190, idealWidth: 300, maxWidth: 420, maxHeight: .infinity)
+                    GitLocalChangeDiffView(file: selected.count == 1 ? selected.first : nil) {
+                        selection.removeAll()
                     }
+                    .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .listStyle(.inset)
-                .contextMenu(forSelectionType: String.self) { tags in
-                    let files = all.filter { tags.contains(Self.tag($0)) }
-                    let unstagedFiles = files.filter { $0.diffMode != .staged }
-                    let stagedFiles = files.filter { $0.diffMode == .staged }
-                    if !unstagedFiles.isEmpty {
-                        Button("Stage") { stage(unstagedFiles, tree: tree) }
-                        Button("Discard Changes…", role: .destructive) { store.confirmation = .discard(unstagedFiles) }
-                    }
-                    if !stagedFiles.isEmpty {
-                        Button("Unstage") { unstage(stagedFiles, tree: tree) }
-                    }
-                } primaryAction: { tags in
-                    let files = all.filter { tags.contains(Self.tag($0)) }
-                    if files.allSatisfy({ $0.diffMode != .staged }) {
-                        stage(files, tree: tree)
-                    } else if files.allSatisfy({ $0.diffMode == .staged }) {
-                        unstage(files, tree: tree)
-                    }
+                Divider()
+                HStack(spacing: 8) {
+                    Button("Discard…") { store.confirmation = .discard(discardable) }
+                        .disabled(discardable.isEmpty)
+                    Spacer(minLength: 0)
+                    Button("Commit…") { store.sheet = .commit }
+                        .buttonStyle(.borderedProminent)
+                        .tint(ClaudeTheme.accent)
+                        .disabled(staged.isEmpty)
+                        .keyboardShortcut(.return, modifiers: .command)
                 }
+                .controlSize(.small)
+                .padding(10)
             }
-            Divider()
-            HStack(spacing: 8) {
-                Button("Stage") { stage(selected.filter { $0.diffMode != .staged }, tree: tree) }
-                    .disabled(!selected.contains { $0.diffMode != .staged })
-                Button("Unstage") { unstage(selected.filter { $0.diffMode == .staged }, tree: tree) }
-                    .disabled(!selected.contains { $0.diffMode == .staged })
-                Button("Discard…") { store.confirmation = .discard(selected.filter { $0.diffMode != .staged }) }
-                    .disabled(!selected.contains { $0.diffMode != .staged })
-                Spacer(minLength: 0)
-                Button("Commit…") { store.sheet = .commit }
-                    .buttonStyle(.borderedProminent)
-                    .tint(ClaudeTheme.accent)
-                    .disabled(staged.isEmpty)
-                    .keyboardShortcut(.return, modifiers: .command)
-            }
-            .controlSize(.small)
-            .padding(10)
-        }
-        .onChange(of: selection) {
-            let files = all.filter { selection.contains(Self.tag($0)) }
-            selectedChange = files.count == 1 ? files.first : nil
         }
         .onChange(of: all) {
             selection.formIntersection(all.map(Self.tag))
-            if let current = selectedChange, !all.contains(current) { selectedChange = nil }
         }
     }
 
-    private func sectionHeader(_ title: LocalizedStringResource, count: Int, action: LocalizedStringResource, perform: @escaping () -> Void) -> some View {
-        HStack {
-            Text("\(String(localized: title)) (\(count))")
-            Spacer()
-            Button(String(localized: action), action: perform)
-                .buttonStyle(.link)
-                .font(.caption)
+    private func changesPane(
+        files: [GitChangeFile],
+        staged: Bool,
+        update: @escaping ([GitChangeFile]) -> Void
+    ) -> some View {
+        let tags = Set(files.map(Self.tag))
+        let selected = files.filter { selection.contains(Self.tag($0)) }
+        let action: LocalizedStringResource = staged ? "Unstage" : "Stage"
+        let bulkAction: LocalizedStringResource = staged ? "Unstage All" : "Stage All"
+
+        return VStack(spacing: 0) {
+            HStack {
+                Text(staged ? "Staged" : "Unstaged")
+                    .font(.subheadline.weight(.semibold))
+                Text("\(files.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(String(localized: selected.isEmpty ? bulkAction : action)) {
+                    update(selected.isEmpty ? files : selected)
+                }
+                .controlSize(.small)
+                .disabled(files.isEmpty)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(ClaudeTheme.surfacePrimary)
+            Divider()
+            if files.isEmpty {
+                Text(staged ? "No staged files" : "No unstaged files")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(files, selection: Binding(get: { selection.intersection(tags) }, set: { selection = $0 })) { file in
+                    ChangeFileRow(file: file).tag(Self.tag(file))
+                }
+                .listStyle(.inset)
+                .contextMenu(forSelectionType: String.self) { selectedTags in
+                    if !selectedTags.isEmpty {
+                        let targets = files.filter { selectedTags.contains(Self.tag($0)) }
+                        Button(String(localized: action)) { update(targets) }
+                        if !staged {
+                            Button("Discard Changes…", role: .destructive) { store.confirmation = .discard(targets) }
+                        }
+                    }
+                } primaryAction: { selectedTags in
+                    update(files.filter { selectedTags.contains(Self.tag($0)) })
+                }
+            }
         }
     }
 
@@ -129,12 +136,13 @@ struct GitLocalChangesView: View {
 }
 
 /// Detail column for a working tree file.
-struct GitLocalChangeDiffView: View {
+private struct GitLocalChangeDiffView: View {
     let file: GitChangeFile?
+    let onClose: () -> Void
 
     var body: some View {
         if let file {
-            FileDiffView(filePath: file.path, fileName: file.name, gitDiffMode: file.diffMode)
+            FileDiffView(filePath: file.path, fileName: file.name, gitDiffMode: file.diffMode, onClose: onClose)
                 .id("\(file.diffMode)-\(file.path)")
         } else {
             ContentUnavailableView("Select a file", systemImage: "doc.text.magnifyingglass",

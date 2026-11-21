@@ -76,6 +76,7 @@
 		C4F7C00C0000000000000002 /* ChromeCookieImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F7C00C0000000000000001 /* ChromeCookieImporterTests.swift */; };
 		C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000002 /* ChatHistoryTests.swift */; };
 		C71A00000000000000000003 /* TaskCardModelMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000004 /* TaskCardModelMenuTests.swift */; };
+		C71A00000000000000000005 /* ProjectsEmptyStateVisualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000006 /* ProjectsEmptyStateVisualTests.swift */; };
 		C93BD2F51A0D4DCA8209E491 /* AgentConfirmationAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3DA07D5F884B7A9F233FD1 /* AgentConfirmationAttentionTests.swift */; };
 		CA5E00012FCB400000000002 /* CacheStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00012FCB400000000001 /* CacheStorageTests.swift */; };
 		D0C1E2A3B4C5D6E7F8091A2C /* DownloadCenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0C1E2A3B4C5D6E7F8091A2B /* DownloadCenterTests.swift */; };
@@ -300,6 +301,7 @@
 		C4F7C00C0000000000000001 /* ChromeCookieImporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChromeCookieImporterTests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000004 /* TaskCardModelMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCardModelMenuTests.swift; sourceTree = "<group>"; };
+		C71A00000000000000000006 /* ProjectsEmptyStateVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsEmptyStateVisualTests.swift; sourceTree = "<group>"; };
 		C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
 		CA5E00012FCB400000000001 /* CacheStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStorageTests.swift; sourceTree = "<group>"; };
 		CA84274331D864DDC9F1A0CA /* LocalModelTests+VideoGeneration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "LocalModelTests+VideoGeneration.swift"; sourceTree = "<group>"; };
@@ -677,6 +679,7 @@
 				6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */,
 				C71A00000000000000000002 /* ChatHistoryTests.swift */,
 				C71A00000000000000000004 /* TaskCardModelMenuTests.swift */,
+				C71A00000000000000000006 /* ProjectsEmptyStateVisualTests.swift */,
 				9985803656D548759AA787D6 /* InspectorSplitTests.swift */,
 			);
 			path = RxCodeUITests;
@@ -1180,6 +1183,7 @@
 				6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */,
 				C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */,
 				C71A00000000000000000003 /* TaskCardModelMenuTests.swift in Sources */,
+				C71A00000000000000000005 /* ProjectsEmptyStateVisualTests.swift in Sources */,
 				D38CA9781B15486DBE72D4F6 /* InspectorSplitTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

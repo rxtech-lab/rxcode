@@ -134,6 +134,7 @@ struct ChatTransientToolSummaryView: View {
                         .foregroundStyle(ClaudeTheme.textTertiary)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
+                        .modifier(ToolGroupCountTransition(count: tools.count))
                     Image(systemName: "chevron.down")
                         .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)

@@ -140,7 +140,7 @@ private struct ImageCanvas: View {
                 .padding(.top, 14)
                 .padding(.bottom, 12)
                 .background {
-                    LinearGradient(colors: [.black.opacity(0.75), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [.black.opacity(0.92), .black.opacity(0.84)], startPoint: .top, endPoint: .bottom)
                         .allowsHitTesting(false)
                 }
                 .onGeometryChange(for: CGFloat.self, of: \.size.height) { headerHeight = $0 }
@@ -155,6 +155,7 @@ private struct ImageCanvas: View {
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
         }
+        .environment(\.colorScheme, .dark)
         .sheet(item: $preview) { ImagePreviewSheet(attachment: $0) }
         .animation(.smooth(duration: 0.2), value: copied)
         .task(id: take.path) {
@@ -201,7 +202,7 @@ private struct ImageCanvas: View {
             } description: {
                 Text("The image file is no longer on this device.", bundle: .module)
             }
-            .foregroundStyle(.white.opacity(0.8))
+            .foregroundStyle(ClaudeTheme.textSecondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed:
             ContentUnavailableView {
@@ -218,7 +219,7 @@ private struct ImageCanvas: View {
                 }
                 .disabled(take.prompt.isEmpty || chatBridge.isStreaming)
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(ClaudeTheme.textSecondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -237,7 +238,7 @@ private struct ImageCanvas: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(take.prompt.isEmpty ? String(localized: "Untitled prompt", bundle: .module) : take.prompt)
                     .font(.system(size: ClaudeTheme.size(14), weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(2)
                     .shadow(color: .black.opacity(0.5), radius: 4)
                     .textSelection(.enabled)
@@ -245,7 +246,7 @@ private struct ImageCanvas: View {
                 if let meta = metaLine {
                     Text(meta)
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
 
@@ -264,7 +265,7 @@ private struct ImageCanvas: View {
                 }
                 .buttonStyle(.borderless)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(ClaudeTheme.textSecondary)
             }
         }
     }
@@ -316,7 +317,7 @@ private struct ImageTakeRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.85))
+                RoundedRectangle(cornerRadius: 6).fill(ClaudeTheme.surfaceTertiary)
                 if let thumbnail {
                     Image(nsImage: thumbnail)
                         .resizable()
@@ -324,7 +325,7 @@ private struct ImageTakeRow: View {
                 } else {
                     Image(systemName: glyph)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(take.phase == .failed ? ClaudeTheme.statusError : .white.opacity(0.7))
+                        .foregroundStyle(take.phase == .failed ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
                         .symbolEffect(.pulse, isActive: take.phase == .generating)
                 }
             }

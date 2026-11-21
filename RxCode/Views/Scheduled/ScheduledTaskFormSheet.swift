@@ -169,7 +169,7 @@ struct ScheduledTaskFormSheet: View {
             } footer: {
                 if let draftError {
                     Text(draftError)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(ClaudeTheme.statusError)
                 } else {
                     Text("Describe what should run and when, like \"every weekday at 9:00, check for outdated dependencies\".")
                 }

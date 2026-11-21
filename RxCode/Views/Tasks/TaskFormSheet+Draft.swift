@@ -78,7 +78,7 @@ extension TaskFormSheet {
             } footer: {
                 if let draftError {
                     Text(draftError)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(ClaudeTheme.statusError)
                 } else {
                     Text(isStory
                         ? "Describe the story and tasks, or choose a text or PDF file."
@@ -112,7 +112,7 @@ extension TaskFormSheet {
             Text("Story")
         } footer: {
             if let draftError {
-                Text(draftError).foregroundStyle(.red)
+                Text(draftError).foregroundStyle(ClaudeTheme.statusError)
             }
         }
 
@@ -240,7 +240,7 @@ extension TaskFormSheet {
             Text("Draft")
         } footer: {
             if let draftError {
-                Text(draftError).foregroundStyle(.red)
+                Text(draftError).foregroundStyle(ClaudeTheme.statusError)
             }
         }
     }

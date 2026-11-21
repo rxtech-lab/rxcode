@@ -7,6 +7,7 @@ public struct CodeEditorView: NSViewRepresentable {
     @Binding private var text: String
     private let language: String
     private let fontSize: CGFloat
+    private let theme: AppTheme
     private let autocompleteProvider: (any CodeEditorAutocompleteProvider)?
 
     public init(
@@ -18,6 +19,7 @@ public struct CodeEditorView: NSViewRepresentable {
         _text = text
         self.language = language
         self.fontSize = fontSize
+        self.theme = ThemeStore.shared.current
         self.autocompleteProvider = autocompleteProvider
     }
 
@@ -58,7 +60,8 @@ public struct CodeEditorView: NSViewRepresentable {
         )
         textView.textContainerInset = NSSize(width: 6, height: 8)
         textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        textView.backgroundColor = NSColor.textBackgroundColor
+        textView.backgroundColor = NSColor(theme.colors.codeBackground)
+        textView.insertionPointColor = NSColor(theme.colors.textPrimary)
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
@@ -87,9 +90,14 @@ public struct CodeEditorView: NSViewRepresentable {
     }
 
     public func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        let themeChanged = context.coordinator.parent.theme != theme
         context.coordinator.parent = self
         guard let textView = context.coordinator.textView else { return }
-        if textView.string != text {
+        if themeChanged {
+            textView.backgroundColor = NSColor(theme.colors.codeBackground)
+            textView.insertionPointColor = NSColor(theme.colors.textPrimary)
+        }
+        if textView.string != text || (themeChanged && !textView.hasMarkedText()) {
             context.coordinator.apply(text: text)
         }
     }
@@ -166,7 +174,8 @@ public struct CodeEditorView: NSViewRepresentable {
             let highlighted = SyntaxHighlighter.highlightNS(
                 textView.string,
                 language: parent.language,
-                fontSize: parent.fontSize
+                fontSize: parent.fontSize,
+                colors: parent.theme.colors
             )
             storage.beginEditing()
             storage.setAttributedString(highlighted)

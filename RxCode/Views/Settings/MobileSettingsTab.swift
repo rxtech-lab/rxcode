@@ -180,7 +180,7 @@ struct MobileSettingsTab: View {
             .buttonStyle(.borderless)
         }
         .padding(10)
-        .background(isConnected ? Color.green.opacity(0.1) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(isConnected ? ClaudeTheme.statusSuccess.opacity(0.1) : ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -194,10 +194,10 @@ struct MobileSettingsTab: View {
                 .controlSize(.small)
         case .connected:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(ClaudeTheme.statusSuccess)
         case .reconnecting:
             Image(systemName: "arrow.clockwise.circle")
-                .foregroundStyle(.orange)
+                .foregroundStyle(ClaudeTheme.statusWarning)
         }
     }
 
@@ -209,13 +209,13 @@ struct MobileSettingsTab: View {
                 .foregroundStyle(.secondary)
         case .connecting:
             Text("Connecting…")
-                .foregroundStyle(.orange)
+                .foregroundStyle(ClaudeTheme.statusWarning)
         case .connected:
             Text("Connected")
-                .foregroundStyle(.green)
+                .foregroundStyle(ClaudeTheme.statusSuccess)
         case .reconnecting(let seconds):
             Text("Reconnecting in \(seconds)s")
-                .foregroundStyle(.orange)
+                .foregroundStyle(ClaudeTheme.statusWarning)
         }
     }
 
@@ -270,7 +270,7 @@ struct MobileSettingsTab: View {
                     if let token = MobileSyncService.pushToken(for: device), !token.isEmpty {
                         Label("Push", systemImage: "bell.fill")
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(ClaudeTheme.statusSuccess)
                         if let environment = pushChannelLabel(for: device) {
                             Text("• \(environment)")
                                 .font(.caption)
@@ -324,7 +324,7 @@ struct MobileSettingsTab: View {
         case .online:
             Label("Online", systemImage: "circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.green)
+                .foregroundStyle(ClaudeTheme.statusSuccess)
                 .labelStyle(.titleAndIcon)
         case .offline:
             Label("Offline", systemImage: "circle.fill")
@@ -360,12 +360,12 @@ struct MobileSettingsTab: View {
         case .directLAN:
             Label("Direct · LAN\(rtt)", systemImage: "bolt.horizontal.fill")
                 .font(.caption2)
-                .foregroundStyle(.green)
+                .foregroundStyle(ClaudeTheme.statusSuccess)
                 .labelStyle(.titleAndIcon)
         case .directWAN:
             Label("Direct · WAN\(rtt)", systemImage: "bolt.horizontal.fill")
                 .font(.caption2)
-                .foregroundStyle(.blue)
+                .foregroundStyle(ClaudeTheme.accentText)
                 .labelStyle(.titleAndIcon)
         case .relay:
             EmptyView()
@@ -384,7 +384,7 @@ struct MobileSettingsTab: View {
             ))
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .foregroundStyle(copied ? Color.green : Color.secondary)
+                .foregroundStyle(copied ? ClaudeTheme.statusSuccess : ClaudeTheme.textSecondary)
         }
         .buttonStyle(.borderless)
         .disabled(token?.isEmpty ?? true)
@@ -540,7 +540,7 @@ struct RelayServerEditorSheet: View {
                         if !url.isEmpty && !isValidURL {
                             Text("Enter a valid ws:// or wss:// URL.")
                                 .font(.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(ClaudeTheme.statusError)
                         }
                     }
                 }

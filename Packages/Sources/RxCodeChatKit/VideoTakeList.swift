@@ -220,7 +220,7 @@ private struct VideoThumbnail: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.85))
+            RoundedRectangle(cornerRadius: 6).fill(ClaudeTheme.surfaceTertiary)
             if let image {
                 Image(nsImage: image)
                     .resizable()
@@ -228,7 +228,7 @@ private struct VideoThumbnail: View {
             } else {
                 Image(systemName: glyph)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(take.phase == .failed ? ClaudeTheme.statusError : .white.opacity(0.7))
+                    .foregroundStyle(take.phase == .failed ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
                     .symbolEffect(.pulse, isActive: take.phase == .generating)
             }
         }

@@ -91,7 +91,12 @@ struct GitLocalBranchContextMenu: View {
         Button(branch.upstream == nil ? "Publish Branch…" : "Push…") {
             store.sheet = .push(.branch(branch))
         }
-        .disabled(store.snapshot.remotes.isEmpty)
+        if branch.isCurrent, let suggestion = store.pullRequestSuggestion {
+            Button("Create Pull Request…") {
+                GitPullRequestTipLedger.dismiss(suggestion)
+                store.sheet = .createPullRequest(suggestion)
+            }
+        }
         Button("Rename…") { store.sheet = .renameBranch(branch.name) }
         Button("Delete…", role: .destructive) { store.confirmation = .deleteBranch(branch.name) }
             .disabled(branch.isCurrent)

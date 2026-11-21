@@ -137,7 +137,7 @@ struct RepoSetupTemplateEditor: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
                 .onChange(of: rulesetText) { _, _ in validateRuleset() }
             if let rulesetError {
-                Text(rulesetError).foregroundStyle(.red).font(.caption)
+                Text(rulesetError).foregroundStyle(ClaudeTheme.statusError).font(.caption)
             } else if let rulesetSummary {
                 rulesetSummaryCard(rulesetSummary)
             }
@@ -146,7 +146,7 @@ struct RepoSetupTemplateEditor: View {
 
     private func rulesetSummaryCard(_ summary: GitHubRulesetSummary) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.seal.fill").foregroundStyle(ClaudeTheme.statusSuccess)
             VStack(alignment: .leading, spacing: 1) {
                 Text(summary.name).font(.callout).fontWeight(.medium)
                 Text("\(summary.target) · \(summary.enforcement) · \(summary.ruleCount) rule\(summary.ruleCount == 1 ? "" : "s")")
@@ -162,7 +162,7 @@ struct RepoSetupTemplateEditor: View {
     private var footer: some View {
         HStack {
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()

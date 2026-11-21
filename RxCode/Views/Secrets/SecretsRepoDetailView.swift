@@ -26,7 +26,7 @@ struct SecretsRepoDetailView: View {
     var body: some View {
         List {
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
             ForEach(environments) { env in
                 NavigationLink(value: SecretsEnvRoute(

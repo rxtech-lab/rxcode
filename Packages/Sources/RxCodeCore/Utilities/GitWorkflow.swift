@@ -1,6 +1,23 @@
 import Foundation
 
 #if os(macOS)
+public struct GitPushDestination: Hashable, Sendable {
+    public let remote: String
+    public let ref: String
+    public let isNew: Bool
+
+    public var branch: String { ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref }
+    public var displayName: String { "\(remote)/\(branch)" }
+}
+
+public struct GitBranchList: Sendable {
+    public var local: [GitLocalBranch] = []
+    public var remote: [GitRemoteBranch] = []
+    public var remotes: [String] = []
+
+    public init() {}
+}
+
 /// Snapshot of refs and repository state shown by the Git workflow window.
 public struct GitRepositorySnapshot: Equatable, Sendable {
     public var currentBranch: String?
@@ -17,6 +34,19 @@ public struct GitRepositorySnapshot: Equatable, Sendable {
     public var currentLocalBranch: GitLocalBranch? {
         localBranches.first { $0.isCurrent }
     }
+
+    public func pushDestinations(for branch: GitLocalBranch) -> [GitPushDestination] {
+        var destinations = remoteBranches.map {
+            GitPushDestination(remote: $0.remote, ref: "refs/heads/\($0.name)", isNew: false)
+        }
+        for remote in remotes {
+            let ref = branch.pushDestination(on: remote)
+            if !destinations.contains(where: { $0.remote == remote && $0.ref == ref }) {
+                destinations.append(GitPushDestination(remote: remote, ref: ref, isNew: true))
+            }
+        }
+        return GitBranchOrder.primaryFirst(destinations, by: \.branch)
+    }
 }
 
 /// Read-only queries for the Git workflow window.
@@ -25,10 +55,8 @@ public enum GitRepositoryLoader {
 
     public static func snapshot(at root: String) async -> GitRepositorySnapshot {
         async let branch = GitHelper.currentBranch(at: root)
-        async let head = GitHelper.run(["rev-parse", "HEAD"], at: root)
-        async let locals = GitHelper.run(["for-each-ref", branchFormat, "refs/heads"], at: root)
-        async let remoteRefs = GitHelper.run(["for-each-ref", "--format=%(refname)%1f%(objectname)", "refs/remotes"], at: root)
-        async let remoteNames = GitHelper.run(["remote"], at: root)
+        async let head = GitHelper.headCommit(at: root)
+        async let branchList = branches(at: root)
         async let tagRefs = GitHelper.run(
             ["for-each-ref", "--sort=-creatordate", "--format=%(refname:lstrip=2)%1f%(objectname)%1f%(*objectname)", "refs/tags"],
             at: root
@@ -38,10 +66,11 @@ public enum GitRepositoryLoader {
 
         var snapshot = GitRepositorySnapshot()
         snapshot.currentBranch = await branch
-        snapshot.headCommit = await head?.trimmingCharacters(in: .whitespacesAndNewlines)
-        snapshot.localBranches = GitHistoryParser.parseLocalBranches(await locals ?? "")
-        snapshot.remoteBranches = parseRemoteBranches(await remoteRefs ?? "")
-        snapshot.remotes = (await remoteNames ?? "").split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        snapshot.headCommit = await head
+        let refs = await branchList
+        snapshot.localBranches = refs.local
+        snapshot.remoteBranches = refs.remote
+        snapshot.remotes = refs.remotes
         snapshot.tags = (await tagRefs ?? "").split(separator: "\n").compactMap { line in
             let fields = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
             guard fields.count >= 3, !fields[0].isEmpty else { return nil }
@@ -56,15 +85,25 @@ public enum GitRepositoryLoader {
         return snapshot
     }
 
-    static func parseRemoteBranches(_ raw: String) -> [GitRemoteBranch] {
-        raw.split(separator: "\n").compactMap { line in
+    public static func branches(at root: String) async -> GitBranchList {
+        async let locals = GitHelper.run(["for-each-ref", branchFormat, "refs/heads"], at: root)
+        async let refs = GitHelper.run(["for-each-ref", "--format=%(refname)%1f%(objectname)%1f%(symref)", "refs/remotes"], at: root)
+        async let names = GitHelper.run(["remote"], at: root)
+        var list = GitBranchList()
+        list.remotes = (await names ?? "").split(separator: "\n").map(String.init)
+        list.local = GitBranchOrder.primaryFirst(GitHistoryParser.parseLocalBranches(await locals ?? ""), by: \.name)
+        // A configured remote name can itself contain slashes.
+        let prefixes = list.remotes.sorted { $0.count > $1.count }
+        let remoteBranches = (await refs ?? "").split(separator: "\n").compactMap { line -> GitRemoteBranch? in
             let fields = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
-            guard fields.count >= 2, fields[0].hasPrefix("refs/remotes/"), !fields[0].hasSuffix("/HEAD") else { return nil }
+            guard fields.count == 3, fields[2].isEmpty, fields[0].hasPrefix("refs/remotes/") else { return nil }
             let ref = fields[0].dropFirst("refs/remotes/".count)
-            guard let slash = ref.firstIndex(of: "/") else { return nil }
-            return GitRemoteBranch(remote: String(ref[..<slash]), name: String(ref[ref.index(after: slash)...]), tip: fields[1])
+            guard let remote = prefixes.first(where: { ref.hasPrefix($0 + "/") }) else { return nil }
+            return GitRemoteBranch(remote: remote, name: String(ref.dropFirst(remote.count + 1)), tip: fields[1])
         }
         .sorted { $0.refName.localizedStandardCompare($1.refName) == .orderedAscending }
+        list.remote = GitBranchOrder.primaryFirst(remoteBranches, by: \.name)
+        return list
     }
 
     public static func pendingOperation(at root: String) async -> GitPendingOperation? {
@@ -92,6 +131,10 @@ public enum GitRepositoryLoader {
         return GitHistoryParser.parseLog(raw)
     }
 
+    public static func commitMessage(for commit: String, at root: String) async -> String? {
+        await GitHelper.run(["log", "-1", "--encoding=UTF-8", "--format=format:%B", "--end-of-options", commit, "--"], at: root)
+    }
+
     /// Commits after `base` up to HEAD, oldest first. A nil base lists the whole branch.
     public static func commitsSince(_ base: String?, at root: String) async -> [GitCommit]? {
         let range = base.map { "\($0)..HEAD" } ?? "HEAD"
@@ -107,14 +150,23 @@ public enum GitRepositoryLoader {
 
     /// Files a commit changed relative to its first parent (or the empty tree for root commits).
     public static func files(in commit: GitCommit, at root: String) async -> [GitCommitFile] {
-        var args = ["diff-tree", "-r", "-M", "--name-status", "-z", "--no-commit-id"]
-        if let parent = commit.parents.first {
-            args += [parent, commit.id]
-        } else {
-            args += ["--root", commit.id]
-        }
-        guard let raw = await GitHelper.run(args, at: root) else { return [] }
-        return GitHistoryParser.parseNameStatus(raw)
+        let args = ["diff-tree", "-r", "-M", "-z", "--no-commit-id"]
+        let range = [commit.parents.first ?? "--root", commit.id, "--"]
+        async let names = GitHelper.run(args + ["--name-status"] + range, at: root)
+        async let counts = GitHelper.run(args + ["--numstat"] + range, at: root)
+        return GitHistoryParser.parseNameStatus(await names ?? "", lineChanges: GitLineChanges.parseNumstat(await counts ?? ""))
+    }
+
+    public static func workingLineChanges(staged: Bool, at root: String) async -> [String: GitLineChanges] {
+        let args = ["--no-optional-locks", "diff", "--no-ext-diff", "--numstat", "-z", "-M"]
+        let raw = await GitHelper.run(args + (staged ? ["--cached"] : []) + ["--"], at: root)
+        return GitLineChanges.parseNumstat(raw ?? "")
+    }
+
+    public static func untrackedLineChanges(for path: String, at root: String) async -> GitLineChanges? {
+        let args = ["diff", "--no-index", "--no-ext-diff", "--numstat", "-z", "--", "/dev/null", path]
+        guard let output = await GitHelper.execute(args, at: root), output.status == 0 || output.status == 1 else { return nil }
+        return GitLineChanges.parseNumstat(String(decoding: output.stdout, as: UTF8.self))[path]
     }
 
     public static func trackedPaths(in commit: GitCommit, at root: String) async -> [String] {
@@ -179,11 +231,13 @@ public enum GitWorkflow {
         remote: String,
         force: Bool,
         pushAllTags: Bool = false,
+        destinationRef: String? = nil,
+        setUpstream: Bool? = nil,
         at root: String
     ) async -> String? {
-        let destination = branch.pushDestination(on: remote)
+        let destination = destinationRef ?? branch.pushDestination(on: remote)
         var options: [String] = []
-        if branch.upstream == nil { options.append("--set-upstream") }
+        if setUpstream ?? (branch.upstream == nil) { options.append("--set-upstream") }
         // Scope the lease to the branch when the same push also includes tags.
         if force { options.append("--force-with-lease=\(destination)") }
         if pushAllTags { options.append("--tags") }
@@ -315,11 +369,36 @@ public enum GitWorkflow {
         await GitHelper.runWithError([operation.command, "--\(action.rawValue)"], at: root, environment: nonInteractive)
     }
 
+    /// Replaces the checked-out commit using the current index. A nil message keeps the original.
+    public static func amend(message: String?, replacing commit: String, on branch: String?, at root: String) async -> String? {
+        async let head = GitHelper.headCommit(at: root)
+        async let currentBranch = GitHelper.currentBranch(at: root)
+        async let pending = GitRepositoryLoader.pendingOperation(at: root)
+        let (checkedOutCommit, checkedOutBranch, pendingOperation) = await (head, currentBranch, pending)
+        guard checkedOutCommit == commit, checkedOutBranch == branch else {
+            return String(localized: "The checkout changed. Open Amend Commit again.")
+        }
+        guard pendingOperation == nil else {
+            return String(localized: "Finish the current Git operation before amending the commit.")
+        }
+
+        let args = ["commit", "--amend", "--allow-empty"]
+        guard let message else {
+            return await GitHelper.runWithError(
+                args + ["--no-edit", "--cleanup=verbatim", "--allow-empty-message"], at: root, environment: nonInteractive
+            )
+        }
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return String(localized: "Empty commit message") }
+        return await withTemporaryFile(trimmed) { path in
+            await GitHelper.runWithError(args + ["-F", path], at: root, environment: nonInteractive)
+        }
+    }
+
     /// Rewrites one commit message. HEAD is amended directly; older commits go
     /// through a non-interactive rebase that rewords only that commit.
     public static func reword(_ commit: GitCommit, message: String, at root: String) async -> String? {
-        let head = await GitHelper.run(["rev-parse", "HEAD"], at: root)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if head == commit.id {
+        if await GitHelper.headCommit(at: root) == commit.id {
             return await withTemporaryFile(message) { path in
                 await GitHelper.runWithError(
                     ["commit", "--amend", "--allow-empty", "--only", "--cleanup=strip", "-F", path],

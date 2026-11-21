@@ -54,7 +54,7 @@ struct RepoSetupManageSheet: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
             ForEach(templates) { template in
                 NavigationLink(value: Route.edit(template)) {

@@ -305,7 +305,7 @@ extension NSPopover {
     func showComment(_ editor: some View, at screenPoint: CGPoint, in host: NSWindow) {
         guard let root = host.contentView else { return }
         behavior = .transient
-        contentViewController = NSHostingController(rootView: editor)
+        contentViewController = NSHostingController(rootView: editor.appThemeForeground())
         let anchor = root.convert(host.convertPoint(fromScreen: screenPoint), from: nil)
         show(relativeTo: NSRect(origin: anchor, size: NSSize(width: 1, height: 1)), of: root, preferredEdge: .minY)
     }

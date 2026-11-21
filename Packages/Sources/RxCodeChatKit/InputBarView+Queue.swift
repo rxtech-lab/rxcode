@@ -172,7 +172,7 @@ extension InputBarView {
             Text("Send all as one")
                 .font(.system(size: ClaudeTheme.size(11), weight: .medium))
         }
-        .foregroundStyle(ClaudeTheme.accent)
+        .foregroundStyle(ClaudeTheme.accentText)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(ClaudeTheme.accentSubtle, in: Capsule())

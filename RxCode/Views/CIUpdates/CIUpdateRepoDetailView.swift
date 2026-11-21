@@ -154,7 +154,7 @@ struct CIUpdateRepoDetailView: View {
                 }
             }
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.caption)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.caption)
             }
         }
         .padding(16)
@@ -299,7 +299,7 @@ private struct CIScanRunRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: run.isSuccess ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                    .foregroundStyle(run.isSuccess ? Color.green : Color.red)
+                    .foregroundStyle(run.isSuccess ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
                 Text(run.isSuccess ? "Success" : "Error")
                     .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                 Spacer()
@@ -316,7 +316,7 @@ private struct CIScanRunRow: View {
             } else if let message = run.errorMessage {
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
                     .lineLimit(3)
             }
             if let urlString = run.prUrl, let url = URL(string: urlString) {

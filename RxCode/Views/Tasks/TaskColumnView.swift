@@ -116,7 +116,7 @@ struct TaskColumnView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(ClaudeTheme.accent)
+                .foregroundStyle(ClaudeTheme.accentText)
                 .padding(.vertical, 8)
                 .accessibilityIdentifier("task-column-show-more-\(status.rawValue)")
             }

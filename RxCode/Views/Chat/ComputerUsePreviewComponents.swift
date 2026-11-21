@@ -101,6 +101,7 @@ struct ComputerUsePreviewSurface: View {
             } else {
                 placeholder
                     .padding(12)
+                    .environment(\.colorScheme, .dark)
             }
         }
         .clipped()
@@ -120,7 +121,7 @@ struct ComputerUsePreviewSurface: View {
             } else {
                 ProgressView()
                     .controlSize(.small)
-                    .tint(.white)
+                    .tint(ClaudeTheme.textSecondary)
                 Text("Looking for the window…")
                 Button("Choose Window…", action: onChooseWindow)
                     .buttonStyle(.borderless)
@@ -128,7 +129,7 @@ struct ComputerUsePreviewSurface: View {
             }
         }
         .font(.system(size: ClaudeTheme.size(11)))
-        .foregroundStyle(.white.opacity(0.75))
+        .foregroundStyle(ClaudeTheme.textSecondary)
     }
 }
 
@@ -168,15 +169,16 @@ struct ComputerUseLiveBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(.red)
+                .fill(ClaudeTheme.statusError)
                 .frame(width: 6, height: 6)
             Text("LIVE")
                 .font(.system(size: ClaudeTheme.size(9), weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(ClaudeTheme.textPrimary)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(.black.opacity(0.55), in: Capsule())
+        .background(.black.opacity(0.86), in: Capsule())
+        .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Live")
     }

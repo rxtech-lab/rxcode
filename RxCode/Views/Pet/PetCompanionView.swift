@@ -192,7 +192,7 @@ struct PetCompanionView: View {
                         PetLoadingSpinner()
                         Text(tool)
                             .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.accent)
+                            .foregroundStyle(ClaudeTheme.accentText)
                             .lineLimit(1)
                     }
                 } else if !controller.livePartialUserText.isEmpty {
@@ -387,7 +387,7 @@ struct PetCompanionView: View {
             }) {
                 HStack {
                     Image(systemName: "questionmark.circle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(ClaudeTheme.statusWarning)
                     Text(minimized.request.title)
                         .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                         .lineLimit(1)
@@ -489,7 +489,7 @@ struct PetCompanionView: View {
                 } else if muted {
                     Text("Muted")
                         .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                        .foregroundStyle(Color.orange)
+                        .foregroundStyle(ClaudeTheme.statusWarning)
                         .transition(.opacity)
                 }
             }

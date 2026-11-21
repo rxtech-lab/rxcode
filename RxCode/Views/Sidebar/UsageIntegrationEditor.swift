@@ -149,7 +149,7 @@ struct UsageIntegrationEditor: View {
             if usesOAuth {
                 if signedIn {
                     Label("Signed in with \(providerName(integration.pluginID))", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
                 }
                 signInButton
                 Text("Sign-in opens your browser and returns to RxCode. Credentials are stored only in Keychain.")
@@ -218,7 +218,7 @@ struct UsageIntegrationEditor: View {
         Section("Account") {
             if vercelOAuth {
                 if signedIn {
-                    Label("Signed in with Vercel", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Label("Signed in with Vercel", systemImage: "checkmark.circle.fill").foregroundStyle(ClaudeTheme.statusSuccess)
                 }
                 signInButton
                 Text("Sign-in opens your browser and returns to RxCode through a local callback on port \(String(VercelUsageOAuth.callbackPort)).").font(.caption).foregroundStyle(.secondary)
@@ -247,7 +247,7 @@ struct UsageIntegrationEditor: View {
                     .help("Load teams from Vercel")
             }
             if let accountsError {
-                Label(accountsError, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
+                Label(accountsError, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(ClaudeTheme.statusWarning)
             }
             TextField("Project ID (optional)", text: $integration.resource)
             Text(vercelOAuth
@@ -260,7 +260,7 @@ struct UsageIntegrationEditor: View {
     private var cloudflareBillingSection: some View {
         Section("Billing API token (optional)") {
             if hasBillingCredential {
-                Label("Billing API token saved", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label("Billing API token saved", systemImage: "checkmark.circle.fill").foregroundStyle(ClaudeTheme.statusSuccess)
             }
             SecureField(hasBillingCredential ? "Billing API token (leave blank to keep existing token)" : "Billing API token", text: $billingCredential)
             MarkdownContentView(text: "Cloudflare sign-in can't grant billing access. Create an API token at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with **Account › Billing › Read** for this account ([billing permissions](https://developers.cloudflare.com/billing/understand/billing-permissions/)). Used only for account billing usage and stored only in Keychain.", style: .rxCodeCompact)
@@ -283,7 +283,7 @@ struct UsageIntegrationEditor: View {
             .disabled(!signedIn || loadingAccounts)
         if loadingAccounts { ProgressView("Loading accounts…").controlSize(.small) }
         if let accountsError {
-            Text(accountsError).font(.caption).foregroundStyle(.orange)
+            Text(accountsError).font(.caption).foregroundStyle(ClaudeTheme.statusWarning)
         }
     }
 

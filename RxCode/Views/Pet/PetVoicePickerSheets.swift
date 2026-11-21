@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import RxCodeCore
 import SwiftUI
 
 // MARK: - Apple Voice Configuration Sheet
@@ -239,7 +240,7 @@ struct PetAppleVoiceSheet: View {
         let isSelected = draftVoiceID == id
         return HStack(spacing: 12) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                 .font(.system(size: 16))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -301,7 +302,7 @@ struct PetCodexVoiceSheet: View {
                     ForEach(CodexRealtimeVoicePreset.allCases) { preset in
                         HStack(spacing: 12) {
                             Image(systemName: draftVoice == preset ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(draftVoice == preset ? Color.accentColor : .secondary)
+                                .foregroundStyle(draftVoice == preset ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                                 .font(.system(size: 16))
                             Text(preset.displayName)
                             if preset == .defaultVoice {

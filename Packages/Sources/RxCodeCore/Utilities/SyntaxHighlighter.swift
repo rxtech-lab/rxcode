@@ -9,17 +9,17 @@ import UIKit
 
 public enum SyntaxHighlighter {
     /// Async version of `highlightNS` that runs highlighting on a background thread.
-    public static func highlightNSAsync(_ code: String, language: String, fontSize: CGFloat = 12) async -> NSAttributedString {
+    public static func highlightNSAsync(_ code: String, language: String, fontSize: CGFloat = 12, colors: ThemeColors = .rxcode) async -> NSAttributedString {
         struct SendableWrapper: @unchecked Sendable {
             let value: NSAttributedString
         }
         let wrapped = await Task.detached {
-            SendableWrapper(value: highlightNS(code, language: language, fontSize: fontSize))
+            SendableWrapper(value: highlightNS(code, language: language, fontSize: fontSize, colors: colors))
         }.value
         return wrapped.value
     }
 
-    public static func highlightNS(_ code: String, language: String, fontSize: CGFloat = 12) -> NSAttributedString {
+    public static func highlightNS(_ code: String, language: String, fontSize: CGFloat = 12, colors: ThemeColors = .rxcode) -> NSAttributedString {
         let normalized = normalizeLanguage(language)
         let tokens = tokenize(code, language: normalized)
         let result = NSMutableAttributedString()
@@ -30,7 +30,7 @@ public enum SyntaxHighlighter {
             let font = (token.kind == .keyword || token.kind == .builtinType) ? mediumFont : regularFont
             result.append(NSAttributedString(string: token.text, attributes: [
                 .font: font,
-                .foregroundColor: NSColor(color(for: token.kind)),
+                .foregroundColor: NSColor(color(for: token.kind, in: colors)),
             ]))
         }
 #elseif os(iOS)
@@ -40,21 +40,21 @@ public enum SyntaxHighlighter {
             let font = (token.kind == .keyword || token.kind == .builtinType) ? mediumFont : regularFont
             result.append(NSAttributedString(string: token.text, attributes: [
                 .font: font,
-                .foregroundColor: UIColor(color(for: token.kind)),
+                .foregroundColor: UIColor(color(for: token.kind, in: colors)),
             ]))
         }
 #endif
         return result
     }
 
-    public static func highlight(_ code: String, language: String, fontSize: CGFloat = 12) -> AttributedString {
+    public static func highlight(_ code: String, language: String, fontSize: CGFloat = 12, colors: ThemeColors = .rxcode) -> AttributedString {
         let normalized = normalizeLanguage(language)
         var result = AttributedString()
         let tokens = tokenize(code, language: normalized)
 
         for token in tokens {
             var attributed = AttributedString(token.text)
-            attributed.foregroundColor = color(for: token.kind)
+            attributed.foregroundColor = color(for: token.kind, in: colors)
             if token.kind == .keyword || token.kind == .builtinType {
                 attributed.font = .system(size: fontSize, weight: .medium, design: .monospaced)
             } else {
@@ -88,24 +88,15 @@ public enum SyntaxHighlighter {
         }
     }
 
-    private static func color(for kind: TokenKind) -> Color {
+    private static func color(for kind: TokenKind, in colors: ThemeColors) -> Color {
         switch kind {
-        case .keyword:
-            return Color(light: .hex(0xAF3A93), dark: .hex(0xFF7AB2))
-        case .string:
-            return Color(light: .hex(0xC4442D), dark: .hex(0xFF8170))
-        case .comment:
-            return Color(light: .hex(0x72962A), dark: .hex(0x7EC856))
-        case .number:
-            return Color(light: .hex(0x1C00CF), dark: .hex(0xD0BF69))
-        case .builtinType:
-            return Color(light: .hex(0x5B2699), dark: .hex(0xDABAFF))
-        case .attribute:
-            return Color(light: .hex(0x947100), dark: .hex(0xFFA14F))
-        case .property:
-            return Color(light: .hex(0x3E6D74), dark: .hex(0x78C2B3))
-        case .plain:
-            return Color(light: .hex(0x3C3929), dark: .hex(0xCCC9C0))
+        case .keyword, .builtinType: colors.semanticForeground(colors.accent, on: colors.codeBackground)
+        case .string: colors.statusSuccess
+        case .comment: colors.textTertiary
+        case .number: colors.statusWarning
+        case .attribute: colors.statusError
+        case .property: colors.textSecondary
+        case .plain: colors.textPrimary
         }
     }
 

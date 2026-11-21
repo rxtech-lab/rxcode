@@ -160,6 +160,12 @@
         }
       }
     },
+    "“%@” is pushed but has no pull request yet. An agent can draft the title and description for you." : {
+
+    },
+    "“%@” is pushed but has no pull request. Create one with an agent-drafted title and description." : {
+
+    },
     "\"%@\" will be archived. Archived chats are hidden from the active list and can be restored from Archived." : {
       "localizations" : {
         "ko" : {
@@ -600,6 +606,9 @@
         }
       }
     },
+    "%@ is pushed but has no pull request. Create one with an agent-drafted title and description." : {
+
+    },
     "%@ isn't backed up to Flowcy" : {
       "localizations" : {
         "ko" : {
@@ -902,6 +911,9 @@
         }
       }
     },
+    "%lld added lines" : {
+
+    },
     "%lld agents available" : {
       "localizations" : {
         "ko" : {
@@ -976,6 +988,9 @@
           }
         }
       }
+    },
+    "%lld changed files" : {
+
     },
     "%lld companion file%@ · %@" : {
       "localizations" : {
@@ -1062,6 +1077,9 @@
           }
         }
       }
+    },
+    "%lld deleted lines" : {
+
     },
     "%lld document(s)" : {
       "localizations" : {
@@ -3744,6 +3762,15 @@
         }
       }
     },
+    "Amend" : {
+
+    },
+    "Amend Commit" : {
+
+    },
+    "Amend Commit…" : {
+
+    },
     "An agent is working on this story's tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4866,6 +4893,9 @@
     "Billing team" : {
 
     },
+    "Binary" : {
+
+    },
     "Binary found: %@, but version check failed" : {
       "localizations" : {
         "ko" : {
@@ -5021,6 +5051,9 @@
           }
         }
       }
+    },
+    "Branch:" : {
+
     },
     "Branches" : {
 
@@ -6721,6 +6754,9 @@
     "Coding Analytics Error" : {
 
     },
+    "Collapse %@" : {
+
+    },
     "Collapse chats" : {
       "localizations" : {
         "ko" : {
@@ -7833,10 +7869,10 @@
     "Couldn’t load page" : {
 
     },
-    "Couldn't Open the Model Page" : {
+    "Couldn’t load the commit to amend." : {
 
     },
-    "Couldn’t prepare commit" : {
+    "Couldn't Open the Model Page" : {
 
     },
     "Couldn’t Preview Window" : {
@@ -8086,7 +8122,6 @@
       }
     },
     "Create Pull Request" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8101,6 +8136,9 @@
           }
         }
       }
+    },
+    "Create Pull Request…" : {
+
     },
     "Create Release" : {
       "localizations" : {
@@ -8149,6 +8187,9 @@
           }
         }
       }
+    },
+    "Create Remote…" : {
+
     },
     "Create reusable templates of GitHub merge settings and branch rulesets. Your default template is applied to newly created repositories." : {
       "localizations" : {
@@ -8272,6 +8313,9 @@
         }
       }
     },
+    "Create tracking reference" : {
+
+    },
     "Create with Model" : {
 
     },
@@ -8389,6 +8433,9 @@
       }
     },
     "Creating branch…" : {
+
+    },
+    "Creating pull request…" : {
 
     },
     "Creating Pull Request…" : {
@@ -8903,6 +8950,9 @@
           }
         }
       }
+    },
+    "Default branch" : {
+
     },
     "Default Effort Level" : {
       "localizations" : {
@@ -9815,9 +9865,6 @@
         }
       }
     },
-    "Destination branch" : {
-
-    },
     "Detached at %@" : {
 
     },
@@ -10427,6 +10474,12 @@
         }
       }
     },
+    "Draft the title and description with an agent" : {
+
+    },
+    "Draft with Agent" : {
+
+    },
     "Drafted by AI from your description." : {
       "localizations" : {
         "zh-Hans" : {
@@ -10436,6 +10489,9 @@
           }
         }
       }
+    },
+    "Drafting with %@…" : {
+
     },
     "Drag a card here." : {
       "localizations" : {
@@ -11676,6 +11732,9 @@
     "Expand" : {
 
     },
+    "Expand %@" : {
+
+    },
     "Expand chats" : {
       "localizations" : {
         "ko" : {
@@ -11991,6 +12050,12 @@
           }
         }
       }
+    },
+    "Fast-forward Only" : {
+
+    },
+    "feat: describe the change" : {
+
     },
     "feature/my-change" : {
 
@@ -12668,21 +12733,17 @@
         }
       }
     },
+    "Force push" : {
+
+    },
     "Force Push" : {
 
     },
-    "Force push (with lease)" : {
+    "Force push to “%@”?" : {
 
     },
-    "Force push to “%@/%@”?" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Force push to “%1$@/%2$@”?"
-          }
-        }
-      }
+    "Force push with lease" : {
+
     },
     "Force pushing…" : {
 
@@ -13946,6 +14007,9 @@
     "Importing Chrome cookies…" : {
 
     },
+    "In original commit (%lld)" : {
+
+    },
     "In progress" : {
       "localizations" : {
         "ko" : {
@@ -15164,6 +15228,9 @@
         }
       }
     },
+    "Line counts unavailable" : {
+
+    },
     "Link" : {
       "localizations" : {
         "ko" : {
@@ -15371,6 +15438,9 @@
       }
     },
     "Loading Categories…" : {
+
+    },
+    "Loading commit files…" : {
 
     },
     "Loading current branches…" : {
@@ -16432,6 +16502,9 @@
         }
       }
     },
+    "Merge" : {
+
+    },
     "Merge %@ into %@" : {
       "localizations" : {
         "en" : {
@@ -17060,6 +17133,9 @@
           }
         }
       }
+    },
+    "new (%@)" : {
+
     },
     "New Branch" : {
 
@@ -19183,6 +19259,9 @@
         }
       }
     },
+    "Not Now" : {
+
+    },
     "Not sent" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19229,6 +19308,9 @@
       }
     },
     "Nothing playing" : {
+
+    },
+    "Nothing to preview" : {
 
     },
     "Nothing written (files already exist)." : {
@@ -19660,7 +19742,6 @@
       }
     },
     "Open in GitHub" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -21534,15 +21615,6 @@
     "Pull" : {
 
     },
-    "Pull (Fast-forward Only)" : {
-
-    },
-    "Pull (Merge)" : {
-
-    },
-    "Pull (Rebase)" : {
-
-    },
     "Pull %lld commits from %@" : {
       "localizations" : {
         "en" : {
@@ -21553,6 +21625,12 @@
         }
       }
     },
+    "Pull and Push" : {
+
+    },
+    "Pull Branch" : {
+
+    },
     "Pull from %@" : {
 
     },
@@ -21560,6 +21638,9 @@
 
     },
     "Pull request #%lld" : {
+
+    },
+    "Pull…" : {
 
     },
     "Pulling…" : {
@@ -21582,9 +21663,6 @@
       }
     },
     "Push all tags" : {
-
-    },
-    "Push Branch" : {
 
     },
     "Push Tag" : {
@@ -21624,6 +21702,9 @@
           }
         }
       }
+    },
+    "Push your local changes to remote repository" : {
+
     },
     "Push…" : {
 
@@ -21884,6 +21965,9 @@
     "Reads OpenCode Go usage limits using this client's existing login or OPENCODE_API_KEY. Other providers and prepaid balances are not reported." : {
 
     },
+    "Ready for a pull request?" : {
+
+    },
     "Ready for review: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -21931,6 +22015,9 @@
           }
         }
       }
+    },
+    "Rebase" : {
+
     },
     "Rebase %@ onto %@" : {
       "localizations" : {
@@ -22951,6 +23038,9 @@
           }
         }
       }
+    },
+    "Replace the latest commit using the current staged changes." : {
+
     },
     "Replay" : {
 
@@ -27112,6 +27202,12 @@
     "Staged files (%lld)" : {
 
     },
+    "Staging %@…" : {
+
+    },
+    "Staging %lld files…" : {
+
+    },
     "Staging files…" : {
 
     },
@@ -27491,6 +27587,9 @@
           }
         }
       }
+    },
+    "Strategy" : {
+
     },
     "Streamable HTTP" : {
       "localizations" : {
@@ -29606,6 +29705,9 @@
     "To" : {
 
     },
+    "To:" : {
+
+    },
     "Today" : {
       "localizations" : {
         "zh-Hans" : {
@@ -30187,6 +30289,9 @@
     "Updating card…" : {
 
     },
+    "Updating file lists…" : {
+
+    },
     "Updating integration…" : {
 
     },
@@ -30210,6 +30315,9 @@
       }
     },
     "upstream" : {
+
+    },
+    "Upstream" : {
 
     },
     "URL" : {
@@ -31613,6 +31721,9 @@
           }
         }
       }
+    },
+    "Write" : {
+
     },
     "Write a schedule with AI" : {
       "localizations" : {

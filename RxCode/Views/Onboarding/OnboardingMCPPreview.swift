@@ -17,7 +17,7 @@ struct MCPSetupPreview: View {
                     .foregroundStyle(ClaudeTheme.accent)
                 Text("First MCP Server")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
                 if added {
                     Label(LocalizedStringKey("Added"), systemImage: "checkmark.circle.fill")
@@ -28,14 +28,14 @@ struct MCPSetupPreview: View {
 
             Text("Connect any MCP server to give every agent extra tools. You can also skip this and add servers later in Settings → MCP.")
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ClaudeTheme.textSecondary)
 
             field(label: LocalizedStringKey("Name"), placeholder: "my-server", text: $spec.name)
 
             HStack(spacing: 8) {
                 Text("Transport")
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.62))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .frame(width: 78, alignment: .leading)
                 Picker("", selection: $spec.transport) {
                     ForEach(MCPTransport.allCases) { t in
@@ -51,15 +51,15 @@ struct MCPSetupPreview: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Args (one per line)")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.62))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                     TextEditor(text: $argsText)
                         .font(.system(size: 12, design: .monospaced))
                         .frame(minHeight: 48, maxHeight: 80)
                         .scrollContentBackground(.hidden)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 6))
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
                         )
                         .onChange(of: argsText) { _, newValue in
                             spec.args = newValue
@@ -91,10 +91,10 @@ struct MCPSetupPreview: View {
                         Text(added ? LocalizedStringKey("Saved") : LocalizedStringKey("Save Server"))
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(canSave ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background((canSave ? ClaudeTheme.accent : ClaudeTheme.textTertiary).opacity(0.85), in: Capsule())
+                    .background(canSave ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSave || isSaving || added)
@@ -104,11 +104,11 @@ struct MCPSetupPreview: View {
         .frame(maxWidth: 620)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.34))
+                .fill(ClaudeTheme.codeBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 
@@ -126,7 +126,7 @@ struct MCPSetupPreview: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label)
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .frame(width: 78, alignment: .leading)
             TextField(placeholder, text: text)
                 .textFieldStyle(.roundedBorder)

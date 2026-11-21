@@ -39,13 +39,13 @@ struct GitWorkflowSidebar: View {
                         Text("Local Changes")
                         Spacer()
                         if changeCount > 0 {
-                            Text("\(changeCount)").monospacedDigit().foregroundStyle(ClaudeTheme.textSecondary)
+                            Text("\(changeCount)").monospacedDigit().foregroundStyle(.secondary)
                         }
                     }
                 } icon: { Image(systemName: "pencil.and.list.clipboard") }
-                .tag(GitSidebarItem.localChanges)
+                .themedListRow(GitSidebarItem.localChanges, selection: store.selection)
                 Label("All Commits", systemImage: "point.3.connected.trianglepath.dotted")
-                    .tag(GitSidebarItem.allCommits)
+                    .themedListRow(GitSidebarItem.allCommits, selection: store.selection)
             }
 
             TextField("Filter refs", text: $filter)
@@ -53,9 +53,13 @@ struct GitWorkflowSidebar: View {
                 .controlSize(.small)
 
             Section("Branches", isExpanded: $branchesExpanded) {
+                let suggestion = store.pullRequestSuggestion
                 ForEach(store.snapshot.localBranches.filter { matches($0.name) }) { branch in
-                    GitBranchRow(branch: branch)
-                        .tag(GitSidebarItem.branch(branch.name))
+                    GitBranchRow(branch: branch, pullRequestSuggestion: branch.isCurrent ? suggestion : nil) { target in
+                        GitPullRequestTipLedger.dismiss(target)
+                        store.sheet = .createPullRequest(target)
+                    }
+                        .themedListRow(GitSidebarItem.branch(branch.name), selection: store.selection)
                         .contextMenu { GitLocalBranchContextMenu(branch: branch, store: store) }
                 }
             }
@@ -73,11 +77,12 @@ struct GitWorkflowSidebar: View {
                                 Label(branch.name, systemImage: "arrow.triangle.branch")
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                    .tag(GitSidebarItem.remoteBranch(branch.refName))
+                                    .themedListRow(GitSidebarItem.remoteBranch(branch.refName), selection: store.selection)
                                     .contextMenu { GitRemoteBranchContextMenu(branch: branch, store: store) }
                             }
                         } label: {
                             Label(group.remote, systemImage: "cloud")
+                                .listItemTint(.fixed(ClaudeTheme.accent))
                                 .contextMenu {
                                     Button("Remove Remote…", role: .destructive) { store.confirmation = .removeRemote(group.remote) }
                                 }
@@ -98,7 +103,7 @@ struct GitWorkflowSidebar: View {
                         ForEach(tags.prefix(visibleTagCount)) { tag in
                             GitTagRow(tag: tag)
                                 .padding(.leading, 12)
-                                .tag(GitSidebarItem.tag(tag.name))
+                                .themedListRow(GitSidebarItem.tag(tag.name), selection: store.selection)
                                 .contextMenu { GitTagContextMenu(tag: tag, store: store) }
                         }
                         if tags.count > visibleTagCount {
@@ -118,7 +123,7 @@ struct GitWorkflowSidebar: View {
                             Text(stash.message).lineLimit(1)
                         } icon: { Image(systemName: "archivebox") }
                         .help(stash.selector)
-                        .tag(GitSidebarItem.stash(stash.selector))
+                        .themedListRow(GitSidebarItem.stash(stash.selector), selection: store.selection)
                         .contextMenu { GitStashContextMenu(stash: stash, store: store) }
                     }
                 }
@@ -180,6 +185,9 @@ struct GitTagRow: View {
 
 private struct GitBranchRow: View {
     let branch: GitLocalBranch
+    /// Set on the current branch when it is pushed but has no pull request.
+    var pullRequestSuggestion: GitPullRequestTarget?
+    var onCreatePullRequest: (GitPullRequestTarget) -> Void = { _ in }
 
     var body: some View {
         Label {
@@ -189,6 +197,11 @@ private struct GitBranchRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
+                if let pullRequestSuggestion {
+                    GitSidebarPullRequestButton(target: pullRequestSuggestion) {
+                        onCreatePullRequest(pullRequestSuggestion)
+                    }
+                }
                 if branch.ahead > 0 {
                     Text("↑\(branch.ahead)").monospacedDigit()
                 }
@@ -198,8 +211,11 @@ private struct GitBranchRow: View {
             }
             .font(.system(size: ClaudeTheme.size(12)))
         } icon: {
-            Image(systemName: branch.isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch")
-                .foregroundStyle(branch.isCurrent ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+            if branch.isCurrent {
+                Image(systemName: "checkmark.circle.fill").themedAccentInk()
+            } else {
+                Image(systemName: "arrow.triangle.branch").foregroundStyle(.secondary)
+            }
         }
         .help(branch.upstream.map { String(localized: "\(branch.name) tracks \($0)") } ?? branch.name)
         .accessibilityLabel(branch.isCurrent ? String(localized: "\(branch.name), current branch") : branch.name)

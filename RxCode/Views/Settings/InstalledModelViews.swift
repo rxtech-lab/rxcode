@@ -38,7 +38,7 @@ struct InstalledModelRow: View {
                 if isDefault {
                     Text("Default")
                         .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.accent)
+                        .foregroundStyle(ClaudeTheme.accentText)
                 }
             }
             HStack(spacing: 8) {

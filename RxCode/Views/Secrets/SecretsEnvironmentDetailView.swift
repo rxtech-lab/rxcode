@@ -25,7 +25,7 @@ struct SecretsEnvironmentDetailView: View {
     var body: some View {
         List {
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
             ForEach(files) { file in
                 Button { editingFile = file } label: {
@@ -184,7 +184,7 @@ struct SecretsFileEditor: View {
                     .border(Color(NSColor.separatorColor))
             }
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
             HStack {
                 Spacer()

@@ -94,11 +94,11 @@ struct DocsRepoDetailView: View {
             if let installed = installedSecret {
                 Label("Installed \(installed.secretName) on \(installed.repositoryFullName)", systemImage: "checkmark.seal.fill")
                     .font(.callout)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
             }
 
             if let installError {
-                Text(installError).foregroundStyle(.red).font(.caption)
+                Text(installError).foregroundStyle(ClaudeTheme.statusError).font(.caption)
             }
 
             Button {
@@ -122,7 +122,7 @@ struct DocsRepoDetailView: View {
             if isLoading, documents.isEmpty {
                 HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
             } else if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             } else if documents.isEmpty {
                 Text("No documents uploaded yet. Use the + button above to add one, or set up CI to upload them automatically.")
                     .foregroundStyle(.secondary).font(.callout)

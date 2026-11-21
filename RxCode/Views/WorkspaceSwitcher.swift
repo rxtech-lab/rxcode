@@ -205,7 +205,7 @@ struct ManageWorkspacesSheet: View {
                         deleteCandidate = workspace
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(ClaudeTheme.statusError)
                     }
                     .buttonStyle(.borderless)
                     .help("Delete Workspace")

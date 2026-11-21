@@ -31,7 +31,7 @@ struct AddTrustedEmailSheet: View {
                 }
                 if let errorMessage {
                     Section {
-                        Text(errorMessage).foregroundStyle(.red).font(.callout)
+                        Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
                     }
                 }
             }

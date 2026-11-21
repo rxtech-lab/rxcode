@@ -202,7 +202,7 @@ struct PetVoiceModelsPane: View {
         let isSelected = controller.configuration.usesLocalVoice(modelID: PetConfiguration.systemTTSModelID)
         return HStack(spacing: 12) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? ClaudeTheme.accent : .secondary)
+                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                 .font(.system(size: 16))
 
             VStack(alignment: .leading, spacing: 3) {
@@ -248,7 +248,7 @@ struct PetVoiceModelsPane: View {
         let selection = controller.configuration.flowcyVoice
         return HStack(spacing: 12) {
             Image(systemName: selection == nil ? "circle" : "checkmark.circle.fill")
-                .foregroundStyle(selection == nil ? Color.secondary : ClaudeTheme.accent)
+                .foregroundStyle(selection == nil ? ClaudeTheme.textSecondary : ClaudeTheme.accent)
                 .font(.system(size: 16))
             VStack(alignment: .leading, spacing: 3) {
                 Text(selection?.voice.name ?? "Flowcy Speech")
@@ -269,7 +269,7 @@ struct PetVoiceModelsPane: View {
         let fit = store.fit(bytes: model.sizeBytes)
         return HStack(spacing: 12) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? ClaudeTheme.accent : .secondary)
+                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                 .font(.system(size: 16))
 
             VStack(alignment: .leading, spacing: 3) {

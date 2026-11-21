@@ -1,3 +1,4 @@
+import RxCodeCore
 import SwiftUI
 
 // MARK: - Level Smoothing
@@ -131,7 +132,7 @@ struct PetMicLevelOrb: View {
                     .fill(isMuted ? Color.secondary.opacity(0.18) : tint.opacity(0.22))
                 Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
                     .font(.system(size: diameter * 0.36, weight: .semibold))
-                    .foregroundStyle(isMuted ? Color.secondary : tint)
+                    .foregroundStyle(isMuted ? ClaudeTheme.textSecondary : tint)
                     .contentTransition(.symbolEffect(.replace))
             }
             .frame(width: diameter, height: diameter)

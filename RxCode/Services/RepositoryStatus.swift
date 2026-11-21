@@ -8,6 +8,8 @@ nonisolated struct GitChangeFile: Identifiable, Hashable, Sendable {
     let statusChar: Character
     let originalPath: String?
     let diffMode: PreviewFile.GitDiffMode
+    var lineChanges: GitLineChanges?
+    var untrackedModificationDate: Date?
     var pathspecs: [String] { [displayPath] + (originalPath.map { [$0] } ?? []) }
 
     var name: String {
@@ -20,19 +22,46 @@ nonisolated struct GitChangeFile: Identifiable, Hashable, Sendable {
 }
 
 nonisolated struct GitChangesSnapshot: Equatable, Sendable {
+    struct Trees: Equatable, Sendable {
+        let unstaged: GitChangedFiles<GitChangeFile>
+        let staged: GitChangedFiles<GitChangeFile>
+    }
+
     let unstaged: [GitChangeFile]
     let staged: [GitChangeFile]
+    var trees: Trees?
 }
 
-nonisolated func loadAllChangedFiles(at projectPath: String) async -> GitChangesSnapshot? {
+@concurrent func loadAllChangedFiles(at projectPath: String, includeFileTrees: Bool) async -> GitChangesSnapshot? {
     guard let raw = await GitHelper.run(["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"], at: projectPath) else { return nil }
-    return parsePorcelainZ(raw, projectPath: projectPath)
+    let files = parsePorcelainZ(raw, projectPath: projectPath)
+    guard includeFileTrees else { return GitChangesSnapshot(unstaged: files.unstaged, staged: files.staged) }
+    async let stagedCounts = files.staged.isEmpty ? [:] : GitRepositoryLoader.workingLineChanges(staged: true, at: projectPath)
+    async let unstagedCounts = files.unstaged.contains { $0.diffMode == .unstaged }
+        ? GitRepositoryLoader.workingLineChanges(staged: false, at: projectPath) : [:]
+    let (staged, unstaged) = await (stagedCounts, unstagedCounts)
+    func withCounts(_ input: GitChangeFile, counts: [String: GitLineChanges]) -> GitChangeFile {
+        var file = input
+        file.lineChanges = counts[file.displayPath]
+        // Untracked files are absent from git diff. Read their stats only when the row is visible.
+        if file.diffMode == .untracked,
+           let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
+           let type = attributes[.type] as? FileAttributeType, type == .typeRegular || type == .typeSymbolicLink {
+            file.untrackedModificationDate = attributes[.modificationDate] as? Date
+        }
+        return file
+    }
+    let index = files.staged.map { withCounts($0, counts: staged) }
+    let worktree = files.unstaged.map { withCounts($0, counts: unstaged) }
+    let trees = GitChangesSnapshot.Trees(unstaged: GitChangedFiles(worktree, path: \.displayPath),
+                                         staged: GitChangedFiles(index, path: \.displayPath))
+    return GitChangesSnapshot(unstaged: worktree, staged: index, trees: trees)
 }
 
 /// Parses `git status --porcelain=v1 -z` output into both unstaged and staged
 /// file lists. Entries are NUL-terminated; renames have an extra NUL-terminated
 /// "old path" record.
-nonisolated func parsePorcelainZ(_ raw: String, projectPath: String) -> GitChangesSnapshot {
+nonisolated func parsePorcelainZ(_ raw: String, projectPath: String) -> (unstaged: [GitChangeFile], staged: [GitChangeFile]) {
     var unstaged: [GitChangeFile] = []
     var staged: [GitChangeFile] = []
     let tokens = raw.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
@@ -82,12 +111,13 @@ nonisolated func parsePorcelainZ(_ raw: String, projectPath: String) -> GitChang
     let sort: ([GitChangeFile]) -> [GitChangeFile] = { files in
         files.sorted { $0.displayPath.localizedStandardCompare($1.displayPath) == .orderedAscending }
     }
-    return GitChangesSnapshot(unstaged: sort(unstaged), staged: sort(staged))
+    return (sort(unstaged), sort(staged))
 }
 
 nonisolated struct GitWorkingTree: Sendable, Equatable {
     let root: String
     let head: String
+    let headCommit: String?
     let upstream: GitHelper.UpstreamStatus?
     let changes: GitChangesSnapshot
 
@@ -98,7 +128,7 @@ nonisolated enum RepositoryState: Sendable, Equatable {
     case loading, notRepository, unavailable
     case ready(GitWorkingTree)
 
-    @concurrent static func load(at path: String) async -> Self {
+    @concurrent static func load(at path: String, includeFileTrees: Bool = false) async -> Self {
         guard let root = await gitPath(["--show-toplevel"], at: path) else {
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue,
@@ -107,9 +137,10 @@ nonisolated enum RepositoryState: Sendable, Equatable {
             else { return .unavailable }
             return .notRepository
         }
-        async let changes = loadAllChangedFiles(at: root)
+        async let changes = loadAllChangedFiles(at: root, includeFileTrees: includeFileTrees)
         async let tracking = GitHelper.upstreamStatus(at: root)
-        let (files, upstream) = await (changes, tracking)
+        async let revision = GitHelper.headCommit(at: root)
+        let (files, upstream, headCommit) = await (changes, tracking, revision)
         guard let files else { return .unavailable }
         let head: String
         if let upstream {
@@ -119,7 +150,7 @@ nonisolated enum RepositoryState: Sendable, Equatable {
         } else {
             return .unavailable
         }
-        return .ready(GitWorkingTree(root: root, head: head, upstream: upstream, changes: files))
+        return .ready(GitWorkingTree(root: root, head: head, headCommit: headCommit, upstream: upstream, changes: files))
     }
 
     fileprivate static func gitPath(_ args: [String], at path: String) async -> String? {
@@ -131,16 +162,25 @@ nonisolated enum RepositoryState: Sendable, Equatable {
 /// Window-scoped so the sidebar and inspector share a snapshot of the same checkout.
 @MainActor @Observable
 final class RepositoryStatus {
+    private let includeFileTrees: Bool
     private(set) var path: String?
     private(set) var state: RepositoryState = .loading
-    @ObservationIgnored private var latestRequest = UUID()
+    @ObservationIgnored private var nextRequest = 0
+    @ObservationIgnored private var lastAppliedRequest = 0
+
+    init(includeFileTrees: Bool = false) {
+        self.includeFileTrees = includeFileTrees
+    }
 
     func refresh(at directory: String) async {
         guard path == directory else { return }
-        let request = UUID()
-        latestRequest = request
-        let result = await RepositoryState.load(at: directory)
-        guard !Task.isCancelled, request == latestRequest, path == directory else { return }
+        nextRequest += 1
+        let request = nextRequest
+        let result = await RepositoryState.load(at: directory, includeFileTrees: includeFileTrees)
+        // A watcher may start another read during a post-action refresh. Publish this
+        // result before returning unless a newer result has already reached the UI.
+        guard !Task.isCancelled, request > lastAppliedRequest, path == directory else { return }
+        lastAppliedRequest = request
         if state != result { state = result }
     }
 
@@ -148,7 +188,7 @@ final class RepositoryStatus {
         guard !Task.isCancelled else { return }
         path = directory
         state = .loading
-        latestRequest = UUID()
+        lastAppliedRequest = nextRequest
         guard let directory else { return }
         let watcher = DirectoryWatcher()
         let (events, continuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))

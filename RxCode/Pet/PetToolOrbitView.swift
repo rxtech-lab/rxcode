@@ -1,4 +1,5 @@
 import RxCodeChatKit
+import RxCodeCore
 import SwiftUI
 
 struct PetToolOrbitView: View {
@@ -37,7 +38,7 @@ struct PetToolOrbitView: View {
                 } else {
                     Image(systemName: statusSymbol(call.status))
                         .font(.system(size: 14))
-                        .foregroundStyle(call.status == .failed ? Color.red : Color.secondary)
+                        .foregroundStyle(call.status == .failed ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
                         .transition(.opacity)
                 }
             }

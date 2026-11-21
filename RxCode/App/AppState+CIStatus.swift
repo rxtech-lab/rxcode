@@ -23,6 +23,11 @@ nonisolated struct ThreadPullRequest: Codable, Equatable, Sendable {
         self.number = number
         self.state = state
     }
+
+    init?(repository: String, status: ProjectCIStatus) {
+        guard status.found else { return nil }
+        self.init(repository: repository, number: status.prNumber, state: status.pullRequestState, reportedURL: status.prUrl)
+    }
 }
 
 /// Last published branch results and cross-branch PR matches for one workspace account.
@@ -153,15 +158,7 @@ extension AppState {
             ?? summary.parentThreadId.flatMap { ciBranchesBySessionId[$0] }
             ?? []
         for branch in branches {
-            let key = "\(repository.lowercased())#\(branch)"
-            guard let status = branchStatus.byBranch[key], status.found,
-                  let pullRequest = ThreadPullRequest(
-                    repository: repository,
-                    number: status.prNumber,
-                    state: status.pullRequestState,
-                    reportedURL: status.prUrl
-                  ) else { continue }
-            return pullRequest
+            if let pullRequest = pullRequest(forRepository: repository, branch: branch) { return pullRequest }
         }
         return nil
     }
@@ -339,6 +336,25 @@ extension AppState {
         return branchStatus.byBranch[Self.ciKey(owner: parts[0], repo: parts[1], branch: branch)]
     }
 
+    func pullRequest(forRepository repository: String, branch: String) -> ThreadPullRequest? {
+        guard canDisplayBranchStatus(accountID: branchStatus.accountID),
+              let status = branchStatus.byBranch["\(repository.lowercased())#\(branch)"] else { return nil }
+        return ThreadPullRequest(repository: repository, status: status)
+    }
+
+    /// A Git window can show a checkout for a branch the workspace poller does not track.
+    func fetchPullRequest(forRepository repository: String, branch: String) async -> ThreadPullRequest? {
+        let parts = repository.split(separator: "/")
+        guard isSignedIn, parts.count == 2 else { return nil }
+        let query = CIStatusQuery(owner: String(parts[0]), repo: String(parts[1]), branch: branch)
+        let repoKey = repository.lowercased()
+        guard let response = try? await autopilot.batchCIStatus([query]), !Task.isCancelled,
+              let status = response.results.first(where: {
+                  $0.branch == branch && Self.ciRepoKey(owner: $0.owner, repo: $0.repo) == repoKey
+              }) else { return nil }
+        return ThreadPullRequest(repository: repository, status: status)
+    }
+
     // MARK: - Failure handling
 
     /// Announce each newly observed failed run once. Auto-fix retains its
@@ -453,7 +469,7 @@ extension AppState {
         "\(owner.lowercased())/\(repo.lowercased())#\(branch ?? "")"
     }
 
-    private static func ciRepoKey(owner: String, repo: String) -> String {
+    static func ciRepoKey(owner: String, repo: String) -> String {
         "\(owner.lowercased())/\(repo.lowercased())"
     }
 

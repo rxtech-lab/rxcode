@@ -52,7 +52,7 @@ struct ProjectListView: View {
 
             List(appState.projects, selection: selectedProjectBinding) { project in
                 projectRow(project)
-                    .tag(project.id)
+                    .themedListRow(project.id, selection: selectedProjectBinding.wrappedValue)
                     .contextMenu {
                         // Create PR, commit, code review, and autopilot setup all
                         // come from hooks as serializable MenuItems now; taps
@@ -146,21 +146,26 @@ struct ProjectListView: View {
         let isSelected = windowState.selectedProject?.id == project.id
 
         return HStack(spacing: 8) {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+            Group {
+                if isSelected {
+                    Image(systemName: "folder.fill").themedAccentInk()
+                } else {
+                    Image(systemName: "folder.fill").foregroundStyle(.tertiary)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(project.name)
                         .font(.body)
-                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     AttentionBadge(attention: appState.projectAttention(projectId: project.id, in: windowState))
                 }
 
                 Text(truncatedPath(project.path))
                     .font(.caption)
-                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }

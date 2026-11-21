@@ -22,10 +22,6 @@ nonisolated struct SourcePreviewContent: @unchecked Sendable {
         lineStarts = starts
     }
 
-    static func highlighted(_ text: String, language: String) async -> Self {
-        await Task.detached { Self(SyntaxHighlighter.highlightNS(text, language: language)) }.value
-    }
-
     func lineNumber(at offset: Int) -> Int {
         var low = 0
         var high = lineStarts.count
@@ -34,6 +30,38 @@ nonisolated struct SourcePreviewContent: @unchecked Sendable {
             if lineStarts[middle] <= offset { low = middle + 1 } else { high = middle }
         }
         return low
+    }
+}
+
+struct ThemedSourcePreview: View {
+    let text: String
+    let language: String
+    @State private var content: SourcePreviewContent?
+
+    private struct Input: Equatable {
+        let text: String
+        let language: String
+        let theme: AppTheme
+    }
+
+    var body: some View {
+        let input = Input(text: text, language: language, theme: ThemeStore.shared.current)
+        Group {
+            if let content {
+                CodeTextRenderer(content: content)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ClaudeTheme.codeBackground)
+        .task(id: input) {
+            let highlighted = await Task.detached {
+                SourcePreviewContent(SyntaxHighlighter.highlightNS(input.text, language: input.language, colors: input.theme.colors))
+            }.value
+            guard !Task.isCancelled else { return }
+            content = highlighted
+        }
     }
 }
 
@@ -97,8 +125,10 @@ final class SourcePreviewTextView: NSTextView {
 
     func display(_ content: SourcePreviewContent) {
         guard source?.text !== content.text else { return }
+        let selection = source?.text.string == content.text.string ? selectedRanges : nil
         source = content
         textStorage?.setAttributedString(content.text)
+        if let selection { selectedRanges = selection }
         (enclosingScrollView?.verticalRulerView as? SourceLineNumberRuler)?.updateWidth(for: content.lineStarts.count)
     }
 

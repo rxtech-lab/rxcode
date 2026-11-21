@@ -121,10 +121,14 @@ struct RunProfileToolbarGroup: View {
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: 200)
+            .foregroundStyle(.primary)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        // Borderless menus pick up the accent tint; match the other toolbar
+        // items, which draw in the standard label color.
+        .tint(.primary)
         .fixedSize()
         .help("Select Run Profile")
         .accessibilityIdentifier("run-profile-menu")
@@ -200,10 +204,10 @@ struct RunProfileToolbarGroup: View {
             if activeTasks.count > 1 {
                 Text("\(activeTasks.count)")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.foreground(on: ClaudeTheme.statusError))
                     .padding(.horizontal, 3)
                     .frame(minWidth: 12, minHeight: 12)
-                    .background(Capsule().fill(.red))
+                    .background(Capsule().fill(ClaudeTheme.statusError))
                     .offset(x: 6, y: -4)
             }
         }
@@ -276,10 +280,12 @@ struct RunProfileToolbarGroup: View {
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: 220)
+            .foregroundStyle(.primary)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .tint(.primary)
         .fixedSize()
         .help("Select Run Destination")
         .accessibilityIdentifier("run-profile-destination-menu")

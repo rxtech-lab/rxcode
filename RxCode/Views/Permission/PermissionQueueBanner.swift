@@ -125,7 +125,7 @@ struct PendingActionBanner: View {
 
                 Text(actionTitle)
                     .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textOnAccent)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                     .background(ClaudeTheme.accent, in: Capsule())

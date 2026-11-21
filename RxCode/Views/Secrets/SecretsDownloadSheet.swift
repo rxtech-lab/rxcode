@@ -30,7 +30,7 @@ struct SecretsDownloadSheet: View {
             }
 
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
             if let written {
                 if written.isEmpty {
@@ -38,7 +38,7 @@ struct SecretsDownloadSheet: View {
                         .font(.callout).foregroundStyle(.secondary)
                 } else {
                     Label("Wrote \(written.joined(separator: ", ")) to the project.", systemImage: "checkmark.circle")
-                        .font(.callout).foregroundStyle(.green)
+                        .font(.callout).foregroundStyle(ClaudeTheme.statusSuccess)
                 }
             }
 

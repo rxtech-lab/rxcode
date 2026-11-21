@@ -62,7 +62,7 @@ struct AddSkillGitSourceSheet: View {
                 if let error = localError ?? appState.marketplaceSourceError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(Color.red)
+                        .foregroundStyle(ClaudeTheme.statusError)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

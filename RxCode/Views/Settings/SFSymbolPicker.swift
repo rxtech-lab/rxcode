@@ -49,11 +49,11 @@ struct SFSymbolPicker: View {
             HStack(spacing: 8) {
                 Image(systemName: hasSymbol ? symbol : "questionmark.square.dashed")
                     .font(.system(size: ClaudeTheme.size(13)))
-                    .foregroundStyle(hasSymbol ? ClaudeTheme.accent : Color.secondary)
+                    .foregroundStyle(hasSymbol ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                     .frame(width: 18)
                 Text(verbatim: hasSymbol ? symbol : "Choose…")
                     .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
-                    .foregroundStyle(hasSymbol ? .primary : .secondary)
+                    .foregroundStyle(hasSymbol ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: ClaudeTheme.size(9)))
@@ -117,7 +117,7 @@ struct SFSymbolPicker: View {
                 .font(.system(size: ClaudeTheme.size(15)))
                 .frame(width: 38, height: 34)
                 .background(isSelected ? ClaudeTheme.accent.opacity(0.18) : Color(NSColor.controlBackgroundColor))
-                .foregroundStyle(isSelected ? ClaudeTheme.accent : Color.primary)
+                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)

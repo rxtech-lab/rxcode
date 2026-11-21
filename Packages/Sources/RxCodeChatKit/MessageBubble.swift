@@ -234,7 +234,7 @@ struct MessageBubble: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                    .foregroundStyle(ClaudeTheme.accent)
+                    .foregroundStyle(ClaudeTheme.accentText)
                 }
             }
         } else {
@@ -283,7 +283,7 @@ struct MessageBubble: View {
                         }
                     }
                     .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                    .foregroundStyle(ClaudeTheme.accent)
+                    .foregroundStyle(ClaudeTheme.accentText)
                     .buttonStyle(.plain)
                 }
             }

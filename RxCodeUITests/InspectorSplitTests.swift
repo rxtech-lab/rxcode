@@ -71,6 +71,72 @@ final class InspectorSplitTests: XCTestCase {
         XCTAssertTrue(run.wait(for: \.isSelected, toEqual: true, timeout: 5))
     }
 
+    func testLocalChangesPreviewsAmendFilesAndReportsStaging() throws {
+        continueAfterFailure = false
+        let project = FileManager.default.temporaryDirectory.appendingPathComponent("GitChanges-\(UUID())")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: project) }
+
+        // The sandboxed UI test runner needs the Git executable behind Apple's xcrun shim.
+        let gitPath = ProcessInfo.processInfo.environment["RXCODE_TEST_GIT"] ?? "/usr/bin/git"
+        func git(_ arguments: [String]) throws {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: gitPath)
+            process.currentDirectoryURL = project
+            process.arguments = arguments
+            try process.run()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0, "git \(arguments.joined(separator: " "))")
+        }
+
+        try git(["init", "-q", "-b", "main"])
+        try Data("original\n".utf8).write(to: project.appending(path: "original.txt"))
+        try Data("pending.txt filter=hold-stage\n".utf8).write(to: project.appending(path: ".gitattributes"))
+        try git(["add", "."])
+        try git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "commit", "-qm", "Original"])
+        // Hold git add until the progress overlay is visible, with a timeout if the test stops.
+        try git(["config", "filter.hold-stage.clean", "for i in 1 2 3 4 5 6 7 8 9 10; do test -f .git/hold-stage || break; sleep 1; done; cat"])
+
+        let app = try launchInspector(project: project, width: 420)
+        let openGit = app.buttons["sidebar-git-window"]
+        XCTAssertTrue(openGit.waitForExistence(timeout: 10))
+        openGit.click()
+        let localChanges = app.staticTexts["Local Changes"].firstMatch
+        XCTAssertTrue(localChanges.waitForExistence(timeout: 10))
+        localChanges.click()
+        let window = app.windows.containing(.checkBox, identifier: "Amend").firstMatch
+        let amend = window.checkBoxes["Amend"]
+        XCTAssertTrue(amend.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        amend.click()
+
+        func row(_ id: String, in scope: XCUIElement) -> XCUIElement {
+            scope.descendants(matching: .any).matching(identifier: id).firstMatch
+        }
+        let staged = row("git-staged-files", in: window)
+        let unstaged = row("git-unstaged-files", in: window)
+        XCTAssertTrue(row("git-commit-file-original.txt", in: staged).waitForExistence(timeout: 10))
+
+        let gate = project.appending(path: ".git/hold-stage")
+        try Data().write(to: gate)
+        try Data("pending\n".utf8).write(to: project.appending(path: "pending.txt"))
+        XCTAssertTrue(row("git-file-pending.txt", in: unstaged).waitForExistence(timeout: 10))
+        window.buttons["Stage All"].click()
+        XCTAssertTrue(window.staticTexts["Staging pending.txt…"].waitForExistence(timeout: 5))
+        try FileManager.default.removeItem(at: gate)
+        XCTAssertTrue(row("git-file-pending.txt", in: staged).waitForExistence(timeout: 10))
+        XCTAssertTrue(row("git-file-pending.txt", in: unstaged).waitForNonExistence(timeout: 5))
+
+        window.buttons["Amend Commit…"].click()
+        let sheet = window.sheets.firstMatch
+        XCTAssertTrue(row("git-commit-file-original.txt", in: sheet).waitForExistence(timeout: 5))
+        XCTAssertTrue(row("git-file-pending.txt", in: sheet).exists)
+        sheet.buttons["Cancel"].click()
+        window.buttons["Unstage All"].click()
+        XCTAssertTrue(row("git-file-pending.txt", in: unstaged).waitForExistence(timeout: 10))
+        amend.click()
+        XCTAssertTrue(row("git-commit-file-original.txt", in: window).waitForNonExistence(timeout: 5))
+    }
+
     func testInspectorToolbarShortcutsKeepTheSameSidebarLayout() throws {
         let app = try launchInspector(width: 420)
         let toggle = app.buttons["toggle-inspector-button"]

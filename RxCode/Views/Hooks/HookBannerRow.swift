@@ -25,7 +25,9 @@ struct HookBannerRow: View {
     @State private var isCloseHovered = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        let activeFill = isActionHovered ? Color.hookBannerAccent.mix(with: ClaudeTheme.background, by: 0.12) : Color.hookBannerAccent
+        let fill = isActionDisabled ? ClaudeTheme.surfaceSecondary : activeFill
+        return HStack(spacing: 8) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
@@ -43,15 +45,10 @@ struct HookBannerRow: View {
                 Button(action: onTap) {
                     Text(actionTitle)
                         .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                        .foregroundStyle(.white.opacity(isActionDisabled ? 0.7 : 1))
+                        .foregroundStyle(isActionDisabled ? ClaudeTheme.textSecondary : ClaudeTheme.foreground(on: fill))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
-                        .background(
-                            Color.hookBannerAccent.opacity(
-                                isActionDisabled ? 0.35 : (isActionHovered ? 0.8 : 1)
-                            ),
-                            in: Capsule()
-                        )
+                        .background(fill, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(isActionDisabled)

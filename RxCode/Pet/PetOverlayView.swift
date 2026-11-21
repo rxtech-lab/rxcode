@@ -370,7 +370,7 @@ struct PetOverlayView: View {
             } label: {
                 Image(systemName: controller.isVoiceActive ? "phone.down.fill" : "phone.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(controller.isVoiceActive ? .white : .primary)
+                    .foregroundStyle(controller.isVoiceActive ? .white : ClaudeTheme.textPrimary)
                     .frame(width: 24, height: 24)
                     .background(
                         Circle()
@@ -385,7 +385,7 @@ struct PetOverlayView: View {
             } label: {
                 Image(systemName: controller.isMuted ? "mic.slash.fill" : "mic.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(controller.isMuted ? .orange : .cyan)
+                    .foregroundStyle(controller.isMuted ? ClaudeTheme.statusWarning : .cyan)
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
@@ -398,7 +398,7 @@ struct PetOverlayView: View {
                 } label: {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(ClaudeTheme.statusWarning)
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.plain)

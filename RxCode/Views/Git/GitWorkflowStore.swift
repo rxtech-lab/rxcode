@@ -31,23 +31,29 @@ enum GitSidebarItem: Hashable {
 enum GitPushSource {
     case branch(GitLocalBranch)
     case tag(GitTag)
+}
 
-    var branch: GitLocalBranch? {
-        if case .branch(let branch) = self { return branch }
-        return nil
-    }
+struct GitAmendDraft {
+    let commit: GitCommit
+    let branch: String?
+    let message: String
+    let changes: GitChangedFiles<GitCommitFile>
+    var files: [GitCommitFile] { changes.files }
 
-    var name: String {
-        switch self {
-        case .branch(let branch): branch.name
-        case .tag(let tag): tag.name
-        }
+    static func load(head: String, branch: String?, at root: String) async -> Self? {
+        async let originalMessage = GitRepositoryLoader.commitMessage(for: head, at: root)
+        guard let commit = await GitRepositoryLoader.history(at: root, ref: head, limit: 1).first,
+              !Task.isCancelled else { return nil }
+        let changes = await GitChangedFiles.load(in: commit, at: root)
+        guard let message = await originalMessage else { return nil }
+        return Self(commit: commit, branch: branch, message: message, changes: changes)
     }
 }
 
 /// Flows presented in their own sheets.
 enum GitSheet: Identifiable {
-    case commit
+    case commit(amend: GitAmendDraft? = nil)
+    case pull
     case push(GitPushSource)
     case createBranch(startPoint: String, label: String)
     case renameBranch(String)
@@ -57,10 +63,12 @@ enum GitSheet: Identifiable {
     case stash
     case addRemote
     case searchTags
+    case createPullRequest(GitPullRequestTarget)
 
     var id: String {
         switch self {
-        case .commit: "commit"
+        case .commit(let amend): amend == nil ? "commit" : "amend"
+        case .pull: "pull"
         case .push(.branch(let branch)): "push-branch-\(branch.name)"
         case .push(.tag(let tag)): "push-tag-\(tag.name)"
         case .createBranch(let start, _): "branch-\(start)"
@@ -71,6 +79,7 @@ enum GitSheet: Identifiable {
         case .stash: "stash"
         case .addRemote: "remote"
         case .searchTags: "search-tags"
+        case .createPullRequest(let target): "pull-request-\(target.repository)-\(target.branch)"
         }
     }
 }
@@ -98,6 +107,26 @@ enum GitConfirmation: Identifiable {
     }
 }
 
+struct GitHubCheckout: Equatable {
+    let repository: String
+    let branch: String?
+    /// Remote the GitHub repository was resolved from (e.g. `origin`).
+    var remote: String = "origin"
+    /// Branch `remote/HEAD` points at, used as the PR base.
+    var defaultBranch: String?
+}
+
+/// A pushed branch that has no pull request yet.
+struct GitPullRequestTarget: Equatable, Hashable {
+    /// `owner/repo` on GitHub.
+    let repository: String
+    /// Branch name on the remote (the PR head).
+    let branch: String
+    /// Branch the PR merges into; nil lets the server use the repo default.
+    let base: String?
+    let remote: String
+}
+
 /// Repository state for one Git workflow window: refs, the commit graph, and
 /// the operation currently running.
 @MainActor @Observable
@@ -106,6 +135,7 @@ final class GitWorkflowStore {
 
     let root: String
     private(set) var snapshot = GitRepositorySnapshot()
+    private(set) var gitHubCheckout: GitHubCheckout?
     private(set) var commits: [GitCommit] = []
     private(set) var rows: [GitGraphRow] = []
     private(set) var graphWidth = 1
@@ -123,6 +153,8 @@ final class GitWorkflowStore {
     var error: String?
     var sheet: GitSheet?
     var confirmation: GitConfirmation?
+    /// PR status for ``gitHubCheckout``'s branch, set by the window's lookup.
+    private(set) var pullRequestStatus: (checkout: GitHubCheckout, presence: BranchPullRequestPresence?)?
     @ObservationIgnored private var snapshotToken = UUID()
     @ObservationIgnored private var historyToken = UUID()
 
@@ -136,6 +168,31 @@ final class GitWorkflowStore {
     }
 
     var currentBranch: GitLocalBranch? { snapshot.currentLocalBranch }
+
+    /// PR status for the current checkout, or nil while unknown or stale.
+    var pullRequestPresence: BranchPullRequestPresence? {
+        guard let pullRequestStatus, pullRequestStatus.checkout == gitHubCheckout else { return nil }
+        return pullRequestStatus.presence
+    }
+
+    func setPullRequestPresence(_ presence: BranchPullRequestPresence?, for checkout: GitHubCheckout) {
+        pullRequestStatus = (checkout, presence)
+    }
+
+    /// The current branch when it has been pushed to GitHub but has no pull
+    /// request yet — the cue for the toolbar and sidebar "Create PR" prompts.
+    var pullRequestSuggestion: GitPullRequestTarget? {
+        guard let checkout = gitHubCheckout, let branch = checkout.branch,
+              let local = currentBranch, local.upstream != nil,
+              pullRequestPresence == .missing,
+              branch != checkout.defaultBranch else { return nil }
+        return GitPullRequestTarget(
+            repository: checkout.repository,
+            branch: branch,
+            base: checkout.defaultBranch,
+            remote: checkout.remote
+        )
+    }
 
     var defaultRemote: String? {
         snapshot.remotes.contains("origin") ? "origin" : snapshot.remotes.first
@@ -156,10 +213,42 @@ final class GitWorkflowStore {
         snapshotToken = token
         let newSnapshot = await GitRepositoryLoader.snapshot(at: root)
         guard token == snapshotToken, !Task.isCancelled else { return }
+        let newGitHubCheckout = await loadGitHubCheckout(in: newSnapshot)
+        guard token == snapshotToken, !Task.isCancelled else { return }
         if snapshot != newSnapshot {
             snapshot = newSnapshot
             headAncestors = ancestors(of: newSnapshot.headCommit, in: commits)
         }
+        if gitHubCheckout != newGitHubCheckout { gitHubCheckout = newGitHubCheckout }
+    }
+
+    private func loadGitHubCheckout(in snapshot: GitRepositorySnapshot) async -> GitHubCheckout? {
+        let branch = snapshot.currentLocalBranch
+        let preferredRemotes = [branch?.upstreamRemote, "origin"].compactMap { $0 }
+        var checked = Set<String>()
+        for remote in preferredRemotes + snapshot.remotes
+        where snapshot.remotes.contains(remote) && checked.insert(remote).inserted {
+            guard !Task.isCancelled else { return nil }
+            guard let url = await GitHelper.run(["remote", "get-url", "--", remote], at: root),
+                  let repository = parseGitHubOwnerRepo(from: url) else { continue }
+            let defaultBranch = await AppState.remoteDefaultBranch(remote: remote, at: root)
+            let branchPrefix = "refs/heads/"
+            if branch?.upstreamRemote == remote, let upstreamRef = branch?.upstreamRef, upstreamRef.hasPrefix(branchPrefix) {
+                return GitHubCheckout(
+                    repository: repository,
+                    branch: String(upstreamRef.dropFirst(branchPrefix.count)),
+                    remote: remote,
+                    defaultBranch: defaultBranch
+                )
+            }
+            return GitHubCheckout(
+                repository: repository,
+                branch: branch?.name ?? snapshot.currentBranch,
+                remote: remote,
+                defaultBranch: defaultBranch
+            )
+        }
+        return nil
     }
 
     func loadMore() async {

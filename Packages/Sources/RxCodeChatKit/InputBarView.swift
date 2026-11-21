@@ -348,7 +348,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
                 .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                 .lineLimit(1)
         }
-        .foregroundStyle(ClaudeTheme.accent)
+        .foregroundStyle(ClaudeTheme.accentText)
         .padding(.horizontal, 9)
         .frame(height: 26)
         .background(ClaudeTheme.accentSubtle, in: Capsule())

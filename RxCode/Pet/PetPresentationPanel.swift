@@ -1,4 +1,5 @@
 import AppKit
+import RxCodeCore
 import SwiftUI
 
 /// A persistent, pet-owned dialog. Transient popovers close when their anchor window moves.
@@ -9,7 +10,7 @@ struct PetPresentationPanel<Content: View>: NSViewRepresentable {
     func makeNSView(context: Context) -> PetPresentationAnchorView { PetPresentationAnchorView() }
 
     func updateNSView(_ view: PetPresentationAnchorView, context: Context) {
-        view.update(id: id, content: AnyView(content().id(id)))
+        view.update(id: id, content: AnyView(content().id(id).appThemeForeground()))
     }
 
     static func dismantleNSView(_ view: PetPresentationAnchorView, coordinator: ()) {

@@ -298,7 +298,7 @@ struct TaskFormSheet: View {
                                 Text("Previously assigned Mac").tag(Optional(id))
                             }
                         }
-                        if let cloudDeviceError { Text(cloudDeviceError).foregroundStyle(.red) }
+                        if let cloudDeviceError { Text(cloudDeviceError).foregroundStyle(ClaudeTheme.statusError) }
                     }
                     .task {
                         do { cloudDevices = try await appState.projectCloud.listDevices() }

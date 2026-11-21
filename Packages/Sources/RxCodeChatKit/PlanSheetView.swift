@@ -343,7 +343,7 @@ public struct PlanSheetView: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: fullWidth ? .infinity : nil)
-            .foregroundStyle(style == .primary ? Color.white : ClaudeTheme.textPrimary)
+            .foregroundStyle(style == .primary ? ClaudeTheme.textOnAccent : ClaudeTheme.textPrimary)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(

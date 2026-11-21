@@ -84,7 +84,7 @@ struct BriefingMarkdownView: View {
                 .font(monospaced
                       ? .system(size: fontSize, weight: .semibold).monospacedDigit()
                       : .system(size: fontSize, weight: .semibold))
-                .foregroundStyle(ClaudeTheme.accent)
+                .foregroundStyle(ClaudeTheme.accentText)
                 .frame(minWidth: 14, alignment: .leading)
             Text(Self.inline(content))
                 .font(.system(size: fontSize))

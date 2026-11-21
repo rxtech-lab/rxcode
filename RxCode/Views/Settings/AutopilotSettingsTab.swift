@@ -316,7 +316,7 @@ struct AutopilotSettingsTab: View {
             }
 
             if let secretsError {
-                Text(secretsError).foregroundStyle(.red).font(.system(size: ClaudeTheme.size(11)))
+                Text(secretsError).foregroundStyle(ClaudeTheme.statusError).font(.system(size: ClaudeTheme.size(11)))
             }
         }
     }

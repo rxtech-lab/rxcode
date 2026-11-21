@@ -136,7 +136,7 @@ struct AutopilotRepoListView: View {
                     .controlSize(.small)
             } else if isAlreadyAdded(repo) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
                     .font(.caption)
             } else {
                 Button {

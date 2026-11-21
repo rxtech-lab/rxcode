@@ -1,6 +1,7 @@
 #if os(macOS)
 import AgentMarkdownUI
 import AppKit
+import RxCodeCore
 import SwiftUI
 
 /// AppKit uses one text storage for the entire document, so a selection can
@@ -321,7 +322,9 @@ private final class MarkdownTextDocument {
         paragraph.textBlocks = [blockCell(table: table, row: 1, column: 0, background: style.codeBackground, padding: 12)]
         let size = style.bodyFontSize * 0.88
         if let language, !language.isEmpty, !code.isEmpty {
-            let highlighted = NSMutableAttributedString(attributedString: SyntaxHighlighter.highlightNS(code, language: language, fontSize: size))
+            let highlighted = NSMutableAttributedString(attributedString: SyntaxHighlighter.highlightNS(
+                code, language: language, fontSize: size, colors: ThemeStore.shared.colors
+            ))
             highlighted.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: highlighted.length))
             content.append(highlighted)
         } else {

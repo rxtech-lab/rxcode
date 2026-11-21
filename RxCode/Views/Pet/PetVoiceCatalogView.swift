@@ -196,7 +196,7 @@ struct PetVoiceCatalogView: View {
             if installed {
                 Label("Installed", systemImage: "checkmark.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
             }
             Image(systemName: "chevron.right")
                 .font(.caption)

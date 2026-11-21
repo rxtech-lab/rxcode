@@ -171,7 +171,7 @@ struct TaskStoriesPanel: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(ClaudeTheme.accent)
+                        .foregroundStyle(ClaudeTheme.accentText)
                         .padding(.vertical, 8)
                         .accessibilityIdentifier("task-stories-panel-show-more")
                     }

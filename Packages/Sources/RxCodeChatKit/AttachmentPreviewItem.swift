@@ -38,7 +38,8 @@ struct AttachmentPreviewItem: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: ClaudeTheme.size(16)))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .background(ClaudeTheme.surfacePrimary, in: Circle())
                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
                         .frame(width: 24, height: 24)
                         .contentShape(Circle())
@@ -94,12 +95,13 @@ struct AttachmentPreviewItem: View {
 
             Text(attachment.name)
                 .font(.system(size: ClaudeTheme.size(10)))
-                .foregroundStyle(.white)
+                .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity)
-                .background(.black.opacity(0.5))
+                .background(.black.opacity(0.86))
+                .environment(\.colorScheme, .dark)
         }
         .task(id: attachment.id) {
             renderedImage = makeCGImage()

@@ -1,3 +1,4 @@
+import RxCodeCore
 import SwiftUI
 
 extension PetSettingsView {
@@ -43,10 +44,10 @@ struct SettingsToolbarTabButton: View {
                     .font(.system(size: 20, weight: .regular))
                     .symbolVariant(isSelected ? .fill : .none)
                     .frame(height: 24)
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                 Text(title)
                     .font(.system(size: 11))
-                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .foregroundStyle(isSelected ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }

@@ -9,6 +9,11 @@
             "isEnabled" : true,
             "key" : "RXCODE_LOCAL_MCP_SERVER",
             "value" : "$(SRCROOT)/scripts/mcp_echo_server.py"
+          },
+          {
+            "isEnabled" : true,
+            "key" : "RXCODE_TEST_GIT",
+            "value" : "$(DEVELOPER_DIR)/usr/bin/git"
           }
         ]
       }

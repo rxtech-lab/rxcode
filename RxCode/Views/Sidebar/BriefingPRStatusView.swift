@@ -140,7 +140,7 @@ struct BriefingPRStatusView: View {
                         .font(.system(size: 8, weight: .bold))
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ClaudeTheme.textOnAccent)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(Capsule(style: .continuous).fill(ClaudeTheme.accent))

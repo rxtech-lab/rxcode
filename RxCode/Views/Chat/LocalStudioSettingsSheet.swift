@@ -103,13 +103,13 @@ struct LocalStudioSettingsSheet: View {
                 let problem = model.flatMap { engine.incompatibility(with: $0) }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: engine == resolved ? "checkmark.circle.fill" : engine.runtime.systemImage)
-                        .foregroundStyle(engine == resolved ? Color.accentColor : .secondary)
+                        .foregroundStyle(engine == resolved ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                         .frame(width: 18)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(engine.title).font(.callout.weight(.medium))
                         Text(engine.summary).font(.caption).foregroundStyle(.secondary)
                         if let problem {
-                            Text(problem).font(.caption).foregroundStyle(.orange)
+                            Text(problem).font(.caption).foregroundStyle(ClaudeTheme.statusWarning)
                         }
                     }
                 }

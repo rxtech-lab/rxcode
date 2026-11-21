@@ -4,17 +4,27 @@ import Foundation
 /// Supports HTTPS and SSH formats.
 /// Returns nil for non-GitHub URLs.
 public func parseGitHubOwnerRepo(from urlString: String) -> String? {
-    guard urlString.contains("github.com") else { return nil }
-    let cleaned = urlString
-        .replacingOccurrences(of: "https://github.com/", with: "")
-        .replacingOccurrences(of: "http://github.com/", with: "")
-        .replacingOccurrences(of: "git@github.com:", with: "")
-        .replacingOccurrences(of: ".git", with: "")
-        .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    let remote = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+    let sshPrefix = "git@github.com:"
+    let path: String
+    if remote.lowercased().hasPrefix(sshPrefix) {
+        path = String(remote.dropFirst(sshPrefix.count))
+    } else {
+        guard let url = URLComponents(string: remote), let scheme = url.scheme?.lowercased(),
+              ["https", "http", "ssh", "git"].contains(scheme),
+              let host = url.host?.lowercased(), host == "github.com" || (scheme == "ssh" && host == "ssh.github.com")
+        else { return nil }
+        path = url.path
+    }
 
-    let parts = cleaned.split(separator: "/")
-    guard parts.count >= 2 else { return nil }
-    return "\(parts[0])/\(parts[1])"
+    let parts = path.split(separator: "/")
+    guard parts.count == 2 else { return nil }
+    let repo = parts[1].hasSuffix(".git") ? parts[1].dropLast(4) : parts[1]
+    let invalidCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.").inverted
+    guard [parts[0], repo].allSatisfy({
+        !$0.isEmpty && $0 != "." && $0 != ".." && $0.rangeOfCharacter(from: invalidCharacters) == nil
+    }) else { return nil }
+    return "\(parts[0])/\(repo)"
 }
 
 public func gitHubWebURL(forOwnerRepo ownerRepo: String) -> URL? {

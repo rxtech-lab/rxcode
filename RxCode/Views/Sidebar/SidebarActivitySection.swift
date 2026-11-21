@@ -85,7 +85,7 @@ struct SidebarActivitySection: View {
                                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
                                 Text(runs.count, format: .number)
                                     .font(.caption.weight(.semibold).monospacedDigit())
-                                    .foregroundStyle(ClaudeTheme.accent)
+                                    .foregroundStyle(ClaudeTheme.accentText)
                                     .padding(.horizontal, 6)
                                     .background(ClaudeTheme.accentSubtle, in: Capsule())
                             }

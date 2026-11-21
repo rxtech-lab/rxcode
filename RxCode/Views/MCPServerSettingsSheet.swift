@@ -130,10 +130,10 @@ struct MCPServerSettingsSheet: View {
     private var serverStatus: some View {
         if let error = appState.memoryMCPServerError {
             Label(error, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(ClaudeTheme.statusError)
         } else if appState.memoryMCPServerRunning {
             Label("Running", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(ClaudeTheme.statusSuccess)
         } else {
             Label("Server stopped", systemImage: "circle")
                 .foregroundStyle(.secondary)

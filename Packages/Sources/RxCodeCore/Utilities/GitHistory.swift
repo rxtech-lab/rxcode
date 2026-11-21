@@ -70,15 +70,59 @@ public struct GitCommitFile: Identifiable, Hashable, Sendable {
     public let status: Character
     public let path: String
     public let originalPath: String?
+    public let lineChanges: GitLineChanges?
 
-    public init(status: Character, path: String, originalPath: String? = nil) {
+    public init(status: Character, path: String, originalPath: String? = nil, lineChanges: GitLineChanges? = nil) {
         self.status = status
         self.path = path
         self.originalPath = originalPath
+        self.lineChanges = lineChanges
     }
 
     public var name: String { (path as NSString).lastPathComponent }
     public var parentDirectory: String { (path as NSString).deletingLastPathComponent }
+}
+
+public enum GitLineChanges: Hashable, Sendable {
+    case text(added: Int, deleted: Int)
+    case binary
+
+    /// With -z, Git emits the old and new rename paths as two extra NUL-delimited fields.
+    public static func parseNumstat(_ raw: String) -> [String: Self] {
+        var records = raw.split(separator: "\0").makeIterator()
+        var result: [String: Self] = [:]
+        while let record = records.next() {
+            let fields = record.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard fields.count == 3 else { continue }
+            let path: Substring
+            if fields[2].isEmpty {
+                guard records.next() != nil, let newPath = records.next() else { break }
+                path = newPath
+            } else {
+                path = fields[2]
+            }
+            if fields[0] == "-", fields[1] == "-" {
+                result[String(path)] = .binary
+            } else if let added = Int(fields[0]), let deleted = Int(fields[1]) {
+                result[String(path)] = .text(added: added, deleted: deleted)
+            }
+        }
+        return result
+    }
+}
+
+public enum GitBranchOrder {
+    /// Pin the two conventional primary branches, retaining the caller's order within each group.
+    public static func primaryFirst<Branch>(_ branches: [Branch], by name: KeyPath<Branch, String>) -> [Branch] {
+        func priority(_ branch: Branch) -> Int {
+            switch branch[keyPath: name] {
+            case "main": 0
+            case "master": 1
+            default: 2
+            }
+        }
+        return branches.sorted { priority($0) < priority($1) }
+    }
 }
 
 public struct GitLocalBranch: Identifiable, Hashable, Sendable {
@@ -252,7 +296,7 @@ public enum GitHistoryParser {
     }
 
     /// Parses `git diff-tree -r --name-status -z` output.
-    public static func parseNameStatus(_ raw: String) -> [GitCommitFile] {
+    public static func parseNameStatus(_ raw: String, lineChanges: [String: GitLineChanges] = [:]) -> [GitCommitFile] {
         let tokens = raw.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
         var files: [GitCommitFile] = []
         var index = 0
@@ -262,10 +306,12 @@ public enum GitHistoryParser {
             guard let code = status.first, index < tokens.count else { break }
             if code == "R" || code == "C" {
                 guard index + 1 < tokens.count else { break }
-                files.append(GitCommitFile(status: code, path: tokens[index + 1], originalPath: tokens[index]))
+                let path = tokens[index + 1]
+                files.append(GitCommitFile(status: code, path: path, originalPath: tokens[index], lineChanges: lineChanges[path]))
                 index += 2
             } else {
-                files.append(GitCommitFile(status: code, path: tokens[index]))
+                let path = tokens[index]
+                files.append(GitCommitFile(status: code, path: path, lineChanges: lineChanges[path]))
                 index += 1
             }
         }

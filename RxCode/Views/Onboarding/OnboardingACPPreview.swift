@@ -14,7 +14,7 @@ struct ACPSetupPreview: View {
                     .foregroundStyle(ClaudeTheme.accent)
                 Text("ACP Clients")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
                 if appState.acpRegistryLoading {
                     ProgressView().controlSize(.small)
@@ -23,7 +23,7 @@ struct ACPSetupPreview: View {
                         Task { await appState.refreshACPRegistry(forceRefresh: true) }
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
                     }
                     .buttonStyle(.plain)
                     .help(LocalizedStringKey("Refresh registry"))
@@ -32,7 +32,7 @@ struct ACPSetupPreview: View {
 
             Text("Install additional ACP-compatible agents — RxCode downloads the right binary for macOS and probes the model list.")
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ClaudeTheme.textSecondary)
 
             ScrollView {
                 VStack(spacing: 8) {
@@ -43,11 +43,11 @@ struct ACPSetupPreview: View {
                     } else if appState.acpRegistryLoading {
                         Text("Loading registry…")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.54))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                     } else {
                         Text("Could not load registry. Check your network connection.")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.54))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                     }
                 }
             }
@@ -64,11 +64,11 @@ struct ACPSetupPreview: View {
         .frame(maxWidth: 620)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.34))
+                .fill(ClaudeTheme.codeBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
         .task {
             if appState.acpRegistry == nil && !appState.acpRegistryLoading {
@@ -85,14 +85,14 @@ struct ACPSetupPreview: View {
                 HStack(spacing: 6) {
                     Text(verbatim: agent.name)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                     Text(verbatim: "v\(agent.version)")
                         .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 Text(verbatim: agent.description)
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
@@ -110,8 +110,8 @@ struct ACPSetupPreview: View {
                         Text("Add")
                             .font(.system(size: 11, weight: .semibold))
                             .frame(width: 56, height: 24)
-                            .foregroundStyle(.white)
-                            .background(ClaudeTheme.accent.opacity(0.85), in: Capsule())
+                            .foregroundStyle(ClaudeTheme.textOnAccent)
+                            .background(ClaudeTheme.accent, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(installingAgentId != nil)
@@ -119,7 +119,7 @@ struct ACPSetupPreview: View {
             }
         }
         .padding(10)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func install(_ agent: ACPRegistryAgent) {

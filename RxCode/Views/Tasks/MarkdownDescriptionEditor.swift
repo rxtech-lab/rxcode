@@ -156,7 +156,7 @@ struct MarkdownDescriptionEditor: View {
                 .overlay {
                     Label("Drop to attach", systemImage: "paperclip")
                         .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.accent)
+                        .foregroundStyle(ClaudeTheme.accentText)
                 }
                 .allowsHitTesting(false)
         }

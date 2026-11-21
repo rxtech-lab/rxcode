@@ -70,7 +70,7 @@ struct BriefingShowMoreButton: View {
                 .font(.system(size: 11, weight: .semibold))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(ClaudeTheme.accent)
+        .foregroundStyle(ClaudeTheme.accentText)
         .accessibilityIdentifier("briefing-show-more-button")
     }
 }

@@ -140,7 +140,7 @@ public struct ShellDetectedChangesView: View {
                             } label: {
                                 Text("Open")
                                     .font(.system(size: ClaudeTheme.messageSize(11)))
-                                    .foregroundStyle(ClaudeTheme.accent)
+                                    .foregroundStyle(ClaudeTheme.accentText)
                                     .underline()
                             }
                             .buttonStyle(.plain)

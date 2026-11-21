@@ -52,9 +52,9 @@ private struct ExtensionActionButton: View {
                     if !action.badgeText.isEmpty {
                         Text(action.badgeText)
                             .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(ClaudeTheme.foreground(on: ClaudeTheme.statusError))
                             .padding(.horizontal, 3)
-                            .background(.red, in: .capsule)
+                            .background(ClaudeTheme.statusError, in: .capsule)
                             .fixedSize()
                     }
                 }
@@ -111,10 +111,10 @@ struct ExtensionStatusOverlay: View {
                     ProgressView().controlSize(.small)
                     Text(message)
                 case .finished(let message):
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(ClaudeTheme.statusSuccess)
                     Text(message)
                 case .failed(let message):
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(ClaudeTheme.statusWarning)
                     Text(message).lineLimit(6)
                     Button("Dismiss") { manager.status = nil }
                         .buttonStyle(.borderless)
@@ -234,7 +234,7 @@ private struct ExtensionRow: View {
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(ClaudeTheme.statusWarning)
                         .lineLimit(4)
                 }
             }

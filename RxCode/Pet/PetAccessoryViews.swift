@@ -242,7 +242,7 @@ struct PetMusicPlayerView: View {
                 .clipped()
                 .padding(.top, isVolumeExpanded ? 6 : 0)
             if let error = music.errorMessage {
-                Text(error).font(.caption2).foregroundStyle(.red).lineLimit(3).help(error)
+                Text(error).font(.caption2).foregroundStyle(ClaudeTheme.statusError).lineLimit(3).help(error)
                     .padding(.top, 6)
             }
         }
@@ -273,7 +273,7 @@ struct PetMusicPlayerView: View {
         }
         .overlay(alignment: .top) {
             if let error = music.volumeError {
-                Text(error).font(.caption2).foregroundStyle(.red)
+                Text(error).font(.caption2).foregroundStyle(ClaudeTheme.statusError)
                     .padding(6).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
                     .offset(y: -34).allowsHitTesting(false)
             }

@@ -109,7 +109,7 @@ struct GitFolderContents: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .padding(10)
-            Divider()
+            ClaudeThemeDivider()
             List(tree.filePaths(in: [folder]), id: \.self) { path in
                 Button {
                     selectFile(path)

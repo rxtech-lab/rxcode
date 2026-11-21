@@ -1,6 +1,50 @@
+import Foundation
 import RxCodeCore
 
 extension AppState {
+    func projectID(forPromptSession sessionKey: String) -> UUID? {
+        let sessionID = resolveCurrentSessionId(sessionKey)
+        return allSessionSummaries.first { resolveCurrentSessionId($0.id) == sessionID }?.projectId
+            ?? registeredWindows().first {
+                resolveCurrentSessionId($0.currentSessionId ?? $0.newSessionKey) == sessionID
+            }?.selectedProject?.id
+    }
+
+    func queuePermissionRequest(_ request: PermissionRequest) {
+        mobilePendingRequests[request.id] = request
+        let sessionID = request.sessionId.map(resolveCurrentSessionId)
+        let isQuestion = request.toolName == "AskUserQuestion"
+        for window in registeredWindows() {
+            window.pendingPermissions.removeAll { $0.id == request.id }
+            window.pendingPermissions.append(request)
+            if isQuestion, window.presentedPermissionId == nil,
+               let sessionID, sessionID == window.currentSessionId {
+                window.presentedPermissionId = request.id
+            }
+        }
+
+        if let sessionID { broadcastMobileSessionStatus(sessionID: sessionID) }
+        if isQuestion {
+            broadcastMobileQuestionQueue()
+        } else if ComputerUsePresentation.recognizes(request.toolName) {
+            broadcastMobileConfirmationQueue()
+        }
+        let projectID = sessionID.flatMap(self.projectID(forPromptSession:))
+        let projectName = projectID.flatMap { sessionProject(id: $0)?.name }
+        Task {
+            if isQuestion {
+                await hookManager.dispatchQuestionAsk(QuestionAskPayload(
+                    toolUseId: request.id, sessionId: sessionID, projectId: projectID, projectName: projectName
+                ))
+            } else {
+                await hookManager.dispatchPermissionAsk(PermissionAskPayload(
+                    toolUseId: request.id, toolName: request.toolName, sessionId: sessionID,
+                    projectId: projectID, projectName: projectName
+                ))
+            }
+        }
+    }
+
     /// Sets the permission mode for the current session and persists it in the session state.
     /// If there's a live CLI session for this window, re-register with the PermissionServer so
     /// the new mode takes effect for the next tool call without restarting the stream.

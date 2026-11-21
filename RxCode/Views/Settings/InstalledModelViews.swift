@@ -105,7 +105,7 @@ struct InstalledModelDetailView: View {
                 .labelsHidden()
                 .fixedSize()
                 .padding(.vertical, 10)
-                Divider()
+                ClaudeThemeDivider()
             }
             .frame(maxWidth: .infinity)
             .background(.bar)

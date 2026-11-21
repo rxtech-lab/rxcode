@@ -91,13 +91,13 @@ public struct PlanSheetView: View {
     public var body: some View {
         VStack(spacing: 0) {
             topBar
-            Divider()
+            ClaudeThemeDivider()
             ScrollView(.vertical) {
                 planBody
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(20)
             }
-            Divider()
+            ClaudeThemeDivider()
             footer
         }
         #if os(macOS)

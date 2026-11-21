@@ -29,7 +29,7 @@ struct BriefingDocumentCard: View {
                 actionsMenu
             }
 
-            Divider().opacity(0.4)
+            ClaudeThemeDivider()
             preview
         }
         .padding(16)
@@ -236,17 +236,17 @@ struct BriefingDocumentSheet: View {
             }
             .padding(24)
 
-            Divider()
+            ClaudeThemeDivider()
 
             contentView
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if !assets.isEmpty {
-                Divider()
+                ClaudeThemeDivider()
                 assetList
             }
 
-            Divider()
+            ClaudeThemeDivider()
             HStack {
                 Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([appState.briefingStore.folderURL(for: document.id)])

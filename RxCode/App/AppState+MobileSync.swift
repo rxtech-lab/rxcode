@@ -14,6 +14,7 @@ extension AppState {
     func bindMobileSyncOwnership() {
         guard mobileSyncObservers.isEmpty else { return }
         setupMobileSyncBridge()
+        broadcastMobileConfirmationQueue()
 
         // Supply MobileSyncService with desktop-side context for the mobile
         // job Live Activity and home-screen widget pushes.
@@ -369,7 +370,7 @@ extension AppState {
                   let id = UUID(uuidString: payload.id)
             else { return }
             Task { @MainActor [weak self] in
-                self?.resolveAgentConfirmation(id: id, confirmed: payload.confirmed)
+                await self?.handleMobileConfirmationDecision(id: id, confirmed: payload.confirmed)
             }
         }
         mobileSyncObservers.append(confirmationDecisionObserver)
@@ -501,6 +502,18 @@ extension AppState {
         mobileSyncObservers.append(taskBoardObserver)
 
         observeMobileSnapshotInputs()
+    }
+
+    func handleMobileConfirmationDecision(id: UUID, confirmed: Bool) async {
+        if let request = mobilePendingRequests.values.first(where: { $0.promptID == id }),
+           request.sessionId != nil, ComputerUsePresentation.recognizes(request.toolName) {
+            await respondToPermission(request, decision: confirmed ? .allowSessionTool : .deny)
+        } else if agentPrompts.confirmations.contains(where: { $0.id == id }) {
+            resolveAgentConfirmation(id: id, confirmed: confirmed)
+        } else {
+            // A device retrying after a lost retraction needs the current queue.
+            broadcastMobileConfirmationQueue()
+        }
     }
 
     func observeMobileSnapshotInputs() {

@@ -76,7 +76,7 @@ struct WorkspaceBrowserView: View {
             .padding(.trailing, 10)
             .padding(.vertical, 5)
             .background(ClaudeTheme.surfaceSecondary.opacity(0.5))
-            Divider()
+            ClaudeThemeDivider()
             if let tab = browser.selectedTab {
                 BrowserPageView(tab: tab, isFocused: isFocused)
                     .id(tab.id)
@@ -231,7 +231,7 @@ private struct BrowserPageView: View {
             .buttonStyle(.borderless)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            Divider()
+            ClaudeThemeDivider()
             ZStack(alignment: .top) {
                 BrowserWebView(webView: tab.webView)
                     .previewSelectionComments(for: designing || tab.webView.isLoading || tab.failure != nil ? nil : tab.address,

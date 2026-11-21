@@ -332,8 +332,7 @@ final class MobileAppState: ObservableObject {
     /// answer, across all sessions. Mirrored from the desktop's queue; the chat
     /// view filters it by session to drive the question banner and sheet.
     @Published var pendingQuestions: [PendingQuestionPayload] = []
-    /// Every `ide__show_confirmation` prompt the desktop currently has awaiting
-    /// a decision, across all sessions. The chat view filters it by session.
+    /// IDE and computer-use prompts awaiting a decision, across all sessions.
     @Published var pendingConfirmations: [PendingConfirmationPayload] = []
 
     @Published var searchQuery: String = ""

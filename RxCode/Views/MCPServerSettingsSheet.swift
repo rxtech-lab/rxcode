@@ -45,7 +45,7 @@ struct MCPServerSettingsSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Tools to Expose")
@@ -72,7 +72,7 @@ struct MCPServerSettingsSheet: View {
                 }
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {

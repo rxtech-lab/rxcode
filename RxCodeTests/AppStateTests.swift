@@ -234,6 +234,22 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.isAgentRunning(for: task))
     }
 
+    func testSidebarLinkedTaskLookupPerformance() {
+        let projectID = UUID()
+        let tasks = (0..<270).map { index in
+            ProjectTask(projectId: projectID, title: "Task \(index)", sessionKey: "session-\(index)")
+        }
+        appState.taskBoards[projectID] = TaskBoard(tasks: tasks)
+        let visibleSessions = ["session-269", "session-120", "a", "b", "c", "d"]
+        measure {
+            for _ in 0..<50 {
+                for session in visibleSessions {
+                    _ = appState.linkedTask(forSessionId: session, projectId: projectID)
+                }
+            }
+        }
+    }
+
     func testLinkedTaskFindsRenamedThreadOnlyInItsProject() {
         let project = makeProject("Chat")
         let otherProject = makeProject("Other")

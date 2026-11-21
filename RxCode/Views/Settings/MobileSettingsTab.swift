@@ -24,7 +24,7 @@ struct MobileSettingsTab: View {
                 headerSection
                 relaySection
                 directConnectionsSection
-                Divider()
+                ClaudeThemeDivider()
                 pairedSection
             }
             .padding(20)

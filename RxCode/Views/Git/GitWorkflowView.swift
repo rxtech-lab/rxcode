@@ -7,46 +7,132 @@ import SwiftUI
 struct GitWindowValue: Codable, Hashable {
     let path: String
     var workspaceID: String?
+    var projectID: UUID?
 }
 
 struct GitWindowRoot: View {
     let workspaceManager: WorkspaceManager
-    let workspaceID: String
-    let path: String
+    @Binding var value: GitWindowValue
+    @State private var openingCheckout: GitWindowValue
     @State private var windowState = WindowState()
-    @State private var repository = RepositoryStatus(includeFileTrees: true)
+
+    init(workspaceManager: WorkspaceManager, value: Binding<GitWindowValue>) {
+        self.workspaceManager = workspaceManager
+        _value = value
+        _openingCheckout = State(initialValue: value.wrappedValue)
+    }
+
+    var body: some View {
+        let workspaceID = value.workspaceID ?? workspaceManager.frontmostWorkspaceID
+        let projectPicker = GitProjectPicker(checkout: $value, openingCheckout: openingCheckout)
+        GitCheckoutView(path: value.path, projectPicker: projectPicker)
+            .id(value.path)
+            .environment(workspaceManager.appState(for: workspaceID))
+            .environment(windowState)
+            .frame(minWidth: 900, minHeight: 560)
+    }
+}
+
+private struct GitCheckoutView: View {
+    let path: String
+    let projectPicker: GitProjectPicker
     @State private var root: String?
     @State private var resolved = false
-
-    private var appState: AppState { workspaceManager.appState(for: workspaceID) }
 
     var body: some View {
         Group {
             if let root {
-                GitWorkflowView(root: root)
-                    .environment(repository)
-                    .task(id: root) { await repository.observe(root) }
-            } else if resolved {
-                ContentUnavailableView("No Git repository", systemImage: "arrow.triangle.branch",
-                                       description: Text(path))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                GitWorkflowView(root: root, projectPicker: projectPicker)
             } else {
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+                Group {
+                    if resolved {
+                        ContentUnavailableView("No Git repository", systemImage: "arrow.triangle.branch",
+                                               description: Text(path))
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle(URL(fileURLWithPath: path).lastPathComponent)
+                .toolbar(removing: .title)
+                .toolbar { projectPicker }
             }
         }
-        .environment(appState)
-        .environment(windowState)
-        .frame(minWidth: 900, minHeight: 560)
-        .task(id: path) {
-            let top = await GitHelper.run(["rev-parse", "--show-toplevel"], at: path)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            root = top?.isEmpty == false ? top : nil
+        .task {
+            let top = await RepositoryState.gitPath(["--show-toplevel"], at: path)
+            guard !Task.isCancelled else { return }
+            root = top
             resolved = true
         }
     }
 }
 
-struct GitWorkflowView: View {
+private struct GitProjectPicker: ToolbarContent {
+    @Binding var checkout: GitWindowValue
+    let openingCheckout: GitWindowValue
+    var branch = ""
+    @Environment(AppState.self) private var appState
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            picker
+                .fixedSize()
+        }
+        if !branch.isEmpty {
+            ToolbarItem(placement: .navigation) {
+                Label(branch, systemImage: "arrow.triangle.branch")
+                    .labelStyle(.titleAndIcon)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 240, alignment: .leading)
+                    .padding(.horizontal, 4)
+                    .help(branch)
+                    .accessibilityIdentifier("git-current-branch")
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
+    }
+
+    private var picker: some View {
+        let projects = appState.projects.filter { !$0.isGlobalChat && !$0.path.isEmpty }
+        let workspaceID = appState.activeWorkspace.id
+        let original = GitWindowValue(path: openingCheckout.path, workspaceID: workspaceID, projectID: openingCheckout.projectID)
+        let current = GitWindowValue(path: checkout.path, workspaceID: workspaceID, projectID: checkout.projectID)
+        var options = projects.map { GitWindowValue(path: $0.path, workspaceID: workspaceID, projectID: $0.id) }
+        let selected = options.first {
+            $0.path == current.path && (current.projectID == nil || $0.projectID == current.projectID)
+        } ?? current
+        if !options.contains(where: { $0.path == original.path }) {
+            options.append(original)
+        }
+        if !options.contains(selected) {
+            options.append(selected)
+        }
+
+        return Picker("Project", selection: Binding(get: { selected }, set: { checkout = $0 })) {
+            ForEach(options, id: \.self) { option in
+                Text(title(for: option, projects: projects)).tag(option)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .accessibilityIdentifier("git-project-picker")
+    }
+
+    private func title(for checkout: GitWindowValue, projects: [Project]) -> String {
+        guard let project = projects.first(where: { $0.id == checkout.projectID && $0.path == checkout.path }) else {
+            return URL(fileURLWithPath: checkout.path).lastPathComponent
+        }
+        guard projects.contains(where: { $0.id != project.id && $0.name == project.name }) else {
+            return project.name
+        }
+        return "\(project.name) (\((project.path as NSString).abbreviatingWithTildeInPath))"
+    }
+}
+
+private struct GitWorkflowView: View {
     private struct PullRequestLookup: Equatable {
         let checkout: GitHubCheckout
         let accountID: String
@@ -57,12 +143,14 @@ struct GitWorkflowView: View {
     @State private var commitTab: GitCommitDetailTab = .changes
     @State private var pullRequestRefreshCount = 0
     @State private var showsPullRequestTip = false
+    @State private var repository = RepositoryStatus(includeFileTrees: true)
     @Environment(AppState.self) private var appState
-    @Environment(RepositoryStatus.self) private var repository
     @Environment(\.openURL) private var openURL
+    private let projectPicker: GitProjectPicker
 
-    init(root: String) {
+    init(root: String, projectPicker: GitProjectPicker) {
         _store = State(initialValue: GitWorkflowStore(root: root))
+        self.projectPicker = projectPicker
     }
 
     var body: some View {
@@ -70,12 +158,14 @@ struct GitWorkflowView: View {
             GitWorkflowSidebar(store: store)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } detail: {
+            // Attach the toolbar to the detail column (as the main window does) so the
+            // flexible spacer pushes the action items to the trailing edge.
             workspacePane
+                .toolbar { toolbar }
         }
         .navigationSplitViewStyle(.balanced)
         .navigationTitle((store.root as NSString).lastPathComponent)
-        .navigationSubtitle(store.snapshot.currentBranch ?? store.snapshot.headCommit.map { String(localized: "Detached at \(String($0.prefix(7)))") } ?? "")
-        .toolbar { toolbar }
+        .toolbar(removing: .title)
         .safeAreaInset(edge: .top, spacing: 0) {
             if let pending = store.snapshot.pendingOperation {
                 GitPendingOperationBanner(operation: pending, store: store)
@@ -83,9 +173,11 @@ struct GitWorkflowView: View {
         }
         .disabled(store.operation != nil)
         .overlay { GitOperationOverlay(operation: store.operation) }
+        .task { await repository.observe(store.root) }
         .task(id: store.selection) { await store.reloadHistory() }
         .onChange(of: repository.state) { Task { await store.reload() } }
         .task { await store.reload() }
+        .task(id: store.snapshot.remotes) { await store.fetchRemotesPeriodically() }
         .task(id: pullRequestLookup) {
             guard let lookup = pullRequestLookup, let branch = lookup.checkout.branch else {
                 // Signed out or no branch: forget any earlier result so no stale prompt lingers.
@@ -114,6 +206,7 @@ struct GitWorkflowView: View {
         .alert("Git operation failed", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
         } message: { Text(store.error ?? "") }
+        .environment(repository)
     }
 
     // MARK: Workspace
@@ -164,9 +257,12 @@ struct GitWorkflowView: View {
     // MARK: Toolbar
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        projectToolbar
+        ToolbarSpacer(.flexible, placement: .primaryAction)
+
         ToolbarItem(placement: .primaryAction) {
             Button("Fetch", systemImage: "arrow.triangle.2.circlepath") {
-                store.perform("Fetching…") { await GitWorkflow.fetch(at: store.root) }
+                store.perform("Fetching…") { await store.fetchRemotes() }
             }
             .help("Fetch all remotes")
             .disabled(store.snapshot.remotes.isEmpty)
@@ -262,6 +358,14 @@ struct GitWorkflowView: View {
         }
     }
 
+    private var projectToolbar: GitProjectPicker {
+        var picker = projectPicker
+        picker.branch = store.snapshot.currentBranch
+            ?? store.snapshot.headCommit.map { String(localized: "Detached at \(String($0.prefix(7)))") }
+            ?? ""
+        return picker
+    }
+
     private var pullHelp: String {
         guard let branch = store.currentBranch, let upstream = branch.upstream else {
             return String(localized: "The current branch has no upstream")
@@ -309,6 +413,8 @@ struct GitWorkflowView: View {
             GitCreateBranchSheet(store: store, startPoint: start, label: label)
         case .renameBranch(let name):
             GitRenameBranchSheet(store: store, branch: name)
+        case .deleteBranch(let branch):
+            GitDeleteBranchSheet(store: store, branch: branch)
         case .createTag(let commit):
             GitCreateTagSheet(store: store, commit: commit)
         case .reword(let commit):
@@ -333,7 +439,6 @@ struct GitWorkflowView: View {
         switch confirmation {
         case .reset(_, let mode):
             return String(localized: "Reset \(store.snapshot.currentBranch ?? "HEAD") (\(mode.rawValue))?")
-        case .deleteBranch(let name): return String(localized: "Delete branch “\(name)”?")
         case .deleteRemoteBranch(let branch): return String(localized: "Delete “\(branch.refName)” from the remote?")
         case .deleteTag(let name): return String(localized: "Delete tag “\(name)”?")
         case .dropStash(let stash): return String(localized: "Drop \(stash.selector)?")
@@ -345,7 +450,7 @@ struct GitWorkflowView: View {
     private func confirmationButton(_ confirmation: GitConfirmation) -> String {
         switch confirmation {
         case .reset: String(localized: "Reset")
-        case .deleteBranch, .deleteRemoteBranch, .deleteTag: String(localized: "Delete")
+        case .deleteRemoteBranch, .deleteTag: String(localized: "Delete")
         case .dropStash: String(localized: "Drop")
         case .discard: String(localized: "Discard")
         case .removeRemote: String(localized: "Remove")
@@ -361,7 +466,6 @@ struct GitWorkflowView: View {
             case .mixed: String(localized: "Moves the branch to \(target). Later commits’ changes stay in the working tree, unstaged.")
             case .hard: String(localized: "Moves the branch to \(target) and permanently discards later commits and all uncommitted changes.")
             }
-        case .deleteBranch: return String(localized: "Unmerged commits on this branch are deleted too.")
         case .deleteRemoteBranch: return String(localized: "Removes the branch for everyone using this remote.")
         case .deleteTag: return String(localized: "Only the local tag is deleted.")
         case .dropStash(let stash): return stash.message
@@ -375,12 +479,8 @@ struct GitWorkflowView: View {
         switch confirmation {
         case .reset(let commit, let mode):
             store.perform("Resetting…") { await GitWorkflow.reset(to: commit.id, mode: mode, at: root) }
-        case .deleteBranch(let name):
-            store.perform("Deleting branch…") { await GitWorkflow.deleteBranch(name, force: true, at: root) }
-            if store.selection == .branch(name) { store.selection = .allCommits }
         case .deleteRemoteBranch(let branch):
             store.perform("Deleting remote branch…") { await GitWorkflow.deleteRemoteBranch(branch, at: root) }
-            if store.selection == .remoteBranch(branch.refName) { store.selection = .allCommits }
         case .deleteTag(let name):
             store.perform("Deleting tag…") { await GitWorkflow.deleteTag(name, at: root) }
             if store.selection == .tag(name) { store.selection = .allCommits }
@@ -459,7 +559,7 @@ private struct GitPendingOperationBanner: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(ClaudeTheme.statusWarning.opacity(0.12))
-        .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .bottom) { ClaudeThemeDivider() }
     }
 
     private func resolve(_ action: GitWorkflow.Continuation, _ label: LocalizedStringResource) {

@@ -510,8 +510,7 @@ public struct QuestionAnswerPayload: Codable, Sendable {
     }
 }
 
-/// One `ide__show_confirmation` prompt awaiting the user's decision, mirrored
-/// to mobile so it can show the same confirm / cancel dialog as the desktop.
+/// An IDE or computer-use confirmation awaiting the user's decision.
 public struct PendingConfirmationPayload: Codable, Sendable, Identifiable, Equatable {
     /// The desktop's prompt id; echoed back in `ConfirmationDecisionPayload`.
     public let id: String
@@ -543,7 +542,7 @@ public struct PendingConfirmationPayload: Codable, Sendable, Identifiable, Equat
     }
 }
 
-/// Desktop → mobile: every `ide__show_confirmation` prompt currently awaiting
+/// Desktop → mobile: every confirmation prompt currently awaiting
 /// a decision. The desktop re-broadcasts the full set whenever a prompt is
 /// queued or settled, so mobile mirrors it exactly.
 public struct ConfirmationQueuePayload: Codable, Sendable {

@@ -44,11 +44,7 @@ actor PermissionServer {
     /// On CLI retry, multiple continuations may accumulate under the same toolUseId.
     private struct Pending {
         var continuations: [CheckedContinuation<DecisionOutcome, Never>]
-        let sessionId: String?
-        let toolName: String
-        /// Kept so a broad grant (session tool / Bash allowlist) can resolve sibling
-        /// requests that were already queued when the user made the decision.
-        let toolInput: [String: JSONValue]
+        let request: PermissionRequest
         let autoApproveReadOnlyBash: Bool
         /// Populated by `respondAskUserQuestion` so the hook response can carry back
         /// the user's answer as `updatedInput`.
@@ -77,7 +73,7 @@ actor PermissionServer {
         return "\(sid)::\(scope)"
     }
 
-    /// Per-subscriber broadcast continuations. One is issued per window via subscribe().
+    /// Subscribers observe each newly queued request.
     private var subscribers: [UUID: AsyncStream<PermissionRequest>.Continuation] = [:]
 
     // MARK: - Init
@@ -86,11 +82,13 @@ actor PermissionServer {
 
     // MARK: - Subscription
 
-    /// Called by a UI window to subscribe to the permission request stream. Must unsubscribe using the returned token.
     func subscribe() -> (token: UUID, stream: AsyncStream<PermissionRequest>) {
         let token = UUID()
         let stream = AsyncStream<PermissionRequest> { continuation in
             self.subscribers[token] = continuation
+            for entry in pending.values where !Self.isExitPlanModeTool(entry.request.toolName) {
+                continuation.yield(entry.request)
+            }
             continuation.onTermination = { [weak self] _ in
                 Task { await self?.unsubscribe(token: token) }
             }
@@ -192,24 +190,34 @@ actor PermissionServer {
     /// in the same session, so the UI must drop them from its queue instead of asking again.
     @discardableResult
     func respond(toolUseId: String, decision: PermissionDecision) async -> [String] {
-        guard var entry = pending.removeValue(forKey: toolUseId) else {
-            logger.warning("No pending continuation for toolUseId \(toolUseId)")
-            return []
-        }
+        let resolved = await resolve(toolUseId: toolUseId, promptID: nil, decision: decision)
+        return resolved.dropFirst().map(\.id)
+    }
+
+    /// A desktop or mobile button can outlive its prompt. Only the first decision
+    /// for this exact request can grant access or dispatch a decision hook.
+    func respond(to request: PermissionRequest, decision: PermissionDecision) async -> [PermissionRequest] {
+        await resolve(toolUseId: request.id, promptID: request.promptID, decision: decision)
+    }
+
+    private func resolve(toolUseId: String, promptID: UUID?, decision: PermissionDecision) async -> [PermissionRequest] {
+        guard var entry = pending[toolUseId], promptID == nil || entry.request.promptID == promptID else { return [] }
+        pending.removeValue(forKey: toolUseId)
+        let request = entry.request
 
         let resolved: PermissionDecision
         switch decision {
         case .allowSessionTool:
-            if let sid = entry.sessionId {
-                sessionToolAllows.insert(Self.sessionToolKey(sid: sid, tool: entry.toolName))
-                logger.info("Session-allowed tool \(entry.toolName) for \(sid.prefix(8))")
+            if let sid = request.sessionId {
+                sessionToolAllows.insert(Self.sessionToolKey(sid: sid, tool: request.toolName))
+                logger.info("Session-allowed tool \(request.toolName) for \(sid.prefix(8))")
             } else {
                 logger.warning("allowSessionTool without sessionId for \(toolUseId) — falling back to allow")
             }
             resolved = .allow
 
         case .allowAlwaysCommand(let command):
-            if let sid = entry.sessionId,
+            if let sid = request.sessionId,
                let projectKey = sessionRegistry[sid]?.projectKey {
                 await loadBashAllowlistIfNeeded()
                 bashCmdAllows?[projectKey, default: []].insert(command)
@@ -221,7 +229,7 @@ actor PermissionServer {
             resolved = .allow
 
         case .allowAndSetMode(let newMode):
-            if let sid = entry.sessionId, var ctx = sessionRegistry[sid] {
+            if let sid = request.sessionId, var ctx = sessionRegistry[sid] {
                 ctx.mode = newMode
                 sessionRegistry[sid] = ctx
                 logger.info("Session \(sid.prefix(8)) mode → \(newMode.rawValue) (allowAndSetMode)")
@@ -247,8 +255,9 @@ actor PermissionServer {
             continuation.resume(returning: outcome)
         }
 
-        guard resolved == .allow, decision != .allow else { return [] }
-        return await resolveNewlyAutoApprovedPending()
+        guard resolved == .allow, decision != .allow else { return [request] }
+        let siblings = await resolveNewlyAutoApprovedPending()
+        return [request] + siblings
     }
 
     /// Deny every request still waiting for this session, so a cancelled turn
@@ -256,38 +265,44 @@ actor PermissionServer {
     /// Returns the ids that were resolved so the UI can drop them.
     @discardableResult
     func cancelPending(sessionId: String) -> [String] {
-        let ids = pending.compactMap { $0.value.sessionId == sessionId ? $0.key : nil }
-        for id in ids {
-            guard let entry = pending.removeValue(forKey: id) else { continue }
-            logger.info("Denying pending \(entry.toolName) \(id): turn cancelled")
+        cancelPending(sessionIDs: [sessionId]).map(\.id)
+    }
+
+    func cancelPending(sessionIDs: Set<String>) -> [PermissionRequest] {
+        let requests = pending.values.map(\.request).filter { $0.sessionId.map(sessionIDs.contains) == true }
+        for request in requests {
+            guard let entry = pending.removeValue(forKey: request.id) else { continue }
+            logger.info("Denying pending \(request.toolName) \(request.id): turn cancelled")
             let outcome = DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil)
             for continuation in entry.continuations {
                 continuation.resume(returning: outcome)
             }
         }
-        return ids
+        return requests
     }
 
     /// After a broad grant, approve every still-pending request the grant now covers.
-    private func resolveNewlyAutoApprovedPending() async -> [String] {
-        var resolvedIds: [String] = []
+    private func resolveNewlyAutoApprovedPending() async -> [PermissionRequest] {
+        var resolved: [PermissionRequest] = []
         for (id, entry) in pending {
+            let request = entry.request
             guard let reason = await autoApproveReason(
-                sessionId: entry.sessionId,
-                toolName: entry.toolName,
-                toolInput: entry.toolInput,
+                sessionId: request.sessionId,
+                toolName: request.toolName,
+                toolInput: request.toolInput,
                 autoApproveReadOnlyBash: entry.autoApproveReadOnlyBash
             ) else { continue }
             // Re-check: the entry may have been resolved while awaiting the allowlist load.
-            guard let entry = pending.removeValue(forKey: id) else { continue }
-            logger.info("Auto-resolving queued \(entry.toolName) \(id): \(reason)")
+            guard pending[id]?.request.promptID == request.promptID,
+                  let entry = pending.removeValue(forKey: id) else { continue }
+            logger.info("Auto-resolving queued \(request.toolName) \(id): \(reason)")
             let outcome = DecisionOutcome(decision: .allow, updatedInput: entry.updatedInput, reasonOverride: nil)
             for continuation in entry.continuations {
                 continuation.resume(returning: outcome)
             }
-            resolvedIds.append(id)
+            resolved.append(request)
         }
-        return resolvedIds
+        return resolved
     }
 
     /// Reuses the same permission UI/decision queue for non-Claude transports
@@ -317,14 +332,7 @@ actor PermissionServer {
             streamPermissionMode: mode,
             sessionId: sessionId
         )
-        let outcome = await waitForDecision(
-            toolUseId: toolUseId,
-            sessionId: sessionId,
-            toolName: toolName,
-            toolInput: toolInput,
-            autoApproveReadOnlyBash: autoApproveReadOnlyBash,
-            emit: request
-        )
+        let outcome = await waitForDecision(request, autoApproveReadOnlyBash: autoApproveReadOnlyBash)
         return outcome.decision
     }
 
@@ -361,13 +369,7 @@ actor PermissionServer {
             streamPermissionMode: nil,
             sessionId: sessionId
         )
-        let outcome = await waitForDecision(
-            toolUseId: toolUseId,
-            sessionId: sessionId,
-            toolName: "AskUserQuestion",
-            toolInput: toolInput,
-            emit: request
-        )
+        let outcome = await waitForDecision(request)
         guard outcome.decision == .allow else { return nil }
         return outcome.updatedInput
     }
@@ -527,13 +529,7 @@ actor PermissionServer {
                     sessionId: hookRequest.sessionId
                 )
 
-                let outcome = await waitForDecision(
-                    toolUseId: hookRequest.toolUseId,
-                    sessionId: hookRequest.sessionId,
-                    toolName: hookRequest.toolName,
-                    toolInput: hookRequest.toolInput,
-                    emit: permissionRequest
-                )
+                let outcome = await waitForDecision(permissionRequest)
 
                 let allowed = outcome.decision == .allow
                 // For deny-with-feedback we pass the user's improvement text as the hook's
@@ -559,40 +555,31 @@ actor PermissionServer {
     /// CLI's own HTTP hook timeout expires — join the same entry by appending another
     /// continuation, so the eventual answer reaches whichever HTTP connection is live.
     private func waitForDecision(
-        toolUseId: String,
-        sessionId: String?,
-        toolName: String,
-        toolInput: [String: JSONValue],
-        autoApproveReadOnlyBash: Bool = true,
-        emit request: PermissionRequest
+        _ request: PermissionRequest,
+        autoApproveReadOnlyBash: Bool = true
     ) async -> DecisionOutcome {
         guard !Task.isCancelled else { return DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil) }
-        let isFirst = pending[toolUseId] == nil
-        // ExitPlanMode owns its own inline plan card so it skips the generic broadcast.
-        // AskUserQuestion now flows through the same queue as permissions — the UI distinguishes
-        // by `toolName` and presents `QuestionSheetView` instead of `PermissionModal`.
-        let suppressGenericModal = Self.isExitPlanModeTool(toolName)
-        if isFirst && !suppressGenericModal {
-            broadcast(request)
-        }
-
-        let outcome: DecisionOutcome = await withCheckedContinuation { continuation in
+        let toolUseId = request.id
+        return await withCheckedContinuation { continuation in
             if var entry = pending[toolUseId] {
+                // A retry can share the decision only with the original tool and session.
+                guard entry.request.sessionId == request.sessionId, entry.request.toolName == request.toolName else {
+                    continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil))
+                    return
+                }
                 entry.continuations.append(continuation)
                 pending[toolUseId] = entry
             } else {
                 pending[toolUseId] = Pending(
                     continuations: [continuation],
-                    sessionId: sessionId,
-                    toolName: toolName,
-                    toolInput: toolInput,
+                    request: request,
                     autoApproveReadOnlyBash: autoApproveReadOnlyBash,
                     updatedInput: nil,
                     reasonOverride: nil
                 )
+                if !Self.isExitPlanModeTool(request.toolName) { broadcast(request) }
             }
         }
-        return outcome
     }
 
     private static func isExitPlanModeTool(_ toolName: String) -> Bool {

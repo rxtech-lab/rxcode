@@ -43,13 +43,13 @@ struct SkillMarketView: View {
     private var marketplaceContent: some View {
         VStack(spacing: 0) {
             headerBar
-            Divider()
+            ClaudeThemeDivider()
             searchAndFilterBar
             if !appState.marketplaceCustomSources.isEmpty || appState.marketplaceSourceError != nil {
-                Divider()
+                ClaudeThemeDivider()
                 customSourcesBar
             }
-            Divider()
+            ClaudeThemeDivider()
             pluginGrid
                 .overlay {
                     if appState.marketplaceLoading && !appState.marketplaceCatalog.isEmpty {
@@ -434,7 +434,7 @@ struct PluginDetailView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Content
             ScrollView {
@@ -468,7 +468,7 @@ struct PluginDetailView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Divider()
+                    ClaudeThemeDivider()
 
                     // Info grid
                     Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
@@ -480,7 +480,7 @@ struct PluginDetailView: View {
                         }
                     }
 
-                    Divider()
+                    ClaudeThemeDivider()
 
                     // Install command
                     VStack(alignment: .leading, spacing: 6) {

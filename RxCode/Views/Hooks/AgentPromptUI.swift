@@ -83,7 +83,7 @@ private struct AgentConfirmationSheet: View {
             }
             .padding(20)
 
-            Divider()
+            ClaudeThemeDivider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -98,7 +98,7 @@ private struct AgentConfirmationSheet: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
+            ClaudeThemeDivider()
 
             HStack {
                 Spacer()

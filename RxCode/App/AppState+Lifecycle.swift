@@ -79,7 +79,6 @@ extension AppState {
 
         permissionMode = PermissionMode(rawValue: workspaceDefaults.string(for: "selectedPermissionMode") ?? "") ?? .default
 
-        // Permission request routing is handled per-window in initializeWindow's listener.
         isInitialized = true
         if !AppSupport.isTestProcess { startCIStatusPoller() }
         scheduleDesktopWidgetUpdate()
@@ -323,60 +322,6 @@ extension AppState {
         let inspectorKey = selectingProjectId.map { "\(AppStorageKeys.rightInspectorLayout).project.\($0.uuidString)" }
             ?? AppStorageKeys.rightInspectorLayout
         window.restoreInspectorLayout(forKey: workspaceDefaults.key(inspectorKey))
-
-        // Subscribe to permission broadcasts — appends requests to this window's pendingPermissions.
-        // subscribe() issues a window-exclusive stream, so events are not stolen across multiple windows.
-        Task { [weak self, weak window] in
-            guard let self else { return }
-            let (_, stream) = await self.permission.subscribe()
-            for await request in stream {
-                guard !Task.isCancelled else { break }
-                guard let window else { break }
-                if !window.pendingPermissions.contains(where: { $0.id == request.id }) {
-                    window.pendingPermissions.append(request)
-                    mobilePendingRequests[request.id] = request
-                    let projectName = window.selectedProject?.name
-                    let projectId = window.selectedProject?.id
-                    let sessionId = window.currentSessionId
-                    let toolName = request.toolName
-                    if let requestSessionId = request.sessionId {
-                        broadcastMobileSessionStatus(sessionID: requestSessionId)
-                    }
-                    if toolName == "AskUserQuestion" {
-                        broadcastMobileQuestionQueue()
-                    }
-                    // Auto-present the question sheet only when the user is actively viewing
-                    // the thread the question belongs to. Otherwise it stays in the queue
-                    // (yellow dot in sidebar + banner) so the user can decide when to answer.
-                    if toolName == "AskUserQuestion",
-                       window.presentedPermissionId == nil,
-                       let qSession = request.sessionId,
-                       qSession == window.currentSessionId
-                    {
-                        window.presentedPermissionId = request.id
-                    }
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        if toolName == "AskUserQuestion" {
-                            await self.hookManager.dispatchQuestionAsk(QuestionAskPayload(
-                                toolUseId: request.id,
-                                sessionId: sessionId,
-                                projectId: projectId,
-                                projectName: projectName
-                            ))
-                        } else {
-                            await self.hookManager.dispatchPermissionAsk(PermissionAskPayload(
-                                toolUseId: request.id,
-                                toolName: toolName,
-                                sessionId: sessionId,
-                                projectId: projectId,
-                                projectName: projectName
-                            ))
-                        }
-                    }
-                }
-            }
-        }
 
         // Install the AskUserQuestion handlers. The question sheet calls submit when the
         // user finishes answering, and skip when they dismiss without answering.

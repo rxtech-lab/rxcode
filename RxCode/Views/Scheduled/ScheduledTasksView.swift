@@ -216,7 +216,7 @@ struct ScheduledTasksView: View {
             VStack(spacing: 0) {
                 ForEach(Array(group.tasks.enumerated()), id: \.element.id) { index, task in
                     if index > 0 {
-                        Divider().overlay(ClaudeTheme.borderSubtle)
+                        ClaudeThemeDivider()
                     }
                     ScheduledTaskRow(
                         task: task,

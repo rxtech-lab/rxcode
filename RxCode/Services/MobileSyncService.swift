@@ -501,7 +501,7 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
-    /// Mirror the desktop's pending `ide__show_confirmation` prompts to every
+    /// Mirror the desktop's pending IDE and computer-use confirmations to every
     /// paired device. Sent whenever a prompt is queued or settled.
     func broadcastConfirmationQueue(_ confirmations: [PendingConfirmationPayload]) {
         Task {

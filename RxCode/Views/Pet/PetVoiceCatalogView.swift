@@ -58,7 +58,7 @@ struct PetVoiceCatalogView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
 
-            Divider()
+            ClaudeThemeDivider()
 
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

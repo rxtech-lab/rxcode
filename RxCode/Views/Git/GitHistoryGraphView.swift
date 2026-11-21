@@ -23,7 +23,7 @@ struct GitHistoryGraphView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            ClaudeThemeDivider()
             if store.commits.isEmpty {
                 Group {
                     if store.isLoadingHistory {
@@ -68,7 +68,8 @@ struct GitHistoryGraphView: View {
                             row: row,
                             graphWidth: graphColumnWidth,
                             isSelected: store.selectedCommitID == commit.id,
-                            isHead: commit.id == store.snapshot.headCommit
+                            isHead: commit.id == store.snapshot.headCommit,
+                            onCheckout: store.checkout
                         )
                         .id(commit.id)
                         .contentShape(Rectangle())
@@ -114,6 +115,7 @@ private struct GitHistoryRow: View {
     let graphWidth: CGFloat
     let isSelected: Bool
     let isHead: Bool
+    let onCheckout: (GitSidebarItem) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -121,7 +123,7 @@ private struct GitHistoryRow: View {
                 .frame(width: graphWidth, height: GitHistoryGraphView.rowHeight)
                 .clipped()
             HStack(spacing: 5) {
-                ForEach(commit.refs, id: \.self) { ref in GitRefBadge(ref: ref) }
+                ForEach(commit.refs, id: \.self) { ref in GitRefBadge(ref: ref, onCheckout: onCheckout) }
                 Text(commit.subject)
                     .fontWeight(isHead ? .semibold : .regular)
                     .foregroundStyle(commit.isMerge ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary)
@@ -205,6 +207,15 @@ struct GitGraphCell: View {
 
 struct GitRefBadge: View {
     let ref: GitRef
+    let onCheckout: (GitSidebarItem) -> Void
+
+    private var branch: GitSidebarItem? {
+        switch ref.kind {
+        case .localBranch where !ref.isCurrent: .branch(ref.name)
+        case .remoteBranch: .remoteBranch(ref.name)
+        default: nil
+        }
+    }
 
     private var style: (symbol: String, color: Color) {
         switch ref.kind {
@@ -217,8 +228,20 @@ struct GitRefBadge: View {
     }
 
     var body: some View {
+        if let branch {
+            badge
+                .simultaneousGesture(TapGesture(count: 2).onEnded { onCheckout(branch) })
+                .help("Double-click to check out \(ref.name)")
+                .accessibilityAction(named: "Checkout") { onCheckout(branch) }
+        } else {
+            badge
+                .help(ref.isCurrent ? String(localized: "\(ref.name) (current branch)") : ref.name)
+        }
+    }
+
+    private var badge: some View {
         let background = ClaudeTheme.surfacePrimary.mix(with: style.color, by: ref.isCurrent ? 0.22 : 0.12)
-        Label(ref.name, systemImage: style.symbol)
+        return Label(ref.name, systemImage: style.symbol)
             .labelStyle(.titleAndIcon)
             .font(.system(size: ClaudeTheme.size(10), weight: ref.isCurrent ? .bold : .medium))
             .lineLimit(1)
@@ -230,7 +253,6 @@ struct GitRefBadge: View {
                 if ref.isCurrent { RoundedRectangle(cornerRadius: 4).strokeBorder(style.color.opacity(0.6)) }
             }
             .fixedSize()
-            .help(ref.isCurrent ? String(localized: "\(ref.name) (current branch)") : ref.name)
     }
 }
 
@@ -254,7 +276,8 @@ struct GitRefBadge: View {
     let width = CGFloat(rows.map(\.width).max() ?? 1) * GitHistoryGraphView.laneWidth + 8
     return VStack(spacing: 0) {
         ForEach(Array(zip(commits, rows)), id: \.0.id) { commit, row in
-            GitHistoryRow(commit: commit, row: row, graphWidth: width, isSelected: commit.subject == "Draw lane curves", isHead: commit.id.hasPrefix("1111111"))
+            GitHistoryRow(commit: commit, row: row, graphWidth: width, isSelected: commit.subject == "Draw lane curves",
+                          isHead: commit.id.hasPrefix("1111111"), onCheckout: { _ in })
         }
     }
     .frame(width: 820)

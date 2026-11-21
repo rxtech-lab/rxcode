@@ -28,22 +28,22 @@ struct AutopilotSettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
-                Divider()
+                ClaudeThemeDivider()
                 accountSection
                 if appState.isSignedIn {
-                    Divider()
+                    ClaudeThemeDivider()
                     notificationsSection
-                    Divider()
+                    ClaudeThemeDivider()
                     automationSection
-                    Divider()
+                    ClaudeThemeDivider()
                     repoSetupSection
-                    Divider()
+                    ClaudeThemeDivider()
                     secretsSection
-                    Divider()
+                    ClaudeThemeDivider()
                     ciUpdatesSection
-                    Divider()
+                    ClaudeThemeDivider()
                     docsSection
-                    Divider()
+                    ClaudeThemeDivider()
                     releaseSection
                 }
             }

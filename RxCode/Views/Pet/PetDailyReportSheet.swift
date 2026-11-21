@@ -15,7 +15,7 @@ struct PetDailyReportSheet: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             summaryMetricsRow(report)
-                            Divider()
+                            ClaudeThemeDivider()
                             MarkdownContentView(text: report.markdownBody)
                         }
                         .padding(24)

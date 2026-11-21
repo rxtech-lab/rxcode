@@ -309,7 +309,7 @@ struct TaskFormSheet: View {
                 attachmentsSection
             }
         }
-        .formStyle(.grouped)
+        .formStyle(TaskEditorFormStyle())
         .sheet(item: $fieldsSheet) { field in
             TaskFieldsSheet(projectId: currentProjectId, initialField: field)
                 .environment(appState)
@@ -658,5 +658,16 @@ struct TaskFormSheet: View {
 
     var permissionBinding: Binding<PermissionMode?> {
         Binding(get: { task.agent.permissionMode }, set: { task.agent.permissionMode = $0 })
+    }
+}
+
+struct TaskEditorFormStyle: FormStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Form {
+            configuration.content.appThemeForeground()
+        }
+        .formStyle(.grouped)
+        // macOS draws grouped form separators with the form's tertiary foreground.
+        .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.border)
     }
 }

@@ -930,6 +930,16 @@
         }
       }
     },
+    "%lld ahead, %lld behind" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld ahead, %2$lld behind"
+          }
+        }
+      }
+    },
     "%lld B" : {
       "localizations" : {
         "ko" : {
@@ -1493,6 +1503,12 @@
         }
       }
     },
+    "%lld↑" : {
+
+    },
+    "%lld↓" : {
+
+    },
     "•" : {
       "localizations" : {
         "ko" : {
@@ -1602,9 +1618,6 @@
         }
       }
     },
-    "↑%lld" : {
-
-    },
     "↑↓ Select  ↵ Confirm  esc Cancel" : {
       "localizations" : {
         "en" : {
@@ -1626,9 +1639,6 @@
           }
         }
       }
-    },
-    "↓%lld" : {
-
     },
     "+%lld" : {
       "localizations" : {
@@ -3686,6 +3696,9 @@
     "Allow Screen Recording…" : {
 
     },
+    "Allow the agent to control your Mac for the rest of this session?" : {
+
+    },
     "Allow this copy of RxCode in Privacy & Security → Accessibility to focus windows and perform requested clicks or scrolling. Then retry the action." : {
 
     },
@@ -3712,6 +3725,9 @@
       }
     },
     "Allowance used up" : {
+
+    },
+    "Also delete “%@” from the remote" : {
 
     },
     "Always" : {
@@ -7221,6 +7237,9 @@
         }
       }
     },
+    "Confirm computer use" : {
+
+    },
     "Confirm deleting story “%@”" : {
       "comment" : "Final story deletion confirmation",
       "localizations" : {
@@ -7242,6 +7261,9 @@
           }
         }
       }
+    },
+    "Confirm for This Session" : {
+
     },
     "Confirmation" : {
 
@@ -9296,7 +9318,10 @@
     "Delete all user-global memories shared by pets and workspaces on this Mac, plus this workspace's project and pet memories? Other workspaces' project memories and voice transcripts are unchanged. This action cannot be undone." : {
 
     },
-    "Delete branch “%@”?" : {
+    "Delete Both Branches" : {
+
+    },
+    "Delete Branch" : {
 
     },
     "Delete Briefing" : {
@@ -9394,6 +9419,9 @@
           }
         }
       }
+    },
+    "Delete Local Branch" : {
+
     },
     "Delete Local Voice Model?" : {
 
@@ -9684,6 +9712,9 @@
 
     },
     "Deleting tag…" : {
+
+    },
+    "Deleting the remote branch removes it for everyone using that remote." : {
 
     },
     "Deleting…" : {
@@ -10312,6 +10343,9 @@
           }
         }
       }
+    },
+    "Double-click to check out %@" : {
+
     },
     "Download" : {
       "localizations" : {
@@ -15637,6 +15671,9 @@
           }
         }
       }
+    },
+    "Local branch" : {
+
     },
     "Local branches" : {
 
@@ -22545,6 +22582,9 @@
           }
         }
       }
+    },
+    "Remote branch" : {
+
     },
     "Remote branches" : {
 

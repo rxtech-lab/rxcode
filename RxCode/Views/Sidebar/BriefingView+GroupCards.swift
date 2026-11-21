@@ -15,7 +15,7 @@ extension BriefingView {
             groupCardHeader(group, project: project)
 
             if let briefing = group.briefing {
-                Divider().opacity(0.4)
+                ClaudeThemeDivider()
                 BriefingSummaryPreview(
                     text: briefing.briefing,
                     maximumHeight: Self.maximumSummaryPreviewHeight
@@ -25,7 +25,7 @@ extension BriefingView {
             }
 
             if !group.threadSummaries.isEmpty {
-                Divider().opacity(0.4)
+                ClaudeThemeDivider()
                 threadList(Array(group.threadSummaries.prefix(Self.visibleThreadCount)), totalCount: group.threadSummaries.count)
             }
 
@@ -55,7 +55,7 @@ extension BriefingView {
             groupCardHeader(group, project: projectsById[group.projectId])
                 .padding(24)
 
-            Divider()
+            ClaudeThemeDivider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -64,7 +64,7 @@ extension BriefingView {
                     }
                     if !group.threadSummaries.isEmpty {
                         if group.briefing != nil {
-                            Divider()
+                            ClaudeThemeDivider()
                         }
                         threadList(group.threadSummaries, totalCount: group.threadSummaries.count)
                     }
@@ -73,7 +73,7 @@ extension BriefingView {
                 .padding(24)
             }
 
-            Divider()
+            ClaudeThemeDivider()
             HStack {
                 Spacer()
                 Button("Done") { presentedBriefing = nil }

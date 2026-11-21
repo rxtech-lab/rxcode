@@ -260,6 +260,92 @@ struct GitWorkflowIntegrationTests {
         #expect(paths.allSatisfy { FileManager.default.fileExists(atPath: repo.appending(path: $0).path) })
     }
 
+    @Test("Branch deletion targets the selected remote head and preserves same-named tags")
+    func deleteLocalAndRemoteBranch() async throws {
+        let repo = try makeRepo(commits: ["one"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let remote = try addRemote("team/backup", to: repo)
+        _ = try addRemote("origin", to: repo)
+        try git(["branch", "topic"], at: repo)
+        try git(["tag", "review/topic"], at: repo)
+        try git(["push", "origin", "refs/heads/topic"], at: repo)
+        try git(["push", "-u", "team/backup", "refs/heads/topic:refs/heads/review/topic", "refs/tags/review/topic"], at: repo)
+
+        let snapshot = await GitRepositoryLoader.snapshot(at: repo.path)
+        let local = try #require(snapshot.localBranches.first { $0.name == "topic" })
+        let targets = snapshot.remoteBranches(for: local)
+        #expect(targets.map(\.refName) == ["team/backup/review/topic"])
+        let target = try #require(targets.first)
+        #expect(await GitWorkflow.deleteBranch(local, alsoDelete: target, at: repo.path) == nil)
+
+        let remaining = await GitRepositoryLoader.snapshot(at: repo.path)
+        #expect(remaining.localBranches.map(\.name) == ["main"])
+        #expect(remaining.remoteBranches.map(\.refName) == ["origin/topic"])
+        let server = await GitRepositoryLoader.snapshot(at: remote.path)
+        #expect(server.localBranches.isEmpty)
+        #expect(server.tags.map(\.name) == ["review/topic"])
+    }
+
+    @Test("Local-only deletion preserves published branches on every remote")
+    func deleteWithoutUpstream() async throws {
+        let repo = try makeRepo(commits: ["one"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        try git(["branch", "topic"], at: repo)
+        for remote in ["origin", "fork"] {
+            _ = try addRemote(remote, to: repo)
+            try git(["push", remote, "refs/heads/topic"], at: repo)
+        }
+        let snapshot = await GitRepositoryLoader.snapshot(at: repo.path)
+        let local = try #require(snapshot.localBranches.first { $0.name == "topic" })
+        #expect(Set(snapshot.remoteBranches(for: local).map(\.refName)) == ["origin/topic", "fork/topic"])
+        #expect(await GitWorkflow.deleteBranch(local, alsoDelete: nil, at: repo.path) == nil)
+        #expect(await GitRepositoryLoader.snapshot(at: repo.path).remoteBranches == snapshot.remoteBranches)
+    }
+
+    @Test("A checked-out branch or a moved remote tip prevents combined deletion")
+    func rejectedDeletionKeepsBothBranches() async throws {
+        let repo = try makeRepo(commits: ["one", "two"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let origin = try addRemote("origin", to: repo)
+        try git(["push", "origin", "HEAD:refs/heads/main", "HEAD^:refs/heads/topic"], at: repo)
+        try git(["branch", "--track", "topic", "origin/topic"], at: repo)
+        let snapshot = await GitRepositoryLoader.snapshot(at: repo.path)
+        let local = try #require(snapshot.localBranches.first { $0.name == "topic" })
+        let target = try #require(snapshot.remoteBranches(for: local).first)
+
+        let worktree = repo.appending(path: ".git/other-checkout")
+        try git(["worktree", "add", worktree.path, "topic"], at: repo)
+        #expect(await GitWorkflow.deleteBranch(local, alsoDelete: target, at: repo.path) != nil)
+        #expect(await GitRepositoryLoader.snapshot(at: origin.path).localBranches.contains { $0.name == "topic" })
+        try git(["worktree", "remove", worktree.path], at: repo)
+
+        try git(["update-ref", "refs/heads/topic", "refs/heads/main"], at: origin)
+        #expect(await GitWorkflow.deleteBranch(local, alsoDelete: target, at: repo.path) != nil)
+        #expect(await GitRepositoryLoader.snapshot(at: repo.path).localBranches.contains(local))
+        #expect(await GitRepositoryLoader.snapshot(at: origin.path).localBranches.first { $0.name == "topic" }?.tip == snapshot.headCommit)
+    }
+
+    @Test("A background fetch updates the pull count without changing the checkout or FETCH_HEAD")
+    func fetchIncomingCommits() async throws {
+        let repo = try makeRepo(commits: ["one", "two"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let origin = try addRemote("origin", to: repo)
+        try git(["push", "origin", "HEAD:refs/heads/main", "HEAD^:refs/heads/topic"], at: repo)
+        try git(["fetch", "origin", "main"], at: repo)
+        let fetchHead = repo.appending(path: ".git/FETCH_HEAD")
+        let previousFetch = try Data(contentsOf: fetchHead)
+        let refs = await GitRepositoryLoader.snapshot(at: repo.path)
+        let topic = try #require(refs.remoteBranches.first { $0.name == "topic" })
+        #expect(await GitWorkflow.checkout(remote: topic, localBranches: refs.localBranches, at: repo.path) == nil)
+        try git(["update-ref", "refs/heads/topic", "refs/heads/main"], at: origin)
+        #expect(await GitWorkflow.fetch(at: repo.path, inBackground: true) == nil)
+        let fetched = try #require(await GitRepositoryLoader.snapshot(at: repo.path).currentLocalBranch)
+        #expect(fetched.name == "topic" && fetched.tip == topic.tip && fetched.behind == 1)
+        #expect(try Data(contentsOf: fetchHead) == previousFetch)
+        #expect(await GitWorkflow.pull(.fastForwardOnly, at: repo.path) == nil)
+        #expect(await GitRepositoryLoader.snapshot(at: repo.path).currentLocalBranch?.behind == 0)
+    }
+
     @Test("A push uses the selected remote and preserves the branch's existing upstream")
     func pushToSelectedRemote() async throws {
         let repo = try makeRepo(commits: ["one", "two"])

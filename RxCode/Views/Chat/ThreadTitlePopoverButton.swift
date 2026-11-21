@@ -70,7 +70,7 @@ private struct ThreadSummaryPopoverContent: View {
                     .font(.system(size: 11))
                     .foregroundStyle(ClaudeTheme.textTertiary)
 
-                Divider()
+                ClaudeThemeDivider()
 
                 ScrollView {
                     Text(Self.attributedSummary(item.summary))

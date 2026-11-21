@@ -24,7 +24,7 @@ struct CommandsSettingsTab: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
 
-            Divider()
+            ClaudeThemeDivider()
 
             switch segment {
             case .slashCommands:

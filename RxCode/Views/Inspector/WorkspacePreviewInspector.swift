@@ -74,7 +74,7 @@ struct WorkspacePreviewInspector: View {
             }
         }
         .controlSize(.small).padding(10)
-        Divider()
+        ClaudeThemeDivider()
         Group {
             if let error = design.error {
                 ContentUnavailableView { Label("Preview unavailable", systemImage: "exclamationmark.triangle") }

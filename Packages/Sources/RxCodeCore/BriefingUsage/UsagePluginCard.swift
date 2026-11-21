@@ -122,7 +122,7 @@ public struct UsagePluginCard: View {
                 hero(primary, valueSize: 28).frame(maxWidth: .infinity, alignment: .leading)
             }
             if metrics.count > 1 {
-                Divider()
+                ClaudeThemeDivider()
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(metrics.dropFirst())) { supporting($0) }
                 }
@@ -136,7 +136,7 @@ public struct UsagePluginCard: View {
             scopeLine
             if let primary = metrics.first { hero(primary, valueSize: size == .xlarge ? 38 : 32) }
             if metrics.count > 1 {
-                Divider()
+                ClaudeThemeDivider()
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .topLeading),
                                          count: size == .xlarge ? 4 : 2),
                           alignment: .leading, spacing: 12) {
@@ -180,7 +180,7 @@ public struct UsagePluginCard: View {
             if let detail = metric.detail {
                 Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
-            Divider()
+            ClaudeThemeDivider()
         }
     }
 }

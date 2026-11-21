@@ -264,6 +264,16 @@
         }
       }
     },
+    "Deleted “%@” from the remote. Git could not delete the local branch “%@”.\n\n%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Deleted “%1$@” from the remote. Git could not delete the local branch “%2$@”.\n\n%3$@"
+          }
+        }
+      }
+    },
     "Descending" : {
 
     },
@@ -766,6 +776,9 @@
 
     },
     "The first kept commit can’t be squashed or fixed up." : {
+
+    },
+    "The local branch “%@” has changed or is checked out in a worktree." : {
 
     },
     "The remote “%@” is unavailable." : {

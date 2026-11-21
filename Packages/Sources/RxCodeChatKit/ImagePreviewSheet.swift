@@ -68,7 +68,7 @@ public struct ImagePreviewSheet: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
-            Divider()
+            ClaudeThemeDivider()
 
             GeometryReader { geometry in
                 if let nsImage = image {

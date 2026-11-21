@@ -448,7 +448,7 @@ struct ToolActivityDetailView: View {
                 }
 
                 if pages.count > 1 && !displayInput.isEmpty {
-                    Divider()
+                    ClaudeThemeDivider()
                     HStack {
                         Button { pageIndex = max(0, currentPage - 1) } label: {
                             Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)

@@ -34,7 +34,7 @@ struct RateLimitAdvicePopover: View {
             }
 
             if !advice.suggestions.isEmpty {
-                Divider()
+                ClaudeThemeDivider()
                 Text("Suggestions", bundle: .module)
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textTertiary)

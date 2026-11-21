@@ -80,7 +80,7 @@ struct UsageDashboardManager: View {
                     Button("Remove integration…", role: .destructive) { deleting = integration }
                 } label: { Label("Connection", systemImage: "gearshape") }
             }.padding(20)
-            Divider()
+            ClaudeThemeDivider()
             if cards.isEmpty {
                 ContentUnavailableView("No card views", systemImage: "rectangle.on.rectangle",
                     description: Text("Add a card view to choose a metric, style, and where it appears."))
@@ -108,7 +108,7 @@ struct UsageDashboardManager: View {
                     }.padding(20)
                 }
             }
-            Divider()
+            ClaudeThemeDivider()
             HStack {
                 Text("Each view has its own style, metric, and visibility.").font(.caption).foregroundStyle(.secondary)
                 Spacer()

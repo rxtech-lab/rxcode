@@ -2,7 +2,12 @@ import XCTest
 
 @MainActor
 final class InspectorSplitTests: XCTestCase {
-    private func launchInspector(project: URL? = nil, width: Int = 600) throws -> XCUIApplication {
+    // The sandboxed UI test runner needs the Git executable behind Apple's xcrun shim.
+    private var gitExecutableURL: URL {
+        URL(fileURLWithPath: ProcessInfo.processInfo.environment["RXCODE_TEST_GIT"] ?? "/usr/bin/git")
+    }
+
+    private func launchInspector(project: URL? = nil, width: Int = 600, additionalProjects: [URL] = []) throws -> XCUIApplication {
         continueAfterFailure = false
         let workspace = "inspector-split-ui-test"
         let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -23,6 +28,7 @@ final class InspectorSplitTests: XCTestCase {
             let workspaceDirectory = support.appending(path: "workspaces/\(workspace)")
             try FileManager.default.createDirectory(at: workspaceDirectory, withIntermediateDirectories: true)
             let projects = [["id": UUID().uuidString, "name": "Branch Test", "path": project.path]]
+                + additionalProjects.map { ["id": UUID().uuidString, "name": $0.lastPathComponent, "path": $0.path] }
             try JSONEncoder().encode(projects).write(to: workspaceDirectory.appending(path: "projects.json"))
         }
         app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UI_TESTING": "1"]
@@ -77,11 +83,9 @@ final class InspectorSplitTests: XCTestCase {
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: project) }
 
-        // The sandboxed UI test runner needs the Git executable behind Apple's xcrun shim.
-        let gitPath = ProcessInfo.processInfo.environment["RXCODE_TEST_GIT"] ?? "/usr/bin/git"
         func git(_ arguments: [String]) throws {
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: gitPath)
+            process.executableURL = gitExecutableURL
             process.currentDirectoryURL = project
             process.arguments = arguments
             try process.run()
@@ -93,7 +97,10 @@ final class InspectorSplitTests: XCTestCase {
         try Data("original\n".utf8).write(to: project.appending(path: "original.txt"))
         try Data("pending.txt filter=hold-stage\n".utf8).write(to: project.appending(path: ".gitattributes"))
         try git(["add", "."])
-        try git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "commit", "-qm", "Original"])
+        try git(["config", "user.name", "Test"])
+        try git(["config", "user.email", "test@example.com"])
+        try git(["config", "commit.gpgsign", "false"])
+        try git(["commit", "-qm", "Original"])
         // Hold git add until the progress overlay is visible, with a timeout if the test stops.
         try git(["config", "filter.hold-stage.clean", "for i in 1 2 3 4 5 6 7 8 9 10; do test -f .git/hold-stage || break; sleep 1; done; cat"])
 
@@ -126,15 +133,148 @@ final class InspectorSplitTests: XCTestCase {
         XCTAssertTrue(row("git-file-pending.txt", in: staged).waitForExistence(timeout: 10))
         XCTAssertTrue(row("git-file-pending.txt", in: unstaged).waitForNonExistence(timeout: 5))
 
-        window.buttons["Amend Commit…"].click()
-        let sheet = window.sheets.firstMatch
-        XCTAssertTrue(row("git-commit-file-original.txt", in: sheet).waitForExistence(timeout: 5))
-        XCTAssertTrue(row("git-file-pending.txt", in: sheet).exists)
-        sheet.buttons["Cancel"].click()
         window.buttons["Unstage All"].click()
         XCTAssertTrue(row("git-file-pending.txt", in: unstaged).waitForExistence(timeout: 10))
         amend.click()
         XCTAssertTrue(row("git-commit-file-original.txt", in: window).waitForNonExistence(timeout: 5))
+
+        window.buttons["Stage All"].click()
+        XCTAssertTrue(row("git-file-pending.txt", in: staged).waitForExistence(timeout: 10))
+        amend.click()
+        let openAmend = window.buttons["Amend Commit…"]
+        XCTAssertTrue(openAmend.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        openAmend.click()
+        let sheet = window.sheets.firstMatch
+        XCTAssertTrue(row("git-commit-file-original.txt", in: sheet).waitForExistence(timeout: 5))
+        XCTAssertTrue(row("git-file-pending.txt", in: sheet).exists)
+        sheet.buttons["Amend"].click()
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 10))
+        try git(["cat-file", "-e", "HEAD:pending.txt"])
+    }
+
+    func testGitWindowSwitchesProjectsInPlace() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = directory.appending(path: "First")
+        let second = directory.appending(path: "Second Project")
+        let folder = directory.appending(path: "Plain Folder")
+        for project in [first, second, folder] {
+            try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        }
+
+        func initializeRepository(at project: URL, branch: String) throws {
+            for arguments in [
+                ["init", "-q", "-b", branch],
+                ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false",
+                 "commit", "--allow-empty", "-qm", branch],
+            ] {
+                let process = Process()
+                process.executableURL = gitExecutableURL
+                process.currentDirectoryURL = project
+                process.arguments = arguments
+                try process.run()
+                process.waitUntilExit()
+                XCTAssertEqual(process.terminationStatus, 0, "git \(arguments.joined(separator: " "))")
+            }
+        }
+        try initializeRepository(at: first, branch: "first-branch")
+        try initializeRepository(at: second, branch: "second-branch")
+
+        let app = try launchInspector(project: first, additionalProjects: [second, folder])
+        let openGit = app.buttons["sidebar-git-window"]
+        XCTAssertTrue(openGit.waitForExistence(timeout: 10))
+        openGit.click()
+
+        func element(_ id: String) -> XCUIElement {
+            app.descendants(matching: .any).matching(identifier: id).firstMatch
+        }
+        let picker = element("git-project-picker")
+        let firstBranch = element("git-branch-first-branch")
+        let secondBranch = element("git-branch-second-branch")
+        XCTAssertTrue(firstBranch.waitForExistence(timeout: 10))
+        let windowCount = app.windows.count
+
+        func choose(_ project: String) {
+            XCTAssertTrue(picker.waitForExistence(timeout: 5))
+            picker.click()
+            let option = app.menuItems[project]
+            XCTAssertTrue(option.waitForExistence(timeout: 5))
+            option.click()
+        }
+        choose("Second Project")
+        XCTAssertTrue(secondBranch.waitForExistence(timeout: 10))
+        XCTAssertFalse(firstBranch.exists)
+        XCTAssertEqual(app.windows.count, windowCount)
+
+        choose("Plain Folder")
+        XCTAssertTrue(app.staticTexts["No Git repository"].waitForExistence(timeout: 10))
+        XCTAssertFalse(secondBranch.exists)
+
+        choose("Branch Test")
+        XCTAssertTrue(firstBranch.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.windows.count, windowCount)
+    }
+
+    func testGitWindowBranchCheckoutAndRemoteDeletion() throws {
+        let project = FileManager.default.temporaryDirectory.appending(path: "GitBranchActions-\(UUID())")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: project) }
+        @discardableResult func git(_ arguments: String...) throws -> String {
+            let process = Process()
+            process.executableURL = gitExecutableURL
+            process.arguments = ["-C", project.path] + arguments
+            let output = Pipe()
+            process.standardOutput = output
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0, arguments.joined(separator: " "))
+            return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .newlines)
+        }
+        try git("init", "-b", "main")
+        try git("config", "user.name", "Git UI Test")
+        try git("config", "user.email", "test@example.com")
+        try git("config", "commit.gpgsign", "false")
+        try git("commit", "--allow-empty", "-m", "Initial commit")
+        try git("init", "--bare", "-b", "main", ".git/server")
+        try git("remote", "add", "origin", project.appending(path: ".git/server").path)
+        try git("push", "-u", "origin", "main")
+        try git("switch", "-c", "topic")
+        try git("commit", "--allow-empty", "-m", "Incoming commit")
+        try git("push", "-u", "origin", "topic:refs/heads/review")
+        try git("-C", ".git/server", "update-ref", "refs/heads/main", "refs/heads/review")
+        try git("switch", "main")
+
+        let app = try launchInspector(project: project)
+        let openGit = app.buttons["sidebar-git-window"]
+        XCTAssertTrue(openGit.waitForExistence(timeout: 10))
+        openGit.click()
+        let main = app.descendants(matching: .any).matching(identifier: "git-branch-main").firstMatch
+        let topic = app.descendants(matching: .any).matching(identifier: "git-branch-topic").firstMatch
+        let incoming = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "0 ahead, 1 behind"), object: main)
+        wait(for: [incoming], timeout: 15)
+        topic.click()
+        XCTAssertEqual(try git("branch", "--show-current"), "main")
+        func switchTo(_ branch: String, using row: XCUIElement) {
+            row.doubleClick()
+            let head = project.appending(path: ".git/HEAD")
+            let switched = NSPredicate { _, _ in (try? String(contentsOf: head, encoding: .utf8)) == "ref: refs/heads/\(branch)\n" }
+            wait(for: [XCTNSPredicateExpectation(predicate: switched, object: nil)], timeout: 10)
+        }
+        switchTo("topic", using: topic)
+        switchTo("main", using: main)
+
+        topic.rightClick()
+        app.menuItems["Delete…"].click()
+        let sheet = app.sheets.containing(.button, identifier: "Delete Local Branch").firstMatch
+        let checkbox = sheet.checkBoxes["Also delete “origin/review” from the remote"]
+        XCTAssertTrue(checkbox.waitForExistence(timeout: 5))
+        XCTAssertEqual(checkbox.value as? Int, 0)
+        checkbox.click()
+        app.sheets.buttons["Delete Both Branches"].click()
+        XCTAssertTrue(topic.waitForNonExistence(timeout: 10))
+        XCTAssertEqual(try git("branch", "--list", "topic"), "")
+        XCTAssertEqual(try git("-C", ".git/server", "branch", "--list", "review"), "")
     }
 
     func testInspectorToolbarShortcutsKeepTheSameSidebarLayout() throws {

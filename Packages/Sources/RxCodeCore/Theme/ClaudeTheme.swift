@@ -47,6 +47,7 @@ public enum ClaudeTheme {
     // MARK: - Borders
     public static var border: Color       { ThemeStore.shared.colors.border }
     public static var borderSubtle: Color { ThemeStore.shared.colors.borderSubtle }
+    public static var divider: Color      { border.opacity(0.6) }
 
     // MARK: - Code Blocks
     public static var codeBackground: Color       { ThemeStore.shared.colors.codeBackground }
@@ -300,8 +301,9 @@ public struct ClaudeThemeDivider: View {
     public init() {}
 
     public var body: some View {
-        Rectangle()
-            .fill(ClaudeTheme.border)
-            .frame(height: 1)
+        Divider()
+            .hidden()
+            .overlay(ClaudeTheme.divider)
+            .allowsHitTesting(false)
     }
 }

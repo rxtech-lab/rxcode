@@ -122,7 +122,7 @@ struct PetInteractivePopover: View {
                     .help("Close interactive view")
                     .accessibilityIdentifier("pet-presentation-close")
             }.padding(14)
-            Divider()
+            ClaudeThemeDivider()
             ScrollView { JSONUIRenderer(spec: dialog.spec, interaction: controller.presentation.interaction(for: dialog)).padding(14) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

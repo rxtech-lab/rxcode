@@ -49,6 +49,7 @@
 		A744CE513073010000000003 /* PetMusicVolumeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A744CE513073010000000004 /* PetMusicVolumeTests.swift */; };
 		A7C1D2E3F4051627384950A1 /* TaskRunClaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C1D2E3F4051627384950A2 /* TaskRunClaimTests.swift */; };
 		A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */; };
+		5BA9F50061BA4433A9660C95 /* MobileComputerUseConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82F82DE3F524986AAFC156B /* MobileComputerUseConfirmationTests.swift */; };
 		AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */; };
 		AC1900000000000000000100 /* RxCode/Services/RxAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */; };
 		AC1900000000000000000101 /* RxCode/Services/ProjectCloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */; };
@@ -273,6 +274,7 @@
 		A744CE513073010000000004 /* PetMusicVolumeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetMusicVolumeTests.swift; sourceTree = "<group>"; };
 		A7C1D2E3F4051627384950A2 /* TaskRunClaimTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunClaimTests.swift; sourceTree = "<group>"; };
 		A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PermissionSessionAllowTests.swift; sourceTree = "<group>"; };
+		A82F82DE3F524986AAFC156B /* MobileComputerUseConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileComputerUseConfirmationTests.swift; sourceTree = "<group>"; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ACPServiceSuggestionTests.swift; sourceTree = "<group>"; };
 		AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/RxAuthService.swift; sourceTree = SOURCE_ROOT; };
@@ -598,6 +600,7 @@
 				7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */,
 				DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */,
 				A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */,
+				A82F82DE3F524986AAFC156B /* MobileComputerUseConfirmationTests.swift */,
 				FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */,
 				FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */,
 				308F126F79C712472865BC80 /* TaskBoardHookTests+TaskTools.swift */,
@@ -1228,6 +1231,7 @@
 				7A5C0002000000000000A002 /* CrossProjectSendConcurrencyTests.swift in Sources */,
 				DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */,
 				A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */,
+				5BA9F50061BA4433A9660C95 /* MobileComputerUseConfirmationTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */,
 				8F1CA3EF3C9B2FCEF955A691 /* TaskBoardHookTests+TaskTools.swift in Sources */,

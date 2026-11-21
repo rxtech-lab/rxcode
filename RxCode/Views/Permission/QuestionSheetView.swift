@@ -213,7 +213,7 @@ private extension QuestionSheetView {
         VStack(alignment: .leading, spacing: 0) {
             questionHeader(question: question)
                 .padding(.bottom, 14)
-            Divider()
+            ClaudeThemeDivider()
                 .padding(.bottom, 14)
             if question.multiSelect {
                 multipleChoiceInput(index: index, question: question)
@@ -482,7 +482,7 @@ private extension QuestionSheetView {
         .background(
             Rectangle().fill(ClaudeTheme.surfacePrimary)
                 .overlay(alignment: .top) {
-                    Rectangle().fill(ClaudeTheme.border).frame(height: 0.5)
+                    Rectangle().fill(ClaudeTheme.divider).frame(height: 0.5)
                 }
         )
     }

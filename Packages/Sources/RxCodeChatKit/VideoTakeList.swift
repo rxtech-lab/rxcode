@@ -91,7 +91,7 @@ struct VideoActivityPopover: View {
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-            Divider()
+            ClaudeThemeDivider()
             if activity.isEmpty {
                 ContentUnavailableView {
                     Label { Text("No Activity Yet", bundle: .module) } icon: { Image(systemName: "list.bullet.rectangle") }

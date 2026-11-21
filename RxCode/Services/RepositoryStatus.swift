@@ -153,7 +153,7 @@ nonisolated enum RepositoryState: Sendable, Equatable {
         return .ready(GitWorkingTree(root: root, head: head, headCommit: headCommit, upstream: upstream, changes: files))
     }
 
-    fileprivate static func gitPath(_ args: [String], at path: String) async -> String? {
+    static func gitPath(_ args: [String], at path: String) async -> String? {
         guard let raw = await GitHelper.run(["rev-parse"] + args, at: path), !raw.isEmpty else { return nil }
         return raw.hasSuffix("\n") ? String(raw.dropLast()) : raw
     }

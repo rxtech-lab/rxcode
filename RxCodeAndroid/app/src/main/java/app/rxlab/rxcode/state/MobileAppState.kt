@@ -191,6 +191,7 @@ class MobileAppState @Inject constructor(
                     briefingDocuments = if (desktopChanged) emptyList() else it.briefingDocuments,
                     briefingContentResult = if (desktopChanged) null else it.briefingContentResult,
                     isLoadingBriefingContent = if (desktopChanged) false else it.isLoadingBriefingContent,
+                    pendingConfirmations = if (desktopChanged) emptyList() else it.pendingConfirmations,
                     briefingAssetFilePath = if (desktopChanged) null else it.briefingAssetFilePath,
                     acpRegistryLoading = if (desktopChanged) false else it.acpRegistryLoading,
                     skillCatalogLoading = if (desktopChanged) false else it.skillCatalogLoading,
@@ -1009,14 +1010,13 @@ class MobileAppState @Inject constructor(
         }
     }
 
-    fun respondToConfirmation(id: String, confirmed: Boolean) {
-        _state.update { it.copy(pendingConfirmations = it.pendingConfirmations.filterNot { c -> c.id == id }) }
-        viewModelScope.launch {
-            client.send(
-                Payload.ConfirmationDecision(ConfirmationDecisionPayload(id, confirmed)),
-                _state.value.activeDesktopPubkey,
-            )
-        }
+    suspend fun respondToConfirmation(id: String, confirmed: Boolean): Boolean {
+        val state = _state.value
+        if (state.pendingConfirmations.none { it.id == id }) return true
+        return client.send(
+            Payload.ConfirmationDecision(ConfirmationDecisionPayload(id, confirmed)),
+            state.activeDesktopPubkey,
+        )
     }
 
     // MARK: - Run profiles

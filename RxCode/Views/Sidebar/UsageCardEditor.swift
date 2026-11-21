@@ -62,7 +62,7 @@ struct UsageCardEditor: View {
                 .formStyle(.grouped)
                 .frame(width: 340)
                 .frame(maxHeight: .infinity)
-                Divider()
+                ClaudeThemeDivider()
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Live preview").font(.headline)
                     Text("Changes appear here as you edit. Click the card to preview its details.")

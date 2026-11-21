@@ -83,7 +83,7 @@ struct GitLocalChangesView: View {
                     .frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            Divider()
+            ClaudeThemeDivider()
             HStack(spacing: 8) {
                 if !all.isEmpty {
                     Button("Discard…") { store.confirmation = .discard(discardable) }
@@ -178,7 +178,7 @@ struct GitLocalChangesView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(ClaudeTheme.surfacePrimary)
-            Divider()
+            ClaudeThemeDivider()
             List(selection: Binding(get: { selection.intersection(tags) }, set: { newValue in
                 if !newValue.isEmpty || !selection.isDisjoint(with: tags) { selection = newValue }
             })) {

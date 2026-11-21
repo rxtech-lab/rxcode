@@ -88,7 +88,7 @@ private struct UsageCardDetailPopover: View {
                 }
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding()
-            Divider()
+            ClaudeThemeDivider()
             ScrollView {
                 if let plugin {
                     plugin.detailView(snapshot: snapshot, configuration: configuration)

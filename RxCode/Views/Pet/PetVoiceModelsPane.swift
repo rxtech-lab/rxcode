@@ -47,7 +47,7 @@ struct PetVoiceModelsPane: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
 
-                Divider()
+                ClaudeThemeDivider()
 
                 Group {
                     switch selectedTab {

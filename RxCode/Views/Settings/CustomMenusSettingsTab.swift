@@ -40,7 +40,7 @@ private struct ContextMenusManagerSheet: View {
         VStack(spacing: 0) {
             header
                 .padding(20)
-            Divider()
+            ClaudeThemeDivider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     placeholderHint
@@ -50,7 +50,7 @@ private struct ContextMenusManagerSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
+            ClaudeThemeDivider()
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }

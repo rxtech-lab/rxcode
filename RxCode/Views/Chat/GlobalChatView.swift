@@ -14,7 +14,7 @@ struct GlobalChatView: View {
                     .transition(.move(edge: .leading))
 
                 Rectangle()
-                    .fill(ClaudeTheme.border)
+                    .fill(ClaudeTheme.divider)
                     .frame(width: 1)
             }
 

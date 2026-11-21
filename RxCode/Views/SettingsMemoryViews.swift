@@ -120,7 +120,7 @@ struct MemorySettingsSection: View {
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
 
-            Divider()
+            ClaudeThemeDivider()
 
             memoryMCPServerSection
         }

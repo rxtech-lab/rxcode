@@ -40,7 +40,7 @@ struct AddSkillGitSourceSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
 
-            Divider()
+            ClaudeThemeDivider()
 
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -89,7 +89,7 @@ struct AddSkillGitSourceSheet: View {
             }
             .padding(20)
 
-            Divider()
+            ClaudeThemeDivider()
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Custom Sources")

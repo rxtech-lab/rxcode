@@ -154,9 +154,9 @@ final class AppState: IDEToolHandling {
     /// Compiles + runs agent-written Swift view filters (`TaskFilterScript`).
     let taskFilterEvaluator = TaskFilterScriptEvaluator()
 
-    /// Pending permission/question prompts keyed by hook id. This mirrors the
-    /// per-window queues so mobile thread rows can show the same attention state.
+    /// Pending permissions for this workspace, including when no chat window is open.
     var mobilePendingRequests: [String: PermissionRequest] = [:]
+    @ObservationIgnored private var permissionRequestTask: Task<Void, Never>?
 
     // MARK: - Theme
 
@@ -1096,6 +1096,20 @@ final class AppState: IDEToolHandling {
         self.hookManager = HookManager(controller: hookController)
         self.reviewScheduler = ReviewScheduler(app: self)
         registerBuiltInHooks()
+
+        if startBackgroundServices {
+            permissionRequestTask = Task { [weak self, permission] in
+                let (_, stream) = await permission.subscribe()
+                for await request in stream {
+                    guard let self else { break }
+                    queuePermissionRequest(request)
+                }
+            }
+        }
+    }
+
+    deinit {
+        permissionRequestTask?.cancel()
     }
 
     // MARK: - Relocated Stored Properties

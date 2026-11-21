@@ -46,7 +46,7 @@ struct CIUpdateRepoDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            ClaudeThemeDivider()
             Picker("", selection: $selectedTab) {
                 ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -54,7 +54,7 @@ struct CIUpdateRepoDetailView: View {
             .labelsHidden()
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            Divider()
+            ClaudeThemeDivider()
             Group {
                 switch selectedTab {
                 case .history: historyList

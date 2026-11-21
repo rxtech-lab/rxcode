@@ -34,12 +34,12 @@ struct StatusLineView: View {
             providerMenuSegment()
 
             if chatBridge.agentProvider != .flowcy {
-                Divider().frame(height: 12)
+                ClaudeThemeDivider().frame(height: 12)
                 usageSegments()
                 rateLimitAdviceSegment()
 
                 if !chatBridge.studioKind.isStudio {
-                    Divider().frame(height: 12)
+                    ClaudeThemeDivider().frame(height: 12)
                     contextSegment()
                 }
             }
@@ -54,7 +54,7 @@ struct StatusLineView: View {
             .foregroundStyle(ClaudeTheme.textTertiary)
 
             if currentRuntimeVersion != nil {
-                Divider().frame(height: 12)
+                ClaudeThemeDivider().frame(height: 12)
                 versionSegment()
             }
         }
@@ -65,7 +65,7 @@ struct StatusLineView: View {
         .padding(.bottom, 4)
         .background(ClaudeTheme.surfacePrimary)
         .overlay(alignment: .top) {
-            ClaudeTheme.borderSubtle.frame(height: 0.5)
+            ClaudeTheme.divider.frame(height: 0.5)
         }
         .task(id: "\(chatBridge.agentProvider.rawValue):\(chatBridge.modelDisplayName)") {
             localResources = nil
@@ -535,7 +535,7 @@ struct StatusLineView: View {
                 .foregroundStyle(ClaudeTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let pct = percent {
-                Divider()
+                ClaudeThemeDivider()
                     .padding(.vertical, 2)
                 HStack(spacing: 6) {
                     Text("Currently at \(Int(pct))%", bundle: .module)

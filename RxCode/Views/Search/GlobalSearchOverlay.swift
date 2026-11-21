@@ -95,7 +95,7 @@ struct GlobalSearchOverlay: View {
         VStack(spacing: 0) {
             searchField
             filterTabs
-            Divider().background(ClaudeTheme.borderSubtle)
+            ClaudeThemeDivider()
             resultsScroll
             footer
         }

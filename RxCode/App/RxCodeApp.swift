@@ -171,13 +171,12 @@ struct RxCodeApp: App {
         .defaultSize(width: 1000, height: 700)
         .windowStyle(.hiddenTitleBar)
 
-        // Full Git workflow window (history graph, rebase, branches) for one checkout.
+        // Full Git workflow window with in-place project switching.
         WindowGroup(id: "git-window", for: GitWindowValue.self) { $value in
-            if let value {
+            if let checkout = Binding($value) {
                 GitWindowRoot(
                     workspaceManager: workspaceManager,
-                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
-                    path: value.path
+                    value: checkout
                 )
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())

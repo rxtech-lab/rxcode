@@ -47,11 +47,22 @@ public struct GitRepositorySnapshot: Equatable, Sendable {
         }
         return GitBranchOrder.primaryFirst(destinations, by: \.branch)
     }
+
+    /// Prefer the configured upstream, which can have a different name on the
+    /// server. An unpublished local branch can also have same-named remote refs.
+    public func remoteBranches(for branch: GitLocalBranch) -> [GitRemoteBranch] {
+        guard let remote = branch.upstreamRemote else {
+            return remoteBranches.filter { $0.name == branch.name }
+        }
+        guard remotes.contains(remote), let ref = branch.upstreamRef, ref.hasPrefix("refs/heads/"),
+              let tracking = remoteBranches.first(where: { $0.refName == branch.upstream }) else { return [] }
+        return [GitRemoteBranch(remote: remote, name: String(ref.dropFirst("refs/heads/".count)), tip: tracking.tip)]
+    }
 }
 
 /// Read-only queries for the Git workflow window.
 public enum GitRepositoryLoader {
-    static let branchFormat = "--format=%(refname:lstrip=2)%1f%(upstream:short)%1f%(HEAD)%1f%(upstream:track)%1f%(objectname)%1f%(upstream:remotename)%1f%(upstream:remoteref)"
+    static let branchFormat = "--format=%(refname:lstrip=2)%1f%(upstream:lstrip=2)%1f%(HEAD)%1f%(upstream:track)%1f%(objectname)%1f%(upstream:remotename)%1f%(upstream:remoteref)"
 
     public static func snapshot(at root: String) async -> GitRepositorySnapshot {
         async let branch = GitHelper.currentBranch(at: root)
@@ -86,7 +97,7 @@ public enum GitRepositoryLoader {
     }
 
     public static func branches(at root: String) async -> GitBranchList {
-        async let locals = GitHelper.run(["for-each-ref", branchFormat, "refs/heads"], at: root)
+        async let locals = GitHelper.run(["for-each-ref", branchFormat, "refs/heads"], at: root, environment: ["LC_ALL": "C"])
         async let refs = GitHelper.run(["for-each-ref", "--format=%(refname)%1f%(objectname)%1f%(symref)", "refs/remotes"], at: root)
         async let names = GitHelper.run(["remote"], at: root)
         var list = GitBranchList()
@@ -213,8 +224,12 @@ public enum GitWorkflow {
         case fastForwardOnly, merge, rebase
     }
 
-    public static func fetch(at root: String) async -> String? {
-        await GitHelper.runWithError(["fetch", "--all", "--prune", "--tags"], at: root)
+    public static func fetch(at root: String, inBackground: Bool = false) async -> String? {
+        var arguments = ["fetch", "--all", "--prune", "--tags"]
+        // A foreground pull owns FETCH_HEAD. Polling only needs the updated refs.
+        if inBackground { arguments.append("--no-write-fetch-head") }
+        let environment = inBackground ? ["GIT_ASKPASS": "/usr/bin/false", "SSH_ASKPASS_REQUIRE": "never", "GCM_INTERACTIVE": "never"] : [:]
+        return await GitHelper.runWithError(arguments, at: root, environment: environment)
     }
 
     public static func pull(_ strategy: PullStrategy, at root: String) async -> String? {
@@ -253,11 +268,12 @@ public enum GitWorkflow {
     }
 
     public static func checkout(remote branch: GitRemoteBranch, localBranches: [GitLocalBranch], at root: String) async -> String? {
+        let trackingRef = "refs/remotes/\(branch.refName)"
         if localBranches.contains(where: { $0.name == branch.name }) {
             if let failure = await checkout(branch.name, at: root) { return failure }
-            return await GitHelper.runWithError(["branch", "--set-upstream-to", branch.refName, branch.name], at: root)
+            return await GitHelper.runWithError(["branch", "--set-upstream-to", trackingRef, "--", branch.name], at: root)
         }
-        return await GitHelper.runWithError(["switch", "--track", "-c", branch.name, branch.refName], at: root)
+        return await GitHelper.runWithError(["switch", "--track", "-c", branch.name, trackingRef], at: root)
     }
 
     public static func createBranch(_ name: String, at startPoint: String, checkout: Bool, root: String) async -> String? {
@@ -275,8 +291,28 @@ public enum GitWorkflow {
         await GitHelper.runWithError(["branch", force ? "-D" : "-d", "--", name], at: root)
     }
 
+    public static func deleteBranch(_ branch: GitLocalBranch, alsoDelete remote: GitRemoteBranch?, at root: String) async -> String? {
+        if let remote {
+            // Check every worktree before removing the server's copy. Keep the
+            // local copy if the server rejects the deletion.
+            let state = await GitHelper.run(
+                ["for-each-ref", "--format=%(refname)%1f%(objectname)%1f%(worktreepath)", branch.refName], at: root
+            )
+            guard state == "\(branch.refName)\u{1F}\(branch.tip)\u{1F}\n" else {
+                return String(localized: "The local branch “\(branch.name)” has changed or is checked out in a worktree.")
+            }
+            if let failure = await deleteRemoteBranch(remote, at: root) { return failure }
+        }
+        let failure = await deleteBranch(branch.name, force: true, at: root)
+        if let failure, let remote {
+            return String(localized: "Deleted “\(remote.refName)” from the remote. Git could not delete the local branch “\(branch.name)”.\n\n\(failure)")
+        }
+        return failure
+    }
+
     public static func deleteRemoteBranch(_ branch: GitRemoteBranch, at root: String) async -> String? {
-        await GitHelper.runWithError(["push", branch.remote, "--delete", branch.name], at: root)
+        let ref = "refs/heads/\(branch.name)"
+        return await push(":\(ref)", to: branch.remote, options: ["--force-with-lease=\(ref):\(branch.tip)"], at: root)
     }
 
     public static func merge(_ ref: String, noFastForward: Bool, at root: String) async -> String? {

@@ -42,7 +42,11 @@ private struct WorkingTreeChanges: View {
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
                 Button {
-                    openWindow(id: "git-window", value: GitWindowValue(path: tree.root, workspaceID: appState.activeWorkspace.id))
+                    openWindow(id: "git-window", value: GitWindowValue(
+                        path: repository.path ?? tree.root,
+                        workspaceID: appState.activeWorkspace.id,
+                        projectID: windowState.selectedProject?.id
+                    ))
                 } label: { Image(systemName: "point.3.connected.trianglepath.dotted") }
                 .buttonStyle(.borderless)
                 .help("Open Git history, branches, and rebase tools")
@@ -68,7 +72,7 @@ private struct WorkingTreeChanges: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 6)
-            .overlay(alignment: .bottom) { Divider() }
+            .background(alignment: .bottom) { ClaudeThemeDivider() }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Change list")
             .onChange(of: showsStaged) { selection.removeAll() }
@@ -97,7 +101,7 @@ private struct WorkingTreeChanges: View {
                 .padding(10)
             }
 
-            Divider()
+            ClaudeThemeDivider()
             HStack(spacing: 6) {
                 syncStatus
                 Spacer(minLength: 0)
@@ -136,6 +140,7 @@ private struct WorkingTreeChanges: View {
     private var fileList: some View {
         List(files, selection: $selection) { file in
             ChangeFileRow(file: file)
+                .listRowSeparatorTint(ClaudeTheme.divider)
                 .tag(file.displayPath)
         }
         .listStyle(.inset)

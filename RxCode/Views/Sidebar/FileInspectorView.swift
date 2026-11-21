@@ -140,7 +140,7 @@ struct FileInspectorView<Title: View>: View {
             Spacer(minLength: 0)
             if content != nil && format.hasRenderedPreview {
                 FilePreviewModeTabs(showsRawText: $showsRawText, compact: compact)
-                Divider().frame(height: 16)
+                ClaudeThemeDivider().frame(height: 16)
             }
             HStack(spacing: 2) {
                 if !isLoading && errorMessage == nil && (usesNativePreview || (format == .native && !showsRawText)) {

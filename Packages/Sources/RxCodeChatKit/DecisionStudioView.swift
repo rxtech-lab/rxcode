@@ -59,7 +59,7 @@ struct DecisionStudioView<Composer: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if !takes.isEmpty {
-                Divider()
+                ClaudeThemeDivider()
                 StudioTakeList(
                     title: String(localized: "Decisions", bundle: .module),
                     takes: takes,

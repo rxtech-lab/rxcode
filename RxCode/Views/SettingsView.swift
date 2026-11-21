@@ -126,29 +126,29 @@ struct GeneralSettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 themeSection
-                Divider()
+                ClaudeThemeDivider()
                 fontSizeSection
-                Divider()
+                ClaudeThemeDivider()
                 PetSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 notificationsSection(appState: $appState.notificationsEnabled)
-                Divider()
+                ClaudeThemeDivider()
                 githubActionsSection(isOn: $appState.enableAutoCIFix)
-                Divider()
+                ClaudeThemeDivider()
                 menuBarSection
-                Divider()
+                ClaudeThemeDivider()
                 searchIndexSection
-                Divider()
+                ClaudeThemeDivider()
                 cacheSection
-                Divider()
+                ClaudeThemeDivider()
                 AgentPromptsSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 MemorySettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 HooksSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 CustomMenusSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 VStack(alignment: .leading, spacing: 8) {
                     onboardingSection
                     whatsNewSection

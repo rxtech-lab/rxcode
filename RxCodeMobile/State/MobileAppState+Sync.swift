@@ -253,22 +253,20 @@ extension MobileAppState {
         pendingQuestions.removeAll { $0.toolUseID == toolUseID }
     }
 
-    // MARK: - Confirmation tool
+    // MARK: - Confirmations
 
-    /// Pending `ide__show_confirmation` prompts for one session, oldest first.
+    /// IDE and computer-use confirmations for the selected thread.
     func pendingConfirmations(sessionID: String) -> [PendingConfirmationPayload] {
         let sessionID = resolveSessionID(sessionID)
         return pendingConfirmations.filter { resolveSessionID($0.sessionID) == sessionID }
     }
 
-    /// Sends the user's confirm / reject decision for prompt `id` to the
-    /// desktop. The prompt is dropped locally right away; the desktop
-    /// re-broadcasts the authoritative queue once it settles the tool call.
-    func respondToConfirmation(id: String, confirmed: Bool) async {
-        guard isPaired else { return }
-        pendingConfirmations.removeAll { $0.id == id }
+    /// Keep the prompt available for retry until the Mac publishes its resolution.
+    func respondToConfirmation(id: String, confirmed: Bool) async throws {
+        guard pendingConfirmations.contains(where: { $0.id == id }) else { return }
+        guard isPaired else { throw RelayError.notConnected }
         let payload = ConfirmationDecisionPayload(id: id, confirmed: confirmed)
-        try? await client.send(.confirmationDecision(payload), toHex: pairedDesktopPubkey)
+        try await client.send(.confirmationDecision(payload), toHex: pairedDesktopPubkey)
     }
 
     func updateDesktopSettings(_ update: MobileSettingsUpdatePayload) async {

@@ -40,7 +40,7 @@ struct InspectorToolTabStrip: View {
         .padding(.trailing, 10)
         .padding(.vertical, 5)
         .background(ClaudeTheme.surfaceSecondary.opacity(0.5))
-        .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .bottom) { ClaudeThemeDivider() }
     }
 
     @ViewBuilder

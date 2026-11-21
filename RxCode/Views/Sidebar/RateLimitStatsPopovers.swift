@@ -105,9 +105,9 @@ struct ProviderTableSection<Row: Identifiable, RowContent: View>: View {
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textSecondary)
                 .padding(.bottom, 6)
-            Divider()
+            ClaudeThemeDivider()
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, item in
-                if index > 0 { Divider().opacity(0.5) }
+                if index > 0 { ClaudeThemeDivider() }
                 row(item)
                     .padding(.vertical, 6)
             }
@@ -374,7 +374,7 @@ struct RateLimitHistoryPopover: View {
                     }
                 }
             }
-            Divider()
+            ClaudeThemeDivider()
             filterSectionTitle("Usage limits")
             ForEach(LimitWindow.allCases, id: \.self) { window in
                 Toggle(window.title, isOn: visibility(of: window.rawValue, in: $hiddenWindowsRaw))

@@ -104,7 +104,7 @@ struct RunOutputInspectorView: View {
         .background(ClaudeTheme.codeBackground)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(ClaudeTheme.borderSubtle.opacity(0.5))
+                .fill(ClaudeTheme.divider)
                 .frame(height: 0.5)
         }
     }

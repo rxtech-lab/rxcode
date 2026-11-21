@@ -216,7 +216,7 @@ struct MenuBarContentView: View {
                 )
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             ScrollView {
                 VStack(spacing: 8) {
@@ -230,16 +230,16 @@ struct MenuBarContentView: View {
 
             chatActivitySection
 
-            Divider()
+            ClaudeThemeDivider()
 
             desktopPetQuickRow
 
             if !ciStatusRows.isEmpty {
-                Divider()
+                ClaudeThemeDivider()
                 ciStatusSection
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             footer
         }

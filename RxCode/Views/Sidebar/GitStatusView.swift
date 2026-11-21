@@ -41,7 +41,7 @@ struct GitStatusView: View {
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
-            Divider()
+            ClaudeThemeDivider()
             branchList
         }
         .disabled(switching)

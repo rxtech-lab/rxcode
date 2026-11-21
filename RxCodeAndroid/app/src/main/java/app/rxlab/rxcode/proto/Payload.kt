@@ -368,7 +368,7 @@ data class QuestionAnswerPayload(
     val answers: List<QuestionAnswerEntry>,
 )
 
-/** One `ide__show_confirmation` prompt the desktop is waiting on. */
+/** An IDE or computer-use confirmation the desktop is waiting on. */
 @Serializable
 data class PendingConfirmationPayload(
     val id: String,

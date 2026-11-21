@@ -31,7 +31,7 @@ struct RightInspectorPanel: View {
         .background(ClaudeTheme.surfaceElevated)
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(ClaudeTheme.borderSubtle.opacity(0.6))
+                .fill(ClaudeTheme.divider)
                 .frame(width: 0.5)
                 .allowsHitTesting(false)
         }
@@ -63,7 +63,7 @@ struct RightInspectorPanel: View {
         .padding(.bottom, mode == .inspector ? 0 : 10)
         .background(ClaudeTheme.surfaceSecondary.opacity(0.4))
         .overlay(alignment: .bottom) {
-            if mode != .inspector { Divider() }
+            if mode != .inspector { ClaudeThemeDivider() }
         }
     }
 

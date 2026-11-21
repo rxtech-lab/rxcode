@@ -71,10 +71,8 @@ struct GitLocalBranchContextMenu: View {
     private var current: String { store.snapshot.currentBranch ?? String(localized: "HEAD") }
 
     var body: some View {
-        Button("Checkout") {
-            store.perform("Switching branch…") { await GitWorkflow.checkout(branch.name, at: store.root) }
-        }
-        .disabled(branch.isCurrent)
+        Button("Checkout") { store.checkout(.branch(branch.name)) }
+            .disabled(branch.isCurrent)
         Button("Create Branch from \(branch.name)…") {
             store.sheet = .createBranch(startPoint: branch.name, label: branch.name)
         }
@@ -98,7 +96,7 @@ struct GitLocalBranchContextMenu: View {
             }
         }
         Button("Rename…") { store.sheet = .renameBranch(branch.name) }
-        Button("Delete…", role: .destructive) { store.confirmation = .deleteBranch(branch.name) }
+        Button("Delete…", role: .destructive) { store.sheet = .deleteBranch(branch) }
             .disabled(branch.isCurrent)
     }
 }
@@ -110,11 +108,7 @@ struct GitRemoteBranchContextMenu: View {
     private var current: String { store.snapshot.currentBranch ?? String(localized: "HEAD") }
 
     var body: some View {
-        Button("Checkout \(branch.name)") {
-            store.perform("Switching branch…") {
-                await GitWorkflow.checkout(remote: branch, localBranches: store.snapshot.localBranches, at: store.root)
-            }
-        }
+        Button("Checkout \(branch.name)") { store.checkout(.remoteBranch(branch.refName)) }
         Button("Create Branch from \(branch.refName)…") {
             store.sheet = .createBranch(startPoint: branch.refName, label: branch.refName)
         }

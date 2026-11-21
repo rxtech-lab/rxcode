@@ -56,7 +56,7 @@ public struct TaskPromptStyle {
             pillTint: ClaudeTheme.textSecondary,
             chipTextColor: ClaudeTheme.textSecondary,
             chipBackground: ClaudeTheme.surfaceElevated,
-            dividerColor: ClaudeTheme.border,
+            dividerColor: ClaudeTheme.divider,
             markdown: .rxCodeChat,
             expandsHorizontally: true
         )
@@ -74,7 +74,7 @@ public struct TaskPromptStyle {
             pillTint: text.opacity(0.85),
             chipTextColor: text.opacity(0.85),
             chipBackground: text.opacity(0.12),
-            dividerColor: text.opacity(0.22),
+            dividerColor: text.opacity(0.14),
             markdown: .rxCodeChatUser,
             expandsHorizontally: false
         )

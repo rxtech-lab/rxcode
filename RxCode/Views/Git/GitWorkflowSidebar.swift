@@ -59,8 +59,7 @@ struct GitWorkflowSidebar: View {
                         GitPullRequestTipLedger.dismiss(target)
                         store.sheet = .createPullRequest(target)
                     }
-                        .themedListRow(GitSidebarItem.branch(branch.name), selection: store.selection)
-                        .contextMenu { GitLocalBranchContextMenu(branch: branch, store: store) }
+                    .themedListRow(GitSidebarItem.branch(branch.name), selection: store.selection)
                 }
             }
 
@@ -78,7 +77,6 @@ struct GitWorkflowSidebar: View {
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                     .themedListRow(GitSidebarItem.remoteBranch(branch.refName), selection: store.selection)
-                                    .contextMenu { GitRemoteBranchContextMenu(branch: branch, store: store) }
                             }
                         } label: {
                             Label(group.remote, systemImage: "cloud")
@@ -104,7 +102,6 @@ struct GitWorkflowSidebar: View {
                             GitTagRow(tag: tag)
                                 .padding(.leading, 12)
                                 .themedListRow(GitSidebarItem.tag(tag.name), selection: store.selection)
-                                .contextMenu { GitTagContextMenu(tag: tag, store: store) }
                         }
                         if tags.count > visibleTagCount {
                             let nextCount = min(Self.tagPageSize, tags.count - visibleTagCount)
@@ -124,15 +121,42 @@ struct GitWorkflowSidebar: View {
                         } icon: { Image(systemName: "archivebox") }
                         .help(stash.selector)
                         .themedListRow(GitSidebarItem.stash(stash.selector), selection: store.selection)
-                        .contextMenu { GitStashContextMenu(stash: stash, store: store) }
                     }
                 }
             }
         }
         .listStyle(.sidebar)
+        .contextMenu(forSelectionType: GitSidebarItem.self) { items in
+            menu(for: items.first)
+        } primaryAction: { items in
+            if let item = items.first { store.checkout(item) }
+        }
         .onChange(of: filter) { visibleTagCount = Self.tagPageSize }
         .onChange(of: tagsExpanded) {
             if !tagsExpanded { visibleTagCount = Self.tagPageSize }
+        }
+    }
+
+    @ViewBuilder private func menu(for item: GitSidebarItem?) -> some View {
+        switch item {
+        case .branch(let name):
+            if let branch = store.snapshot.localBranches.first(where: { $0.name == name }) {
+                GitLocalBranchContextMenu(branch: branch, store: store)
+            }
+        case .remoteBranch(let name):
+            if let branch = store.snapshot.remoteBranches.first(where: { $0.refName == name }) {
+                GitRemoteBranchContextMenu(branch: branch, store: store)
+            }
+        case .tag(let name):
+            if let tag = store.snapshot.tags.first(where: { $0.name == name }) {
+                GitTagContextMenu(tag: tag, store: store)
+            }
+        case .stash(let selector):
+            if let stash = store.snapshot.stashes.first(where: { $0.selector == selector }) {
+                GitStashContextMenu(stash: stash, store: store)
+            }
+        default:
+            EmptyView()
         }
     }
 }
@@ -203,10 +227,10 @@ private struct GitBranchRow: View {
                     }
                 }
                 if branch.ahead > 0 {
-                    Text("↑\(branch.ahead)").monospacedDigit()
+                    Text("\(branch.ahead)↑").monospacedDigit().fixedSize()
                 }
                 if branch.behind > 0 {
-                    Text("↓\(branch.behind)").monospacedDigit()
+                    Text("\(branch.behind)↓").monospacedDigit().fixedSize()
                 }
             }
             .font(.system(size: ClaudeTheme.size(12)))
@@ -219,5 +243,7 @@ private struct GitBranchRow: View {
         }
         .help(branch.upstream.map { String(localized: "\(branch.name) tracks \($0)") } ?? branch.name)
         .accessibilityLabel(branch.isCurrent ? String(localized: "\(branch.name), current branch") : branch.name)
+        .accessibilityValue(branch.upstream == nil ? Text("No upstream") : Text("\(branch.ahead) ahead, \(branch.behind) behind"))
+        .accessibilityIdentifier("git-branch-\(branch.name)")
     }
 }

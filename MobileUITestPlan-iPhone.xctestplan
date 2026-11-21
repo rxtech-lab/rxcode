@@ -15,6 +15,7 @@
   "testTargets" : [
     {
       "selectedTests" : [
+        "iPhoneNavigationUITests/testComputerUseConfirmationSendsBothDecisionsToTheMac()",
         "TaskDetailSheetUITests/testCardActionsAreInDropdownMenuAndNotSwipeable()",
         "MobileNativeReorderingUITests/testOnlyDeliberateHoldLiftsTaskCard()",
         "iPhoneNavigationUITests/testDraggingAcrossRowsDoesNotOpenThem()",

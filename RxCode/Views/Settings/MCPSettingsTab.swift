@@ -444,7 +444,7 @@ private struct MCPServerDetailsSheet: View {
                     .keyboardShortcut(.cancelAction)
             }
             .padding(20)
-            Divider()
+            ClaudeThemeDivider()
 
             VStack(alignment: .leading, spacing: 12) {
                 Text(verbatim: server.endpoint)
@@ -472,7 +472,7 @@ private struct MCPServerDetailsSheet: View {
                     .accessibilityLabel("Search tools")
             }
             .padding(20)
-            Divider()
+            ClaudeThemeDivider()
 
             if let probe, !probe.ok, let error = probe.error {
                 ContentUnavailableView {
@@ -564,7 +564,7 @@ private struct MCPToolDetailsSheet: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
-            Divider()
+            ClaudeThemeDivider()
             if let content {
                 ScrollView {
                     MarkdownContentView(text: content, style: .rxCodeCompact)

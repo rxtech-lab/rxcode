@@ -196,6 +196,7 @@ extension AppState {
             .questionQueue(QuestionQueuePayload(questions: mobilePendingQuestionPayloads())),
             toHex: hex
         )
+        guard !mobileSyncObservers.isEmpty else { return }
         await MobileSyncService.shared.send(
             .confirmationQueue(ConfirmationQueuePayload(confirmations: mobilePendingConfirmationPayloads())),
             toHex: hex
@@ -289,7 +290,7 @@ extension AppState {
     }
 
     func mobileAttentionKind(forSessionId id: String) -> SessionAttentionKind? {
-        let requests = mobilePendingRequests.values.filter { $0.sessionId == id }
+        let requests = mobilePendingRequests.values.filter { $0.sessionId.map(resolveCurrentSessionId) == id }
         if requests.contains(where: { $0.toolName == "AskUserQuestion" }) {
             return .question
         }
@@ -389,10 +390,10 @@ extension AppState {
         MobileSyncService.shared.broadcastQuestionQueue(mobilePendingQuestionPayloads())
     }
 
-    /// Wire representation of every `ide__show_confirmation` prompt awaiting
-    /// the user, used to mirror the desktop's confirmation queue to mobile.
+    /// The same queue is sent on arrival, resolution and reconnect. The phone
+    /// echoes the opaque prompt ID for both IDE and computer-use confirmations.
     func mobilePendingConfirmationPayloads() -> [PendingConfirmationPayload] {
-        agentPrompts.confirmations.map { confirmation in
+        let idePrompts = agentPrompts.confirmations.map { confirmation in
             PendingConfirmationPayload(
                 id: confirmation.id.uuidString,
                 sessionID: resolveCurrentSessionId(confirmation.sessionKey),
@@ -404,11 +405,25 @@ extension AppState {
                 isDestructive: confirmation.request.isDestructive
             )
         }
+        let computerUsePrompts = mobilePendingRequests.values.sorted { $0.id < $1.id }.compactMap { request -> PendingConfirmationPayload? in
+            guard ComputerUsePresentation.recognizes(request.toolName), let sessionID = request.sessionId else { return nil }
+            return PendingConfirmationPayload(
+                id: request.promptID.uuidString,
+                sessionID: resolveCurrentSessionId(sessionID),
+                projectID: projectID(forPromptSession: sessionID),
+                title: String(localized: "Confirm computer use"),
+                message: String(localized: "Allow the agent to control your Mac for the rest of this session?"),
+                confirmLabel: String(localized: "Confirm for This Session"),
+                cancelLabel: String(localized: "Reject"),
+                isDestructive: false
+            )
+        }
+        return idePrompts + computerUsePrompts
     }
 
     /// Broadcast the current confirmation queue to paired mobile devices.
     func broadcastMobileConfirmationQueue() {
-        guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
+        guard !mobileSyncObservers.isEmpty, !MobileSyncService.shared.pairedDevices.isEmpty else { return }
         MobileSyncService.shared.broadcastConfirmationQueue(mobilePendingConfirmationPayloads())
     }
 

@@ -1,3 +1,4 @@
+import RxCodeSync
 import XCTest
 
 /// iPhone navigation flows (UI test cases 1 & 3).
@@ -5,6 +6,31 @@ import XCTest
 /// On iPhone the app uses a `TabView` with `NavigationStack` tabs, so each flow
 /// pushes a detail screen and navigates back with the navigation-bar back button.
 final class iPhoneNavigationUITests: XCTestCase {
+
+    @MainActor
+    func testComputerUseConfirmationSendsBothDecisionsToTheMac() throws {
+        let session = try UITestRunner.launch(.phone, on: self)
+        let r = session.robot
+        r.tap(r.projectsTab, "Projects tab")
+        r.tap(r.app.buttons["project-row-A0000000-0000-0000-0000-000000000001"], "Project Alpha")
+        r.tap(r.app.buttons["thread-row-sess-alpha-1"].firstMatch, "Alpha Thread One")
+        r.assertExists(r.chatScreen, "chat screen")
+
+        let alert = r.app.alerts["Confirm computer use"]
+        let banner = r.app.buttons["Confirmation needed: Confirm computer use. Tap to review."]
+        for confirmed in [true, false] {
+            let prompt = PendingConfirmationPayload(
+                id: UUID().uuidString, sessionID: "sess-alpha-1", projectID: nil,
+                title: "Confirm computer use", message: "Allow the agent to control your Mac for the rest of this session?",
+                confirmLabel: "Confirm for This Session", cancelLabel: "Reject", isDestructive: false
+            )
+            session.server.sendConfirmations([prompt])
+            r.assertExists(alert, "computer-use confirmation")
+            r.tap(alert.buttons[confirmed ? prompt.confirmLabel : prompt.cancelLabel], "permission decision")
+            r.assertDisappears(banner, "resolved permission")
+            XCTAssertEqual(session.server.confirmationDecision(for: prompt.id), confirmed)
+        }
+    }
 
     @MainActor
     func testPublishedDocumentAppearsBesideProjectBriefings() throws {

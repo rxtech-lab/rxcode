@@ -51,6 +51,18 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
     private var dynamicThreadSummaries: [MobileThreadSummary] = []
     private var dynamicMessagesBySession: [String: [ChatMessage]] = [:]
     private var newSessionCounter = 0
+    private var confirmationDecisions: [String: Bool] = [:]
+
+    func sendConfirmations(_ prompts: [PendingConfirmationPayload]) {
+        queue.sync {
+            guard let connection else { return }
+            send(.confirmationQueue(.init(confirmations: prompts)), on: connection)
+        }
+    }
+
+    func confirmationDecision(for id: String) -> Bool? {
+        queue.sync { confirmationDecisions[id] }
+    }
 
     /// Ephemeral port the listener bound to. Valid after `start()` returns.
     private(set) var port: UInt16 = 0
@@ -172,6 +184,9 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
         else { return }
 
         switch payload {
+        case .confirmationDecision(let decision):
+            confirmationDecisions[decision.id] = decision.confirmed
+            send(.confirmationQueue(.init(confirmations: [])), on: connection)
         case .requestSnapshot(let request):
             send(.snapshot(currentSnapshot(activeSessionID: request.activeSessionID)),
                  on: connection)

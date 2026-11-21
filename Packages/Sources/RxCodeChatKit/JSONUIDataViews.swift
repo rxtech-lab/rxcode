@@ -27,10 +27,10 @@ struct JSONUITableView: View {
                         .gridColumnAlignment(horizontal(column))
                 }
             }
-            Divider()
+            ClaudeThemeDivider()
             ForEach(table.rows.indices, id: \.self) { index in
                 let row = table.rows[index]
-                if row.style == "total" { Divider() }
+                if row.style == "total" { ClaudeThemeDivider() }
                 GridRow {
                     ForEach(table.columns) { column in
                         cell(row.cells[column.key], column: column, style: row.style)
@@ -38,7 +38,7 @@ struct JSONUITableView: View {
                 }
             }
             if table.hasTotals {
-                Divider()
+                ClaudeThemeDivider()
                 GridRow {
                     ForEach(Array(table.columns.enumerated()), id: \.element.id) { index, column in
                         if let total = table.total(of: column) {
@@ -91,7 +91,7 @@ struct JSONUITableView: View {
                 }
                 .padding(.vertical, 10)
                 .accessibilityElement(children: .combine)
-                Divider()
+                ClaudeThemeDivider()
             }
             if table.hasTotals {
                 VStack(alignment: .leading, spacing: 6) {

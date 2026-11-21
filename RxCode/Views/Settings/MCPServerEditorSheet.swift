@@ -19,13 +19,13 @@ struct MCPServerEditorSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            ClaudeThemeDivider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     nameField
                     scopeField
                     transportField
-                    Divider()
+                    ClaudeThemeDivider()
                     if spec.transport == .stdio {
                         stdioFields
                     } else {
@@ -35,7 +35,7 @@ struct MCPServerEditorSheet: View {
                 .padding(20)
             }
             .disabled(isSaving)
-            Divider()
+            ClaudeThemeDivider()
             footer
         }
         .frame(width: 540, height: 600)

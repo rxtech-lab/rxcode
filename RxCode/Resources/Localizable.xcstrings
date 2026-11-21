@@ -3744,6 +3744,15 @@
         }
       }
     },
+    "Amend" : {
+
+    },
+    "Amend Commit" : {
+
+    },
+    "Amend Commit…" : {
+
+    },
     "An agent is working on this story's tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7833,10 +7842,10 @@
     "Couldn’t load page" : {
 
     },
-    "Couldn't Open the Model Page" : {
+    "Couldn’t load the latest commit message." : {
 
     },
-    "Couldn’t prepare commit" : {
+    "Couldn't Open the Model Page" : {
 
     },
     "Couldn’t Preview Window" : {
@@ -15374,6 +15383,9 @@
       }
     },
     "Loading Categories…" : {
+
+    },
+    "Loading commit message…" : {
 
     },
     "Loading current branches…" : {
@@ -22959,6 +22971,9 @@
           }
         }
       }
+    },
+    "Replace the latest commit using the current staged changes." : {
+
     },
     "Replay" : {
 

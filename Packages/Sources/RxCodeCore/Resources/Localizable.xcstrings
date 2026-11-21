@@ -290,6 +290,9 @@
         }
       }
     },
+    "Empty commit message" : {
+
+    },
     "Enter a cron expression." : {
 
     },
@@ -346,6 +349,9 @@
           }
         }
       }
+    },
+    "Finish the current Git operation before amending the commit." : {
+
     },
     "First day of the month at 9:00" : {
 
@@ -755,6 +761,9 @@
           }
         }
       }
+    },
+    "The checkout changed. Open Amend Commit again." : {
+
     },
     "The first kept commit can’t be squashed or fixed up." : {
 

@@ -186,12 +186,13 @@ struct StudioImplicitParentCard: View {
             }
             Label { Text("Continues from", bundle: .module) } icon: { Image(systemName: "arrow.triangle.branch") }
                 .font(.system(size: ClaudeTheme.size(10)))
-                .foregroundStyle(.white)
+                .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity)
-                .background(.black.opacity(0.5))
+                .background(.black.opacity(0.86))
+                .environment(\.colorScheme, .dark)
         }
         .frame(width: 96, height: 104)
         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -297,7 +298,6 @@ struct StudioWorkingScreen: View {
     let systemImage: String
     let status: String?
     let startedAt: Date
-    var tint: Color = .white
     let stop: () -> Void
 
     @State private var sweep = false
@@ -316,26 +316,26 @@ struct StudioWorkingScreen: View {
             VStack(spacing: 18) {
                 Image(systemName: systemImage)
                     .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(tint.opacity(0.85))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .symbolEffect(.pulse, options: .repeating)
 
                 VStack(spacing: 6) {
                     Text(status ?? String(localized: "Preparing…", bundle: .module))
                         .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
-                        .foregroundStyle(tint)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                         .multilineTextAlignment(.center)
                         .contentTransition(.opacity)
                         .animation(.smooth, value: status)
                     Text(startedAt, style: .timer)
                         .font(.system(size: ClaudeTheme.size(12)).monospacedDigit())
-                        .foregroundStyle(tint.opacity(0.6))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
 
                 Group {
                     if let fraction {
                         Text(fraction, format: .percent.precision(.fractionLength(0)))
                             .font(.system(size: ClaudeTheme.size(12)).monospacedDigit())
-                            .foregroundStyle(tint)
+                            .foregroundStyle(ClaudeTheme.textPrimary)
                         ProgressView(value: fraction)
                             .animation(.smooth, value: fraction)
                     } else {
@@ -351,7 +351,7 @@ struct StudioWorkingScreen: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
-                .tint(tint)
+                .tint(ClaudeTheme.textPrimary)
             }
             .padding(32)
         }

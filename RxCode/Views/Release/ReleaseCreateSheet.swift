@@ -49,7 +49,7 @@ struct ReleaseCreateSheet: View {
                 if isLoading {
                     HStack { Spacer(); ProgressView(); Spacer() }
                 } else if let loadError {
-                    Text(loadError).foregroundStyle(.red)
+                    Text(loadError).foregroundStyle(ClaudeTheme.statusError)
                 } else if dispatchableWorkflows.isEmpty {
                     Text("No dispatchable release workflow found for \(repoFullName). Add a `workflow_dispatch` release workflow and rescan, then try again.")
                         .foregroundStyle(.secondary)
@@ -59,12 +59,12 @@ struct ReleaseCreateSheet: View {
                         inputsSection(inputs)
                     }
                     if let dispatchError {
-                        Section { Text(dispatchError).foregroundStyle(.red).font(.callout) }
+                        Section { Text(dispatchError).foregroundStyle(ClaudeTheme.statusError).font(.callout) }
                     }
                     if let dispatchedURL {
                         Section {
                             Label("Release workflow triggered", systemImage: "checkmark.seal.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(ClaudeTheme.statusSuccess)
                             Link("View workflow run on GitHub", destination: dispatchedURL)
                         }
                     }

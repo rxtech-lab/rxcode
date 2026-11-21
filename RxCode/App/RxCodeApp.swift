@@ -71,6 +71,7 @@ struct RxCodeApp: App {
             .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
             .modifier(DownloadWindowPresenter())
             .modifier(PetWindowPresenter(workspaceManager: workspaceManager))
+            .appThemeForeground()
         } defaultValue: {
             WorkspaceWindowValue(workspaceID: workspaceManager.frontmostWorkspaceID)
         }
@@ -126,6 +127,7 @@ struct RxCodeApp: App {
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
             }
         }
         .defaultSize(width: 1000, height: 700)
@@ -143,6 +145,7 @@ struct RxCodeApp: App {
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
             }
         }
         .defaultSize(width: 1200, height: 800)
@@ -162,6 +165,7 @@ struct RxCodeApp: App {
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
             }
         }
         .defaultSize(width: 1000, height: 700)
@@ -177,6 +181,7 @@ struct RxCodeApp: App {
                 )
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
             }
         }
         .defaultSize(width: 1280, height: 800)
@@ -186,6 +191,7 @@ struct RxCodeApp: App {
             TerminalWindowRoot(path: value?.path ?? "")
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .defaultSize(width: 900, height: 600)
 
@@ -195,6 +201,7 @@ struct RxCodeApp: App {
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
                 .modifier(PetWindowPresenter(workspaceManager: workspaceManager))
+                .appThemeForeground()
         }
 
         // Standalone Automation windows, opened from the "Automation" menu.
@@ -202,6 +209,7 @@ struct RxCodeApp: App {
             AutopilotWindowRoot(appState: appState)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(width: 720, height: 640)
@@ -210,6 +218,7 @@ struct RxCodeApp: App {
             HooksWindowRoot(appState: appState)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(width: 760, height: 620)
@@ -218,6 +227,7 @@ struct RxCodeApp: App {
             CustomMenusWindowRoot(appState: appState)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(width: 720, height: 620)
@@ -228,6 +238,7 @@ struct RxCodeApp: App {
                 .frame(minWidth: LocalModelsSheet.minSize.width, minHeight: LocalModelsSheet.minSize.height)
                 .environment(appState)
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(LocalModelsSheet.idealSize)
@@ -237,6 +248,7 @@ struct RxCodeApp: App {
                 .frame(minWidth: 620, minHeight: 520)
                 .environment(appState)
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(width: 680, height: 580)
@@ -248,6 +260,7 @@ struct RxCodeApp: App {
         Window("Downloads", id: DownloadsWindow.id) {
             DownloadsWindow()
                 .environment(appState)
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(width: 520, height: 420)
@@ -258,6 +271,7 @@ struct RxCodeApp: App {
             MenuBarContentView()
                 .environment(appState)
                 .environment(workspaceManager)
+                .appThemeForeground()
         } label: {
             MenuBarLabel()
                 .environment(appState)

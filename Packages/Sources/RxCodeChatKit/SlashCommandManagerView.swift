@@ -130,7 +130,7 @@ public struct SlashCommandManagerView: View {
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(ClaudeTheme.accentText)
 
             Button {
                 dismiss()
@@ -185,7 +185,7 @@ public struct SlashCommandManagerView: View {
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(ClaudeTheme.accentText)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
@@ -255,7 +255,7 @@ public struct SlashCommandManagerView: View {
                 HStack(spacing: 6) {
                     Text(cmd.command)
                         .font(.system(size: ClaudeTheme.size(13), weight: .semibold, design: .monospaced))
-                        .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
+                        .foregroundStyle(isEnabled ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
 
                     agentScopeBadge(cmd.agentProvider)
 
@@ -280,7 +280,7 @@ public struct SlashCommandManagerView: View {
                     if cmd.isInteractive {
                         Text("terminal", bundle: .module)
                             .font(.system(size: ClaudeTheme.size(9)))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(ClaudeTheme.accentText)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(Color.accentColor.opacity(0.08), in: Capsule())
@@ -504,7 +504,7 @@ struct SlashCommandEditView: View {
                         if hasNameConflict {
                             Text("A command with this name already exists.", bundle: .module)
                                 .font(.system(size: ClaudeTheme.size(11)))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(ClaudeTheme.statusError)
                         }
                     }
 
@@ -611,7 +611,7 @@ struct SlashCommandEditView: View {
                             .font(.system(size: ClaudeTheme.size(13)))
                     }
                     .buttonStyle(.borderless)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
                 }
 
                 Spacer()

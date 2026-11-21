@@ -1,3 +1,4 @@
+import RxCodeCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -109,10 +110,10 @@ struct CookieImportStatusOverlay: View {
                     ProgressView().controlSize(.small)
                     Text("Importing Chrome cookies…")
                 case .imported(let count):
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(ClaudeTheme.statusSuccess)
                     Text("Imported \(count) cookies")
                 case .failed(let message):
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(ClaudeTheme.statusWarning)
                     Text(message).lineLimit(3)
                     Button("Dismiss") { browser.cookieImportStatus = nil }
                         .buttonStyle(.borderless)

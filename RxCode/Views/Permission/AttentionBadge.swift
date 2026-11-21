@@ -9,7 +9,7 @@ struct AttentionBadge: View {
             Text(attention.count > 99 ? "99+" : String(attention.count))
                 .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(ClaudeTheme.foreground(on: ClaudeTheme.statusWarning))
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(ClaudeTheme.statusWarning, in: Capsule())

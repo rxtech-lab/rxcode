@@ -44,6 +44,31 @@ struct GitHistoryParsingTests {
         #expect(GitHistoryParser.parseTrack("[gone]") == (0, 0))
         #expect(GitHistoryParser.parseTrack("") == (0, 0))
     }
+
+    @Test("Numstat preserves unusual paths, renames and binary changes")
+    func parsesNumstat() {
+        let raw = "2\t3\ttab\tand\nnewline\0-\t-\timage.png\0" + "0\t0\t\0old\0folder/new\0"
+        #expect(GitLineChanges.parseNumstat(raw) == [
+            "tab\tand\nnewline": .text(added: 2, deleted: 3),
+            "image.png": .binary,
+            "folder/new": .text(added: 0, deleted: 0),
+        ])
+    }
+
+    @Test("Folder selection includes descendants once and keeps sibling paths and replacement files distinct")
+    func folderSelection() {
+        let tree = GitPathTree(paths: ["Src/Old", "Src/Old/new.swift", "Src/a.swift", "SrcTests/a.swift", "top.txt"])
+        #expect(tree.roots.map(\.id) == ["Src/", "SrcTests/", "top.txt"])
+        #expect(tree.roots.first?.fileCount == 3)
+        #expect(tree.folders == ["Src/", "Src/Old/", "SrcTests/"])
+        #expect(tree.visibleRows(collapsing: ["Src/"]).map(\.id) == ["Src/", "SrcTests/", "SrcTests/a.swift", "top.txt"])
+        #expect(tree.visibleRows(collapsing: []).first { $0.id == "Src/Old/new.swift" }?.depth == 2)
+        #expect(tree.filePaths(in: ["Src/Old/"]) == ["Src/Old/new.swift"])
+        #expect(tree.filePaths(in: ["Src/Old"]) == ["Src/Old"])
+        #expect(Set(tree.filePaths(in: ["Src/", "Src/Old/", "Src/a.swift", "top.txt"])) == ["Src/Old", "Src/Old/new.swift", "Src/a.swift", "top.txt"])
+        #expect(tree.filePaths(in: ["Src/", "Src/Old/"]).count == 3)
+        #expect(tree.filePaths(in: []).isEmpty)
+    }
 }
 
 @Suite("Git graph layout")
@@ -159,6 +184,80 @@ struct GitWorkflowIntegrationTests {
         try git(["init", "-q", "--bare", "-b", "main", remote.path], at: repo)
         try git(["remote", "add", name, remote.path], at: repo)
         return remote
+    }
+
+    @Test("Primary branches stay first and publishing respects the chosen branch, destination and tracking option")
+    func publishUntrackedBranch() async throws {
+        let repo = try makeRepo(commits: ["base"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let initial = await GitRepositoryLoader.snapshot(at: repo.path)
+        let main = try #require(initial.currentLocalBranch)
+        #expect(initial.pushDestinations(for: main).isEmpty)
+        let remote = repo.appending(path: ".git/test-remotes/backup")
+        try git(["init", "-q", "--bare", "-b", "main", remote.path], at: repo)
+        #expect(await GitWorkflow.addRemote(name: "team/backup", url: remote.path, at: repo.path) == nil)
+        #expect(await GitHelper.runWithError(["fetch", "--", "team/backup"], at: repo.path) == nil)
+        for name in ["master", "aaa", "feature/main"] { try git(["branch", name], at: repo) }
+        try git(["push", "-q", "team/backup", "main", "master", "aaa"], at: repo)
+        let snapshot = await GitRepositoryLoader.snapshot(at: repo.path)
+        #expect(snapshot.localBranches.map(\.name) == ["main", "master", "aaa", "feature/main"])
+        #expect(snapshot.remoteBranches.map(\.name) == ["main", "master", "aaa"])
+        #expect(Array(await GitHelper.listLocalBranches(at: repo.path).prefix(2)) == ["main", "master"])
+        let feature = try #require(snapshot.localBranches.first { $0.name == "feature/main" })
+        let options = snapshot.pushDestinations(for: feature)
+        #expect(options.map(\.displayName) == ["team/backup/main", "team/backup/master", "team/backup/aaa", "team/backup/feature/main"])
+        #expect(options.map(\.isNew) == [false, false, false, true])
+        let target = try #require(options.last)
+        #expect(await GitWorkflow.push(branch: feature, remote: target.remote, force: false,
+                                       destinationRef: target.ref, setUpstream: false, at: repo.path) == nil)
+        let published = await GitRepositoryLoader.snapshot(at: repo.path)
+        #expect(published.localBranches.first { $0.name == feature.name }?.upstream == nil)
+        #expect(published.pushDestinations(for: feature).allSatisfy { !$0.isNew })
+        #expect(await GitRepositoryLoader.branches(at: remote.path).local.contains { $0.name == feature.name })
+        #expect(await GitWorkflow.push(branch: feature, remote: target.remote, force: false,
+                                       destinationRef: "refs/heads/aaa", setUpstream: true, at: repo.path) == nil)
+        let tracked = await GitRepositoryLoader.snapshot(at: repo.path)
+        #expect(tracked.currentBranch == "main")
+        #expect(tracked.localBranches.first { $0.name == feature.name }?.upstream == "team/backup/aaa")
+    }
+
+    @Test("Working tree, index and commit report independent file line counts")
+    func fileLineChanges() async throws {
+        let repo = try makeRepo(commits: ["base"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let path = "Sources/nested.txt"
+        try FileManager.default.createDirectory(at: repo.appending(path: "Sources"), withIntermediateDirectories: true)
+        let url = repo.appending(path: path)
+        try Data("first\nsecond".utf8).write(to: url)
+        #expect(await GitRepositoryLoader.untrackedLineChanges(for: url.path, at: repo.path) == .text(added: 2, deleted: 0))
+        try git(["add", "--", path], at: repo)
+        try Data("first\nthird\nfourth\n".utf8).write(to: url)
+        #expect(await GitRepositoryLoader.workingLineChanges(staged: true, at: repo.path)[path] == .text(added: 2, deleted: 0))
+        #expect(await GitRepositoryLoader.workingLineChanges(staged: false, at: repo.path)[path] == .text(added: 2, deleted: 1))
+        try git(["commit", "-qm", "add file"], at: repo)
+        let commit = try #require(await GitRepositoryLoader.history(at: repo.path, ref: "HEAD", limit: 1).first)
+        #expect(await GitRepositoryLoader.files(in: commit, at: repo.path).first?.lineChanges == .text(added: 2, deleted: 0))
+        let binary = repo.appending(path: "binary")
+        try Data([0, 1, 2]).write(to: binary)
+        #expect(await GitRepositoryLoader.untrackedLineChanges(for: binary.path, at: repo.path) == .binary)
+    }
+
+    @Test("Staging and unstaging a folder affect only the listed changes under that folder")
+    func stageSelectedFolder() async throws {
+        let repo = try makeRepo(commits: ["base"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let paths = ["App/Views/nested.txt", "App/top.txt", "AppTests/test.txt"]
+        for path in paths {
+            let url = repo.appending(path: path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("added\n".utf8).write(to: url)
+        }
+        let selected = GitPathTree(paths: paths).filePaths(in: ["App/", "App/Views/nested.txt"])
+        #expect(await GitHelper.stage(paths: selected, at: repo.path) == nil)
+        #expect(Set(await GitRepositoryLoader.workingLineChanges(staged: true, at: repo.path).keys) == ["App/Views/nested.txt", "App/top.txt"])
+        #expect(await GitHelper.unstage(paths: selected, at: repo.path) == nil)
+        #expect(await GitRepositoryLoader.workingLineChanges(staged: true, at: repo.path).isEmpty)
+        #expect(paths.allSatisfy { FileManager.default.fileExists(atPath: repo.appending(path: $0).path) })
     }
 
     @Test("A push uses the selected remote and preserves the branch's existing upstream")

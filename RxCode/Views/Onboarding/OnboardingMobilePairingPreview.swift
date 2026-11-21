@@ -46,7 +46,7 @@ struct MobilePairingPreview: View {
                     .foregroundStyle(ClaudeTheme.accent)
                 Text("Pair via QR")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
             }
 
@@ -66,10 +66,10 @@ struct MobilePairingPreview: View {
                     Text(verbatim: errorMessage)
                         .font(.system(size: 11))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
                 .frame(width: 180, height: 180)
-                .background(Color.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
                 ProgressView()
                     .frame(width: 180, height: 180)
@@ -82,7 +82,7 @@ struct MobilePairingPreview: View {
                          ? String(format: NSLocalizedString("Expires in %d:%02d", comment: ""), remaining / 60, remaining % 60)
                          : String(localized: "Expired"))
                         .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
 
@@ -91,10 +91,10 @@ struct MobilePairingPreview: View {
             } label: {
                 Label(LocalizedStringKey("Regenerate"), systemImage: "arrow.clockwise")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.14), in: Capsule())
+                    .background(ClaudeTheme.surfaceSecondary, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -102,11 +102,11 @@ struct MobilePairingPreview: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.34))
+                .fill(ClaudeTheme.codeBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 
@@ -116,17 +116,17 @@ struct MobilePairingPreview: View {
             VStack(spacing: 8) {
                 Text("No relay server configured")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .multilineTextAlignment(.center)
                 Button {
                     onAddRelayServer()
                 } label: {
                     Label(LocalizedStringKey("Add Relay Server"), systemImage: "plus")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ClaudeTheme.textOnAccent)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(ClaudeTheme.accent.opacity(0.85), in: Capsule())
+                        .background(ClaudeTheme.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -136,7 +136,7 @@ struct MobilePairingPreview: View {
             HStack(spacing: 6) {
                 Text("Relay")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                 Picker("", selection: $selectedRelayServerID) {
                     ForEach(savedRelayServers) { server in
                         Text(verbatim: server.name).tag(Optional(server.id))
@@ -153,8 +153,8 @@ struct MobilePairingPreview: View {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .semibold))
                         .frame(width: 22, height: 22)
-                        .foregroundStyle(.white)
-                        .background(Color.white.opacity(0.14), in: Circle())
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .background(ClaudeTheme.surfaceSecondary, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .help(LocalizedStringKey("Add Relay Server"))
@@ -170,13 +170,13 @@ struct MobilePairingPreview: View {
                     .foregroundStyle(ClaudeTheme.accent)
                 Text("Install the app")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
             }
 
             Text("Open RxCode on your phone, then tap Pair Device and scan the QR code.")
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ClaudeTheme.textSecondary)
 
             if isLoadingDownloads {
                 ProgressView()
@@ -187,7 +187,7 @@ struct MobilePairingPreview: View {
             } else {
                 Text("Download links unavailable. Visit rxlab.app to install the mobile app.")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.54))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             }
 
             Spacer(minLength: 0)
@@ -196,11 +196,11 @@ struct MobilePairingPreview: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.34))
+                .fill(ClaudeTheme.codeBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 
@@ -246,18 +246,18 @@ struct MobilePairingPreview: View {
                     if !sublabel.isEmpty {
                         Text(verbatim: sublabel)
                             .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                     }
                 }
                 Spacer()
                 Image(systemName: "arrow.up.right.square")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ClaudeTheme.textPrimary)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
     }

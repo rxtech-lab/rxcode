@@ -16,14 +16,14 @@ struct SummarizationSetupPreview: View {
                     .foregroundStyle(ClaudeTheme.accent)
                 Text("Summarization Model")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Provider")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.62))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                 Menu {
                     Picker("", selection: $appState.summarizationProvider) {
                         ForEach(SummarizationProvider.allCases) { provider in
@@ -36,21 +36,21 @@ struct SummarizationSetupPreview: View {
                     HStack(spacing: 6) {
                         Text(appState.summarizationProvider.displayName)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(ClaudeTheme.textPrimary)
                         Spacer()
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(.white.opacity(0.08))
+                            .fill(ClaudeTheme.surfaceSecondary)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                            .strokeBorder(ClaudeTheme.border, lineWidth: 1)
                     )
                 }
                 .menuStyle(.borderlessButton)
@@ -61,11 +61,11 @@ struct SummarizationSetupPreview: View {
             case .selectedClient:
                 Text("Uses the model picked by the current thread. No extra configuration needed.")
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.62))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             case .appleFoundationModel:
                 Text("Runs on-device using Apple Intelligence. Free, private, and offline.")
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.62))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             case .openAI:
                 openAISection
             }
@@ -74,11 +74,11 @@ struct SummarizationSetupPreview: View {
         .frame(maxWidth: 620)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.34))
+                .fill(ClaudeTheme.codeBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 
@@ -127,10 +127,10 @@ struct SummarizationSetupPreview: View {
                         Text("Fetch Models")
                     }
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textOnAccent)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(ClaudeTheme.accent.opacity(0.85), in: Capsule())
+                    .background(ClaudeTheme.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(appState.isLoadingOpenAISummarizationModels)
@@ -165,7 +165,7 @@ struct SummarizationSetupPreview: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(label)
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .frame(width: 78, alignment: .leading)
             TextField(placeholder, text: text)
                 .textFieldStyle(.roundedBorder)
@@ -177,7 +177,7 @@ struct SummarizationSetupPreview: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(label)
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .frame(width: 78, alignment: .leading)
             SecureField(placeholder, text: text)
                 .textFieldStyle(.roundedBorder)

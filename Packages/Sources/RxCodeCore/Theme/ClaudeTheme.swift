@@ -12,6 +12,7 @@ public enum ClaudeTheme {
     // MARK: - Accent
     public static var accent: Color        { ThemeStore.shared.colors.accent }
     public static var accentSubtle: Color  { ThemeStore.shared.colors.accentSubtle }
+    public static var accentText: Color    { ThemeStore.shared.colors.accentText }
 
     // MARK: - Backgrounds
     public static var background: Color        { ThemeStore.shared.colors.background }
@@ -26,10 +27,22 @@ public enum ClaudeTheme {
     public static var sidebarItemSelected: Color { ThemeStore.shared.colors.sidebarItemSelected }
 
     // MARK: - Text
-    public static var textPrimary: Color   { ThemeStore.shared.colors.textPrimary }
-    public static var textSecondary: Color { ThemeStore.shared.colors.textSecondary }
-    public static var textTertiary: Color  { ThemeStore.shared.colors.textTertiary }
+    public static var textPrimary: Color   { foreground(ThemeStore.shared.colors.textPrimary) }
+    public static var textSecondary: Color { foreground(ThemeStore.shared.colors.textSecondary) }
+    public static var textTertiary: Color  { foreground(ThemeStore.shared.colors.textTertiary) }
     public static var textOnAccent: Color  { ThemeStore.shared.colors.textOnAccent }
+
+    public static func foreground(_ color: Color) -> Color {
+        ThemeStore.shared.colors.foreground(color)
+    }
+
+    public static func semanticForeground(_ color: Color, on background: Color? = nil) -> Color {
+        ThemeStore.shared.colors.semanticForeground(color, on: background)
+    }
+
+    public static func foreground(on fill: Color) -> Color {
+        ThemeStore.shared.colors.foreground(on: fill)
+    }
 
     // MARK: - Borders
     public static var border: Color       { ThemeStore.shared.colors.border }
@@ -146,7 +159,19 @@ extension Color {
 
 // MARK: - Theme View Modifiers
 
+private struct AppThemeForeground: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
+            .tint(ClaudeTheme.accent)
+    }
+}
+
 extension View {
+    public func appThemeForeground() -> some View {
+        modifier(AppThemeForeground())
+    }
+
     public func pointerCursorOnHover() -> some View {
 #if os(macOS)
         self.onHover { hovering in
@@ -186,16 +211,13 @@ public struct ClaudeAccentButtonStyle: ButtonStyle {
     public init() {}
 
     public func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let fill = configuration.isPressed ? ClaudeTheme.accent.mix(with: ClaudeTheme.background, by: 0.12) : ClaudeTheme.accent
+        return configuration.label
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(ClaudeTheme.textOnAccent)
+            .foregroundStyle(ClaudeTheme.foreground(on: fill))
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .background(
-                configuration.isPressed
-                    ? ClaudeTheme.accent.opacity(0.8)
-                    : ClaudeTheme.accent
-            )
+            .background(fill)
             .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
     }
 }

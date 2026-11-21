@@ -172,7 +172,7 @@ struct TaskTableLayoutView: View {
                 HStack(spacing: 6) {
                     Image(systemName: row.statusIcon)
                         .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                        .foregroundStyle(row.statusTint)
+                        .foregroundStyle(ClaudeTheme.foreground(row.statusTint))
                     Text(row.title.isEmpty ? String(localized: "Untitled task") : row.title)
                         .lineLimit(1)
                 }
@@ -186,7 +186,7 @@ struct TaskTableLayoutView: View {
 
             TableColumn("Status", value: \.statusSortKey) { row in
                 Text(row.status)
-                    .foregroundStyle(row.statusTint)
+                    .foregroundStyle(ClaudeTheme.foreground(row.statusTint))
             }
             .width(min: 90, ideal: 110)
 
@@ -204,7 +204,7 @@ struct TaskTableLayoutView: View {
                     } icon: {
                         Image(systemName: priority.systemImage)
                     }
-                    .foregroundStyle(priority.tint)
+                    .foregroundStyle(ClaudeTheme.foreground(priority.tint))
                 }
             }
             .width(min: 60, ideal: 90)

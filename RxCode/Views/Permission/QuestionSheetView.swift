@@ -174,13 +174,12 @@ private extension QuestionSheetView {
                 if answered {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
                 }
                 Text(pillLabel(index: index, question: question))
                     .font(.system(size: ClaudeTheme.size(12), weight: isActive ? .semibold : .medium))
-                    .foregroundStyle(isActive || answered ? Color.white : ClaudeTheme.textSecondary)
                     .lineLimit(1)
             }
+            .foregroundStyle(isActive ? ClaudeTheme.textOnAccent : answered ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
@@ -201,7 +200,7 @@ private extension QuestionSheetView {
 
     func pillColor(isActive: Bool, answered: Bool) -> Color {
         if isActive { return ClaudeTheme.accent }
-        if answered { return ClaudeTheme.accent.opacity(0.6) }
+        if answered { return ClaudeTheme.accentSubtle }
         return ClaudeTheme.surfaceSecondary
     }
 }
@@ -440,25 +439,26 @@ private extension QuestionSheetView {
                         }
                     }
                 } label: {
+                    let fill = submitEnabled ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary
+                    let ink = submitEnabled ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary
                     HStack(spacing: 8) {
                         if isSubmitting {
                             ProgressView()
                                 .controlSize(.small)
-                                .tint(.white)
+                                .tint(ink)
                         }
                         Text(mainButtonLabel)
                             .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                            .foregroundStyle(.white)
                         if !isSubmitting {
                             Image(systemName: mainButtonIcon)
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white)
                         }
                     }
+                    .foregroundStyle(ink)
                     .frame(maxWidth: .infinity, minHeight: 38)
                     .background(
                         RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                            .fill(submitEnabled ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+                            .fill(fill)
                     )
                 }
                 .buttonStyle(.plain)

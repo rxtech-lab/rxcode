@@ -161,7 +161,7 @@ struct WhatsNewSheet: View {
                 .frame(width: 230, height: 44)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.white)
+        .foregroundStyle(ClaudeTheme.textOnAccent)
         .background(ClaudeTheme.accent, in: Capsule())
         .shadow(color: ClaudeTheme.accent.opacity(0.24), radius: 12, y: 6)
     }

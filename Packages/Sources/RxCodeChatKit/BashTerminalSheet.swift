@@ -137,7 +137,7 @@ struct BashTerminalSheet: View {
         HStack(alignment: .top, spacing: 8) {
             Text("$")
                 .font(.system(size: ClaudeTheme.messageSize(12), weight: .bold, design: .monospaced))
-                .foregroundStyle(ClaudeTheme.accent)
+                .foregroundStyle(ClaudeTheme.semanticForeground(ClaudeTheme.accent, on: ClaudeTheme.codeBackground))
             Text(command)
                 .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
                 .foregroundStyle(ClaudeTheme.textPrimary)

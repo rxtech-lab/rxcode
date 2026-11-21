@@ -321,18 +321,15 @@ public enum GitHelper {
         return await runWithError(args, at: repoPath)
     }
 
-    /// Returns local branch names ordered by most recent commit first.
+    /// Lists main and master first, followed by other branches in most-recent-commit order.
     public static func listLocalBranches(at path: String) async -> [String] {
         guard let result = await run(
-            ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads/"],
+            ["for-each-ref", "--sort=-committerdate", "--format=%(refname:lstrip=2)", "refs/heads/"],
             at: path
         ) else {
             return []
         }
-        return result
-            .split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        return GitBranchOrder.primaryFirst(result.split(separator: "\n").map(String.init), by: \.self)
     }
 
     // MARK: - Uncommitted changes

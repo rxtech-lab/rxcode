@@ -67,7 +67,7 @@ struct SkillMarketView: View {
         HStack(spacing: 10) {
             Image(systemName: "brain.head.profile")
                 .font(.system(size: ClaudeTheme.size(16)))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(ClaudeTheme.accent)
 
             Text("Skill Marketplace")
                 .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
@@ -169,7 +169,7 @@ struct SkillMarketView: View {
                 if let error = appState.marketplaceSourceError {
                     Text(error)
                         .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(Color.red)
+                        .foregroundStyle(ClaudeTheme.statusError)
                         .lineLimit(1)
                 }
 
@@ -193,10 +193,10 @@ struct SkillMarketView: View {
         } label: {
             Text(LocalizedStringKey(label))
                 .font(.system(size: ClaudeTheme.size(11), weight: selectedFilter == label ? .semibold : .regular))
-                .foregroundStyle(selectedFilter == label ? Color.white : Color.secondary)
+                .foregroundStyle(selectedFilter == label ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(selectedFilter == label ? Color.accentColor : Color(NSColor.controlBackgroundColor))
+                .background(selectedFilter == label ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -296,7 +296,7 @@ struct PluginCard: View {
             HStack(spacing: 4) {
                 Text(plugin.categoryLabel)
                     .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(ClaudeTheme.accentText)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Color.accentColor.opacity(0.08))
@@ -359,7 +359,7 @@ struct PluginCard: View {
                         .frame(width: 6, height: 6)
                     Text("Installed")
                         .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                        .foregroundStyle(Color.green)
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
                 }
             }
         case .installing:
@@ -374,19 +374,19 @@ struct PluginCard: View {
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
                 Text("Installed")
                     .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
             }
         case .failed(let message):
             HStack(spacing: 4) {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(Color.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
                 Text("Failed")
                     .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                    .foregroundStyle(Color.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
             }
             .help(message)
         }
@@ -443,7 +443,7 @@ struct PluginDetailView: View {
                     HStack(spacing: 6) {
                         Text(plugin.categoryLabel)
                             .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(ClaudeTheme.accentText)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(Color.accentColor.opacity(0.08))
@@ -521,7 +521,7 @@ struct PluginDetailView: View {
             Task { await appState.uninstallMarketplacePlugin(plugin) }
         }
         .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-        .foregroundStyle(Color.red)
+        .foregroundStyle(ClaudeTheme.statusError)
     }
 
     @ViewBuilder

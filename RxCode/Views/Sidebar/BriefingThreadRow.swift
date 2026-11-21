@@ -104,7 +104,7 @@ private struct BriefingThreadProgressBadge: View {
                 .font(.system(size: 10.5, weight: .semibold))
                 .lineLimit(1)
         }
-        .foregroundStyle(ClaudeTheme.accent)
+        .foregroundStyle(ClaudeTheme.accentText)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(

@@ -1,6 +1,7 @@
 import AppKit
 import PDFKit
 import QuickLookThumbnailing
+import RxCodeCore
 import SwiftUI
 import VisionKit
 import WebKit
@@ -124,7 +125,7 @@ struct PreviewCommentControls: View {
                     Label(capture.recognized == nil ? "Select Text in Preview" : "Return to Preview",
                           systemImage: "text.viewfinder")
                 }
-                .foregroundStyle(capture.recognized == nil ? Color.secondary : Color.accentColor)
+                .foregroundStyle(capture.recognized == nil ? ClaudeTheme.textSecondary : ClaudeTheme.accent)
                 .help(capture.recognized == nil ? "Select text in the visible preview using Live Text" : "Return to preview")
             }
             Button { capture.prepare(for: url, selectText: false) } label: {

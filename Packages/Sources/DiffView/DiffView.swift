@@ -488,7 +488,8 @@ private struct DiffRowBody: View {
             let attributed = SyntaxHighlighter.highlight(
                 bodyText,
                 language: language,
-                fontSize: ClaudeTheme.messageSize(12)
+                fontSize: ClaudeTheme.messageSize(12),
+                colors: ThemeStore.shared.colors
             )
             return Text(attributed)
         }

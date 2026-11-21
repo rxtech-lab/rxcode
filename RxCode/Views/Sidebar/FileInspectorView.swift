@@ -22,7 +22,6 @@ struct FileInspectorView<Title: View>: View {
     let onClose: () -> Void
     @ViewBuilder var title: () -> Title
     @State private var content: String?
-    @State private var highlightedContent: SourcePreviewContent?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isCopied = false
@@ -57,11 +56,7 @@ struct FileInspectorView<Title: View>: View {
                 } else if let content {
                     Group {
                         if showsRawText || !format.hasRenderedPreview {
-                            if let highlightedContent {
-                                CodeTextRenderer(content: highlightedContent)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    .background(ClaudeTheme.codeBackground)
-                            }
+                            ThemedSourcePreview(text: content, language: fileExtension)
                         } else if format == .markdown {
                             MarkdownPreviewView(content: content, baseURL: fileURL.deletingLastPathComponent())
                         } else if format == .html {
@@ -254,9 +249,7 @@ struct FileInspectorView<Title: View>: View {
                 }
                 try (bom + encoded).write(to: url, options: .atomic)
             }.value
-            let highlighted = await SourcePreviewContent.highlighted(textToSave, language: fileExtension)
             content = textToSave
-            highlightedContent = highlighted
             isEditing = false
         } catch {
             saveError = "Save failed: \(error.localizedDescription)"
@@ -269,7 +262,6 @@ struct FileInspectorView<Title: View>: View {
     private func loadFile() async {
         isLoading = true
         content = nil
-        highlightedContent = nil
         errorMessage = nil
         showsRawText = false
         sourceEncoding = .utf8
@@ -296,11 +288,7 @@ struct FileInspectorView<Title: View>: View {
 
             try Task.checkCancellation()
             if let text = FilePreviewFormat.decodeSource(data) {
-                let ext = fileExtension
-                let highlighted = await SourcePreviewContent.highlighted(text, language: ext)
-                try Task.checkCancellation()
                 content = text
-                highlightedContent = highlighted
                 if data.starts(with: [0xFF, 0xFE]) {
                     sourceEncoding = .utf16LittleEndian
                     sourceBOM = Data([0xFF, 0xFE])

@@ -8,7 +8,7 @@ extension MarkdownStyle {
             bodyFontSize: ClaudeTheme.messageSize(15),
             bodyColor: ClaudeTheme.textPrimary,
             secondaryColor: ClaudeTheme.textSecondary,
-            accentColor: ClaudeTheme.accent,
+            accentColor: ClaudeTheme.accentText,
             codeTextColor: ClaudeTheme.textPrimary,
             codeBackground: ClaudeTheme.codeBackground,
             codeHeaderBackground: ClaudeTheme.codeHeaderBackground,
@@ -27,7 +27,7 @@ extension MarkdownStyle {
             bodyFontSize: ClaudeTheme.size(12),
             bodyColor: ClaudeTheme.textPrimary,
             secondaryColor: ClaudeTheme.textSecondary,
-            accentColor: ClaudeTheme.accent,
+            accentColor: ClaudeTheme.accentText,
             codeTextColor: ClaudeTheme.textPrimary,
             codeBackground: ClaudeTheme.codeBackground,
             codeHeaderBackground: ClaudeTheme.codeHeaderBackground,
@@ -49,8 +49,8 @@ extension MarkdownStyle {
             bodyColor: text,
             secondaryColor: text.opacity(0.85),
             accentColor: text,
-            codeTextColor: text,
-            codeBackground: text.opacity(0.12),
+            codeTextColor: ClaudeTheme.textPrimary,
+            codeBackground: ClaudeTheme.codeBackground,
             codeHeaderBackground: text.opacity(0.08),
             borderColor: text.opacity(0.22),
             tableHeaderBackground: text.opacity(0.1),
@@ -93,7 +93,7 @@ public struct MarkdownContentView: View {
     }
 
     public var body: some View {
-        content.tint(ClaudeTheme.accent)
+        content.tint(style.accentColor)
     }
 
     @ViewBuilder

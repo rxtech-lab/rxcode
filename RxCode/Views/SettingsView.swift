@@ -83,8 +83,6 @@ struct SettingsView: View {
         }
         .frame(width: 720, height: 620)
         .background(ClaudeTheme.background)
-        .foregroundStyle(ClaudeTheme.textPrimary)
-        .tint(ClaudeTheme.accent)
         .focusable(false)
         .onAppear { selectedTab = 0 }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
@@ -313,7 +311,7 @@ struct GeneralSettingsTab: View {
                 Button("Reset", action: onReset)
                     .buttonStyle(.plain)
                     .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(ClaudeTheme.accent)
+                    .foregroundStyle(ClaudeTheme.accentText)
             }
         }
     }

@@ -352,7 +352,7 @@ struct ProjectChatRow: View {
         if taskCompletionChip == nil, showLabelChip, let label = summary.threadLabel, !label.isEmpty {
             Text(label)
                 .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
-                .foregroundStyle(ClaudeTheme.accent)
+                .foregroundStyle(ClaudeTheme.accentText)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(ClaudeTheme.accentSubtle, in: Capsule())

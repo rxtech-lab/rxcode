@@ -70,7 +70,7 @@ struct ReleaseRepoDetailView: View {
             if isLoading, workflows.isEmpty {
                 HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
             } else if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             } else if workflows.isEmpty {
                 Text("No workflows scanned yet. Add a release workflow (e.g. .github/workflows/create-release.yaml) to the repo, then re-add the repository to rescan.")
                     .foregroundStyle(.secondary).font(.callout)
@@ -87,7 +87,7 @@ struct ReleaseRepoDetailView: View {
                         if wf.isSelected && wf.hasWorkflowDispatch {
                             Label("Release", systemImage: "checkmark.seal.fill")
                                 .labelStyle(.iconOnly)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(ClaudeTheme.statusSuccess)
                                 .help("Selected release workflow")
                         } else if wf.hasWorkflowDispatch {
                             Text("dispatchable")
@@ -120,11 +120,11 @@ struct ReleaseRepoDetailView: View {
             if let installed = installedSecret {
                 Label("Installed \(installed.secretName) on \(installed.repositoryFullName)", systemImage: "checkmark.seal.fill")
                     .font(.callout)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
             }
 
             if let installError {
-                Text(installError).foregroundStyle(.red).font(.caption)
+                Text(installError).foregroundStyle(ClaudeTheme.statusError).font(.caption)
             }
 
             Button {

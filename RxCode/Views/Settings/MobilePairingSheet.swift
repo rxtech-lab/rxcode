@@ -154,11 +154,11 @@ struct PairingSheet: View {
                     systemImage: "clock"
                 )
                 .font(.caption)
-                .foregroundStyle(remaining < 30 ? Color.red : Color.secondary)
+                .foregroundStyle(remaining < 30 ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
             } else {
                 Text("Expired — generating a new QR code")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
             }
         }
     }

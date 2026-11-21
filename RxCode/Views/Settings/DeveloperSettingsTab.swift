@@ -82,7 +82,7 @@ private struct SettingsIconTile: View {
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: size * 0.5, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(ClaudeTheme.foreground(on: color))
             .frame(width: size, height: size)
             .background(color.gradient, in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
     }

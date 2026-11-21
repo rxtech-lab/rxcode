@@ -75,7 +75,7 @@ struct CIAddWatchedRepoSheet: View {
                         .textFieldStyle(.plain)
                 }
                 if let errorMessage {
-                    Text(errorMessage).foregroundStyle(.red).font(.callout)
+                    Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
                 }
                 ForEach(visibleRepos) { repo in
                     Button {

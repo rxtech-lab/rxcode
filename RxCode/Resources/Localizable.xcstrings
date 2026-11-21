@@ -902,6 +902,9 @@
         }
       }
     },
+    "%lld added lines" : {
+
+    },
     "%lld agents available" : {
       "localizations" : {
         "ko" : {
@@ -976,6 +979,9 @@
           }
         }
       }
+    },
+    "%lld changed files" : {
+
     },
     "%lld companion file%@ · %@" : {
       "localizations" : {
@@ -1062,6 +1068,9 @@
           }
         }
       }
+    },
+    "%lld deleted lines" : {
+
     },
     "%lld document(s)" : {
       "localizations" : {
@@ -4875,6 +4884,9 @@
     "Billing team" : {
 
     },
+    "Binary" : {
+
+    },
     "Binary found: %@, but version check failed" : {
       "localizations" : {
         "ko" : {
@@ -5030,6 +5042,9 @@
           }
         }
       }
+    },
+    "Branch:" : {
+
     },
     "Branches" : {
 
@@ -6730,6 +6745,9 @@
     "Coding Analytics Error" : {
 
     },
+    "Collapse %@" : {
+
+    },
     "Collapse chats" : {
       "localizations" : {
         "ko" : {
@@ -7842,7 +7860,7 @@
     "Couldn’t load page" : {
 
     },
-    "Couldn’t load the latest commit message." : {
+    "Couldn’t load the commit to amend." : {
 
     },
     "Couldn't Open the Model Page" : {
@@ -8159,6 +8177,9 @@
         }
       }
     },
+    "Create Remote…" : {
+
+    },
     "Create reusable templates of GitHub merge settings and branch rulesets. Your default template is applied to newly created repositories." : {
       "localizations" : {
         "ko" : {
@@ -8280,6 +8301,9 @@
           }
         }
       }
+    },
+    "Create tracking reference" : {
+
     },
     "Create with Model" : {
 
@@ -9823,9 +9847,6 @@
           }
         }
       }
-    },
-    "Destination branch" : {
-
     },
     "Detached at %@" : {
 
@@ -11685,6 +11706,9 @@
     "Expand" : {
 
     },
+    "Expand %@" : {
+
+    },
     "Expand chats" : {
       "localizations" : {
         "ko" : {
@@ -12680,21 +12704,17 @@
         }
       }
     },
+    "Force push" : {
+
+    },
     "Force Push" : {
 
     },
-    "Force push (with lease)" : {
+    "Force push to “%@”?" : {
 
     },
-    "Force push to “%@/%@”?" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Force push to “%1$@/%2$@”?"
-          }
-        }
-      }
+    "Force push with lease" : {
+
     },
     "Force pushing…" : {
 
@@ -13958,6 +13978,9 @@
     "Importing Chrome cookies…" : {
 
     },
+    "In original commit (%lld)" : {
+
+    },
     "In progress" : {
       "localizations" : {
         "ko" : {
@@ -15176,6 +15199,9 @@
         }
       }
     },
+    "Line counts unavailable" : {
+
+    },
     "Link" : {
       "localizations" : {
         "ko" : {
@@ -15385,7 +15411,7 @@
     "Loading Categories…" : {
 
     },
-    "Loading commit message…" : {
+    "Loading commit files…" : {
 
     },
     "Loading current branches…" : {
@@ -17078,6 +17104,9 @@
           }
         }
       }
+    },
+    "new (%@)" : {
+
     },
     "New Branch" : {
 
@@ -21601,9 +21630,6 @@
     "Push all tags" : {
 
     },
-    "Push Branch" : {
-
-    },
     "Push Tag" : {
 
     },
@@ -21641,6 +21667,9 @@
           }
         }
       }
+    },
+    "Push your local changes to remote repository" : {
+
     },
     "Push…" : {
 
@@ -27135,6 +27164,12 @@
     "Staged files (%lld)" : {
 
     },
+    "Staging %@…" : {
+
+    },
+    "Staging %lld files…" : {
+
+    },
     "Staging files…" : {
 
     },
@@ -29632,6 +29667,9 @@
     "To" : {
 
     },
+    "To:" : {
+
+    },
     "Today" : {
       "localizations" : {
         "zh-Hans" : {
@@ -30211,6 +30249,9 @@
       }
     },
     "Updating card…" : {
+
+    },
+    "Updating file lists…" : {
 
     },
     "Updating integration…" : {

@@ -1,67 +1,28 @@
 import RxCodeCore
 import SwiftUI
 
-private typealias GitFormConfirmation = (title: LocalizedStringResource, message: LocalizedStringResource)
-
-/// Shared chrome for the Git window's create and edit sheets: title, Cancel and
-/// confirm buttons, a progress overlay while git runs, and an error alert.
-private struct GitFormSheet<Content: View>: View {
-    let title: LocalizedStringResource
-    let confirmTitle: LocalizedStringResource
-    let progressTitle: LocalizedStringResource
-    let canConfirm: Bool
-    var confirmation: GitFormConfirmation? = nil
+/// Runs a sheet action, keeps the sheet open on failure, and refreshes the Git window.
+struct GitSheetOperation<Content: View>: View {
     let store: GitWorkflowStore
+    let progressTitle: LocalizedStringResource
     let action: () async -> String?
-    @ViewBuilder let content: () -> Content
+    @ViewBuilder let content: (_ submit: @escaping () -> Void) -> Content
     @Environment(\.dismiss) private var dismiss
     @State private var running = false
-    @State private var isConfirming = false
     @State private var error: String?
 
     var body: some View {
-        NavigationStack {
-            Form { content() }
-                .formStyle(.grouped)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle(Text(title))
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(String(localized: confirmTitle)) {
-                            if confirmation == nil {
-                                run()
-                            } else {
-                                isConfirming = true
-                            }
-                        }
-                        .disabled(!canConfirm || running)
-                    }
-                }
-        }
-        .frame(minWidth: 460, idealWidth: 520, maxWidth: .infinity, minHeight: 320, idealHeight: 380, maxHeight: .infinity)
-        .disabled(running)
-        .interactiveDismissDisabled(running)
-        .overlay { GitOperationOverlay(operation: running ? progressTitle : nil) }
-        .confirmationDialog(
-            String(localized: confirmation?.title ?? confirmTitle),
-            isPresented: $isConfirming,
-            titleVisibility: .visible,
-            presenting: confirmation
-        ) { _ in
-            Button(String(localized: confirmTitle), role: .destructive) { run() }
-            Button("Cancel", role: .cancel) {}
-        } message: { confirmation in
-            Text(confirmation.message)
-        }
-        .alert("Git operation failed", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-            Button("OK") { error = nil }
-        } message: { Text(error ?? "") }
+        content(run)
+            .disabled(running)
+            .interactiveDismissDisabled(running)
+            .overlay { GitOperationOverlay(operation: running ? progressTitle : nil) }
+            .alert("Git operation failed", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+                Button("OK") { error = nil }
+            } message: { Text(error ?? "") }
     }
 
     private func run() {
+        guard !running else { return }
         running = true
         Task {
             let failure = await action()
@@ -72,6 +33,38 @@ private struct GitFormSheet<Content: View>: View {
             } else {
                 dismiss()
             }
+        }
+    }
+}
+
+private struct GitFormSheet<Content: View>: View {
+    let title: LocalizedStringResource
+    let confirmTitle: LocalizedStringResource
+    let progressTitle: LocalizedStringResource
+    let canConfirm: Bool
+    let store: GitWorkflowStore
+    let action: () async -> String?
+    @ViewBuilder let content: () -> Content
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        GitSheetOperation(store: store, progressTitle: progressTitle, action: action) { submit in
+            NavigationStack {
+                Form { content() }
+                    .formStyle(.grouped)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .navigationTitle(Text(title))
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { dismiss() }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(String(localized: confirmTitle), action: submit)
+                                .disabled(!canConfirm)
+                        }
+                    }
+            }
+            .frame(minWidth: 460, idealWidth: 520, maxWidth: .infinity, minHeight: 320, idealHeight: 380, maxHeight: .infinity)
         }
     }
 }
@@ -94,6 +87,10 @@ struct GitPullSheet: View {
                 LabeledContent("Branch", value: branch.name)
                 if let upstream = branch.upstream {
                     LabeledContent("Upstream", value: upstream)
+                } else {
+                    LabeledContent("Upstream") {
+                        Button("Create Remote…") { store.sheet = .push(.branch(branch)) }
+                    }
                 }
             }
             Picker("Strategy", selection: $strategy) {
@@ -102,81 +99,39 @@ struct GitPullSheet: View {
                 Text("Rebase").tag(GitWorkflow.PullStrategy.rebase)
             }
             .pickerStyle(.radioGroup)
+            .disabled(branch?.upstream == nil)
         }
     }
 }
 
-struct GitPushSheet: View {
+struct GitPushTagSheet: View {
     let store: GitWorkflowStore
-    let source: GitPushSource
-    @State private var selectedRemote: String?
-    @State private var force = false
-    @State private var pushAllTags = false
+    let tag: GitTag
+    @State private var remote: String?
 
-    init(store: GitWorkflowStore, source: GitPushSource) {
+    init(store: GitWorkflowStore, tag: GitTag) {
         self.store = store
-        self.source = source
-        let trackingRemote = source.branch?.upstreamRemote.flatMap { remote in
-            store.snapshot.remotes.contains(remote) ? remote : nil
-        }
-        _selectedRemote = State(initialValue: trackingRemote ?? store.defaultRemote)
-    }
-
-    private var remote: String? {
-        selectedRemote.flatMap { store.snapshot.remotes.contains($0) ? $0 : nil }
-    }
-
-    private var destinationBranch: String {
-        guard let branch = source.branch, let remote else { return source.name }
-        let ref = branch.pushDestination(on: remote)
-        return ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
-    }
-
-    private var forceConfirmation: GitFormConfirmation? {
-        guard force, let remote else { return nil }
-        return (
-            "Force push to “\(remote)/\(destinationBranch)”?",
-            "Git checks the remote branch against your local remote-tracking ref before rewriting it."
-        )
+        self.tag = tag
+        _remote = State(initialValue: store.defaultRemote)
     }
 
     var body: some View {
-        let isBranch = source.branch != nil
         GitFormSheet(
-            title: isBranch ? "Push Branch" : "Push Tag",
-            confirmTitle: force ? "Force Push" : "Push",
-            progressTitle: force ? "Force pushing…" : "Pushing…",
-            canConfirm: remote != nil,
-            confirmation: forceConfirmation,
+            title: "Push Tag",
+            confirmTitle: "Push",
+            progressTitle: "Pushing…",
+            canConfirm: remote.map(store.snapshot.remotes.contains) == true,
             store: store,
-            action: push
+            action: {
+                guard let remote else { return String(localized: "Select a remote before pushing.") }
+                return await GitWorkflow.pushTag(tag.name, remote: remote, at: store.root)
+            }
         ) {
-            LabeledContent(isBranch ? "Branch" : "Tag", value: source.name)
-            Picker("Remote", selection: Binding(get: { remote }, set: { selectedRemote = $0 })) {
-                if remote == nil {
-                    Text("Select a remote").tag(nil as String?)
-                }
-                ForEach(store.snapshot.remotes, id: \.self) { remote in
-                    Text(remote).tag(Optional(remote))
-                }
+            LabeledContent("Tag", value: tag.name)
+            Picker("Remote", selection: $remote) {
+                if remote == nil { Text("Select a remote").tag(nil as String?) }
+                ForEach(store.snapshot.remotes, id: \.self) { Text($0).tag(Optional($0)) }
             }
-            if isBranch {
-                if destinationBranch != source.name {
-                    LabeledContent("Destination branch", value: destinationBranch)
-                }
-                Toggle("Force push (with lease)", isOn: $force)
-                Toggle("Push all tags", isOn: $pushAllTags)
-            }
-        }
-    }
-
-    private func push() async -> String? {
-        guard let remote else { return String(localized: "Select a remote before pushing.") }
-        switch source {
-        case .branch(let branch):
-            return await GitWorkflow.push(branch: branch, remote: remote, force: force, pushAllTags: pushAllTags, at: store.root)
-        case .tag(let tag):
-            return await GitWorkflow.pushTag(tag.name, remote: remote, at: store.root)
         }
     }
 }
@@ -372,8 +327,16 @@ struct GitStashSheet: View {
 
 struct GitAddRemoteSheet: View {
     let store: GitWorkflowStore
-    @State private var name = ""
+    let onAdded: (String) -> Void
+    @State private var name: String
     @State private var url = ""
+    @State private var added = false
+
+    init(store: GitWorkflowStore, onAdded: @escaping (String) -> Void = { _ in }) {
+        self.store = store
+        self.onAdded = onAdded
+        _name = State(initialValue: store.snapshot.remotes.isEmpty ? "origin" : "")
+    }
 
     var body: some View {
         GitFormSheet(
@@ -383,14 +346,20 @@ struct GitAddRemoteSheet: View {
             canConfirm: isValidRefName(name) && !url.trimmingCharacters(in: .whitespaces).isEmpty,
             store: store,
             action: {
-                if let failure = await GitWorkflow.addRemote(name: name, url: url.trimmingCharacters(in: .whitespaces), at: store.root) {
-                    return failure
+                if !added {
+                    if let failure = await GitWorkflow.addRemote(name: name, url: url.trimmingCharacters(in: .whitespaces), at: store.root) {
+                        return failure
+                    }
+                    added = true
+                    onAdded(name)
                 }
-                return await GitWorkflow.fetch(at: store.root)
+                return await GitHelper.runWithError(["fetch", "--", name], at: store.root)
             }
         ) {
             TextField("Name", text: $name, prompt: Text(store.snapshot.remotes.isEmpty ? "origin" : "upstream"))
+                .disabled(added)
             TextField("URL", text: $url, prompt: Text("git@github.com:owner/repo.git"))
+                .disabled(added)
         }
     }
 }

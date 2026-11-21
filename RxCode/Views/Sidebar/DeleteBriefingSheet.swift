@@ -16,7 +16,7 @@ struct DeleteBriefingSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: "trash")
                     .font(.title2)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
                 Text("Delete Briefing")
                     .font(.title2.weight(.semibold))
             }
@@ -26,7 +26,7 @@ struct DeleteBriefingSheet: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
                     .textSelection(.enabled)
             }
 

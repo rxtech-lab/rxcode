@@ -212,7 +212,7 @@ private struct AudioStage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: take.isTranscription ? .top : .center)
         case .generating:
             StudioWorkingScreen(systemImage: take.attachments.isEmpty ? "waveform" : "ear", status: status,
-                                startedAt: take.date, tint: ClaudeTheme.textPrimary) {
+                                startedAt: take.date) {
                 Task { await chatBridge.cancelStreaming() }
             }
         case .missing:
@@ -373,7 +373,7 @@ private struct AudioPlayerPanel: View {
                 } label: {
                     Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ClaudeTheme.textOnAccent)
                         .frame(width: 44, height: 44)
                         .background(ClaudeTheme.accent, in: Circle())
                         .contentTransition(.symbolEffect(.replace))

@@ -148,7 +148,7 @@ struct MemorySettingsSection: View {
 
                 if appState.memoryMCPServerRunning {
                     Text("Running")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
                 } else {
                     Text("Off")
                         .foregroundStyle(.secondary)
@@ -515,18 +515,18 @@ struct ThemePickerRow: View {
                     .frame(width: 10, height: 10)
                 Text(theme.displayName)
                     .font(.system(size: ClaudeTheme.size(13)))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer(minLength: 0)
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.accent)
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isHovering ? Color(NSColor.selectedContentBackgroundColor).opacity(0.5) : Color.clear)
+            .background(isHovering ? ClaudeTheme.sidebarItemHover : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
         }

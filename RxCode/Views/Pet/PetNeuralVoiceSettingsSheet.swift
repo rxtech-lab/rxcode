@@ -290,7 +290,7 @@ struct PetNeuralVoiceSettingsSheet: View {
             if fixedSeed == nil {
                 Text("Enter a whole number from 0 to 2147483647.")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
             }
         } header: {
             Text("Variation")

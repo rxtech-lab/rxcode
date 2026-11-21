@@ -68,10 +68,10 @@ struct RxCodeToolbarContent: ToolbarContent {
                     if let loadedFileCount, loadedFileCount.sessionId == key.sessionId, loadedFileCount.count > 0 {
                         Text("\(loadedFileCount.count)")
                             .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(ClaudeTheme.foreground(on: ClaudeTheme.statusError))
                             .padding(.horizontal, 4)
                             .frame(minWidth: 14, minHeight: 14)
-                            .background(Capsule().fill(Color.red))
+                            .background(Capsule().fill(ClaudeTheme.statusError))
                             .offset(x: 8, y: -6)
                     }
                 }

@@ -156,7 +156,7 @@ struct OnboardingView: View {
                 .shadow(color: .black.opacity(0.18), radius: 28, y: 18)
 
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
 
             ZStack {
                 ForEach(Array(slides.enumerated()), id: \.element.id) { index, slide in
@@ -227,7 +227,7 @@ struct OnboardingView: View {
                     .frame(width: 230, height: 44)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.white)
+            .foregroundStyle(ClaudeTheme.textOnAccent)
             .background(ClaudeTheme.accent, in: Capsule())
             .padding(.bottom, 34)
         }
@@ -323,9 +323,9 @@ struct OnboardingView: View {
             Image(systemName: systemImage)
                 .font(.system(size: ClaudeTheme.size(17), weight: .semibold))
                 .frame(width: 42, height: 42)
-                .foregroundStyle(.white)
-                .background(.white.opacity(0.18), in: Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .background(ClaudeTheme.surfaceSecondary, in: Circle())
+                .overlay(Circle().strokeBorder(ClaudeTheme.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .help(systemImage == "chevron.left" ? LocalizedStringKey("Back") : LocalizedStringKey("Continue"))

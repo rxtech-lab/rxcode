@@ -198,9 +198,9 @@ private struct ComputerUsePreviewPanel: View {
                     .truncationMode(.middle)
                 Text(pinnedItem == nil ? "Following Codex" : "Pinned")
                     .font(.system(size: ClaudeTheme.size(9.5)))
-                    .opacity(0.7)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ClaudeTheme.textPrimary)
             Spacer(minLength: 6)
             ComputerUseLiveIndicator(item: item)
         }
@@ -208,8 +208,11 @@ private struct ComputerUsePreviewPanel: View {
         .padding(.top, 8)
         .padding(.bottom, 18)
         .background(
-            LinearGradient(colors: [.black.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom)
+            LinearGradient(stops: [.init(color: .black.opacity(0.9), location: 0),
+                                   .init(color: .black.opacity(0.84), location: 0.75),
+                                   .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom)
         )
+        .environment(\.colorScheme, .dark)
         .contentShape(Rectangle())
         .gesture(dragGesture)
         .help(item.title)

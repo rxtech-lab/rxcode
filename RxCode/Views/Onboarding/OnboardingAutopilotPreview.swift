@@ -18,13 +18,13 @@ struct AutopilotSignInPreview: View {
                     .foregroundStyle(ClaudeTheme.accent)
                 Text("Flowcy Account")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
             }
 
             Text("Sign in with rxlab to import GitHub repositories, sync encrypted secrets, and use Flowcy features. You can skip this and sign in later from Settings.")
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ClaudeTheme.textSecondary)
 
             capabilitiesGrid
 
@@ -40,11 +40,11 @@ struct AutopilotSignInPreview: View {
         .frame(maxWidth: 620)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.34))
+                .fill(ClaudeTheme.codeBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
         .sheet(isPresented: $showSignIn) {
             RxAuthSignInView()
@@ -103,20 +103,20 @@ struct AutopilotSignInPreview: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(capability.title)
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Text(capability.description)
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 
@@ -126,11 +126,11 @@ struct AutopilotSignInPreview: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(appState.rxUser?.name ?? "rxlab account")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 if let email = appState.rxUser?.email {
                     Text(verbatim: email)
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
             Spacer(minLength: 8)
@@ -153,29 +153,29 @@ struct AutopilotSignInPreview: View {
                 } else {
                     Text("Sign Out")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                 }
             }
             .buttonStyle(.plain)
             .disabled(isSigningOut)
         }
         .padding(12)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var signedOutCard: some View {
         HStack(spacing: 12) {
             Image(systemName: "person.crop.circle.badge.questionmark")
                 .font(.system(size: 22))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Not signed in")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Text("Connect your rxlab account to enable Flowcy.")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
             Spacer(minLength: 8)
             Button {
@@ -184,13 +184,13 @@ struct AutopilotSignInPreview: View {
                 Text("Sign In")
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 88, height: 30)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textOnAccent)
                     .background(ClaudeTheme.accent, in: Capsule())
             }
             .buttonStyle(.plain)
         }
         .padding(12)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder
@@ -214,7 +214,7 @@ struct AutopilotSignInPreview: View {
     private var avatarPlaceholder: some View {
         Image(systemName: "person.crop.circle.fill")
             .font(.system(size: 34))
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(ClaudeTheme.textSecondary)
             .frame(width: 40, height: 40)
     }
 }

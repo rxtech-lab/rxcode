@@ -125,7 +125,7 @@ struct RateLimitModelEstimatePopover: View {
                     if isHighestTier {
                         Text("Highest tier")
                             .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(ClaudeTheme.accent)
+                            .foregroundStyle(ClaudeTheme.accentText)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
                             .background(Capsule().fill(ClaudeTheme.accent.opacity(0.12)))

@@ -137,7 +137,7 @@ struct AgentRuntimeSettingsView: View {
 
                 Text(path ?? "No executable detected")
                     .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
-                    .foregroundStyle(path == nil ? .secondary : ClaudeTheme.textPrimary)
+                    .foregroundStyle(path == nil ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary)
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .textSelection(.enabled)

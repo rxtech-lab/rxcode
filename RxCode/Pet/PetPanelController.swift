@@ -249,7 +249,7 @@ final class PetPanelController {
         // `.background`, which made PetSpriteView render a single still frame forever.
         // The always-on-screen panel is effectively active; pausing is handled by
         // `isAnimationActive` and the screen sleep/wake notifications instead.
-        let hosting = NSHostingView(rootView: rootView.environment(\.scenePhase, .active))
+        let hosting = NSHostingView(rootView: rootView.appThemeForeground().environment(\.scenePhase, .active))
         hosting.sizingOptions = []
         hosting.frame = container.bounds
         hosting.autoresizingMask = [.width, .height]

@@ -72,7 +72,7 @@ struct NotificationSettingsSheet: View {
 
             if let errorMessage {
                 Section {
-                    Text(errorMessage).foregroundStyle(.red).font(.callout)
+                    Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
                 }
             }
 
@@ -433,7 +433,7 @@ private struct EmailRow<Actions: View>: View {
                             .font(.caption2.weight(.medium))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(ClaudeTheme.accentText)
                             .background(Color.accentColor.opacity(0.14), in: Capsule())
                     }
                 }
@@ -533,7 +533,7 @@ private struct NotificationHistoryView: View {
     var body: some View {
         List {
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
             ForEach(records) { record in
                 HistoryRow(record: record, projectName: projectName(record.projectId))
@@ -588,7 +588,7 @@ private struct HistoryRow: View {
                 if let message = record.errorMessage ?? record.reason, !message.isEmpty {
                     Text(verbatim: message)
                         .font(.caption)
-                        .foregroundStyle(record.status == .failed ? Color.red : Color.secondary)
+                        .foregroundStyle(record.status == .failed ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
                         .lineLimit(2)
                         .help(message)
                 }

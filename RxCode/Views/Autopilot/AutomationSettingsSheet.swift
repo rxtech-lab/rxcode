@@ -97,7 +97,7 @@ struct AutomationSettingsSheet: View {
     private var footer: some View {
         HStack {
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()

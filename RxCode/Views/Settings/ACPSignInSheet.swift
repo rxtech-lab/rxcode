@@ -128,7 +128,7 @@ struct ACPSignInSheet: View {
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                     .font(.system(size: ClaudeTheme.size(13)))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {

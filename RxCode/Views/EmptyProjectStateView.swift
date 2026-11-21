@@ -91,7 +91,7 @@ struct EmptyProjectStateView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
-                    .foregroundStyle(ClaudeTheme.accent)
+                    .foregroundStyle(ClaudeTheme.accentText)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
                     .background(

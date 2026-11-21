@@ -200,10 +200,10 @@ struct RunProfileToolbarGroup: View {
             if activeTasks.count > 1 {
                 Text("\(activeTasks.count)")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.foreground(on: ClaudeTheme.statusError))
                     .padding(.horizontal, 3)
                     .frame(minWidth: 12, minHeight: 12)
-                    .background(Capsule().fill(.red))
+                    .background(Capsule().fill(ClaudeTheme.statusError))
                     .offset(x: 6, y: -4)
             }
         }

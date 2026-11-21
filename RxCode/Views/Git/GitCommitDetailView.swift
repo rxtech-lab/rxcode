@@ -95,24 +95,26 @@ struct GitCommitDetailView: View {
 private struct GitCommitChangesView: View {
     let commit: GitCommit
     let root: String
-    @State private var files: [GitCommitFile] = []
+    @State private var changes = GitChangedFiles<GitCommitFile>([], path: \.path)
     @State private var selectedPath: String?
     @State private var loading = true
 
     private var selectedFile: GitCommitFile? {
-        files.first { $0.path == selectedPath }
+        selectedPath.flatMap { changes.byPath[$0] }
     }
 
     var body: some View {
         Group {
             if loading {
                 ProgressView().controlSize(.small)
-            } else if files.isEmpty {
+            } else if changes.files.isEmpty {
                 ContentUnavailableView("No file changes", systemImage: "doc")
             } else {
                 HSplitView {
-                    List(files, selection: $selectedPath) { file in
-                        GitCommitFileRow(file: file).tag(file.path)
+                    List(selection: $selectedPath) {
+                        GitChangedFileTree(changes: changes, isSelected: { $0 == selectedPath }) { file in
+                            GitCommitFileRow(file: file)
+                        }
                     }
                     .listStyle(.inset)
                     .frame(minWidth: 180, idealWidth: 260, maxWidth: 380, maxHeight: .infinity)
@@ -121,6 +123,8 @@ private struct GitCommitChangesView: View {
                         if let selectedFile {
                             GitCommitFileDiffView(file: selectedFile, commit: commit, root: root)
                                 .id(selectedFile.id)
+                        } else if let path = selectedPath, changes.tree.folders.contains(path) {
+                            GitFolderContents(folder: path, tree: changes.tree) { selectedPath = $0 }
                         } else {
                             ContentUnavailableView("Select a file", systemImage: "doc.text.magnifyingglass")
                         }
@@ -131,16 +135,16 @@ private struct GitCommitChangesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
-            let changedFiles = await GitRepositoryLoader.files(in: commit, at: root)
+            let changedFiles = await GitChangedFiles.load(in: commit, at: root)
             guard !Task.isCancelled else { return }
-            files = changedFiles
-            selectedPath = changedFiles.first?.path
+            changes = changedFiles
+            selectedPath = changedFiles.files.first?.path
             loading = false
         }
     }
 }
 
-private struct GitCommitFileDiffView: View {
+struct GitCommitFileDiffView: View {
     let file: GitCommitFile
     let commit: GitCommit
     let root: String
@@ -173,33 +177,39 @@ private struct GitCommitFileDiffView: View {
 private struct GitCommitFileTreeView: View {
     let commit: GitCommit
     let root: String
-    @State private var nodes: [FileNode]?
+    @State private var tree: GitPathTree?
     @State private var selectedPath: String?
 
     var body: some View {
         Group {
-            if let nodes {
-                if nodes.isEmpty {
+            if let tree {
+                if tree.roots.isEmpty {
                     ContentUnavailableView("No tracked files", systemImage: "folder")
                 } else {
                     HSplitView {
                         List(selection: $selectedPath) {
-                            OutlineGroup(nodes, children: \.outlineChildren) { node in
+                            OutlineGroup(tree.roots, children: \.outlineChildren) { node in
                                 Label {
                                     Text(node.name).lineLimit(1).truncationMode(.middle)
+                                        .foregroundStyle(ClaudeTheme.textPrimary)
                                 } icon: {
-                                    Image(systemName: node.icon).foregroundStyle(node.iconColor)
+                                    GitFileIcon(name: node.name, isFolder: node.isDirectory)
                                 }
-                                .tag(node.id)
+                                .themedListRow(node.id, selected: node.id == selectedPath)
                                 .help(node.id)
+                                .listRowSeparator(.hidden)
                             }
                         }
                         .listStyle(.inset)
                         .frame(minWidth: 180, idealWidth: 260, maxWidth: 380, maxHeight: .infinity)
                         Group {
-                            if let selectedPath {
-                                GitCommitFilePreview(path: selectedPath, commit: commit, root: root)
-                                    .id(selectedPath)
+                            if let path = selectedPath {
+                                if tree.folders.contains(path) {
+                                    GitFolderContents(folder: path, tree: tree) { selectedPath = $0 }
+                                } else {
+                                    GitCommitFilePreview(path: path, commit: commit, root: root)
+                                        .id(path)
+                                }
                             } else {
                                 ContentUnavailableView("Select a file", systemImage: "doc.text.magnifyingglass")
                             }
@@ -214,9 +224,9 @@ private struct GitCommitFileTreeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             let paths = await GitRepositoryLoader.trackedPaths(in: commit, at: root)
-            let tree = await Task.detached { FileNode.gitTree(paths: paths) }.value
+            let loaded = await Task.detached { GitPathTree(paths: paths) }.value
             guard !Task.isCancelled else { return }
-            nodes = tree
+            tree = loaded
         }
     }
 }
@@ -225,18 +235,20 @@ private struct GitCommitFilePreview: View {
     let path: String
     let commit: GitCommit
     let root: String
-    @State private var code: SourcePreviewContent?
-    @State private var markdown: String?
+    @State private var text: String?
     @State private var loading = true
 
     var body: some View {
         VStack(spacing: 0) {
             GitFilePaneHeader(path: path)
             Group {
-                if let markdown {
-                    MarkdownPreviewView(content: markdown)
-                } else if let code {
-                    CodeTextRenderer(content: code)
+                if let text {
+                    let language = SyntaxHighlighter.language(forFilename: path) ?? ""
+                    if ["md", "markdown"].contains(language) {
+                        MarkdownPreviewView(content: text)
+                    } else {
+                        ThemedSourcePreview(text: text, language: language)
+                    }
                 } else if loading {
                     ProgressView().controlSize(.small)
                 } else {
@@ -247,15 +259,9 @@ private struct GitCommitFilePreview: View {
         }
         .background(ClaudeTheme.background)
         .task {
-            if let text = await GitRepositoryLoader.fileText(at: path, in: commit, root: root), !Task.isCancelled {
-                if ["md", "markdown"].contains((path as NSString).pathExtension.lowercased()) {
-                    markdown = text
-                } else {
-                    let highlighted = await SourcePreviewContent.highlighted(text, language: SyntaxHighlighter.language(forFilename: path) ?? "")
-                    guard !Task.isCancelled else { return }
-                    code = highlighted
-                }
-            }
+            let result = await GitRepositoryLoader.fileText(at: path, in: commit, root: root)
+            guard !Task.isCancelled else { return }
+            text = result
             loading = false
         }
     }
@@ -277,54 +283,5 @@ private struct GitFilePaneHeader: View {
                 .help(path)
             Divider()
         }
-    }
-}
-
-private extension FileNode {
-    var outlineChildren: [Self]? { isDirectory ? children : nil }
-
-    nonisolated static func gitTree(paths: [String], parent: String = "") -> [Self] {
-        let components = paths.compactMap { path -> (name: String, remainder: String?)? in
-            let parts = path.split(separator: "/", maxSplits: 1)
-            guard let name = parts.first else { return nil }
-            return (String(name), parts.count == 2 ? String(parts[1]) : nil)
-        }
-        return Dictionary(grouping: components, by: \.name).map { name, entries in
-            let path = parent.isEmpty ? name : "\(parent)/\(name)"
-            let children = gitTree(paths: entries.compactMap(\.remainder), parent: path)
-            return Self(id: path, name: name, isDirectory: !children.isEmpty, children: children)
-        }
-        .sorted {
-            if $0.isDirectory != $1.isDirectory { return $0.isDirectory }
-            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
-    }
-}
-
-private struct GitCommitFileRow: View {
-    let file: GitCommitFile
-
-    private var style: (symbol: String, color: Color) {
-        switch file.status {
-        case "A": ("plus.circle", ClaudeTheme.statusSuccess)
-        case "D": ("minus.circle", ClaudeTheme.statusError)
-        case "R": ("arrow.right.circle", ClaudeTheme.accent)
-        case "C": ("doc.on.doc", ClaudeTheme.accent)
-        default: ("pencil", ClaudeTheme.statusWarning)
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: style.symbol).foregroundStyle(style.color).frame(width: 16)
-            Text(file.name).font(.system(size: ClaudeTheme.size(12), weight: .medium))
-            Text(file.originalPath.map { "\($0) → \(file.parentDirectory)" } ?? file.parentDirectory)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .truncationMode(.head)
-            Spacer(minLength: 0)
-        }
-        .lineLimit(1)
-        .help(file.path)
     }
 }

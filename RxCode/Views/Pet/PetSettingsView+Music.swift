@@ -39,7 +39,7 @@ extension PetSettingsView {
                 Label {
                     Text(error).textSelection(.enabled)
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(ClaudeTheme.statusWarning)
                 }
                 .font(.caption)
             }

@@ -10,6 +10,7 @@ struct GitCommitSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var operation: LocalizedStringResource?
     @State private var error: String?
+    @State private var selectedPath: String?
     @FocusState private var editingMessage: Bool
 
     private var canCommit: Bool {
@@ -20,7 +21,7 @@ struct GitCommitSheet: View {
 
     private var checkoutLabel: String {
         guard let amend else { return tree.head }
-        let commit = String(amend.head.prefix(7))
+        let commit = amend.commit.shortID
         return amend.branch.map { "\($0) · \(commit)" } ?? commit
     }
 
@@ -44,13 +45,31 @@ struct GitCommitSheet: View {
                     .frame(minHeight: 90, maxHeight: 150)
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.borderSubtle) }
                     .accessibilityLabel("Commit message")
-                if tree.changes.staged.isEmpty {
-                    ContentUnavailableView("No staged files", systemImage: "tray")
+                if tree.changes.staged.isEmpty && (amend?.files.isEmpty ?? true) {
+                    ContentUnavailableView(amend == nil ? "No staged files" : "No file changes", systemImage: "tray")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Text("Staged files (\(tree.changes.staged.count))").font(.headline)
-                    List(tree.changes.staged) { file in ChangeFileRow(file: file) }
-                        .listStyle(.inset)
+                    List(selection: $selectedPath) {
+                        if !tree.changes.staged.isEmpty {
+                            Section("Staged files (\(tree.changes.staged.count))") {
+                                if let changes = tree.changes.trees?.staged {
+                                    GitChangedFileTree(changes: changes, tagPrefix: "s:", isSelected: { $0 == selectedPath }) { file in
+                                        GitWorkingFileRow(file: file)
+                                    }
+                                } else {
+                                    ForEach(tree.changes.staged) { file in ChangeFileRow(file: file) }
+                                }
+                            }
+                        }
+                        if let amend, !amend.files.isEmpty {
+                            Section("In original commit (\(amend.files.count))") {
+                                GitChangedFileTree(changes: amend.changes, tagPrefix: "c:", isSelected: { $0 == selectedPath }) { file in
+                                    GitCommitFileRow(file: file)
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.inset)
                 }
             }
             .padding(20)
@@ -97,16 +116,19 @@ struct GitCommitSheet: View {
         let draft = message
         operation = amend == nil ? "Committing…" : "Amending commit…"
         Task {
-            if let amend {
-                error = await GitWorkflow.amend(
-                    message: draft == amend.message ? nil : draft, replacing: amend.head, on: amend.branch, at: tree.root
+            let failure = if let amend {
+                await GitWorkflow.amend(
+                    message: draft == amend.message ? nil : draft, replacing: amend.commit.id, on: amend.branch, at: tree.root
                 )
             } else {
-                error = await GitHelper.commit(message: draft, at: tree.root)
+                await GitHelper.commit(message: draft, at: tree.root)
             }
+            operation = "Updating file lists…"
             await repository.refresh(at: path)
             operation = nil
-            if error == nil {
+            if let failure {
+                error = failure
+            } else {
                 message = ""
                 dismiss()
             }

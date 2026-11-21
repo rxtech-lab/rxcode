@@ -241,11 +241,12 @@ private struct VideoStage: View {
                 .padding(.top, 14)
                 .padding(.bottom, 12)
                 .background {
-                    LinearGradient(colors: [.black.opacity(0.75), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [.black.opacity(0.92), .black.opacity(0.84)], startPoint: .top, endPoint: .bottom)
                         .allowsHitTesting(false)
                 }
                 .onGeometryChange(for: CGFloat.self, of: \.size.height) { headerHeight = $0 }
         }
+        .environment(\.colorScheme, .dark)
         .task(id: take.phase) {
             guard take.phase == .ready, let path = take.path else {
                 player = nil
@@ -285,7 +286,7 @@ private struct VideoStage: View {
             } description: {
                 Text("The video file is no longer on this device.", bundle: .module)
             }
-            .foregroundStyle(.white.opacity(0.8))
+            .foregroundStyle(ClaudeTheme.textSecondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed:
             ContentUnavailableView {
@@ -304,7 +305,7 @@ private struct VideoStage: View {
                 }
                 .disabled(take.prompt.isEmpty || chatBridge.isStreaming)
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(ClaudeTheme.textSecondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -314,7 +315,7 @@ private struct VideoStage: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(take.prompt.isEmpty ? String(localized: "Untitled prompt", bundle: .module) : take.prompt)
                     .font(.system(size: ClaudeTheme.size(14), weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(2)
                     .shadow(color: .black.opacity(0.5), radius: 4)
                     .textSelection(.enabled)
@@ -322,7 +323,7 @@ private struct VideoStage: View {
                 if let meta = metaLine {
                     Text(meta)
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
 
@@ -377,7 +378,7 @@ private struct VideoStage: View {
                 }
                 .buttonStyle(.borderless)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(ClaudeTheme.textSecondary)
             }
         }
     }
@@ -425,18 +426,18 @@ private struct VideoRenderingScreen: View {
             VStack(spacing: 18) {
                 Image(systemName: "film.stack")
                     .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .symbolEffect(.pulse, options: .repeating)
 
                 VStack(spacing: 6) {
                     Text(status ?? String(localized: "Preparing…", bundle: .module))
                         .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                         .contentTransition(.opacity)
                         .animation(.smooth, value: status)
                     Text(startedAt, style: .timer)
                         .font(.system(size: ClaudeTheme.size(12)).monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
 
                 Group {
@@ -456,7 +457,7 @@ private struct VideoRenderingScreen: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
-                .tint(.white)
+                .tint(ClaudeTheme.textPrimary)
             }
             .padding(32)
         }

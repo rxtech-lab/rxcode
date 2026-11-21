@@ -170,7 +170,7 @@ private struct SwiftPreviewPicker: View {
             LabeledContent("Swift source") { Button(file?.lastPathComponent ?? "Choose File…") { importing = true } }
             Stepper("Preview \(index + 1)", value: $index, in: 0...999)
             TextField("Xcode workspace or tab (optional)", text: $workspace)
-            if let error { Text(error).foregroundStyle(.red) }
+            if let error { Text(error).foregroundStyle(ClaudeTheme.statusError) }
         }
         .formStyle(.grouped).frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("SwiftUI preview")

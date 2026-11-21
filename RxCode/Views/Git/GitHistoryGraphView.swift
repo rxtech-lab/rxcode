@@ -217,14 +217,15 @@ struct GitRefBadge: View {
     }
 
     var body: some View {
+        let background = ClaudeTheme.surfacePrimary.mix(with: style.color, by: ref.isCurrent ? 0.22 : 0.12)
         Label(ref.name, systemImage: style.symbol)
             .labelStyle(.titleAndIcon)
             .font(.system(size: ClaudeTheme.size(10), weight: ref.isCurrent ? .bold : .medium))
             .lineLimit(1)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .foregroundStyle(style.color)
-            .background(style.color.opacity(ref.isCurrent ? 0.22 : 0.12), in: .rect(cornerRadius: 4))
+            .foregroundStyle(ClaudeTheme.semanticForeground(style.color, on: background))
+            .background(background, in: .rect(cornerRadius: 4))
             .overlay {
                 if ref.isCurrent { RoundedRectangle(cornerRadius: 4).strokeBorder(style.color.opacity(0.6)) }
             }

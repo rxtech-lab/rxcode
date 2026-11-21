@@ -54,7 +54,7 @@ struct AddSecretSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
 
             HStack {
@@ -102,7 +102,7 @@ struct AddSecretSheet: View {
                             HStack(spacing: 6) {
                                 Text(env.filename)
                                 if existingFilenames.contains(env.filename) {
-                                    Text("overwrites").font(.caption2).foregroundStyle(.orange)
+                                    Text("overwrites").font(.caption2).foregroundStyle(ClaudeTheme.statusWarning)
                                 }
                             }
                             Text("\(env.byteCount) bytes").font(.caption).foregroundStyle(.secondary)
@@ -126,7 +126,7 @@ struct AddSecretSheet: View {
                 Text("\(pickedContent.utf8.count) bytes").font(.caption).foregroundStyle(.secondary)
                 if existingFilenames.contains(pickedFilename) {
                     Text("Will overwrite the existing \(pickedFilename).")
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(.caption).foregroundStyle(ClaudeTheme.statusWarning)
                 }
                 TextEditor(text: $pickedContent)
                     .font(.system(.body, design: .monospaced))

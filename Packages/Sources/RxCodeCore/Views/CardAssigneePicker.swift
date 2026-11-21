@@ -42,7 +42,7 @@ public struct CardAssigneePicker: View {
                     CardAssigneeAvatarStack(assignees: assigned)
                 }
                 Text(summary)
-                    .foregroundStyle(assigned.isEmpty ? .tertiary : .secondary)
+                    .foregroundStyle(assigned.isEmpty ? ClaudeTheme.textTertiary : ClaudeTheme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Image(systemName: "chevron.right")

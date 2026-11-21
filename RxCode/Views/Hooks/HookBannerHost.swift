@@ -3,9 +3,8 @@ import RxCodeCore
 import SwiftUI
 
 extension Color {
-    /// Hook banners always use the Claude brand orange, independent of the
-    /// active app theme (which may be blue/green/purple/etc.).
-    static let hookBannerAccent = Color.hex(0xD97757)
+    /// Hook banners use the same brand orange in every app theme.
+    static let hookBannerAccent = ThemeColors.claude.accent
 }
 
 /// Renders hook-supplied banners for a given surface + position as a *deck of

@@ -126,7 +126,7 @@ struct HistoryListView: View {
         HStack {
             Text(showArchived ? "Archived" : "History")
                 .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                .foregroundStyle(ClaudeTheme.textTertiary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .textCase(.uppercase)
 
             Spacer()
@@ -171,33 +171,39 @@ struct HistoryListView: View {
     private var sessionList: some View {
         let calendar = Calendar.current
         let visibleSessions = sessions
+        let selectedSessionID = selectedSessionBinding.wrappedValue
         let pinned = visibleSessions.filter(\.isPinned)
         let days = Dictionary(grouping: visibleSessions.filter { !$0.isPinned }) {
             calendar.startOfDay(for: $0.updatedAt)
         }
         return List(selection: selectedSessionBinding) {
             if !pinned.isEmpty {
-                Section("Pinned") {
+                Section {
                     ForEach(pinned) { session in
                         sessionRow(session)
-                            .tag(session.id)
+                            .themedListRow(session.id, selection: selectedSessionID)
                     }
+                } header: {
+                    Text("Pinned").foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
             ForEach(days.keys.sorted(by: >), id: \.self) { day in
                 Section {
                     ForEach(days[day] ?? []) { session in
                         sessionRow(session)
-                            .tag(session.id)
+                            .themedListRow(session.id, selection: selectedSessionID)
                     }
                 } header: {
-                    if calendar.isDateInToday(day) {
-                        Text("Today")
-                    } else if calendar.isDateInYesterday(day) {
-                        Text("Yesterday")
-                    } else {
-                        Text(day, format: .dateTime.year().month(.wide).day())
+                    Group {
+                        if calendar.isDateInToday(day) {
+                            Text("Today")
+                        } else if calendar.isDateInYesterday(day) {
+                            Text("Yesterday")
+                        } else {
+                            Text(day, format: .dateTime.year().month(.wide).day())
+                        }
                     }
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
         }

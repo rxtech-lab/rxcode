@@ -27,7 +27,7 @@ struct CLISetupPreview: View {
                     .foregroundStyle(ClaudeTheme.accent)
                 Text("Agent CLI Setup")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
                 if isCheckingCLI {
                     ProgressView()
@@ -68,7 +68,7 @@ struct CLISetupPreview: View {
             if let signInMessage {
                 Text(signInMessage)
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
             if let installError {
                 Text(installError)
@@ -79,7 +79,7 @@ struct CLISetupPreview: View {
             HStack {
                 Text(claudeInstalled || codexInstalled ? LocalizedStringKey("Ready to start.") : LocalizedStringKey("You can continue without installing either CLI."))
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.64))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                 Spacer()
                 Button {
                     onCheckAgain()
@@ -88,7 +88,7 @@ struct CLISetupPreview: View {
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(ClaudeTheme.accent)
+                .foregroundStyle(ClaudeTheme.accentText)
                 .disabled(isCheckingCLI)
             }
             .padding(.top, 2)
@@ -97,11 +97,11 @@ struct CLISetupPreview: View {
         .frame(maxWidth: 620)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.34))
+                .fill(ClaudeTheme.codeBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 }
@@ -129,7 +129,7 @@ struct CLIStatusRow: View {
                      ? "\(title) \(String(localized: "installed"))\(version.map { " - \($0)" } ?? "")"
                      : "\(title) \(String(localized: "not found"))")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
                 if installed {
                     Button(action: onSignIn) {
@@ -149,7 +149,7 @@ struct CLIStatusRow: View {
                 if let error {
                     Text(verbatim: error)
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.54))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                         .lineLimit(2)
                 }
 
@@ -167,13 +167,13 @@ struct CLIStatusRow: View {
 
                     Text(verbatim: installCommand)
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.86))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .textSelection(.enabled)
 
                     Button {
@@ -185,13 +185,13 @@ struct CLIStatusRow: View {
                             .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                     .help(LocalizedStringKey("Copy install command"))
                 }
             }
         }
         .padding(12)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }

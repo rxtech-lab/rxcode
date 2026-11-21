@@ -65,7 +65,7 @@ struct SecretsManageSheet: View {
                     .textFieldStyle(.plain)
             }
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage).foregroundStyle(ClaudeTheme.statusError).font(.callout)
             }
             ForEach(repos) { repo in
                 NavigationLink(value: repo) {

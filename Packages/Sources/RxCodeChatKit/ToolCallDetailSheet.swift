@@ -170,7 +170,7 @@ private struct JSONCodeBlock: View {
             .background(ClaudeTheme.codeHeaderBackground)
 
             ScrollView([.horizontal, .vertical]) {
-                Text(SyntaxHighlighter.highlight(code, language: "json", fontSize: ClaudeTheme.messageSize(12)))
+                Text(SyntaxHighlighter.highlight(code, language: "json", fontSize: ClaudeTheme.messageSize(12), colors: ThemeStore.shared.colors))
                     .textSelection(.enabled)
                     .fixedSize()
                     .padding(10)

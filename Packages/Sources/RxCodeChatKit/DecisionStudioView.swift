@@ -114,7 +114,7 @@ private struct DecisionStage: View {
                 }
             }
         case .generating:
-            StudioWorkingScreen(systemImage: "checklist", status: status, startedAt: take.date, tint: ClaudeTheme.textPrimary) {
+            StudioWorkingScreen(systemImage: "checklist", status: status, startedAt: take.date) {
                 Task { await chatBridge.cancelStreaming() }
             }
         case .missing, .failed:

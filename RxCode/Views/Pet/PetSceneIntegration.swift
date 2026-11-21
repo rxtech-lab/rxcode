@@ -14,6 +14,7 @@ struct PetCompanionScene: Scene {
                 .environment(appState)
                 .environment(workspaceManager)
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(width: 700, height: 660)
@@ -25,6 +26,7 @@ struct PetCompanionScene: Scene {
                 .environment(appState)
                 .environment(workspaceManager)
                 .modifier(DownloadWindowPresenter())
+                .appThemeForeground()
         }
         .commandsRemoved()
         .defaultSize(width: 780, height: 720)

@@ -14,7 +14,7 @@ struct GitWindowRoot: View {
     let workspaceID: String
     let path: String
     @State private var windowState = WindowState()
-    @State private var repository = RepositoryStatus()
+    @State private var repository = RepositoryStatus(includeFileTrees: true)
     @State private var root: String?
     @State private var resolved = false
 
@@ -92,7 +92,7 @@ struct GitWorkflowView: View {
             guard !Task.isCancelled, pullRequestLookup == lookup else { return }
             fetchedPullRequest = (lookup, pullRequest?.url)
         }
-        .sheet(item: $store.sheet) { sheet in sheetContent(sheet) }
+        .sheet(item: $store.sheet) { sheet in sheetContent(sheet).appThemeForeground() }
         .confirmationDialog(
             confirmationTitle,
             isPresented: Binding(get: { store.confirmation != nil }, set: { if !$0 { store.confirmation = nil } }),
@@ -129,12 +129,16 @@ struct GitWorkflowView: View {
             }
         default:
             GeometryReader { geometry in
-                let historyHeight = min(300, geometry.size.height * 0.4)
+                let minimumCommitHeight: CGFloat = 200
+                let measuredHeight = geometry.size.height
+                // The split view can receive an unbounded or undersized height during measurement.
+                let height = measuredHeight.isFinite ? max(minimumCommitHeight, measuredHeight) : minimumCommitHeight
+                let historyHeight = min(300, height * 0.4, height - minimumCommitHeight)
                 VSplitView {
                     GitHistoryGraphView(store: store)
                         .frame(minHeight: historyHeight, maxHeight: .infinity)
                     commitPane
-                        .frame(minHeight: 200, idealHeight: geometry.size.height - historyHeight, maxHeight: .infinity)
+                        .frame(minHeight: minimumCommitHeight, idealHeight: height - historyHeight, maxHeight: .infinity)
                         .layoutPriority(1)
                 }
             }
@@ -167,7 +171,7 @@ struct GitWorkflowView: View {
                     store.sheet = .pull
                 }
                 .help(pullHelp)
-                .disabled(store.currentBranch?.upstream == nil)
+                .disabled(store.currentBranch == nil)
 
                 Button("Push…", systemImage: "arrow.up.circle") {
                     if let branch = store.currentBranch {
@@ -175,7 +179,7 @@ struct GitWorkflowView: View {
                     }
                 }
                 .help("Choose a remote and push options")
-                .disabled(store.currentBranch == nil || store.snapshot.remotes.isEmpty)
+                .disabled(store.currentBranch == nil)
             } label: {
                 Label("Pull and Push", systemImage: "arrow.up.arrow.down")
             }
@@ -255,8 +259,10 @@ struct GitWorkflowView: View {
             }
         case .pull:
             GitPullSheet(store: store)
-        case .push(let source):
-            GitPushSheet(store: store, source: source)
+        case .push(.branch(let branch)):
+            GitPushSheet(store: store, initialBranch: branch)
+        case .push(.tag(let tag)):
+            GitPushTagSheet(store: store, tag: tag)
         case .createBranch(let start, let label):
             GitCreateBranchSheet(store: store, startPoint: start, label: label)
         case .renameBranch(let name):

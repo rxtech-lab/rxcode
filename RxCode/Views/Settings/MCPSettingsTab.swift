@@ -101,14 +101,14 @@ struct MCPSettingsTab: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(ClaudeTheme.statusWarning)
             Text(verbatim: message)
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(10)
-        .background(Color.orange.opacity(0.12))
+        .background(ClaudeTheme.statusWarning.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -381,10 +381,10 @@ private struct MCPServerRow: View {
     private var overrideBadge: some View {
         Text(server.projectOverride == .enabled ? "Project: On" : "Project: Off")
             .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
-            .foregroundStyle(.orange)
+            .foregroundStyle(ClaudeTheme.statusWarning)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Color.orange.opacity(0.12))
+            .background(ClaudeTheme.statusWarning.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .help("Project-specific override is set")
     }
@@ -399,10 +399,10 @@ private struct MCPServerRow: View {
 
     private var statusColorAndLabel: (Color, String) {
         switch server.status {
-        case .connected:        return (.green, "Connected")
-        case .needsAuth:        return (.orange, "Needs authentication")
-        case .failed(let msg):  return (.red, msg)
-        case .unknown:          return (.gray, "Unknown")
+        case .connected:        return (ClaudeTheme.statusSuccess, "Connected")
+        case .needsAuth:        return (ClaudeTheme.statusWarning, "Needs authentication")
+        case .failed(let msg):  return (ClaudeTheme.statusError, msg)
+        case .unknown:          return (ClaudeTheme.textTertiary, "Unknown")
         }
     }
 
@@ -411,7 +411,7 @@ private struct MCPServerRow: View {
             .font(.system(size: ClaudeTheme.size(10), weight: .medium))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.15))
+            .background(ClaudeTheme.surfaceSecondary)
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 

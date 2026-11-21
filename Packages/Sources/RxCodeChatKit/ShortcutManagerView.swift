@@ -99,7 +99,7 @@ public struct ShortcutManagerView: View {
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(ClaudeTheme.accentText)
 
             Button {
                 dismiss()
@@ -145,7 +145,7 @@ public struct ShortcutManagerView: View {
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(ClaudeTheme.accentText)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)

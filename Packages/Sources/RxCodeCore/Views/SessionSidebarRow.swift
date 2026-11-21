@@ -37,7 +37,7 @@ public struct SessionSidebarRow: View {
                     if let projectName {
                         Text(projectName)
                             .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.accent.opacity(0.8))
+                            .foregroundStyle(ClaudeTheme.foreground(ClaudeTheme.accent))
                             .lineLimit(1)
 
                         Text("·")

@@ -15,7 +15,7 @@ struct WorkspacePreview: View {
                 }
                 .frame(width: 148)
                 .padding(14)
-                .background(Color.white.opacity(0.06))
+                .background(ClaudeTheme.surfaceSecondary)
 
                 VStack(alignment: .leading, spacing: 12) {
                     PreviewBubble(title: LocalizedStringKey("Refactor onboarding into slides"), isUser: true)
@@ -42,22 +42,22 @@ struct ApprovalPreview: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Review Command")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(ClaudeTheme.textPrimary)
                         Text("The agent wants to run a command in this project.")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.62))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
                     }
                 }
 
                 Text(verbatim: "xcodebuild -project RxCode.xcodeproj -scheme RxCode build")
                     .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 HStack(spacing: 10) {
-                    PreviewActionButton(title: LocalizedStringKey("Deny"), fill: Color.white.opacity(0.12))
+                    PreviewActionButton(title: LocalizedStringKey("Deny"), fill: ClaudeTheme.surfaceSecondary)
                     PreviewActionButton(title: LocalizedStringKey("Allow"), fill: ClaudeTheme.accent)
                 }
             }
@@ -92,21 +92,21 @@ struct OnboardingMockWindow<Content: View>: View {
                 Spacer()
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.58))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
                 Spacer()
             }
             .padding(.horizontal, 14)
             .frame(height: 38)
-            .background(Color.black.opacity(0.32))
+            .background(ClaudeTheme.codeBackground)
 
             content
                 .frame(height: 268)
                 .background(
                     LinearGradient(
                         colors: [
-                            Color(hex: 0x171A23),
-                            Color(hex: 0x202536),
-                            Color(hex: 0x11131A)
+                            ClaudeTheme.surfacePrimary,
+                            ClaudeTheme.surfaceSecondary,
+                            ClaudeTheme.background
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -116,7 +116,7 @@ struct OnboardingMockWindow<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.28), radius: 18, y: 14)
     }
@@ -135,10 +135,10 @@ struct PreviewSidebarRow: View {
                 .font(.system(size: 12, weight: .medium))
             Spacer()
         }
-        .foregroundStyle(isActive ? .white : .white.opacity(0.58))
+        .foregroundStyle(isActive ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(isActive ? ClaudeTheme.accent.opacity(0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(isActive ? ClaudeTheme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -149,12 +149,12 @@ struct PreviewBubble: View {
     var body: some View {
         Text(title)
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.white.opacity(0.88))
+            .foregroundStyle(isUser ? ClaudeTheme.userBubbleText : ClaudeTheme.textPrimary)
             .lineLimit(2)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .frame(maxWidth: isUser ? 250 : 340, alignment: .leading)
-            .background(isUser ? ClaudeTheme.accent.opacity(0.72) : Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .background(isUser ? ClaudeTheme.userBubble : ClaudeTheme.assistantBubble, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
 }
@@ -171,12 +171,12 @@ struct PreviewToolRow: View {
                 .foregroundStyle(accent)
             Text(title)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.72))
+                .foregroundStyle(ClaudeTheme.textSecondary)
             Spacer()
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -187,7 +187,7 @@ struct PreviewActionButton: View {
     var body: some View {
         Text(title)
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(ClaudeTheme.foreground(on: fill))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

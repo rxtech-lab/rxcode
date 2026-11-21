@@ -76,7 +76,7 @@ struct CacheStorageSheet: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
                     .font(.callout)
             }
 

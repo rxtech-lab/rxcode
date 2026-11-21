@@ -45,19 +45,13 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         if let tv = process?.terminalView, process?.terminated == false {
             tv.processDelegate = context.coordinator
+            applyTheme(to: tv, context: context)
             return tv
         }
 
         let tv = LocalProcessTerminalView(frame: .zero)
 
-        // Set terminal background/foreground colors to match the theme
-        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        tv.nativeBackgroundColor = isDark
-            ? NSColor(red: 0x1A/255.0, green: 0x1A/255.0, blue: 0x18/255.0, alpha: 1) // dark: codeBackground
-            : NSColor(red: 0xE8/255.0, green: 0xE5/255.0, blue: 0xDC/255.0, alpha: 1) // light: codeBackground
-        tv.nativeForegroundColor = isDark
-            ? NSColor(red: 0xCC/255.0, green: 0xC9/255.0, blue: 0xC0/255.0, alpha: 1) // dark: textPrimary
-            : NSColor(red: 0x3C/255.0, green: 0x39/255.0, blue: 0x29/255.0, alpha: 1) // light: textPrimary
+        applyTheme(to: tv, context: context)
 
         tv.processDelegate = context.coordinator
         tv.startProcess(
@@ -84,6 +78,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
+        applyTheme(to: nsView, context: context)
         if let focus = focusTrigger,
            focus != context.coordinator.lastFocusTrigger {
             context.coordinator.lastFocusTrigger = focus
@@ -91,6 +86,16 @@ struct EmbeddedTerminalView: NSViewRepresentable {
                 nsView.window?.makeFirstResponder(nsView)
             }
         }
+    }
+
+    private func applyTheme(to terminal: LocalProcessTerminalView, context: Context) {
+        let theme = ThemeStore.shared.current
+        let scheme = context.environment.colorScheme
+        guard context.coordinator.theme != theme || context.coordinator.colorScheme != scheme else { return }
+        terminal.nativeBackgroundColor = NSColor(Color(theme.colors.codeBackground.resolve(in: context.environment)))
+        terminal.nativeForegroundColor = NSColor(Color(theme.colors.textPrimary.resolve(in: context.environment)))
+        context.coordinator.theme = theme
+        context.coordinator.colorScheme = scheme
     }
 
     func makeCoordinator() -> Coordinator {
@@ -135,6 +140,8 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
+        var theme: AppTheme?
+        var colorScheme: ColorScheme?
         nonisolated(unsafe) let onTerminated: ((Int32) -> Void)?
         nonisolated(unsafe) var lastFocusTrigger: UUID? = nil
 

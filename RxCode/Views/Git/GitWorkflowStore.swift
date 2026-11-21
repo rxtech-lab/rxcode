@@ -31,24 +31,23 @@ enum GitSidebarItem: Hashable {
 enum GitPushSource {
     case branch(GitLocalBranch)
     case tag(GitTag)
-
-    var branch: GitLocalBranch? {
-        if case .branch(let branch) = self { return branch }
-        return nil
-    }
-
-    var name: String {
-        switch self {
-        case .branch(let branch): branch.name
-        case .tag(let tag): tag.name
-        }
-    }
 }
 
 struct GitAmendDraft {
-    let head: String
+    let commit: GitCommit
     let branch: String?
     let message: String
+    let changes: GitChangedFiles<GitCommitFile>
+    var files: [GitCommitFile] { changes.files }
+
+    static func load(head: String, branch: String?, at root: String) async -> Self? {
+        async let originalMessage = GitRepositoryLoader.commitMessage(for: head, at: root)
+        guard let commit = await GitRepositoryLoader.history(at: root, ref: head, limit: 1).first,
+              !Task.isCancelled else { return nil }
+        let changes = await GitChangedFiles.load(in: commit, at: root)
+        guard let message = await originalMessage else { return nil }
+        return Self(commit: commit, branch: branch, message: message, changes: changes)
+    }
 }
 
 /// Flows presented in their own sheets.
@@ -240,20 +239,6 @@ final class GitWorkflowStore {
             stack.append(contentsOf: commit.parents)
         }
         return visited
-    }
-
-    func prepareAmend(head: String, branch: String?) {
-        guard operation == nil else { return }
-        operation = "Loading commit message…"
-        Task {
-            let message = await GitRepositoryLoader.commitMessage(for: head, at: root)
-            operation = nil
-            if let message {
-                sheet = .commit(amend: GitAmendDraft(head: head, branch: branch, message: message))
-            } else {
-                error = String(localized: "Couldn’t load the latest commit message.")
-            }
-        }
     }
 
     /// Loads the commits from `commit` through HEAD and opens the interactive rebase sheet.

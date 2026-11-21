@@ -246,8 +246,6 @@ struct MenuBarContentView: View {
         .padding(14)
         .frame(width: 280)
         .background(ClaudeTheme.background)
-        .foregroundStyle(ClaudeTheme.textPrimary)
-        .tint(ClaudeTheme.accent)
         .sheet(isPresented: $showCreateWorkspaceSheet) {
             CreateWorkspaceSheet()
                 .environment(appState)

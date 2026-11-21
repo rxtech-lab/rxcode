@@ -4,6 +4,7 @@ import SwiftUI
 struct GitCommitSheet: View {
     let tree: GitWorkingTree
     @Binding var message: String
+    var amend: GitAmendDraft? = nil
     @Environment(AppState.self) private var appState
     @Environment(RepositoryStatus.self) private var repository
     @Environment(\.dismiss) private var dismiss
@@ -11,10 +12,22 @@ struct GitCommitSheet: View {
     @State private var error: String?
     @FocusState private var editingMessage: Bool
 
+    private var canCommit: Bool {
+        if let amend, message == amend.message { return true }
+        return (amend != nil || !tree.changes.staged.isEmpty)
+            && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var checkoutLabel: String {
+        guard let amend else { return tree.head }
+        let commit = String(amend.head.prefix(7))
+        return amend.branch.map { "\($0) · \(commit)" } ?? commit
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Label(tree.head, systemImage: "arrow.triangle.branch")
+                Label(checkoutLabel, systemImage: "arrow.triangle.branch")
                     .font(.subheadline.monospaced())
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -31,28 +44,33 @@ struct GitCommitSheet: View {
                     .frame(minHeight: 90, maxHeight: 150)
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.borderSubtle) }
                     .accessibilityLabel("Commit message")
-                Text("Staged files (\(tree.changes.staged.count))").font(.headline)
-                List(tree.changes.staged) { file in ChangeFileRow(file: file) }
-                    .listStyle(.inset)
+                if tree.changes.staged.isEmpty {
+                    ContentUnavailableView("No staged files", systemImage: "tray")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text("Staged files (\(tree.changes.staged.count))").font(.headline)
+                    List(tree.changes.staged) { file in ChangeFileRow(file: file) }
+                        .listStyle(.inset)
+                }
             }
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .navigationTitle("Commit changes")
+            .navigationTitle(amend == nil ? "Commit changes" : "Amend Commit")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Commit") { commit() }
-                        .disabled(tree.changes.staged.isEmpty || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(amend == nil ? "Commit" : "Amend") { commit() }
+                        .disabled(!canCommit)
                 }
             }
         }
-        .frame(minWidth: 420, idealWidth: 520, minHeight: 420, idealHeight: 560)
+        .frame(minWidth: 420, idealWidth: 520, maxWidth: .infinity, minHeight: 420, idealHeight: 560, maxHeight: .infinity)
         .disabled(operation != nil)
         .interactiveDismissDisabled(operation != nil)
         .overlay { GitOperationOverlay(operation: operation) }
-        .alert("Couldn’t prepare commit", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+        .alert("Git operation failed", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
         .onAppear { editingMessage = true }
@@ -75,10 +93,17 @@ struct GitCommitSheet: View {
     }
 
     private func commit() {
-        guard operation == nil, let path = repository.path else { return }
-        operation = "Committing…"
+        guard operation == nil, canCommit, let path = repository.path else { return }
+        let draft = message
+        operation = amend == nil ? "Committing…" : "Amending commit…"
         Task {
-            error = await GitHelper.commit(message: message, at: tree.root)
+            if let amend {
+                error = await GitWorkflow.amend(
+                    message: draft == amend.message ? nil : draft, replacing: amend.head, on: amend.branch, at: tree.root
+                )
+            } else {
+                error = await GitHelper.commit(message: draft, at: tree.root)
+            }
             await repository.refresh(at: path)
             operation = nil
             if error == nil {

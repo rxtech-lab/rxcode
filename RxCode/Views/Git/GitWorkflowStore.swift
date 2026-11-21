@@ -45,9 +45,15 @@ enum GitPushSource {
     }
 }
 
+struct GitAmendDraft {
+    let head: String
+    let branch: String?
+    let message: String
+}
+
 /// Flows presented in their own sheets.
 enum GitSheet: Identifiable {
-    case commit
+    case commit(amend: GitAmendDraft? = nil)
     case pull
     case push(GitPushSource)
     case createBranch(startPoint: String, label: String)
@@ -61,7 +67,7 @@ enum GitSheet: Identifiable {
 
     var id: String {
         switch self {
-        case .commit: "commit"
+        case .commit(let amend): amend == nil ? "commit" : "amend"
         case .pull: "pull"
         case .push(.branch(let branch)): "push-branch-\(branch.name)"
         case .push(.tag(let tag)): "push-tag-\(tag.name)"
@@ -234,6 +240,20 @@ final class GitWorkflowStore {
             stack.append(contentsOf: commit.parents)
         }
         return visited
+    }
+
+    func prepareAmend(head: String, branch: String?) {
+        guard operation == nil else { return }
+        operation = "Loading commit message…"
+        Task {
+            let message = await GitRepositoryLoader.commitMessage(for: head, at: root)
+            operation = nil
+            if let message {
+                sheet = .commit(amend: GitAmendDraft(head: head, branch: branch, message: message))
+            } else {
+                error = String(localized: "Couldn’t load the latest commit message.")
+            }
+        }
     }
 
     /// Loads the commits from `commit` through HEAD and opens the interactive rebase sheet.

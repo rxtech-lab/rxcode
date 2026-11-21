@@ -25,7 +25,7 @@ public enum GitRepositoryLoader {
 
     public static func snapshot(at root: String) async -> GitRepositorySnapshot {
         async let branch = GitHelper.currentBranch(at: root)
-        async let head = GitHelper.run(["rev-parse", "HEAD"], at: root)
+        async let head = GitHelper.headCommit(at: root)
         async let locals = GitHelper.run(["for-each-ref", branchFormat, "refs/heads"], at: root)
         async let remoteRefs = GitHelper.run(["for-each-ref", "--format=%(refname)%1f%(objectname)", "refs/remotes"], at: root)
         async let remoteNames = GitHelper.run(["remote"], at: root)
@@ -38,7 +38,7 @@ public enum GitRepositoryLoader {
 
         var snapshot = GitRepositorySnapshot()
         snapshot.currentBranch = await branch
-        snapshot.headCommit = await head?.trimmingCharacters(in: .whitespacesAndNewlines)
+        snapshot.headCommit = await head
         snapshot.localBranches = GitHistoryParser.parseLocalBranches(await locals ?? "")
         snapshot.remoteBranches = parseRemoteBranches(await remoteRefs ?? "")
         snapshot.remotes = (await remoteNames ?? "").split(separator: "\n").map(String.init).filter { !$0.isEmpty }
@@ -90,6 +90,10 @@ public enum GitRepositoryLoader {
         }
         guard let raw = await GitHelper.run(args, at: root) else { return [] }
         return GitHistoryParser.parseLog(raw)
+    }
+
+    public static func commitMessage(for commit: String, at root: String) async -> String? {
+        await GitHelper.run(["log", "-1", "--encoding=UTF-8", "--format=format:%B", "--end-of-options", commit, "--"], at: root)
     }
 
     /// Commits after `base` up to HEAD, oldest first. A nil base lists the whole branch.
@@ -315,11 +319,36 @@ public enum GitWorkflow {
         await GitHelper.runWithError([operation.command, "--\(action.rawValue)"], at: root, environment: nonInteractive)
     }
 
+    /// Replaces the checked-out commit using the current index. A nil message keeps the original.
+    public static func amend(message: String?, replacing commit: String, on branch: String?, at root: String) async -> String? {
+        async let head = GitHelper.headCommit(at: root)
+        async let currentBranch = GitHelper.currentBranch(at: root)
+        async let pending = GitRepositoryLoader.pendingOperation(at: root)
+        let (checkedOutCommit, checkedOutBranch, pendingOperation) = await (head, currentBranch, pending)
+        guard checkedOutCommit == commit, checkedOutBranch == branch else {
+            return String(localized: "The checkout changed. Open Amend Commit again.")
+        }
+        guard pendingOperation == nil else {
+            return String(localized: "Finish the current Git operation before amending the commit.")
+        }
+
+        let args = ["commit", "--amend", "--allow-empty"]
+        guard let message else {
+            return await GitHelper.runWithError(
+                args + ["--no-edit", "--cleanup=verbatim", "--allow-empty-message"], at: root, environment: nonInteractive
+            )
+        }
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return String(localized: "Empty commit message") }
+        return await withTemporaryFile(trimmed) { path in
+            await GitHelper.runWithError(args + ["-F", path], at: root, environment: nonInteractive)
+        }
+    }
+
     /// Rewrites one commit message. HEAD is amended directly; older commits go
     /// through a non-interactive rebase that rewords only that commit.
     public static func reword(_ commit: GitCommit, message: String, at root: String) async -> String? {
-        let head = await GitHelper.run(["rev-parse", "HEAD"], at: root)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if head == commit.id {
+        if await GitHelper.headCommit(at: root) == commit.id {
             return await withTemporaryFile(message) { path in
                 await GitHelper.runWithError(
                     ["commit", "--amend", "--allow-empty", "--only", "--cleanup=strip", "-F", path],

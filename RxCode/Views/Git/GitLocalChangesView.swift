@@ -7,6 +7,7 @@ struct GitLocalChangesView: View {
     let store: GitWorkflowStore
     @Environment(RepositoryStatus.self) private var repository
     @State private var selection = Set<String>()
+    @State private var amend = false
 
     var body: some View {
         switch repository.state {
@@ -30,6 +31,8 @@ struct GitLocalChangesView: View {
         let all = unstaged + staged
         let selected = all.filter { selection.contains(Self.tag($0)) }
         let discardable = selected.filter { $0.diffMode != .staged }
+        let amendableHead = store.snapshot.pendingOperation == nil ? tree.headCommit : nil
+        let amendHead = amend ? amendableHead : nil
         return VStack(spacing: 0) {
             if all.isEmpty {
                 ContentUnavailableView("Working tree clean", systemImage: "checkmark.circle",
@@ -52,24 +55,38 @@ struct GitLocalChangesView: View {
                     }
                     .frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
                 }
-                Divider()
-                HStack(spacing: 8) {
+            }
+            Divider()
+            HStack(spacing: 8) {
+                if !all.isEmpty {
                     Button("Discard…") { store.confirmation = .discard(discardable) }
                         .disabled(discardable.isEmpty)
-                    Spacer(minLength: 0)
-                    Button("Commit…") { store.sheet = .commit }
-                        .buttonStyle(.borderedProminent)
-                        .tint(ClaudeTheme.accent)
-                        .disabled(staged.isEmpty)
-                        .keyboardShortcut(.return, modifiers: .command)
                 }
-                .controlSize(.small)
-                .padding(10)
+                Toggle("Amend", isOn: $amend)
+                    .toggleStyle(.checkbox)
+                    .disabled(amendableHead == nil)
+                    .help("Replace the latest commit using the current staged changes.")
+                Spacer(minLength: 0)
+                Button(amendHead == nil ? "Commit…" : "Amend Commit…") {
+                    if let amendHead {
+                        store.prepareAmend(head: amendHead, branch: tree.upstream?.branch)
+                    } else {
+                        store.sheet = .commit()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(ClaudeTheme.accent)
+                .disabled(amendHead == nil && staged.isEmpty)
+                .keyboardShortcut(.return, modifiers: .command)
             }
+            .controlSize(.small)
+            .padding(10)
         }
         .onChange(of: all) {
             selection.formIntersection(all.map(Self.tag))
         }
+        .onChange(of: amendableHead) { amend = false }
+        .onChange(of: tree.head) { amend = false }
     }
 
     private func changesPane(

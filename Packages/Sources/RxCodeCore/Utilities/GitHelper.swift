@@ -171,6 +171,12 @@ public enum GitHelper {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Returns the checked-out commit ID, or nil before the first commit.
+    public static func headCommit(at path: String) async -> String? {
+        await run(["rev-parse", "--verify", "--quiet", "HEAD"], at: path)?
+            .trimmingCharacters(in: .newlines)
+    }
+
     /// Runs `git init` at `path`. Returns nil on success or the combined git
     /// output on failure.
     public static func initRepository(at path: String) async -> String? {

@@ -88,6 +88,7 @@ nonisolated func parsePorcelainZ(_ raw: String, projectPath: String) -> GitChang
 nonisolated struct GitWorkingTree: Sendable, Equatable {
     let root: String
     let head: String
+    let headCommit: String?
     let upstream: GitHelper.UpstreamStatus?
     let changes: GitChangesSnapshot
 
@@ -109,7 +110,8 @@ nonisolated enum RepositoryState: Sendable, Equatable {
         }
         async let changes = loadAllChangedFiles(at: root)
         async let tracking = GitHelper.upstreamStatus(at: root)
-        let (files, upstream) = await (changes, tracking)
+        async let revision = GitHelper.headCommit(at: root)
+        let (files, upstream, headCommit) = await (changes, tracking, revision)
         guard let files else { return .unavailable }
         let head: String
         if let upstream {
@@ -119,7 +121,7 @@ nonisolated enum RepositoryState: Sendable, Equatable {
         } else {
             return .unavailable
         }
-        return .ready(GitWorkingTree(root: root, head: head, upstream: upstream, changes: files))
+        return .ready(GitWorkingTree(root: root, head: head, headCommit: headCommit, upstream: upstream, changes: files))
     }
 
     fileprivate static func gitPath(_ args: [String], at path: String) async -> String? {

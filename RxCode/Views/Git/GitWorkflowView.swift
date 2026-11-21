@@ -249,9 +249,9 @@ struct GitWorkflowView: View {
 
     @ViewBuilder private func sheetContent(_ sheet: GitSheet) -> some View {
         switch sheet {
-        case .commit:
+        case .commit(let amend):
             if case .ready(let tree) = repository.state {
-                GitWindowCommitSheet(tree: tree, store: store)
+                GitWindowCommitSheet(tree: tree, store: store, amend: amend)
             }
         case .pull:
             GitPullSheet(store: store)
@@ -354,10 +354,18 @@ struct GitWorkflowView: View {
 private struct GitWindowCommitSheet: View {
     let tree: GitWorkingTree
     let store: GitWorkflowStore
-    @State private var message = ""
+    let amend: GitAmendDraft?
+    @State private var message: String
+
+    init(tree: GitWorkingTree, store: GitWorkflowStore, amend: GitAmendDraft?) {
+        self.tree = tree
+        self.store = store
+        self.amend = amend
+        _message = State(initialValue: amend?.message ?? "")
+    }
 
     var body: some View {
-        GitCommitSheet(tree: tree, message: $message)
+        GitCommitSheet(tree: tree, message: $message, amend: amend)
             .onDisappear { Task { await store.reload() } }
     }
 }

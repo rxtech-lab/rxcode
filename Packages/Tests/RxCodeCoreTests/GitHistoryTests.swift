@@ -219,6 +219,63 @@ struct GitWorkflowIntegrationTests {
         #expect(afterConflict.tags.first { $0.name == "stable" }?.tip == unpublished.tip)
     }
 
+    @Test("Amend takes staged changes and preserves the original message and unstaged edits")
+    func amendStagedChanges() async throws {
+        let message = "two\ncontinued subject\n\nBody\n\nSigned-off-by: Test <test@example.com>"
+        let repo = try makeRepo(commits: ["one", message])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let head = try #require(await GitHelper.headCommit(at: repo.path))
+        #expect(await GitRepositoryLoader.commitMessage(for: head, at: repo.path) == message + "\n")
+
+        let file = repo.appendingPathComponent("file1.txt")
+        try Data("staged\n".utf8).write(to: file)
+        try git(["add", "file1.txt"], at: repo)
+        try Data("unstaged\n".utf8).write(to: file)
+        try Data("untracked\n".utf8).write(to: repo.appendingPathComponent("untracked.txt"))
+
+        #expect(await GitWorkflow.amend(message: nil, replacing: head, on: "main", at: repo.path) == nil)
+        let amended = try #require(await GitHelper.headCommit(at: repo.path))
+        #expect(amended != head)
+        #expect(await GitRepositoryLoader.commitMessage(for: amended, at: repo.path) == message + "\n")
+        #expect(await GitHelper.run(["show", "HEAD:file1.txt"], at: repo.path) == "staged\n")
+        #expect(await GitHelper.run(["status", "--porcelain"], at: repo.path) == " M file1.txt\n?? untracked.txt\n")
+        #expect(await GitHelper.run(["rev-parse", "HEAD^"], at: repo.path) == GitHelper.run(["rev-parse", "\(head)^"], at: repo.path))
+    }
+
+    @Test("A clean amend can replace the message of an empty commit")
+    func amendMessageOnCleanTree() async throws {
+        let repo = try makeRepo(commits: ["one"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        try git(["commit", "--allow-empty", "--quiet", "-m", "two"], at: repo)
+        let head = try #require(await GitHelper.headCommit(at: repo.path))
+        let tree = await GitHelper.run(["rev-parse", "HEAD^{tree}"], at: repo.path)
+
+        #expect(await GitWorkflow.amend(message: "New subject\n\nNew body", replacing: head, on: "main", at: repo.path) == nil)
+        let amended = try #require(await GitHelper.headCommit(at: repo.path))
+        #expect(amended != head)
+        #expect(await GitRepositoryLoader.commitMessage(for: amended, at: repo.path) == "New subject\n\nNew body\n")
+        #expect(await subjects(at: repo) == ["New subject", "one"])
+        #expect(await GitHelper.run(["rev-parse", "HEAD^{tree}"], at: repo.path) == tree)
+        #expect(await GitHelper.run(["status", "--porcelain"], at: repo.path) == "")
+    }
+
+    @Test("Amend rejects a different branch and a newer commit")
+    func amendRejectsChangedCheckout() async throws {
+        let repo = try makeRepo(commits: ["one"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let head = try #require(await GitHelper.headCommit(at: repo.path))
+        try git(["switch", "-c", "other"], at: repo)
+
+        #expect(await GitWorkflow.amend(message: "Wrong branch", replacing: head, on: "main", at: repo.path) != nil)
+        #expect(await GitHelper.headCommit(at: repo.path) == head)
+
+        try git(["switch", "main"], at: repo)
+        try git(["commit", "--allow-empty", "--quiet", "-m", "two"], at: repo)
+        let latest = try #require(await GitHelper.headCommit(at: repo.path))
+        #expect(await GitWorkflow.amend(message: "Wrong commit", replacing: head, on: "main", at: repo.path) != nil)
+        #expect(await GitHelper.headCommit(at: repo.path) == latest)
+    }
+
     @Test("Reword an older commit without an editor")
     func rewordOlderCommit() async throws {
         let repo = try makeRepo(commits: ["one", "two", "three"])

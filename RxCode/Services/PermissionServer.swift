@@ -369,7 +369,11 @@ actor PermissionServer {
             streamPermissionMode: nil,
             sessionId: sessionId
         )
-        let outcome = await waitForDecision(request)
+        let outcome = await withTaskCancellationHandler {
+            await waitForDecision(request)
+        } onCancel: {
+            Task { await self.respond(to: request, decision: .deny) }
+        }
         guard outcome.decision == .allow else { return nil }
         return outcome.updatedInput
     }

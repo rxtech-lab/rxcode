@@ -112,6 +112,8 @@ extension AppState {
         if window.pendingPermissions.contains(where: { $0.sessionId == id }) {
             return .awaitingPermission
         }
+        // Debate turns run on ephemeral backend streams that never reach `sessionActivity`.
+        if debatingCodingPlanIDs.contains(id) { return .streaming }
         // `sessionActivity`, not `sessionStates`: this runs in every sidebar row's
         // body, and reading `sessionStates` re-rendered them all per stream event.
         if let activity = sessionActivity[id] {

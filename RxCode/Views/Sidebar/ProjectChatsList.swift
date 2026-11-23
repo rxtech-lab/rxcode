@@ -20,8 +20,8 @@ struct ProjectChatsList: View {
     @State private var taskSheet: TaskBoardSheet?
     @State private var creatingTaskSessionIds: Set<String> = []
     @State private var showTaskCreationError = false
-    /// Parent thread ids whose nested review children are currently expanded.
-    @State private var expandedReviewParentIds: Set<String> = []
+    /// Plan groups start expanded. Other linked thread groups start collapsed.
+    @State private var toggledParentIDs: Set<String> = []
 
     private struct HistorySnapshot {
         let projectThreadCount: Int
@@ -54,10 +54,20 @@ struct ProjectChatsList: View {
                 sessions.append(summary)
             }
         }
+        // A new or pinned implementation brings its whole plan into view.
+        let roots = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var seenRoots: Set<String> = []
+        sessions = allSessions.compactMap { summary in
+            let root = summary.implementationParentID.flatMap { roots[$0] } ?? roots[summary.id]
+            guard let root, seenRoots.insert(root.id).inserted else { return nil }
+            return root
+        }
         childrenByParent = childrenByParent.mapValues { $0.sorted { $0.updatedAt < $1.updatedAt } }
         performance.record("child-grouping", since: groupingStart, project: project.id)
 
-        let pinnedCount = sessions.prefix(while: { $0.isPinned }).count
+        let pinnedCount = sessions.prefix { root in
+            root.isPinned || childrenByParent[root.id, default: []].contains { $0.isPinned && $0.implementationParentID == root.id }
+        }.count
         let pinnedShown = min(pinnedCount, 6)
         let unpinnedShown = max(4, 6 - pinnedShown)
         return HistorySnapshot(
@@ -84,7 +94,7 @@ struct ProjectChatsList: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ForEach(visibleSessions) { summary in
-                    threadGroup(for: summary, children: snapshot.childrenByParent[summary.id] ?? [])
+                    threadGroup(for: summary, childrenByParent: snapshot.childrenByParent)
                         .transition(.asymmetric(
                             insertion: .move(edge: .top).combined(with: .opacity),
                             removal: .move(edge: .top).combined(with: .opacity)
@@ -106,7 +116,12 @@ struct ProjectChatsList: View {
             await performance.monitor(project: project.id)
         }
         .onDisappear { performance.flush(project: project.id) }
-        .animation(.easeInOut(duration: 0.18), value: expandedReviewParentIds)
+        .onChange(of: windowState.currentSessionId) { _, id in
+            if let parent = appState.allSessionSummaries.first(where: { $0.id == id })?.implementationParentID {
+                toggledParentIDs.remove(parent)
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: toggledParentIDs)
         .sheet(item: $taskSheet) { payload in
             TaskFormSheet(payload: payload, defaultProjectId: project.id)
                 .environment(appState)
@@ -119,29 +134,26 @@ struct ProjectChatsList: View {
         }
     }
 
-    /// A top-level thread row plus, when expanded, its nested review children.
-    @ViewBuilder
-    private func threadGroup(for summary: ChatSession.Summary, children: [ChatSession.Summary]) -> some View {
-        let isExpanded = expandedReviewParentIds.contains(summary.id)
-
-        VStack(alignment: .leading, spacing: 0) {
-            chatRow(for: summary, reviewDisclosure: disclosure(for: summary, children: children))
-
-            if isExpanded {
-                ForEach(childDisplayItems(children), id: \.summary.id) { item in
-                    chatRow(
-                        for: item.summary,
-                        indentLevel: 1,
-                        titleOverride: item.titleOverride,
-                        showLabelChip: item.showLabelChip
-                    )
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .move(edge: .top).combined(with: .opacity)
-                    ))
-                }
-            }
+    private func threadGroup(for root: ChatSession.Summary, childrenByParent: [String: [ChatSession.Summary]]) -> some View {
+        var rows: [(item: ChildDisplayItem, depth: Int)] = []
+        func append(_ item: ChildDisplayItem, depth: Int) {
+            rows.append((item, depth))
+            let children = childrenByParent[item.summary.id] ?? []
+            guard isExpanded(item.summary.id, children: children) else { return }
+            for child in childDisplayItems(children) { append(child, depth: depth + 1) }
         }
+        append(ChildDisplayItem(summary: root, titleOverride: nil, showLabelChip: true), depth: 0)
+        return ForEach(rows, id: \.item.summary.id) { row in
+            let item = row.item
+            chatRow(for: item.summary, indentLevel: row.depth, titleOverride: item.titleOverride,
+                    showLabelChip: item.showLabelChip,
+                    reviewDisclosure: disclosure(for: item.summary, children: childrenByParent[item.summary.id] ?? []))
+        }
+    }
+
+    private func isExpanded(_ id: String, children: [ChatSession.Summary]) -> Bool {
+        let planGroup = children.contains { $0.implementationParentID == id }
+        return planGroup != toggledParentIDs.contains(id)
     }
 
     /// How a nested child row should render. Code-review children keep the
@@ -179,14 +191,14 @@ struct ProjectChatsList: View {
         }
         return ProjectChatRow.ReviewDisclosure(
             count: children.count,
-            isExpanded: expandedReviewParentIds.contains(summary.id),
+            isExpanded: isExpanded(summary.id, children: children),
             isReviewing: isReviewing,
             onToggle: {
                 withAnimation(.easeInOut(duration: 0.18)) {
-                    if expandedReviewParentIds.contains(summary.id) {
-                        expandedReviewParentIds.remove(summary.id)
+                    if toggledParentIDs.contains(summary.id) {
+                        toggledParentIDs.remove(summary.id)
                     } else {
-                        expandedReviewParentIds.insert(summary.id)
+                        toggledParentIDs.insert(summary.id)
                     }
                 }
             }

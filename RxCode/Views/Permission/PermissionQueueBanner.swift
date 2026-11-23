@@ -10,6 +10,7 @@ import RxCodeChatKit
 struct PermissionQueueBanner: View {
     @Environment(WindowState.self) private var windowState
     @Environment(ChatBridge.self) private var chatBridge
+    var horizontalInset: CGFloat = 16
 
     private var pendingRequests: [PermissionRequest] {
         windowState.pendingPermissions.filter {
@@ -81,8 +82,10 @@ struct PermissionQueueBanner: View {
             icon: bannerIcon,
             title: bannerText,
             actionTitle: actionText,
+            horizontalInset: horizontalInset,
             action: open
         )
+        .help(bannerText)
     }
 
     private func open() {
@@ -106,11 +109,13 @@ struct PendingActionBanner: View {
     let icon: String
     let title: String
     let actionTitle: String
+    var horizontalInset: CGFloat = 16
     let action: () -> Void
 
     @State private var isHovered = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
@@ -120,8 +125,7 @@ struct PendingActionBanner: View {
                 Text(title)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textPrimary)
-
-                Spacer(minLength: 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(actionTitle)
                     .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
@@ -129,23 +133,19 @@ struct PendingActionBanner: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                     .background(ClaudeTheme.accent, in: Capsule())
+                    .fixedSize()
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
-                    .fill(ClaudeTheme.accentSubtle)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
-                    .strokeBorder(ClaudeTheme.accent.opacity(isHovered ? 0.55 : 0.35), lineWidth: 1)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
+            .background(ClaudeTheme.accentSubtle, in: shape)
+            .background(ClaudeTheme.background, in: shape)
+            .overlay { shape.strokeBorder(ClaudeTheme.accent.opacity(isHovered ? 0.55 : 0.35), lineWidth: 1) }
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .pointerCursorOnHover()
-        .padding(.horizontal, 16)
+        .padding(.horizontal, horizontalInset)
         .padding(.bottom, 6)
         .animation(.easeInOut(duration: 0.12), value: isHovered)
     }

@@ -1,0 +1,212 @@
+{
+  "type": "snapshot",
+  "data": {
+    "projects": [{"id": "30000000-0000-4000-8000-000000000001", "name": "Fixture project", "path": "/fixtures/project"}],
+    "sessions": [],
+    "usageDashboard": {
+      "version": 1,
+      "integrations": [
+        {"id": "10000000-0000-4000-8000-000000000001", "pluginID": "ai-usage", "title": "Project activity", "account": "", "resource": "", "projectID": "30000000-0000-4000-8000-000000000001"},
+        {"id": "10000000-0000-4000-8000-000000000002", "pluginID": "ai-limits", "title": "Account limits", "account": "", "resource": ""},
+        {"id": "10000000-0000-4000-8000-000000000003", "pluginID": "acp-opencode", "title": "OpenCode test client", "account": "", "resource": "fixture-opencode"},
+        {"id": "10000000-0000-4000-8000-000000000004", "pluginID": "acp-antigravity", "title": "Antigravity test client", "account": "", "resource": "fixture-antigravity"},
+        {"id": "10000000-0000-4000-8000-000000000005", "pluginID": "vercel", "title": "Gateway and billing", "account": "team_fixture", "resource": "prj_fixture", "projectID": "30000000-0000-4000-8000-000000000001"},
+        {"id": "10000000-0000-4000-8000-000000000006", "pluginID": "neon", "title": "Compute and storage", "account": "org-fixture", "resource": "db-fixture"},
+        {"id": "10000000-0000-4000-8000-000000000007", "pluginID": "turso", "title": "Database usage", "account": "fixture-org", "resource": "fixture-db"},
+        {"id": "10000000-0000-4000-8000-000000000008", "pluginID": "cloudflare", "title": "Account consumption", "account": "cf-fixture", "resource": "", "oauth": {"clientID": "fixture-public-client", "callbackURL": "http://localhost:47616/oauth/callback", "scopes": "account-analytics.read workers-r2.read zone.read memberships.read"}},
+        {"id": "10000000-0000-4000-8000-000000000009", "pluginID": "cloudflare", "title": "Zone traffic", "account": "cf-fixture", "resource": "fixture-zone", "oauth": {"clientID": "fixture-public-client", "callbackURL": "http://localhost:47616/oauth/callback", "scopes": "account-analytics.read workers-r2.read zone.read memberships.read"}},
+        {"id": "10000000-0000-4000-8000-000000000010", "pluginID": "cloudflare", "title": "Worker traffic", "account": "cf-fixture", "resource": "worker:fixture-worker", "projectID": "30000000-0000-4000-8000-000000000001", "oauth": {"clientID": "fixture-public-client", "callbackURL": "http://localhost:47616/oauth/callback", "scopes": "account-analytics.read workers-r2.read zone.read memberships.read"}},
+        {"id": "10000000-0000-4000-8000-000000000011", "pluginID": "cloudflare", "title": "Bucket storage", "account": "cf-fixture", "resource": "r2:fixture-bucket", "oauth": {"clientID": "fixture-public-client", "callbackURL": "http://localhost:47616/oauth/callback", "scopes": "account-analytics.read workers-r2.read zone.read memberships.read"}},
+        {"id": "10000000-0000-4000-8000-000000000012", "pluginID": "github-ci", "title": "PR queue wait", "account": "example/fixture", "resource": "", "projectID": "30000000-0000-4000-8000-000000000001"},
+        {"id": "10000000-0000-4000-8000-000000000013", "pluginID": "neon", "title": "Pending connection", "account": "org-pending", "resource": ""}
+      ],
+      "cards": [
+        {"id": "20000000-0000-4000-8000-000000000001", "integrationID": "10000000-0000-4000-8000-000000000001", "style": "summary", "isVisible": true, "showInMenuBar": false, "showInWidget": true, "metricID": "turns"},
+        {"id": "20000000-0000-4000-8000-000000000002", "integrationID": "10000000-0000-4000-8000-000000000001", "style": "metrics", "isVisible": true, "showInMenuBar": false, "showInWidget": false, "metricID": "time", "metricIDs": ["time","tokens"], "size": "xlarge"},
+        {"id": "20000000-0000-4000-8000-000000000003", "integrationID": "10000000-0000-4000-8000-000000000002", "style": "metrics", "isVisible": true, "showInMenuBar": true, "showInWidget": false, "metricID": "claudeCode:cost", "metricIDs": ["claudeCode:cost","claudeCode:remaining"]},
+        {"id": "20000000-0000-4000-8000-000000000004", "integrationID": "10000000-0000-4000-8000-000000000003", "style": "compact", "isVisible": true, "showInMenuBar": false, "showInWidget": false, "metricID": "rolling", "size": "small"},
+        {"id": "20000000-0000-4000-8000-000000000005", "integrationID": "10000000-0000-4000-8000-000000000004", "style": "metrics", "isVisible": true, "showInMenuBar": false, "showInWidget": false, "metricIDs": [], "size": "large"},
+        {"id": "20000000-0000-4000-8000-000000000006", "integrationID": "10000000-0000-4000-8000-000000000005", "style": "summary", "isVisible": true, "showInMenuBar": false, "showInWidget": false, "metricIDs": [], "size": "medium"},
+        {"id": "20000000-0000-4000-8000-000000000007", "integrationID": "10000000-0000-4000-8000-000000000006", "style": "metrics", "isVisible": true, "showInMenuBar": false, "showInWidget": false},
+        {"id": "20000000-0000-4000-8000-000000000008", "integrationID": "10000000-0000-4000-8000-000000000007", "style": "compact", "isVisible": false, "showInMenuBar": true, "showInWidget": false, "metricID": "bytes_synced"},
+        {"id": "20000000-0000-4000-8000-000000000009", "integrationID": "10000000-0000-4000-8000-000000000008", "style": "summary", "isVisible": true, "showInMenuBar": false, "showInWidget": false},
+        {"id": "20000000-0000-4000-8000-000000000010", "integrationID": "10000000-0000-4000-8000-000000000009", "style": "summary", "isVisible": true, "showInMenuBar": false, "showInWidget": true, "metricID": "requests"},
+        {"id": "20000000-0000-4000-8000-000000000011", "integrationID": "10000000-0000-4000-8000-000000000010", "style": "compact", "isVisible": true, "showInMenuBar": false, "showInWidget": true, "metricID": "requests"},
+        {"id": "20000000-0000-4000-8000-000000000012", "integrationID": "10000000-0000-4000-8000-000000000011", "style": "metrics", "isVisible": true, "showInMenuBar": false, "showInWidget": false},
+        {"id": "20000000-0000-4000-8000-000000000013", "integrationID": "10000000-0000-4000-8000-000000000012", "style": "summary", "isVisible": true, "showInMenuBar": false, "showInWidget": true},
+        {"id": "20000000-0000-4000-8000-000000000014", "integrationID": "10000000-0000-4000-8000-000000000013", "style": "summary", "isVisible": true, "showInMenuBar": false, "showInWidget": false}
+      ],
+      "snapshots": [
+        {
+          "id": "10000000-0000-4000-8000-000000000001",
+          "pluginID": "ai-usage",
+          "title": "Project activity",
+          "projectID": "30000000-0000-4000-8000-000000000001",
+          "scope": "Project",
+          "period": "Last 7 days",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "top-model", "title": "Most used model", "value": 8, "unit": "turns", "detail": "Fixture model"},
+            {"id": "tokens", "title": "Tokens burned", "value": 12000, "unit": "tokens"},
+            {"id": "time", "title": "Session time", "value": 3600, "unit": "seconds"},
+            {"id": "turns", "title": "Agent turns", "value": 8, "unit": "turns"},
+            {"id": "model:codex|fixture-model", "title": "Fixture model", "value": 8, "unit": "turns", "detail": "codex"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000002",
+          "pluginID": "ai-limits",
+          "title": "Account limits",
+          "scope": "All projects",
+          "period": "Current limits · 7-day task samples",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "claudeCode:5h", "title": "Claude Code · 5h", "value": 40, "unit": "%"},
+            {"id": "claudeCode:7d", "title": "Claude Code · 7d", "value": 15, "unit": "%"},
+            {"id": "claudeCode:cost", "title": "Claude Code · Average task cost", "value": 5, "unit": "%", "detail": "4 samples · 5h window"},
+            {"id": "claudeCode:remaining", "title": "Claude Code · Estimated remaining", "value": 12, "unit": "tasks"},
+            {"id": "codex:5h", "title": "Codex · 5h", "unit": "%"},
+            {"id": "codex:7d", "title": "Codex · 7d", "value": 0, "unit": "%"},
+            {"id": "codex:cost", "title": "Codex · Average task cost", "unit": "%", "detail": "0 samples · 5h window"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000003",
+          "pluginID": "acp-opencode",
+          "title": "OpenCode test client",
+          "scope": "OpenCode Go",
+          "period": "Current account limits",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "rolling", "title": "5-hour usage", "value": 22, "unit": "%", "resetsAt": 800003600, "detail": "Resets May 9, 2026 at 7:13 AM"},
+            {"id": "weekly", "title": "Weekly usage", "value": 11, "unit": "%", "resetsAt": 800086400, "detail": "Resets May 10, 2026 at 6:13 AM"},
+            {"id": "monthly", "title": "Monthly usage", "value": 4, "unit": "%", "resetsAt": 800604800, "detail": "Resets May 16, 2026 at 6:13 AM"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000004",
+          "pluginID": "acp-antigravity",
+          "title": "Antigravity test client",
+          "scope": "Antigravity",
+          "period": "Current account limits",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "0:gemini-5h", "title": "Gemini Models · 5-hour", "value": 20, "unit": "%", "resetsAt": 800003600, "detail": "Resets May 9, 2026 at 7:13 AM"},
+            {"id": "0:gemini-weekly", "title": "Gemini Models · Weekly", "value": 5, "unit": "%", "resetsAt": 800086400, "detail": "Resets May 10, 2026 at 6:13 AM"},
+            {"id": "1:claude-5h", "title": "Claude and GPT models · 5-hour", "value": 30, "unit": "%"},
+            {"id": "1:credits", "title": "Claude and GPT models · Credits", "value": 900, "unit": "units remaining"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000005",
+          "pluginID": "vercel",
+          "title": "Gateway and billing",
+          "projectID": "30000000-0000-4000-8000-000000000001",
+          "scope": "team_fixture / prj_fixture",
+          "period": "Last 30 days",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "billable|EUR", "title": "Billable usage", "value": 3, "unit": "EUR", "detail": "Billed charges over the last 30 days. Included credit and billing-cycle totals are not provided by this view."},
+            {"id": "billable|USD", "title": "Billable usage", "value": 7.25, "unit": "USD", "detail": "Billed charges over the last 30 days. Included credit and billing-cycle totals are not provided by this view."},
+            {"id": "ai-gateway-balance", "title": "AI Gateway credits", "unit": "USD", "detail": "Add an AI Gateway API key for this team in the integration sheet."},
+            {"id": "EUR|Compute", "title": "Compute", "value": 3, "unit": "EUR"},
+            {"id": "USD|Compute", "title": "Compute", "value": 7.25, "unit": "USD"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000006",
+          "pluginID": "neon",
+          "title": "Compute and storage",
+          "scope": "org-fixture / db-fixture",
+          "period": "Last 30 days · daily granularity",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "compute_unit_seconds", "title": "compute unit seconds", "value": 7200, "unit": "CU seconds"},
+            {"id": "public_network_transfer_bytes", "title": "public network transfer bytes", "value": 4000, "unit": "bytes"},
+            {"id": "root_branch_bytes_month", "title": "root branch bytes month", "value": 60000, "unit": "byte-hours"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000007",
+          "pluginID": "turso",
+          "title": "Database usage",
+          "scope": "fixture-org / fixture-db",
+          "period": "Last 30 days",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "rows_read", "title": "rows read", "value": 500, "unit": "rows"},
+            {"id": "rows_written", "title": "rows written", "value": 19, "unit": "rows"},
+            {"id": "storage_bytes", "title": "storage bytes", "value": 10000, "unit": "bytes"},
+            {"id": "bytes_synced", "title": "bytes synced", "value": 0, "unit": "bytes"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000008",
+          "pluginID": "cloudflare",
+          "title": "Account consumption",
+          "scope": "cf-fixture",
+          "period": "Current billing period",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "billable|USD", "title": "Billable usage", "value": 3.5, "unit": "USD", "detail": "Usage-based charges for the current billing period, updated daily by Cloudflare. Plan subscription fees are not included."},
+            {"id": "Workers|Requests", "title": "Workers", "value": 800, "unit": "Requests", "detail": "Metered consumption for the current billing period; not an invoice total."}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000009",
+          "pluginID": "cloudflare",
+          "title": "Zone traffic",
+          "scope": "cf-fixture / fixture-zone",
+          "period": "Last 30 days",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "requests", "title": "Requests", "value": 190, "unit": "requests"},
+            {"id": "bandwidth", "title": "Bandwidth", "value": 9000, "unit": "bytes"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000010",
+          "pluginID": "cloudflare",
+          "title": "Worker traffic",
+          "projectID": "30000000-0000-4000-8000-000000000001",
+          "scope": "cf-fixture / worker:fixture-worker",
+          "period": "Last 24 hours · analytics",
+          "fetchedAt": 799992800,
+          "metrics": [
+            {"id": "requests", "title": "Worker requests", "value": 70, "unit": "requests", "detail": "Analytics · last 24 hours · not billed cost"},
+            {"id": "errors", "title": "Worker errors", "value": 0, "unit": "errors"}
+          ],
+          "error": "Usage request failed (HTTP 403). Check credentials, permissions, and plan eligibility."
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000011",
+          "pluginID": "cloudflare",
+          "title": "Bucket storage",
+          "scope": "cf-fixture / r2:fixture-bucket",
+          "period": "Last 24 hours · analytics",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "requests", "title": "R2 operations", "value": 12, "unit": "requests", "detail": "Analytics · last 24 hours · not billed cost"},
+            {"id": "payloadSize", "title": "Stored object data", "value": 6000, "unit": "bytes", "detail": "Latest sample: 2026-05-09T06:00:00Z"},
+            {"id": "metadataSize", "title": "Stored metadata", "value": 128, "unit": "bytes", "detail": "Latest sample: 2026-05-09T06:00:00Z"},
+            {"id": "objectCount", "title": "Objects", "value": 6, "unit": "objects", "detail": "Latest sample: 2026-05-09T06:00:00Z"}
+          ]
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000012",
+          "pluginID": "github-ci",
+          "title": "PR queue wait",
+          "projectID": "30000000-0000-4000-8000-000000000001",
+          "scope": "example/fixture",
+          "period": "Last 30 days · first attempts",
+          "fetchedAt": 800000000,
+          "metrics": [
+            {"id": "overall", "title": "Average CI wait per PR", "value": 20, "unit": "seconds", "detail": "Created to started · 1 PRs"},
+            {"id": "repo:example/fixture", "title": "example/fixture", "value": 20, "unit": "seconds", "detail": "Mean across 1 PRs"},
+            {"id": "example/fixture#12", "title": "example/fixture#12", "value": 20, "unit": "seconds", "detail": "Mean workflow queue wait · 2 runs"}
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -2,10 +2,13 @@ import RxCodeCore
 import SwiftUI
 
 struct PetFlowcyVoiceSheet: View {
-    @Bindable var controller: PetController
+    var controller: PetController? = nil
     let client: FlowcyMediaClient
     let isSignedIn: Bool
+    var initialVoice: FlowcySpeechSelection? = nil
+    var onSelect: ((FlowcySpeechSelection) -> Void)? = nil
     var onSaved: () -> Void = {}
+    private var savedVoice: FlowcySpeechSelection? { initialVoice ?? controller?.configuration.flowcyVoice }
     @Environment(\.dismiss) private var dismiss
 
     @State private var models: [FlowcyMediaModel] = []
@@ -57,22 +60,25 @@ struct PetFlowcyVoiceSheet: View {
             .navigationTitle("Flowcy Speech Voice")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem {
-                    Button(preview.isPlaying ? "Stop Preview" : "Preview Voice") {
-                        if preview.isPlaying {
-                            preview.stop()
-                        } else if let selection {
-                            var draft = controller.configuration
-                            draft.flowcyVoice = selection
-                            preview.play(configuration: draft, controller: controller, flowcyClient: client)
+                if let controller {
+                    ToolbarItem {
+                        Button(preview.isPlaying ? "Stop Preview" : "Preview Voice") {
+                            if preview.isPlaying {
+                                preview.stop()
+                            } else if let selection {
+                                var draft = controller.configuration
+                                draft.flowcyVoice = selection
+                                preview.play(configuration: draft, controller: controller, flowcyClient: client)
+                            }
                         }
+                        .disabled(controller.isMuted || selection == nil)
                     }
-                    .disabled(controller.isMuted || selection == nil)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Use Voice") {
                         guard let selection else { return }
-                        controller.configuration.flowcyVoice = selection
+                        controller?.configuration.flowcyVoice = selection
+                        onSelect?(selection)
                         onSaved()
                         dismiss()
                     }
@@ -172,7 +178,7 @@ struct PetFlowcyVoiceSheet: View {
     }
 
     private func loadModels() async {
-        let previousID = modelID ?? controller.configuration.flowcyVoice?.model.id
+        let previousID = modelID ?? savedVoice?.model.id
         loadingModels = true
         loadError = nil
         do {
@@ -207,7 +213,7 @@ struct PetFlowcyVoiceSheet: View {
             try Task.checkCancellation()
             guard model.id == modelID else { return }
             voices = options
-            let saved = controller.configuration.flowcyVoice
+            let saved = savedVoice
             if let saved, saved.model.id == model.id,
                model.speechProvider == .gateway || options.contains(where: { $0.id == saved.voice.id }) {
                 voiceID = saved.voice.id

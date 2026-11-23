@@ -39,8 +39,10 @@ struct ThreadUsageChip: View {
             Image(systemName: "gauge.with.dots.needle.33percent")
                 .font(.system(size: ClaudeTheme.size(12), weight: .medium))
             HStack(spacing: 4) {
-                windowValue("5h", primary?.fiveHour)
-                Text(verbatim: "·").foregroundStyle(ClaudeTheme.textTertiary)
+                if hasFiveHourLimit(primary?.provider ?? preferredProvider, in: appState) {
+                    windowValue("5h", primary?.fiveHour)
+                    Text(verbatim: "·").foregroundStyle(ClaudeTheme.textTertiary)
+                }
                 windowValue("7d", primary?.sevenDay)
             }
             if usage.count > 1 {
@@ -78,7 +80,8 @@ struct ThreadUsageChip: View {
 }
 
 /// Per-provider breakdown of the limits a thread consumed.
-private struct ThreadUsagePopover: View {
+struct ThreadUsagePopover: View {
+    @Environment(AppState.self) private var appState
     let usage: [ThreadRateLimitUsage]
 
     var body: some View {
@@ -104,7 +107,9 @@ private struct ThreadUsagePopover: View {
                         Text(row.provider.displayNameText)
                             .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                             .foregroundStyle(ClaudeTheme.textPrimary)
-                        meter(String(localized: "5-hour limit"), row.fiveHour)
+                        if hasFiveHourLimit(row.provider, in: appState) {
+                            meter(String(localized: "5-hour limit"), row.fiveHour)
+                        }
                         meter(String(localized: "Weekly limit"), row.sevenDay)
                     }
                     .padding(10)

@@ -16,7 +16,21 @@ private struct WorkingTreeChanges: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(RepositoryStatus.self) private var repository
-    @State private var showsStaged: Bool
+
+    private enum Scope: CaseIterable {
+        case unstaged, staged, thread
+
+        var title: LocalizedStringResource {
+            switch self {
+            case .unstaged: "Unstaged"
+            case .staged: "Staged"
+            case .thread: "This Thread"
+            }
+        }
+    }
+
+    @State private var scope: Scope
+    @State private var threadChanges: (sessionId: String, files: [FileEditSummary])?
     @State private var selection = Set<String>()
     @State private var showsCommit = false
     @State private var draft = ""
@@ -25,9 +39,18 @@ private struct WorkingTreeChanges: View {
 
     init(tree: GitWorkingTree) {
         self.tree = tree
-        _showsStaged = State(initialValue: tree.changes.unstaged.isEmpty && !tree.changes.staged.isEmpty)
+        _scope = State(initialValue: tree.changes.unstaged.isEmpty && !tree.changes.staged.isEmpty ? .staged : .unstaged)
     }
 
+    private var threadLoadID: ThreadFileEditsLoadID {
+        appState.threadFileEditsLoadID(sessionId: windowState.currentSessionId ?? windowState.newSessionKey)
+    }
+
+    private var threadFiles: [FileEditSummary]? {
+        threadChanges?.sessionId == threadLoadID.sessionId ? threadChanges?.files : nil
+    }
+
+    private var showsStaged: Bool { scope == .staged }
     private var files: [GitChangeFile] { showsStaged ? tree.changes.staged : tree.changes.unstaged }
     private var clean: Bool { tree.changes.unstaged.isEmpty && tree.changes.staged.isEmpty }
 
@@ -62,10 +85,10 @@ private struct WorkingTreeChanges: View {
             .padding(.bottom, 4)
 
             HStack(spacing: 0) {
-                WorkspaceUnderlineTabPicker(options: [false, true], selection: $showsStaged) { staged, selected in
+                WorkspaceUnderlineTabPicker(options: Scope.allCases, selection: $scope) { tab, selected in
                     WorkspaceUnderlineTabLabel(
-                        title: staged ? "Staged" : "Unstaged",
-                        count: staged ? tree.changes.staged.count : tree.changes.unstaged.count,
+                        title: tab.title,
+                        count: fileCount(for: tab),
                         isSelected: selected
                     )
                 }
@@ -75,9 +98,17 @@ private struct WorkingTreeChanges: View {
             .background(alignment: .bottom) { ClaudeThemeDivider() }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Change list")
-            .onChange(of: showsStaged) { selection.removeAll() }
+            .onChange(of: scope) { selection.removeAll() }
 
-            if files.isEmpty {
+            if scope == .thread {
+                ThreadChangeList(summaries: threadFiles) { file in
+                    windowState.diffFile = PreviewFile(
+                        path: file.path, name: file.name, editHunks: file.hunks,
+                        showFullFileDiff: true, originalContent: file.originalContent,
+                        modifiedContent: file.modifiedContent, preferHunks: file.hasExternalInterleaving
+                    )
+                }
+            } else if files.isEmpty {
                 ContentUnavailableView {
                     if clean {
                         Label("Working tree clean", systemImage: "checkmark.circle")
@@ -101,25 +132,32 @@ private struct WorkingTreeChanges: View {
                 .padding(10)
             }
 
-            ClaudeThemeDivider()
-            HStack(spacing: 6) {
-                syncStatus
-                Spacer(minLength: 0)
-                if let tracking = tree.upstream, !tracking.remotes.isEmpty || tracking.upstream != nil {
-                    Button(tracking.upstream == nil ? "Publish" : "Push") { push(tracking) }
-                        .disabled(tracking.upstream != nil && tracking.ahead == 0)
-                        .help(tracking.upstream ?? String(localized: "Publish this branch to its remote"))
+            if scope != .thread {
+                ClaudeThemeDivider()
+                HStack(spacing: 6) {
+                    syncStatus
+                    Spacer(minLength: 0)
+                    if let tracking = tree.upstream, !tracking.remotes.isEmpty || tracking.upstream != nil {
+                        Button(tracking.upstream == nil ? "Publish" : "Push") { push(tracking) }
+                            .disabled(tracking.upstream != nil && tracking.ahead == 0)
+                            .help(tracking.upstream ?? String(localized: "Publish this branch to its remote"))
+                    }
+                    Button("Commit…") { showsCommit = true }
+                        .buttonStyle(.borderedProminent)
+                        .tint(ClaudeTheme.accent)
+                        .disabled(tree.changes.staged.isEmpty)
                 }
-                Button("Commit…") { showsCommit = true }
-                    .buttonStyle(.borderedProminent)
-                    .tint(ClaudeTheme.accent)
-                    .disabled(tree.changes.staged.isEmpty)
+                .controlSize(.small)
+                .padding(10)
             }
-            .controlSize(.small)
-            .padding(10)
         }
         .disabled(operation != nil)
         .overlay { GitOperationOverlay(operation: operation) }
+        .task(id: threadLoadID) { [key = threadLoadID] in
+            let summaries = await appState.loadThreadDiffPreview(key)
+            guard !Task.isCancelled, threadLoadID == key else { return }
+            threadChanges = (key.sessionId, summaries)
+        }
         .onChange(of: files) {
             selection.formIntersection(files.map(\.displayPath))
         }
@@ -134,6 +172,14 @@ private struct WorkingTreeChanges: View {
                 "project_id": windowState.selectedProject?.id.uuidString ?? "",
                 "surface": "inspector_changes",
             ])
+        }
+    }
+
+    private func fileCount(for tab: Scope) -> Int? {
+        switch tab {
+        case .unstaged: tree.changes.unstaged.count
+        case .staged: tree.changes.staged.count
+        case .thread: threadFiles?.count
         }
     }
 

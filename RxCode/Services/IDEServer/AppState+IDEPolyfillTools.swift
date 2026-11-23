@@ -31,6 +31,18 @@ extension AppState {
     /// Available to every backend, regardless of agent mode: route the prompt
     /// through the same queue + `QuestionSheetView` and block until answered.
     func handleAskUser(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let question = try IDEUserQuestion(arguments)
+        let response = await question.ask(via: permission, sessionID: resolveCurrentSessionId(sessionKey))
+        return textResult(response.result)
+    }
+}
+
+nonisolated struct IDEUserQuestion {
+    typealias Response = (answer: String?, result: String)
+    let question: String
+    let toolInput: [String: JSONValue]
+
+    init(_ arguments: JSONValue) throws {
         guard let question = arguments["question"]?.stringValue?
             .trimmingCharacters(in: .whitespacesAndNewlines), !question.isEmpty
         else {
@@ -48,28 +60,33 @@ extension AppState {
         guard !options.isEmpty else {
             throw IDEToolError.invalidArguments("'options' must contain at least one option")
         }
-        let toolInput: [String: JSONValue] = [
+        self.question = question
+        toolInput = [
             "questions": .array([.object([
                 "question": .string(question),
                 "multiSelect": .bool(arguments["allow_multiple"]?.boolValue ?? false),
                 "options": .array(options),
             ])]),
         ]
-        let sessionId = await MainActor.run { resolveCurrentSessionId(sessionKey) }
+    }
+
+    func ask(via permission: PermissionServer, sessionID: String, toolUseID: String = "ide_ask_user_\(UUID())") async
+        -> Response {
         guard let payload = await permission.requestAskUserAnswers(
-            toolUseId: "ide_ask_user_\(UUID().uuidString)",
-            sessionId: sessionId,
+            toolUseId: toolUseID,
+            sessionId: sessionID,
             toolInput: toolInput
         ) else {
-            return textResult("The user skipped the question without answering. Do not assume an answer — continue without it or ask again in plain text.")
+            return (nil, "The user skipped the question. Continue without assuming an answer.")
         }
         let answer = payload["answers"]?[question]
         if let values = answer?.arrayValue?.compactMap(\.stringValue) {
-            return textResult("User selected: \(values.joined(separator: ", "))")
+            let answer = values.joined(separator: ", ")
+            return (answer, "User selected: \(answer)")
         }
         if let value = answer?.stringValue {
-            return textResult("User answered: \(value)")
+            return (value, "User answered: \(value)")
         }
-        return textResult("The user did not provide an answer.")
+        return (nil, "The user did not provide an answer.")
     }
 }

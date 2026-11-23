@@ -26,6 +26,25 @@ final class ACPServiceSuggestionTests: XCTestCase {
         }
     }
 
+    func testAskUserPermissionMatchesEveryClientTitleFormat() {
+        func request(title: String, rawInput: JSONValue? = nil, options: [String] = []) -> JSONValue {
+            var toolCall: [String: JSONValue] = ["toolCallId": .string("1"), "title": .string(title)]
+            toolCall["rawInput"] = rawInput
+            return .object([
+                "toolCall": .object(toolCall),
+                "options": .array(options.map { .object(["optionId": .string($0), "name": .string($0), "kind": .string("allow_once")]) }),
+            ])
+        }
+        for title in ["ide__ask_user", "mcp__rxcode-ide__ide__ask_user", "Tool: rxcode-ide/ide__ask_user", "rxcode-ide_ide__ask_user"] {
+            XCTAssertTrue(ACPService.isAskUserPermission(request(title: title)), title)
+        }
+        XCTAssertTrue(ACPService.isAskUserPermission(request(title: #"{"question":"Which?","options":["A","B"]}"#)))
+        XCTAssertTrue(ACPService.isAskUserPermission(request(title: "{}", options: ["Always Allow ide__ask_user"])))
+        XCTAssertTrue(ACPService.isAskUserPermission(request(
+            title: "Ask", rawInput: .object(["question": .string("Which?"), "options": .array([.string("A")])]))))
+        XCTAssertFalse(ACPService.isAskUserPermission(request(title: "Write file.swift", rawInput: .object(["path": .string("a")]))))
+    }
+
     func testFailedBootstrapCanBeRetriedOnSameThread() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("rxcode-acp-retry-\(UUID().uuidString)")

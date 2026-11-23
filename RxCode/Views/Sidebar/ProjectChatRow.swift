@@ -333,7 +333,7 @@ struct ProjectChatRow: View {
 
     @ViewBuilder
     private var titleDetails: some View {
-        if summary.hasUnfinishedTurn == true && status != .streaming && status != .awaitingPermission {
+        if status != .awaitingPermission && appState.isThreadInterrupted(summary) {
             InterruptedThreadLabel()
         }
         AttentionBadge(attention: appState.threadAttention(sessionKey: summary.id, in: windowState))
@@ -363,14 +363,15 @@ struct ProjectChatRow: View {
                 .help("Creating task from chat")
         }
 
-        if taskCompletionChip == nil, showLabelChip, let label = summary.threadLabel, !label.isEmpty {
+        if taskCompletionChip == nil, showLabelChip, let label = appState.linkedThreadLabel(for: summary), !label.isEmpty {
             Text(label)
                 .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.accentText)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(ClaudeTheme.accentSubtle, in: Capsule())
-                .fixedSize()
+                .lineLimit(1)
+                .help(label)
         }
 
         if let reviewPassed {
@@ -530,9 +531,7 @@ struct ProjectChatRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(disclosure.isReviewing
-            ? "Code review in progress"
-            : (disclosure.isExpanded ? "Hide code reviews" : "Show \(disclosure.count) code review(s)"))
+        .help(disclosure.isExpanded ? "Hide linked chats" : "Show linked chats (\(disclosure.count))")
     }
 
     private static func compactElapsedTime(since date: Date, now: Date = Date()) -> String {

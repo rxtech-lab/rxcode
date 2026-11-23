@@ -337,6 +337,42 @@ actor MCPService {
         return makeDetail(record: record, projectPath: projectPath)
     }
 
+    /// Pins the connection to its original configuration, project and authorization grant.
+    func appConnection(for record: MCPServerRecord, projectPath: String?) async throws -> MCPAppConnection {
+        let detail = makeDetail(record: record, projectPath: projectPath)
+        var env = detail.env
+        var headers = detail.headers
+        if detail.transport == .stdio || record.bearerTokenEnvVar != nil {
+            env = await claudeService.resolvedEnvironment().merging(env) { _, configured in configured }
+        }
+        if detail.transport != .stdio, let key = record.bearerTokenEnvVar,
+           !headers.keys.contains(where: { $0.caseInsensitiveCompare("Authorization") == .orderedSame }) {
+            guard let token = env[key], !token.isEmpty else { throw MCPError.probeFailed("The MCP bearer token is unavailable.") }
+            headers["Authorization"] = "Bearer \(token)"
+        }
+        let generation: UUID?
+        if let resource = detail.url { generation = await oauth.authorizationGeneration(for: resource) } else { generation = nil }
+        let connection = MCPAppConnection(detail: MCPServerDetail(name: detail.name, scope: detail.scope, transport: detail.transport,
+            url: detail.url, command: detail.command, args: detail.args, env: env, headers: headers,
+            projectPath: record.cwd ?? projectPath), oauth: oauth) { [self] in
+            try await validateAppOrigin(record: record, projectPath: projectPath, authorization: generation)
+        }
+        try await validateAppOrigin(record: record, projectPath: projectPath, authorization: generation)
+        return connection
+    }
+
+    private func validateAppOrigin(record: MCPServerRecord, projectPath: String?, authorization: UUID?) async throws {
+        if let resource = record.url, await oauth.authorizationGeneration(for: resource) != authorization {
+            throw MCPError.probeFailed("MCP authorization changed. Reopen the App.")
+        }
+        guard let current = try loadConfig().servers.first(where: { $0.name == record.name }),
+              isAvailableToAgents(current, projectPath: projectPath),
+              current.cwd == record.cwd, current.bearerTokenEnvVar == record.bearerTokenEnvVar,
+              makeDetail(record: current, projectPath: projectPath) == makeDetail(record: record, projectPath: projectPath) else {
+            throw MCPError.probeFailed("The originating MCP server changed or is unavailable in this project.")
+        }
+    }
+
     /// The enabled servers without known connection failures, unrendered.
     ///
     /// `writeClaudeConfig`, `codexConfigOverrides` and `acpMCPServers` are three

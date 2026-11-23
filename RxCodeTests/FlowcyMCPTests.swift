@@ -102,6 +102,22 @@ final class FlowcyCloudBackendTests: XCTestCase {
         XCTAssertEqual(result?.isError, false)
     }
 
+    func testDebateSendsOnlyTheQuestionToolAndReturnsItsAnswer() async throws {
+        let turn = BackendSendRequest(streamId: UUID(), prompt: "Plan backups", cwd: "/project", sessionId: nil,
+            model: nil, permissionMode: .plan, planMode: true, isEphemeral: true, clientSessionKey: "speaker",
+            askUser: { arguments in
+                XCTAssertEqual(arguments["question"], .string("Where?"))
+                return "User answered: Locally"
+            })
+        let messages = await events(backend(token: "debate"), turn)
+        XCTAssertTrue(messages.contains { if case .textDelta("User answered: Locally") = $0 { true } else { false } })
+        guard case .result(let result) = messages.last else { return XCTFail("Missing result") }
+        XCTAssertFalse(result.isError)
+
+        let olderServer = await events(backend(token: "older-debate"), turn)
+        XCTAssertTrue(olderServer.contains { if case .textDelta("Draft") = $0 { true } else { false } })
+    }
+
     func testInterruptedExplicitModelReplyReportsErrorAfterFinalizing() async throws {
         let backend = backend(token: "interrupted")
         let turn = request(model: "model-a")
@@ -263,8 +279,17 @@ nonisolated private final class FlowcyChatFixture: URLProtocol, @unchecked Senda
                 let input = try bodyJSON()
                 let tools = try XCTUnwrap(input["tools"]?.arrayValue)
                 let messages = try XCTUnwrap(input["messages"]?.arrayValue)
+                if bearer == "Bearer older-debate" {
+                    if tools.isEmpty {
+                        respond(url, contentType: "application/x-ndjson", body: "{\"type\":\"text\",\"text\":\"Draft\"}\n{\"type\":\"finish\"}")
+                    } else {
+                        respond(url, status: 400, contentType: "application/json", body: #"{"error":"Invalid chat request"}"#)
+                    }
+                    return
+                }
                 let toolFree = ["Bearer one-shot", "Bearer plan"].contains(bearer)
-                XCTAssertEqual(tools.compactMap { $0["name"]?.stringValue }, toolFree ? [] : ["bash"])
+                let toolName = bearer == "Bearer debate" ? "ide__ask_user" : "bash"
+                XCTAssertEqual(tools.compactMap { $0["name"]?.stringValue }, toolFree ? [] : [toolName])
                 if bearer == "Bearer history" {
                     XCTAssertNil(input["modelId"])
                     XCTAssertEqual(messages.compactMap { $0["content"]?.stringValue }, ["First question", "First answer", "Continue"])
@@ -292,16 +317,22 @@ nonisolated private final class FlowcyChatFixture: URLProtocol, @unchecked Senda
                     let call = try XCTUnwrap(messages.dropLast().last?["content"]?.arrayValue?.last)
                     let result = try XCTUnwrap(messages.last?["content"]?.arrayValue?.first)
                     XCTAssertEqual(call["type"], .string("tool-call"))
-                    XCTAssertEqual(call["toolName"], .string("bash"))
+                    XCTAssertEqual(call["toolName"], .string(toolName))
                     XCTAssertEqual(result["type"], .string("tool-result"))
                     XCTAssertEqual(result["toolName"], call["toolName"])
                     XCTAssertEqual(result["toolCallId"], call["toolCallId"])
                     XCTAssertEqual(result["output"]?["type"], .string(bearer == "Bearer permission" ? "error-text" : "text"))
                     let output = try XCTUnwrap(result["output"]?["value"]?.stringValue)
+                    if bearer == "Bearer debate" { XCTAssertEqual(output, "User answered: Locally") }
                     if bearer == "Bearer permission" { XCTAssertEqual(output, "The user denied this command.") }
                     let delta: JSONValue = .object(["type": .string("text"), "text": .string(output.trimmingCharacters(in: .whitespacesAndNewlines))])
                     let line = String(decoding: try JSONEncoder().encode(delta), as: UTF8.self)
                     respond(url, contentType: "application/x-ndjson", body: line + "\n" + #"{"type":"finish"}"#)
+                } else if bearer == "Bearer debate" {
+                    respond(url, contentType: "application/x-ndjson", body: """
+                        {"type":"tool-call","id":"q","name":"ide__ask_user","arguments":{"question":"Where?","options":["Locally","Online"]}}
+                        {"type":"finish"}
+                        """)
                 } else {
                     let command = bearer == "Bearer terminal" ? "git branch --show-current" : "touch marker"
                     let call = #"{"type":"tool-call","id":"call","name":"bash","arguments":{"command":"\#(command)"}}"#

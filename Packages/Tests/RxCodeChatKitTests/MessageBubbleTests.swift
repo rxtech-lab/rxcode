@@ -47,6 +47,16 @@ struct MessageBubbleTests {
 
     // MARK: - Tests
 
+    @Test("A restored implementation opener matches the exact approved Markdown")
+    func implementationOpenerRecognizesRestoredRequests() {
+        let prompt = "Implement this approved plan and verify the result.\n\n- Keep two backups.\n  - Test recovery."
+        let handoff = ImplementationPlanMessage(prompt: prompt, versionNumber: 2) {}
+        #expect(handoff.matches(prompt))
+        #expect(handoff.matches("# Project instructions\nRun the tests.\n\nUser request:\n" + prompt))
+        #expect(!handoff.matches(prompt + "\nKeep three backups instead."))
+        #expect(!handoff.matches("A discussion about this plan:\n" + prompt))
+    }
+
     @Test("Bubble inspects without crashing for a plain user message")
     func plainUserMessageInspectsCleanly() throws {
         let msg = ChatMessage(role: .user, content: "hello world")

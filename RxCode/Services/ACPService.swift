@@ -57,6 +57,7 @@ actor ACPService {
         /// Probe entries get torn down in `probeModels` instead of pooled
         /// across turns.
         let isEphemeral: Bool
+        var hasDebateQuestionTool = false
     }
 
     var sessions: [String: SessionEntry] = [:]

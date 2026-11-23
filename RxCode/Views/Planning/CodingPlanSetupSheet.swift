@@ -131,10 +131,12 @@ struct CodingPlanSetupSheet: View {
         .overlay { if starting { PlanningProgress(label: "Starting debate…") } }
         .sheet(item: $reviewerEditor) { reviewer in
             let index = configuration.reviewers.firstIndex { $0.id == reviewer.id }
-            CodingPlanReviewerSheet(reviewer: reviewer, canRemove: index != nil && configuration.reviewers.count > 1) { edited in
-                if let index {
-                    if let edited { configuration.reviewers[index] = edited } else { configuration.reviewers.remove(at: index) }
-                } else if let edited { configuration.reviewers.append(edited) }
+            CodingPlanReviewerSheet(reviewer: reviewer, title: index == nil ? "Add Reviewer" : "Reviewer",
+                remove: index != nil && configuration.reviewers.count > 1 ? {
+                    configuration.reviewers.removeAll { $0.id == reviewer.id }
+                } : nil) { edited in
+                if let index { configuration.reviewers[index] = edited }
+                else { configuration.reviewers.append(edited) }
             }
         }
         .planningError($error)
@@ -157,11 +159,13 @@ struct CodingPlanSetupSheet: View {
     }
 }
 
-private struct CodingPlanReviewerSheet: View {
+struct CodingPlanReviewerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State var reviewer: CodingPlan.Reviewer
-    let canRemove: Bool
-    let save: (CodingPlan.Reviewer?) -> Void
+    let title: LocalizedStringKey
+    var remove: (() -> Void)?
+    let save: (CodingPlan.Reviewer) throws -> Void
+    @State private var error: String?
 
     var body: some View {
         NavigationStack {
@@ -178,20 +182,29 @@ private struct CodingPlanReviewerSheet: View {
                         editorIdentifier: "coding-plan-review-prompt"
                     )
                 }
-                if canRemove {
-                    Button("Remove Reviewer", role: .destructive) { save(nil); dismiss() }
+                if let remove {
+                    Button("Remove Reviewer", role: .destructive) { remove(); dismiss() }
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Reviewer")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save Reviewer") { save(reviewer); dismiss() }
+                    Button("Save Reviewer") {
+                        do {
+                            try save(reviewer)
+                            dismiss()
+                        } catch {
+                            self.error = error.localizedDescription
+                        }
+                    }
                 }
             }
         }
         .frame(minWidth: 420, minHeight: 340, maxHeight: .infinity)
+        .planningError($error)
     }
 }
 

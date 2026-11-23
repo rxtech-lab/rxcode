@@ -91,6 +91,7 @@ actor MockAgentBackend: AgentBackend {
     /// Observed `send(_:)` requests, in order. Tests can inspect to assert
     /// the orchestration layer dispatched what they expected.
     private(set) var receivedRequests: [BackendSendRequest] = []
+    private(set) var finalizedStreamIDs: [UUID] = []
 
     // MARK: - Init
 
@@ -192,6 +193,6 @@ actor MockAgentBackend: AgentBackend {
     }
 
     func finalize(streamId: UUID) {
-        // No-op for the same reason as `cancel(streamId:)`.
+        finalizedStreamIDs.append(streamId)
     }
 }

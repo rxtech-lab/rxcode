@@ -3,61 +3,60 @@ import XCTest
 
 @MainActor
 final class CodingPlanUITests: XCTestCase {
-    /// A real ACP subprocess with deterministic answers, so this exercises
-    /// streaming, native controls and session rollover without an account.
-    func testPlanDebateRevisionImplementationAndChatConversions() throws {
+    private let app = XCUIApplication()
+    private let root = FileManager.default.temporaryDirectory.appendingPathComponent("PlanDebateUI-\(UUID())")
+    private var support: URL { root.appendingPathComponent("Support") }
+    private var repo: URL { root.appendingPathComponent("Repository") }
+    private var finishDraft: URL { root.appendingPathComponent("finish-draft") }
+
+    private func control(_ id: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: id).firstMatch
+    }
+
+    private func text(_ text: String, in pane: XCUIElement) -> XCUIElement {
+        let matches = NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", text, text)
+        return pane.descendants(matching: .any).matching(matches).firstMatch
+    }
+
+    private func paste(_ item: NSPasteboardWriting, in field: XCUIElement? = nil, matching predicate: NSPredicate? = nil) {
+        let pasteboard = NSPasteboard.general
+        let saved = (pasteboard.pasteboardItems ?? []).map { original in
+            let copy = NSPasteboardItem()
+            for type in original.types {
+                if let data = original.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        }
+        pasteboard.clearContents()
+        pasteboard.writeObjects([item])
+        let changeCount = pasteboard.changeCount
+        defer {
+            if pasteboard.changeCount == changeCount {
+                pasteboard.clearContents()
+                pasteboard.writeObjects(saved)
+            }
+        }
+        app.typeKey("v", modifierFlags: .command)
+        if let field, let predicate {
+            let pasted = XCTNSPredicateExpectation(predicate: predicate, object: field)
+            XCTAssertEqual(XCTWaiter.wait(for: [pasted], timeout: 4), .completed, field.debugDescription)
+        }
+    }
+
+    // Paste fixture text verbatim even when the Mac has a composing input method selected.
+    private func enterText(_ text: String, in field: XCUIElement? = nil) {
+        paste(text as NSString, in: field, matching: NSPredicate(format: "value == %@", text))
+    }
+
+    private func launchFixture() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
-        func control(_ id: String) -> XCUIElement {
-            app.descendants(matching: .any).matching(identifier: id).firstMatch
-        }
-        func text(_ text: String, in pane: XCUIElement) -> XCUIElement {
-            let matches = NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", text, text)
-            return pane.descendants(matching: .any).matching(matches).firstMatch
-        }
-        func paste(_ item: NSPasteboardWriting, in field: XCUIElement? = nil, matching predicate: NSPredicate? = nil) {
-            let pasteboard = NSPasteboard.general
-            let saved = (pasteboard.pasteboardItems ?? []).map { original in
-                let copy = NSPasteboardItem()
-                for type in original.types {
-                    if let data = original.data(forType: type) { copy.setData(data, forType: type) }
-                }
-                return copy
-            }
-            pasteboard.clearContents()
-            pasteboard.writeObjects([item])
-            let changeCount = pasteboard.changeCount
-            defer {
-                if pasteboard.changeCount == changeCount {
-                    pasteboard.clearContents()
-                    pasteboard.writeObjects(saved)
-                }
-            }
-            app.typeKey("v", modifierFlags: .command)
-            if let field, let predicate {
-                let pasted = XCTNSPredicateExpectation(predicate: predicate, object: field)
-                XCTAssertEqual(XCTWaiter.wait(for: [pasted], timeout: 4), .completed, field.debugDescription)
-            }
-        }
-        // Paste fixture text verbatim even when the Mac has a composing input method selected.
-        func enterText(_ text: String, in field: XCUIElement? = nil) {
-            paste(text as NSString, in: field, matching: NSPredicate(format: "value == %@", text))
-        }
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PlanDebateUI-\(UUID())")
-        let support = root.appendingPathComponent("Support")
-        let repo = root.appendingPathComponent("Repository")
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-        let requirements = repo.appendingPathComponent("Plan requirements.md")
-        try "Support reopening.".write(to: requirements, atomically: true, encoding: .utf8)
-        let chatNotes = repo.appendingPathComponent("Chat notes.md")
-        try "Preserve draft files.".write(to: chatNotes, atomically: true, encoding: .utf8)
-        let finishDraft = root.appendingPathComponent("finish-draft")
         let projectID = UUID().uuidString
         let config: [[String: Any]] = [[
             "id": "plan-fixture", "displayName": "Fixture Client", "enabled": true,
             "launch": ["binary": ["path": "/usr/bin/python3", "args": ["-u", "-c", Self.acpClient, finishDraft.path], "env": [:]]],
-            "models": ["fixture-model"], "extraArgs": [], "extraEnv": [:]
+            "models": ["fixture-model", "alternate-model"], "extraArgs": [], "extraEnv": [:]
         ]]
         try JSONSerialization.data(withJSONObject: config).write(to: support.appendingPathComponent("acp_clients.json"))
         try JSONSerialization.data(withJSONObject: [["id": projectID, "name": "Test Repository", "path": repo.path]])
@@ -73,7 +72,10 @@ final class CodingPlanUITests: XCTestCase {
             "-summarizationProvider", "openAI", "-openAISummarizationModel", ""
         ]
         app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UI_TESTING": "1", "RXCODE_UNIT_TESTING": "1"]
-        defer { app.terminate(); try? FileManager.default.removeItem(at: root) }
+        addTeardownBlock { @MainActor [app, root] in
+            app.terminate()
+            try FileManager.default.removeItem(at: root)
+        }
         app.launch()
         app.activate()
         let whatsNew = app.sheets.containing(.staticText, identifier: "New in RxCode").firstMatch
@@ -81,6 +83,16 @@ final class CodingPlanUITests: XCTestCase {
         let chat = app.buttons["general-route-chat"]
         XCTAssertTrue(chat.waitForExistence(timeout: 25))
         chat.click()
+    }
+
+    /// A real ACP subprocess with deterministic answers, so this exercises
+    /// streaming, native controls and session rollover without an account.
+    func testPlanDebateRevisionImplementationAndChatConversions() throws {
+        try launchFixture()
+        let requirements = repo.appendingPathComponent("Plan requirements.md")
+        try "Support reopening.".write(to: requirements, atomically: true, encoding: .utf8)
+        let chatNotes = repo.appendingPathComponent("Chat notes.md")
+        try "Preserve draft files.".write(to: chatNotes, atomically: true, encoding: .utf8)
         let addMenu = control("composer-add-menu")
         XCTAssertTrue(addMenu.waitForExistence(timeout: 10), app.windows.firstMatch.debugDescription)
         addMenu.click()
@@ -263,6 +275,8 @@ final class CodingPlanUITests: XCTestCase {
         floatingScreenshot.lifetime = .keepAlways
         add(floatingScreenshot)
         openPlanChip(2)
+        XCTAssertTrue(text("Protect writes.", in: debate).exists)
+        XCTAssertFalse(text("<!--", in: debate).exists)
         let versions = control("coding-plan-versions")
         versions.click()
         let proposal = app.menuItems.matching(NSPredicate(format: "title CONTAINS %@", "Reviewer 1 proposal")).firstMatch
@@ -276,6 +290,7 @@ final class CodingPlanUITests: XCTestCase {
         XCTAssertTrue(details.waitForExistence(timeout: 5))
         XCTAssertTrue(text("Save settings.", in: details).exists)
         XCTAssertTrue(text("Protect writes.", in: details).exists)
+        XCTAssertFalse(text("<!--", in: details).exists)
         app.buttons["coding-plan-add-comment"].click()
         let commentEditor = app.textViews["coding-plan-comment-text"].firstMatch
         XCTAssertTrue(commentEditor.waitForExistence(timeout: 5))
@@ -352,58 +367,222 @@ final class CodingPlanUITests: XCTestCase {
         app.buttons["Cancel"].click()
     }
 
-    private static let acpClient = #"""
-    import json, pathlib, sys, time, uuid
+    func testActiveAndReadyPlanRowsDoNotShowInterrupted() throws {
+        try launchFixture()
+        control("composer-add-menu").click()
+        control("composer-plan-mode").click()
+        let goal = app.textViews["coding-plan-goal"].firstMatch
+        XCTAssertTrue(goal.waitForExistence(timeout: 8))
+        app.sheets.popUpButtons.matching(NSPredicate(format: "value == %@", "Chat")).firstMatch.click()
+        app.menuItems["Test Repository"].firstMatch.click()
+        goal.click()
+        let title = "Plan search"
+        enterText(title, in: goal)
+        app.buttons["coding-plan-start"].click()
+        XCTAssertTrue(control("coding-plan-streaming-dots").waitForExistence(timeout: 15))
 
-    def emit(payload):
-        print(json.dumps(dict(jsonrpc="2.0", **payload)), flush=True)
+        let expand = app.buttons["Expand chats in Test Repository"]
+        if expand.exists { expand.click() }
+        let projects = app.scrollViews.containing(.button, identifier: "Collapse chats in Test Repository").firstMatch
+        XCTAssertTrue(text(title, in: projects).waitForExistence(timeout: 5))
+        app.buttons["global-chat-sidebar-toggle"].click()
+        let historyRow = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'history-thread-'")).firstMatch
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 5))
+        XCTAssertFalse(text("Interrupted", in: app).exists)
 
-    for line in sys.stdin:
-        call = json.loads(line)
-        method = call.get("method")
-        if method == "initialize":
-            result = {"protocolVersion": 1, "agentCapabilities": {}}
-        elif method == "session/new":
-            result = {"sessionId": str(uuid.uuid4())}
-        elif method == "session/prompt":
-            params = call["params"]
-            prompt = params["prompt"][0]["text"]
-            if "Distill the requested work" in prompt:
-                name = "Test story" if "project story with" in prompt else "Test task"
-                answer = name + "\n\nSave settings and verify reopening."
-            elif "You are hosting" in prompt:
-                answer = "Review storage and reopening."
-            elif "As host, reply to the user's latest messages" in prompt:
-                pathlib.Path(sys.argv[1]).with_name("reply-prompt").write_text(prompt)
-                answer = "A backup lets you recover settings." if "Why keep a backup?" in prompt and "Keep a local backup." in prompt else "Missing context."
-            elif "You are reviewer 1." in prompt:
-                answer = "Protect writes.\n```suggestion\nSave settings.\n---\nSave settings atomically.\n```"
-            elif "You are reviewer 2." in prompt:
-                answer = "The acceptance check covers reopening."
-            elif "You are the host." in prompt:
-                answer = "## Implementation\n\nSave settings atomically and verify reopening."
-            elif "Return the plan itself" in prompt:
-                pathlib.Path(sys.argv[1]).with_name("draft-prompt").write_text(prompt)
-                emit({"method": "session/update", "params": {"sessionId": params["sessionId"],
-                      "update": {"sessionUpdate": "tool_call", "toolCallId": "read-brief", "kind": "read",
-                                 "title": "Read requirements", "status": "in_progress", "rawInput": {"path": "Plan requirements.md"}}}})
-                emit({"method": "session/update", "params": {"sessionId": params["sessionId"],
-                      "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "## Implementation\n\nPersist stable keys.\n\n"}}}})
-                deadline = time.monotonic() + 90
-                while not pathlib.Path(sys.argv[1]).exists() and time.monotonic() < deadline:
-                    time.sleep(0.05)
-                emit({"method": "session/update", "params": {"sessionId": params["sessionId"],
-                      "update": {"sessionUpdate": "tool_call_update", "toolCallId": "read-brief",
-                                 "status": "completed", "rawOutput": "Support reopening."}}})
-                answer = "Save settings."
-            else:
-                answer = "Implementation complete."
-            emit({"method": "session/update", "params": {"sessionId": params["sessionId"],
-                  "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": answer}}}})
-            result = {"stopReason": "end_turn"}
-        else:
-            result = {}
-        if "id" in call:
-            emit({"id": call["id"], "result": result})
-    """#
+        try Data().write(to: finishDraft)
+        XCTAssertTrue(app.buttons["coding-plan-implement"].waitForExistence(timeout: 30))
+        XCTAssertTrue(historyRow.exists)
+        XCTAssertTrue(text(title, in: projects).exists)
+        XCTAssertFalse(text("Interrupted", in: app).exists)
+    }
+
+    func testAddAndInspectReviewerWhilePlannerIsResponding() throws {
+        try launchFixture()
+        control("composer-add-menu").click()
+        control("composer-plan-mode").click()
+        let goal = app.textViews["coding-plan-goal"].firstMatch
+        XCTAssertTrue(goal.waitForExistence(timeout: 8))
+        goal.click()
+        enterText("Plan settings storage.", in: goal)
+        app.buttons["coding-plan-start"].click()
+        XCTAssertTrue(control("tool-activity-toggle").waitForExistence(timeout: 15))
+
+        let reviewers = app.buttons["coding-plan-reviewers"]
+        reviewers.click()
+        let sheet = app.sheets.firstMatch
+        XCTAssertTrue(text("Review feasibility, edge cases, and verification.", in: sheet).waitForExistence(timeout: 5))
+        XCTAssertTrue(text("ACP · Fixture Client", in: sheet).exists)
+        XCTAssertTrue(text("fixture-model", in: sheet).exists)
+        XCTAssertTrue(text("Queued", in: sheet).exists)
+        app.buttons["coding-plan-add-reviewer"].click()
+        let instructions = app.textViews["coding-plan-review-prompt"].firstMatch
+        XCTAssertTrue(instructions.waitForExistence(timeout: 5))
+        instructions.click()
+        enterText("Check **reopening** on launch.", in: instructions)
+        app.buttons["Save Reviewer"].click()
+        XCTAssertTrue(text("Reviewer 2", in: sheet).waitForExistence(timeout: 5))
+        XCTAssertTrue(text("Check reopening on launch.", in: sheet).exists)
+        try Data().write(to: finishDraft)
+        XCTAssertTrue(text("Reviewed", in: sheet).waitForExistence(timeout: 20))
+        sheet.buttons["Close"].click()
+        let implement = app.buttons["coding-plan-implement"]
+        XCTAssertTrue(implement.waitForExistence(timeout: 20))
+        let reviewPrompt = try String(contentsOf: root.appendingPathComponent("reviewer-2-prompt"), encoding: .utf8)
+        XCTAssertTrue(reviewPrompt.contains("You are reviewer 2. Check **reopening** on launch."))
+
+        implement.click()
+        app.buttons["coding-plan-confirm-implementation"].click()
+        let viewPlan = app.buttons["implementation-view-plan"]
+        XCTAssertTrue(viewPlan.waitForExistence(timeout: 15))
+        viewPlan.click()
+        reviewers.click()
+        XCTAssertTrue(text("Check reopening on launch.", in: sheet).waitForExistence(timeout: 5))
+        XCTAssertFalse(sheet.buttons["coding-plan-add-reviewer"].exists)
+    }
+
+    func testPlanFormWrapsFilesAndReviewerAsksThroughQuestionTool() throws {
+        try launchFixture()
+        control("composer-add-menu").click()
+        control("composer-plan-mode").click()
+        let goal = app.textViews["coding-plan-goal"].firstMatch
+        XCTAssertTrue(goal.waitForExistence(timeout: 8))
+        goal.click()
+        enterText("Plan backup retention.", in: goal)
+
+        let shortNames = ["Plan.md", "Notes.md"]
+        let otherNames = (1...4).map { "Release verification checklist \($0).md" }
+        let longName = String(repeating: "Backup retention requirements and verification ", count: 4) + "notes.md"
+        let sheet = app.sheets.firstMatch
+        let formWidth = sheet.frame.width
+        for name in shortNames + otherNames + [longName] {
+            let file = repo.appendingPathComponent(name)
+            try "Backup notes.".write(to: file, atomically: true, encoding: .utf8)
+            paste(file as NSURL, in: goal, matching: NSPredicate(format: "value CONTAINS %@", "[File: \(name)]"))
+        }
+        let first = sheet.buttons["attachment-preview-\(shortNames[0])"]
+        let second = sheet.buttons["attachment-preview-\(shortNames[1])"]
+        XCTAssertTrue((goal.value as? String)?.contains("[File: Plan.md] [File: Notes.md]") == true)
+        let long = sheet.buttons.matching(NSPredicate(format: "identifier == %@", "attachment-preview-\(longName)")).firstMatch
+        let remove = sheet.buttons.matching(NSPredicate(format: "identifier == %@", "attachment-remove-\(longName)")).firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(sheet.frame.width, formWidth, accuracy: 2)
+        XCTAssertEqual(first.frame.midY, second.frame.midY, accuracy: 2)
+        let lastChecklist = sheet.buttons["attachment-preview-\(otherNames[3])"]
+        XCTAssertGreaterThanOrEqual(lastChecklist.frame.minY, first.frame.maxY)
+        XCTAssertGreaterThanOrEqual(long.frame.minY, lastChecklist.frame.maxY)
+        XCTAssertGreaterThan(long.frame.height, first.frame.height)
+        XCTAssertGreaterThanOrEqual(long.frame.minX, sheet.frame.minX)
+        XCTAssertLessThanOrEqual(remove.frame.maxX, sheet.frame.maxX)
+        // The text view scrolls its document to the caret as files are pasted.
+        let editorScrolls = sheet.scrollViews.containing(.textView, identifier: "coding-plan-goal")
+        let viewport = try XCTUnwrap(editorScrolls.allElementsBoundByIndex.min { $0.frame.height < $1.frame.height })
+        XCTAssertLessThanOrEqual(long.frame.maxY, viewport.frame.minY, sheet.debugDescription)
+        let editorBelowWrappedRow = viewport.frame.minY
+        remove.click()
+        XCTAssertTrue(long.waitForNonExistence(timeout: 5))
+        XCTAssertLessThan(viewport.frame.minY, editorBelowWrappedRow)
+
+        app.buttons["coding-plan-start"].click()
+        let question = app.sheets.staticTexts["How many backups should be kept?"]
+        XCTAssertTrue(question.waitForExistence(timeout: 30), app.windows.firstMatch.debugDescription)
+        app.sheets.buttons["Close"].click()
+        let pending = app.buttons["coding-plan-pending-question"]
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        let field = app.textViews["coding-plan-message"].firstMatch
+        let attachmentButton = app.buttons["coding-plan-message-add-files"]
+        let sendButton = app.buttons["coding-plan-send"]
+        func checkBannerPlacement() {
+            let banner = pending.frame
+            // Measure the controls inside the composer's leading and trailing padding.
+            XCTAssertEqual(attachmentButton.frame.minX - banner.minX, 14, accuracy: 3)
+            XCTAssertEqual(banner.maxX - sendButton.frame.maxX, 10, accuracy: 3)
+            XCTAssertGreaterThan(field.frame.minY, banner.maxY)
+            XCTAssertLessThanOrEqual(field.frame.minY - banner.maxY, 24)
+        }
+        checkBannerPlacement()
+        let debate = control("coding-plan-debate")
+        let divider = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Debate room width")).firstMatch
+        if divider.exists {
+            XCTAssertTrue(debate.frame.contains(pending.frame))
+            let initialSize = pending.frame.size
+            let handle = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            handle.click(forDuration: 0.2, thenDragTo: debate.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)))
+            XCTAssertLessThan(pending.frame.width, initialSize.width)
+            XCTAssertEqual(pending.frame.height, initialSize.height, accuracy: 1)
+            checkBannerPlacement()
+            app.buttons["global-chat-sidebar-toggle"].click()
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            checkBannerPlacement()
+        }
+        pending.click()
+        XCTAssertTrue(question.waitForExistence(timeout: 5))
+        app.sheets.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Two copies")).firstMatch.click()
+        app.sheets.buttons["Submit"].click()
+        XCTAssertTrue(pending.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["coding-plan-implement"].waitForExistence(timeout: 20))
+        XCTAssertTrue(text("Keep two backup copies.", in: control("coding-plan-document")).exists)
+    }
+
+    func testImplementPlanTwiceWithDifferentModelsAndViewFullPlan() throws {
+        try launchFixture()
+        control("composer-add-menu").click()
+        control("composer-plan-mode").click()
+        let goal = app.textViews["coding-plan-goal"].firstMatch
+        XCTAssertTrue(goal.waitForExistence(timeout: 8))
+        goal.click()
+        enterText("Plan backup retention.", in: goal)
+        app.buttons["coding-plan-start"].click()
+        let answer = app.sheets.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Two copies")).firstMatch
+        XCTAssertTrue(answer.waitForExistence(timeout: 30), app.debugDescription)
+        answer.click()
+        app.sheets.buttons["Submit"].click()
+        let implement = app.buttons["coding-plan-implement"]
+        XCTAssertTrue(implement.waitForExistence(timeout: 20))
+        implement.click()
+        let model = control("coding-plan-implementation-model")
+        let effort = control("coding-plan-implementation-effort")
+        XCTAssertEqual(model.value as? String, "fixture-model")
+        XCTAssertFalse(effort.exists)
+        model.click()
+        app.menuItems["Sonnet"].firstMatch.click()
+        // Claude reports its levels from the installed CLI. CI hosts may have only the ACP fixture.
+        if effort.waitForExistence(timeout: 5) {
+            effort.click()
+            app.menuItems["High"].firstMatch.click()
+            XCTAssertEqual(effort.value as? String, "High")
+        }
+        model.click()
+        app.menuItems["fixture-model"].firstMatch.click()
+        XCTAssertFalse(effort.exists)
+        app.buttons["coding-plan-confirm-implementation"].click()
+        let fullPlan = app.buttons["implementation-message-full-plan"]
+        XCTAssertTrue(fullPlan.waitForExistence(timeout: 10))
+        XCTAssertFalse(text("Keep two backup copies.", in: app).exists)
+        fullPlan.click()
+        XCTAssertTrue(text("Keep two backup copies.", in: app.sheets.firstMatch).waitForExistence(timeout: 5))
+        app.sheets.buttons["Done"].click()
+
+        let groupToggle = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "history-plan-disclosure-")).firstMatch
+        XCTAssertTrue(groupToggle.waitForExistence(timeout: 5))
+        let parentID = String(groupToggle.identifier.dropFirst("history-plan-disclosure-".count))
+        let planRow = control("history-thread-\(parentID)")
+        planRow.click()
+        XCTAssertTrue(implement.waitForExistence(timeout: 10))
+        implement.click()
+        model.click()
+        app.menuItems["alternate-model"].firstMatch.click()
+        app.buttons["coding-plan-confirm-implementation"].click()
+        XCTAssertTrue(fullPlan.waitForExistence(timeout: 10))
+        let history = control("global-chat-history")
+        func implementationRow(_ model: String) -> XCUIElement {
+            history.staticTexts.matching(NSPredicate(format: "(value CONTAINS 'Implementation' AND value CONTAINS %@) OR (label CONTAINS 'Implementation' AND label CONTAINS %@)", model, model)).firstMatch
+        }
+        XCTAssertTrue(implementationRow("alternate-model").waitForExistence(timeout: 5), history.debugDescription)
+        XCTAssertTrue(implementationRow("fixture-model").exists)
+        groupToggle.click()
+        XCTAssertTrue(implementationRow("alternate-model").waitForNonExistence(timeout: 5))
+        groupToggle.click()
+        XCTAssertTrue(implementationRow("alternate-model").waitForExistence(timeout: 5))
+    }
 }

@@ -2,6 +2,16 @@ import Foundation
 import RxAgentCore
 import RxCodeCore
 
+struct PlanningToolPermissions: RxAgentCore.PermissionResolving {
+    let canAskUser: Bool
+
+    func resolve(_ request: RxAgentCore.PermissionRequest) async -> RxAgentCore.PermissionDecision {
+        guard canAskUser, request.toolName == IDEToolRegistry.askUser.name ||
+                request.toolName == IDEToolRegistry.qualifiedAskUserName else { return .deny }
+        return .allow
+    }
+}
+
 /// Answers an SDK client's approval requests out of RxCode's existing
 /// permission queue.
 ///

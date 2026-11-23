@@ -33,6 +33,8 @@ final class AppState: IDEToolHandling {
 
     /// Shared across windows so each plan has at most one active debate.
     @ObservationIgnored var codingPlanRooms: [UUID: CodingPlanRoom] = [:]
+    /// Plan thread IDs with a debate turn running. Observable so sidebar rows show progress.
+    var debatingCodingPlanIDs: Set<String> = []
 
     /// Independent state for all active sessions. Key: sessionId
     /// `internal` (not private) — read access required from WindowState / extensions
@@ -67,7 +69,7 @@ final class AppState: IDEToolHandling {
             attentionSessionIDsByProject = nil
             cachedTaskLinkedSessions = nil
             taskSessionIndexes.removeAll(keepingCapacity: true)
-            if briefingPlans.contains(where: { $0.implementationThreadID != nil }) {
+            if briefingPlans.contains(where: { !$0.linkedImplementationIDs.isEmpty }) {
                 scheduleBriefingPlansRefresh()
             }
         }
@@ -1040,8 +1042,7 @@ final class AppState: IDEToolHandling {
         let cliStore = core.cliStore
         let claude = core.claude
         self.codex = CodexAppServer()
-        let acp = ACPService()
-        self.acp = acp
+        self.acp = ACPService()
         self.marketplace = MarketplaceService(baseURL: active.storageURL)
         self.mcp = MCPService(baseURL: active.storageURL, claudeService: claude)
         let threadStore = ThreadStore.make(baseURL: active.storageURL)
@@ -1068,60 +1069,7 @@ final class AppState: IDEToolHandling {
         )
         loadWorkspaceSettings()
         threadStore.onCodingPlansChanged = { [weak self] in self?.scheduleBriefingPlansRefresh() }
-        self.runService.onTasksChanged = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.broadcastMobileRunTasks()
-            }
-        }
-
-        installSDKBackendsIfEnabled()
-
-        if startBackgroundServices && !AppSupport.isUnitTesting {
-            // Bridge ACP `session/request_permission` and Codex in-band permission
-            // requests into the existing PermissionServer.
-            let permission = self.permission
-            let codex = self.codex
-            let ideMCPServer = self.ideMCPServer
-            Task {
-                await acp.setPermissionServer(permission)
-                await codex.setPermissionServer(permission)
-                await ideMCPServer.setHandler(self)
-            }
-
-            // Boot the on-device thread search index in the background. The actor
-            // loads cached chunks on `start`, then kicks off a one-time backfill
-            // of any threads that don't have chunks yet.
-            let searchService = self.searchService
-            let memoryService = self.memoryService
-            let keepsGlobalRows = self.activeWorkspace.isPersonal
-            let threadStore = self.threadStore
-            let threadStoreReader = self.threadStoreReader
-            let persistence = self.persistence
-            let workspaceDefaults = self.workspaceDefaults
-            Task.detached(priority: .utility) { [weak self] in
-                await searchService.setWorkspaceDefaults(workspaceDefaults)
-                await searchService.start(threadStore: threadStore, reader: threadStoreReader)
-                await memoryService.start(threadStore: threadStore, keepsGlobalRows: keepsGlobalRows)
-                await searchService.backfillIfNeeded(
-                    loadAll: { await threadStoreReader.loadSummaries() },
-                    loadFull: { @MainActor [weak self] summary -> ChatSession? in
-                        let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
-                        return await persistence.loadFullSession(summary: summary, cwd: cwd)
-                    }
-                )
-            }
-        }
-        // Mobile sync is owned by a single (frontmost) workspace — bound by
-        // WorkspaceManager, not here, so multiple workspace windows don't all
-        // respond to the same mobile request.
-
-        // Build the hook controller/manager last — the controller captures
-        // `self` (weakly) and every other service it forwards to is now ready.
-        let hookController = AppStateHookController(app: self)
-        self.hookController = hookController
-        self.hookManager = HookManager(controller: hookController)
-        self.reviewScheduler = ReviewScheduler(app: self)
-        registerBuiltInHooks()
+        configureRuntimeServices(startBackgroundServices: startBackgroundServices)
 
         if startBackgroundServices {
             permissionRequestTask = Task { [weak self, permission] in

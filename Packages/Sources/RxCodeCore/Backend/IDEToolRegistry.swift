@@ -1,6 +1,33 @@
 import Foundation
 
 public enum IDEToolRegistry {
+    public static let askUser = IDETool(
+        name: "ide__ask_user",
+        description: "Ask the user a question and wait for their selection. Use when you need clarification or a decision the user must make.",
+        visibility: .alwaysIDEOnly,
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "question": .object([
+                    "type": .string("string"),
+                    "description": .string("The question to show the user."),
+                ]),
+                "options": .object([
+                    "type": .string("array"),
+                    "items": .object(["type": .string("string")]),
+                    "description": .string("2–4 mutually-exclusive options the user can pick from."),
+                ]),
+                "allow_multiple": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Whether more than one option may be selected."),
+                ]),
+            ]),
+            "required": .array([.string("question"), .string("options")]),
+        ])
+    )
+
+    public static let qualifiedAskUserName = "mcp__rxcode-ide__" + askUser.name
+
     public static let allTools: [IDETool] = designTools + petCaptureTools + petInteractionTools + flowcyTools + mediaTools + [
         usageCardsTool,
         integrationUsageTool,
@@ -15,32 +42,7 @@ public enum IDEToolRegistry {
                 "required": .array([.string("name")]),
             ])
         ),
-        IDETool(
-            name: "ide__ask_user",
-            description: "Ask the user a question and wait for their selection. Use when you need clarification or a decision the user must make.",
-            // Native question tools can be restricted by agent mode. Keep the
-            // IDE sheet available even when the backend declares question support.
-            visibility: .alwaysIDEOnly,
-            inputSchema: .object([
-                "type": .string("object"),
-                "properties": .object([
-                    "question": .object([
-                        "type": .string("string"),
-                        "description": .string("The question to show the user."),
-                    ]),
-                    "options": .object([
-                        "type": .string("array"),
-                        "items": .object(["type": .string("string")]),
-                        "description": .string("2–4 mutually-exclusive options the user can pick from."),
-                    ]),
-                    "allow_multiple": .object([
-                        "type": .string("boolean"),
-                        "description": .string("Whether more than one option may be selected."),
-                    ]),
-                ]),
-                "required": .array([.string("question"), .string("options")]),
-            ])
-        ),
+        askUser,
         IDETool(
             name: "ide__set_todos",
             description: "Replace the current chat's todo list shown in RxCode. Send the full list to track progress on large, multi-step tasks.",

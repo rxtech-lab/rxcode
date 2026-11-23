@@ -234,10 +234,13 @@ actor MCPOAuthService {
         return try await session.data(for: authorized)
     }
 
-    func bytes(for request: URLRequest, resource: String) async throws -> (URLSession.AsyncBytes, URLResponse) {
+    func bytes(for request: URLRequest, resource: String,
+               beforeSend: @Sendable () async throws -> Void = {}) async throws -> (URLSession.AsyncBytes, URLResponse) {
         var authorized = request
         let token = try await accessToken(for: resource)
         if let token { authorized.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        try await beforeSend()
+        try Task.checkCancellation()
         let response = try await session.bytes(for: authorized)
         guard (response.1 as? HTTPURLResponse)?.statusCode == 401, let token else { return response }
         response.0.task.cancel()
@@ -245,8 +248,13 @@ actor MCPOAuthService {
             throw AuthError.invalid("Sign in again to renew MCP access.")
         }
         authorized.setValue("Bearer \(renewed)", forHTTPHeaderField: "Authorization")
+        try await beforeSend()
+        try Task.checkCancellation()
         return try await session.bytes(for: authorized)
     }
+
+    /// Changes on sign-in or sign-out. Refreshing a token preserves the open App's authorization.
+    func authorizationGeneration(for resource: String) -> UUID? { generations[resource] }
 
     func hasCredential(for resource: String) throws -> Bool { try read(resource) != nil }
 

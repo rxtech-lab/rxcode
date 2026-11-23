@@ -4,17 +4,35 @@ import RxCodeCore
 @Observable
 final class CodingPlanRoom {
     var plan: CodingPlan
-    var liveTurn = PlanningTurn()
-    var liveText: String { liveTurn.text }
+    var liveTurn = PlanningTurn() {
+        didSet {
+            liveBroadcast = CodingPlanBroadcast(liveTurn.text, hostRevision: plan.nextStep?.isHostRevision == true, streaming: true)
+        }
+    }
+    private(set) var liveBroadcast = CodingPlanBroadcast("", hostRevision: false)
+    var liveText: String { liveBroadcast.body }
+    private(set) var dispatch: Dispatch?
+    struct Dispatch: Identifiable {
+        let id: UUID
+        let text: String
+    }
     var turnStartIndex = 0
     var isHandingOff = false
+    var canAddReviewer: Bool { !isHandingOff && plan.approvedVersionID == nil }
     var runID: UUID?
     @ObservationIgnored var task: Task<Void, Never>?
+    @ObservationIgnored var questions: CodingPlanQuestions?
 
     init(_ plan: CodingPlan) { self.plan = plan }
 
+    func publishBriefing(_ text: String?, role: String, turnID: UUID) {
+        guard dispatch?.id != turnID, let text, !text.isEmpty else { return }
+        dispatch = .init(id: turnID, text: "\(role). \(text)")
+    }
+
     func stop() {
         runID = nil
+        questions?.close()
         task?.cancel()
         task = nil
         liveTurn = PlanningTurn()
@@ -25,9 +43,9 @@ extension AppState {
     func codingPlanRoom(for threadID: String) -> CodingPlanRoom? {
         if let id = UUID(uuidString: threadID), let room = codingPlanRooms[id] { return room }
         guard let stored = threadStore.codingPlan(for: threadID) else { return nil }
-        if let room = codingPlanRooms[stored.id] { return room }
         let room = CodingPlanRoom(stored)
-        codingPlanRooms[stored.id] = room
+        // Each implementation keeps the version approved for its own run.
+        if UUID(uuidString: threadID) == stored.id { codingPlanRooms[stored.id] = room }
         return room
     }
 
@@ -40,7 +58,7 @@ extension AppState {
         let session = ChatSession(
             id: plan.id.uuidString, projectId: project.id, title: ChatSession.placeholderTitle(from: goal),
             messages: messages, agentProvider: configuration.planner.provider, model: configuration.planner.id,
-            origin: .legacyRxCode, worktreePath: worktreePath, worktreeBranch: worktreeBranch, threadLabel: "Plan"
+            origin: .legacyRxCode, worktreePath: worktreePath, worktreeBranch: worktreeBranch, threadLabel: ChatSession.codingPlanLabel
         )
         if project.isGlobalChat {
             try await Task.detached {
@@ -48,7 +66,10 @@ extension AppState {
             }.value
         }
         try await persistence.saveSession(session)
-        threadStore.upsert(session.summary)
+        // The chat transcript holds only the goal. The plan tracks its turns separately.
+        var summary = session.summary
+        summary.hasUnfinishedTurn = false
+        threadStore.upsert(summary)
         do {
             try threadStore.saveCodingPlan(plan)
         } catch {
@@ -58,7 +79,7 @@ extension AppState {
         }
         let room = CodingPlanRoom(plan)
         codingPlanRooms[plan.id] = room
-        allSessionSummaries.insert(session.summary, at: 0)
+        allSessionSummaries.insert(summary, at: 0)
         let inChatTab = window.generalRoute == .chat
         window.cancelSessionSwitchTask()
         selectProject(project, in: window)
@@ -74,10 +95,13 @@ extension AppState {
         room.turnStartIndex = room.plan.contributions.endIndex
         room.runID = run
         room.plan.lastError = nil
+        let planID = room.plan.id.uuidString
+        debatingCodingPlanIDs.insert(planID)
         room.task = Task { [weak self, weak room] in
             guard let self, let room else { return }
             defer {
                 if room.runID == run {
+                    debatingCodingPlanIDs.remove(planID)
                     room.task = nil
                     room.runID = nil
                     room.liveTurn = PlanningTurn()
@@ -85,18 +109,44 @@ extension AppState {
             }
             do {
                 while let step = room.plan.nextStep, room.runID == run {
+                    let turnID = UUID()
                     let turnStart = room.plan.contributions.endIndex
                     room.turnStartIndex = turnStart
                     let speaker = room.plan.speaker(for: step)
                     room.liveTurn = PlanningTurn()
-                    let response = try await planningTurn(model: speaker.model, prompt: room.plan.prompt(for: step), cwd: cwd) { turn in
-                        if room.runID == run { room.liveTurn = turn }
+                    let questions = CodingPlanQuestions(appState: self, room: room, runID: run)
+                    room.questions = questions
+                    defer {
+                        questions.close()
+                        if room.questions === questions { room.questions = nil }
                     }
+                    let result: Result<PlanningTurn, Error>
+                    do {
+                        let turn = try await planningTurn(model: speaker.model, prompt: room.plan.prompt(for: step),
+                                                          cwd: cwd, questions: questions) { update in
+                            guard room.runID == run else { return }
+                            room.liveTurn = update
+                            if room.dispatch?.id != turnID {
+                                room.publishBriefing(room.liveBroadcast.briefing, role: speaker.role, turnID: turnID)
+                            }
+                        }
+                        result = .success(turn)
+                    } catch {
+                        result = .failure(error)
+                    }
+                    if try await questions.receivedAnswerAfterTurn() { continue }
                     guard room.runID == run, !Task.isCancelled else { return }
+                    let response = try result.get()
+                    let broadcastBody = CodingPlanBroadcast(response.text, hostRevision: step.isHostRevision).body
+                    guard !broadcastBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        throw PlanningTurnError(message: "The agent returned a radio update without its planning response.")
+                    }
                     var updated = room.plan
                     updated.finish(step, text: response.text, toolCalls: response.toolCalls, at: turnStart)
                     try threadStore.saveCodingPlan(updated)
                     room.plan = updated
+                    let message = updated.contributions[turnStart]
+                    room.publishBriefing(message.radioSummary, role: speaker.role, turnID: turnID)
                 }
             } catch {
                 guard room.runID == run, !Task.isCancelled, let step = room.plan.nextStep else { return }
@@ -105,6 +155,18 @@ extension AppState {
                 try? threadStore.saveCodingPlan(room.plan)
             }
         }
+    }
+
+    func addCodingPlanReviewer(_ reviewer: CodingPlan.Reviewer, to room: CodingPlanRoom, cwd: String) throws {
+        guard room.canAddReviewer else {
+            throw PlanningTurnError(message: "This plan is closed to additional reviews.")
+        }
+        let wasReady = room.plan.nextStep == nil
+        var updated = room.plan
+        guard updated.addReviewer(reviewer) else { return }
+        try threadStore.saveCodingPlan(updated)
+        room.plan = updated
+        if wasReady { resumeCodingPlan(room, cwd: cwd) }
     }
 
     func sendCodingPlanMessage(_ text: String, to room: CodingPlanRoom, cwd: String) throws {
@@ -157,15 +219,19 @@ extension AppState {
     }
 
     @discardableResult
-    func implementCodingPlan(_ room: CodingPlanRoom, versionID: UUID, model: AgentModel, in window: WindowState) async -> UUID? {
+    func implementCodingPlan(_ room: CodingPlanRoom, versionID: UUID, model: AgentModel, effort: String? = nil,
+                             in window: WindowState) async -> UUID? {
         let sourceID = room.plan.id.uuidString
-        guard window.currentSessionId == sourceID, room.runID == nil, room.plan.nextStep == nil,
-              !room.isHandingOff, room.plan.approvedVersionID == nil,
+        guard let originID = window.currentSessionId,
+              originID == sourceID || threadStore.fetch(id: originID)?.implementationPlanID == room.plan.id,
+              room.runID == nil, room.plan.nextStep == nil, !room.isHandingOff,
               let version = room.plan.versions.first(where: { $0.id == versionID }),
               let source = threadStore.fetch(id: sourceID) else { return nil }
         room.isHandingOff = true
         defer { room.isHandingOff = false }
-        var approved = room.plan
+        let chosenEffort = await sanitizedEffort(effort, for: model.provider, model: model.id)
+        guard window.currentSessionId == originID else { return nil }
+        var approved = codingPlanRoom(for: sourceID)?.plan ?? room.plan
         approved.approvedVersionID = versionID
         let inChatTab = window.generalRoute == .chat
         startNewChat(in: window)
@@ -176,12 +242,13 @@ extension AppState {
         window.pendingWorktreeBranch = source.worktreeBranch
         window.sessionAgentProvider = model.provider
         window.sessionModel = model.id
+        window.sessionEffort = chosenEffort
         if permissionMode == .plan { window.sessionPermissionMode = .default }
         if inChatTab { window.generalRoute = .chat }
         let stream = await sendPrompt(CodingPlan.implementationPrompt(for: version),
                                       implementationPlan: approved, in: window)
         if stream == nil, window.currentSessionId == nil {
-            selectSession(id: sourceID, inChatTab: inChatTab, in: window)
+            selectSession(id: originID, inChatTab: inChatTab, in: window)
         }
         return stream
     }
@@ -189,5 +256,6 @@ extension AppState {
     func discardCodingPlanRun(threadID: String) {
         guard let id = UUID(uuidString: threadID) else { return }
         codingPlanRooms.removeValue(forKey: id)?.stop()
+        debatingCodingPlanIDs.remove(id.uuidString)
     }
 }

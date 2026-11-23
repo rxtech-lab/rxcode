@@ -1,15 +1,35 @@
 import Foundation
 
-/// An App's HTML and a proxy scoped to the server that supplied it.
+/// One representation of an inline App and its host-scoped action handler.
 public struct MCPAppResource: Sendable {
-    public let html: String
+    public enum Content: Sendable {
+        case html(String)
+        case jsonUI(MCPJSONUIResource)
+    }
+
+    public let content: Content
     public let tool: JSONValue
+    public let submit: MCPJSONUISubmit?
     public let call: @Sendable (String, JSONValue) async throws -> JSONValue
 
+    /// HTML document for existing HTML-only consumers.
+    public var html: String {
+        if case .html(let document) = content { return document }
+        return ""
+    }
+
     public init(html: String, tool: JSONValue, call: @escaping @Sendable (String, JSONValue) async throws -> JSONValue) {
-        self.html = html
+        self.content = .html(html)
         self.tool = tool
         self.call = call
+        self.submit = nil
+    }
+
+    public init(jsonUI: MCPJSONUIResource, tool: JSONValue, submit: @escaping MCPJSONUISubmit) {
+        self.content = .jsonUI(jsonUI)
+        self.tool = tool
+        self.submit = submit
+        self.call = { _, _ in throw MCPJSONUIResource.InvalidDocument("Native MCP Apps require a bound submit action.") }
     }
 
     public static func resourceURI(in tool: JSONValue) -> String? {
@@ -20,8 +40,8 @@ public struct MCPAppResource: Sendable {
     }
 
     public static func permitsAppCall(_ tool: JSONValue) -> Bool {
-        guard let visibility = tool["_meta"]?["ui"]?["visibility"]?.arrayValue else { return true }
-        return visibility.contains(.string("app"))
+        guard let visibility = tool["_meta"]?["ui"]?["visibility"] else { return true }
+        return visibility.arrayValue?.contains(.string("app")) == true
     }
 
     /// Build policy from validated origins only. Resource HTML cannot loosen this policy.

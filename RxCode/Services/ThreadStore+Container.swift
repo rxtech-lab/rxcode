@@ -52,6 +52,7 @@ extension ThreadStore {
             store.finalizeInterruptedHooks()
             store.finalizeInterruptedHookCards()
             store.finalizeInterruptedCompletionChecks()
+            store.backfillCodingPlanTurnOutcomes()
             store.pruneUsageBuckets()
             store.pruneRateLimitHistory()
             store.backfillThreadSummaryCreatedAt()

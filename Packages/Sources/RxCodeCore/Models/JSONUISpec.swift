@@ -233,10 +233,12 @@ public enum JSONUIFormat {
             case "percent":
                 return (number / 100).formatted(.percent.precision(.fractionLength(0...1)))
             case "bytes":
-                return Int64(number).formatted(.byteCount(style: .file))
+                guard let bytes = Int64(exactly: number.rounded(.towardZero)) else { return number.formatted() }
+                return bytes.formatted(.byteCount(style: .file))
             case "duration":
                 // Seconds; sub-second values read better as milliseconds.
                 if abs(number) < 1 { return "\((number * 1000).formatted(.number.precision(.fractionLength(0...1)))) ms" }
+                guard abs(number) < Double(Int64.max) else { return number.formatted() }
                 return Duration.seconds(number).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated, maximumUnitCount: 2))
             default:
                 return number.formatted()

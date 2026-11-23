@@ -182,7 +182,18 @@ actor SDKAgentBackend: AgentBackend {
     }
 
     private func makeSendRequest(_ request: BackendSendRequest) -> AgentSendRequest {
-        AgentSendRequest(
+        let question = IDEToolRegistry.askUser
+        var localTools: [AnyAgentTool] = []
+        if provider == .localAgent, let askUser = request.askUser {
+            localTools.append(AnyAgentTool(name: question.name, description: question.description,
+                                           inputSchema: SDKJSON(question.inputSchema), annotations: .readOnly) { arguments, _ in
+                .text(try await askUser(AppJSON(arguments)))
+            })
+        }
+        let permissions: any PermissionResolving = request.isEphemeral
+            ? PlanningToolPermissions(canAskUser: request.askUser != nil)
+            : SDKPermissionResolver(server: permissionServer, sessionKey: request.clientSessionKey)
+        return AgentSendRequest(
             turnID: request.streamId,
             threadID: Self.threadID(forSessionKey: request.clientSessionKey),
             resumeSessionID: request.sessionId,
@@ -194,10 +205,9 @@ actor SDKAgentBackend: AgentBackend {
             planMode: request.planMode,
             contextText: request.extraSystemPrompt ?? "",
             mcpServers: request.sdkMCPServers,
-            permissions: request.isEphemeral ? DenyAllPermissions() : SDKPermissionResolver(
-                server: permissionServer, sessionKey: request.clientSessionKey
-            ),
-            allowedTools: request.isEphemeral ? ["Read", "Glob", "Grep"] : nil
+            permissions: permissions,
+            localTools: localTools,
+            allowedTools: request.isEphemeral ? ["Read", "Glob", "Grep"] + (request.askUser == nil ? [] : [question.name]) : nil
         )
     }
 

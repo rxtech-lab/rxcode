@@ -85,10 +85,12 @@ actor IDEMCPServer {
         let listener: NWListener
         let sessionKey: String
         let capabilities: CapabilitySet
+        let sessionHandler: (any IDEToolHandling)?
         var toolExposures: [ToolExposure]?
         var connections: [UUID: NWConnection] = [:]
     }
     private var allocations: [String: Allocation] = [:]
+    private var startingListeners: [String: Task<UInt16?, Never>] = [:]
     private var settingsHTTPServer: SettingsHTTPServer?
     /// Port → sessionKey, so connection accept can resolve back.
     private var portIndex: [UInt16: String] = [:]
@@ -128,29 +130,56 @@ actor IDEMCPServer {
     /// Reserve a port + listener for `sessionKey`. Returns the port that
     /// should be embedded in the MCP server `args` (`["127.0.0.1", "<port>"]`).
     /// If the session is already allocated, returns the existing port.
-    func allocate(sessionKey: String, capabilities: CapabilitySet) async -> UInt16? {
-        if let existing = allocations[sessionKey] {
-            return existing.port
+    func allocate(sessionKey: String, capabilities: CapabilitySet, handler: (any IDEToolHandling)? = nil) async -> UInt16? {
+        if let existing = allocations[sessionKey] { return existing.port }
+        if let starting = startingListeners[sessionKey] { return await starting.value }
+        let starting = Task {
+            defer { if !Task.isCancelled { startingListeners.removeValue(forKey: sessionKey) } }
+            return await startListener(sessionKey: sessionKey, capabilities: capabilities, handler: handler)
         }
+        startingListeners[sessionKey] = starting
+        return await starting.value
+    }
+
+    private func startListener(sessionKey: String, capabilities: CapabilitySet, handler: (any IDEToolHandling)?) async -> UInt16? {
         for _ in 0..<(Self.maxPort - Self.basePort + 1) {
+            guard !Task.isCancelled else { return nil }
             let candidate = nextPort
             nextPort = nextPort == Self.maxPort ? Self.basePort : nextPort + 1
             if portIndex[candidate] != nil { continue }
             do {
                 let listener = try makeListener(port: candidate)
-                allocations[sessionKey] = Allocation(
-                    port: candidate,
-                    listener: listener,
-                    sessionKey: sessionKey,
-                    capabilities: capabilities,
-                    toolExposures: nil
-                )
                 portIndex[candidate] = sessionKey
                 listener.newConnectionHandler = { [weak self] connection in
                     guard let self else { return }
                     Task { await self.accept(connection: connection, port: candidate) }
                 }
+                // Network.framework reports a busy port after start(), even when
+                // creating the listener succeeded. Only hand out a bound port.
+                let (readiness, signal) = AsyncStream<Bool>.makeStream()
+                listener.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready: signal.yield(true)
+                    case .failed, .waiting, .cancelled: signal.yield(false)
+                    default: return
+                    }
+                    signal.finish()
+                }
                 listener.start(queue: .global(qos: .userInitiated))
+                var events = readiness.makeAsyncIterator()
+                guard await events.next() == true, !Task.isCancelled else {
+                    listener.cancel()
+                    portIndex.removeValue(forKey: candidate)
+                    continue
+                }
+                allocations[sessionKey] = Allocation(
+                    port: candidate,
+                    listener: listener,
+                    sessionKey: sessionKey,
+                    capabilities: capabilities,
+                    sessionHandler: handler,
+                    toolExposures: nil
+                )
                 Self.logger.info("[IDE] allocated port \(candidate) for session=\(sessionKey, privacy: .public)")
                 return candidate
             } catch {
@@ -163,6 +192,7 @@ actor IDEMCPServer {
     }
 
     func release(sessionKey: String) async {
+        startingListeners.removeValue(forKey: sessionKey)?.cancel()
         guard let alloc = allocations.removeValue(forKey: sessionKey) else { return }
         portIndex.removeValue(forKey: alloc.port)
         alloc.listener.cancel()
@@ -289,7 +319,6 @@ actor IDEMCPServer {
 
     private func makeListener(port: UInt16) throws -> NWListener {
         let params = NWParameters.tcp
-        params.allowLocalEndpointReuse = true
         params.requiredInterfaceType = .loopback
         return try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
     }
@@ -342,13 +371,14 @@ actor IDEMCPServer {
                 let lineData = pendingBuffer[pendingBuffer.startIndex..<newline]
                 pendingBuffer.removeSubrange(pendingBuffer.startIndex...newline)
                 if lineData.isEmpty { continue }
-                guard allocations[sessionKey]?.connections[connectionId] != nil else {
+                guard let allocation = allocations[sessionKey], allocation.connections[connectionId] != nil else {
                     Self.logger.info("[IDE.runMCP] revoked conn=\(connectionId.uuidString.prefix(8), privacy: .public) session=\(sessionKey, privacy: .public)")
                     return
                 }
                 await processLine(
                     data: lineData,
                     connection: connection,
+                    handler: allocation.sessionHandler ?? handler,
                     sessionKey: sessionKey,
                     capabilities: capabilities,
                     toolExposures: toolExposures,
@@ -396,6 +426,7 @@ actor IDEMCPServer {
     private func processLine(
         data: Data.SubSequence,
         connection: NWConnection,
+        handler: (any IDEToolHandling)?,
         sessionKey: String,
         capabilities: CapabilitySet,
         toolExposures: [ToolExposure]?,
@@ -449,7 +480,8 @@ actor IDEMCPServer {
             let tools = await currentTools(
                 sessionKey: sessionKey,
                 capabilities: capabilities,
-                toolExposures: toolExposures
+                toolExposures: toolExposures,
+                handler: handler
             )
             await reply(
                 id: id!,
@@ -474,7 +506,6 @@ actor IDEMCPServer {
             let argsValue = JSONValue.fromAny(arguments)
             let callStart = Date()
             do {
-                let handler = self.handler
                 guard let handler else {
                     throw IDEToolError.handlerFailed("IDE handler not attached")
                 }
@@ -507,7 +538,8 @@ actor IDEMCPServer {
     private func currentTools(
         sessionKey: String,
         capabilities: CapabilitySet,
-        toolExposures: [ToolExposure]?
+        toolExposures: [ToolExposure]?,
+        handler: (any IDEToolHandling)?
     ) async -> [IDETool] {
         let available: [IDETool]
         if let handler {
@@ -532,7 +564,8 @@ actor IDEMCPServer {
         let tools = await currentTools(
             sessionKey: Self.memoryAPISessionKey,
             capabilities: [],
-            toolExposures: toolExposures
+            toolExposures: toolExposures,
+            handler: handler
         )
         return try tools.map(Self.mcpTool)
     }

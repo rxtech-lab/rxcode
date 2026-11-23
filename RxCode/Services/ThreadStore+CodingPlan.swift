@@ -3,6 +3,16 @@ import RxCodeCore
 import SwiftData
 
 extension ThreadStore {
+    /// Older plan goals were treated as unanswered chat messages during transcript recovery.
+    func backfillCodingPlanTurnOutcomes() {
+        let query = FetchDescriptor<ChatThread>(predicate: #Predicate {
+            $0.implementationPlanID == nil && $0.codingPlanData != nil && $0.unfinishedTranscript == nil
+        })
+        guard let rows = try? context.fetch(query).filter({ $0.hasUnfinishedTurn != false }), !rows.isEmpty else { return }
+        for row in rows { row.hasUnfinishedTurn = false }
+        save()
+    }
+
     func codingPlan(for threadID: String) -> CodingPlan? {
         guard let data = fetch(id: threadID)?.codingPlanData,
               var plan = try? JSONDecoder().decode(CodingPlan.self, from: data) else { return nil }
@@ -37,9 +47,9 @@ extension ThreadStore {
         }
     }
 
-    func implementationThread(for planID: UUID) -> String? {
-        var query = FetchDescriptor<ChatThread>(predicate: #Predicate { $0.implementationPlanID == planID })
-        query.fetchLimit = 1
-        return (try? context.fetch(query))?.first?.id
+    func implementationThreads(for planID: UUID) -> [ChatSession.Summary] {
+        let query = FetchDescriptor<ChatThread>(predicate: #Predicate { $0.implementationPlanID == planID },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse), SortDescriptor(\.id)])
+        return (try? context.fetch(query))?.map { $0.toSummary() } ?? []
     }
 }

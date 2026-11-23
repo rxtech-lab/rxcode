@@ -148,7 +148,7 @@ private struct JSONUINode: View {
                 VStack(alignment: .leading, spacing: spacing) { children(of: element) }
             }
         case "Grid":
-            grid(element, columns: min(4, max(1, Int(element.number("columns") ?? 2))))
+            grid(element, columns: Int(min(4, max(1, element.number("columns") ?? 2))))
         case "Card":
             JSONUICard(element: element, fillsHeight: fillsCell) { children(of: element) }
         case "Disclosure":

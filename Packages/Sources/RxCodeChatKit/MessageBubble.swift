@@ -5,6 +5,7 @@ import RxCodeCore
 
 struct MessageBubble: View {
     @Environment(ChatBridge.self) private var chatBridge
+    @Environment(\.implementationPlanMessage) private var implementation
     @Environment(\.openURL) private var openWorkspaceLink
     let message: ChatMessage
     @State private var isCopied = false
@@ -239,13 +240,26 @@ struct MessageBubble: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                let isLong = displayText.count > Self.longTextThreshold
+                let handoff = implementation.flatMap { plan -> ImplementationPlanMessage? in
+                    guard plan.matches(message.content),
+                          chatBridge.messages.first(where: { $0.role == .user })?.id == message.id else { return nil }
+                    return plan
+                }
+                let isLong = handoff == nil && displayText.count > Self.longTextThreshold
                 let collapsed = isLong && !isLongTextExpanded
                 Group {
                     // A task dispatched from the board arrives as a `**Task:**`
                     // message; show it as the card the task form's Run tab uses
                     // instead of raw Markdown.
-                    if let taskPrompt = TaskPromptContent.task(in: displayText) {
+                    if let handoff {
+                        VStack(alignment: .leading, spacing: 8) {
+                            MarkdownContentView(text: "Implement **version \(handoff.versionNumber)** and verify the result.",
+                                                style: .rxCodeChatUser, expandsHorizontally: false)
+                            Button("View Full Plan", systemImage: "doc.text", action: handoff.openPlan)
+                                .buttonStyle(.bordered)
+                                .accessibilityIdentifier("implementation-message-full-plan")
+                        }
+                    } else if let taskPrompt = TaskPromptContent.task(in: displayText) {
                         TaskPromptView(content: taskPrompt, style: .userBubble)
                     } else {
                         MarkdownContentView(

@@ -142,7 +142,12 @@ extension ClaudeCodeServer {
         }
 
         if isEphemeral {
-            args += ["--no-session-persistence", "--tools", "Read,Glob,Grep", "--strict-mcp-config"]
+            args += ["--no-session-persistence", "--tools", "Read,Glob,Grep"]
+            if mcpConfigPath != nil {
+                args += ["--allowedTools", IDEToolRegistry.qualifiedAskUserName]
+            } else {
+                args.append("--strict-mcp-config")
+            }
         } else if !permissionMode.skipsHookPipeline {
             // Pre-approve safe tools that don't need to go through hooks via --allowedTools.
             // This eliminates HTTP round-trips from internal agent mechanics like Read/Grep/Task,
@@ -170,7 +175,7 @@ extension ClaudeCodeServer {
         //  - IDE tools blurb, when the `rxcode-ide` MCP server is wired in.
         //  - Caller-supplied context, e.g. the current branch briefing.
         var systemPromptSections: [String] = []
-        if mcpConfigPath != nil {
+        if mcpConfigPath != nil && !isEphemeral {
             systemPromptSections.append(Self.ideToolsSystemPrompt)
         }
         if let extraSystemPrompt, !extraSystemPrompt.isEmpty {

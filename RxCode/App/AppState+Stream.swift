@@ -583,7 +583,7 @@ extension AppState {
         in window: WindowState
     ) async {
         let key = window.currentSessionId ?? window.newSessionKey
-        let turnEnded = !isSessionTurnRunning(key)
+        let turnEnded = !isSessionTurnRunning(key) && !CodingPlanQuestions.owns(toolUseId)
         var followUp: String?
 
         var updatedInput = JSONValue.object([
@@ -623,15 +623,7 @@ extension AppState {
             followUp = AskUserQuestion.followUpPrompt(questions: parsed.questions, answers: answers)
         }
 
-        window.pendingPermissions.removeAll { $0.id == toolUseId }
-        let requestSessionId = mobilePendingRequests.removeValue(forKey: toolUseId)?.sessionId
-        if window.presentedPermissionId == toolUseId {
-            window.presentedPermissionId = nil
-        }
-        if let requestSessionId {
-            broadcastMobileSessionStatus(sessionID: requestSessionId)
-        }
-        broadcastMobileQuestionQueue()
+        clearPendingQuestion(toolUseId: toolUseId, sessionId: mobilePendingRequests[toolUseId]?.sessionId, in: window)
 
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
 
@@ -645,15 +637,7 @@ extension AppState {
     /// User dismissed the question sheet without answering — resolve the hook as deny so
     /// the CLI does not block, and clear the pending entry from the window queue.
     func skipAskUserQuestion(toolUseId: String, in window: WindowState) async {
-        window.pendingPermissions.removeAll { $0.id == toolUseId }
-        let requestSessionId = mobilePendingRequests.removeValue(forKey: toolUseId)?.sessionId
-        if window.presentedPermissionId == toolUseId {
-            window.presentedPermissionId = nil
-        }
-        if let requestSessionId {
-            broadcastMobileSessionStatus(sessionID: requestSessionId)
-        }
-        broadcastMobileQuestionQueue()
+        clearPendingQuestion(toolUseId: toolUseId, sessionId: mobilePendingRequests[toolUseId]?.sessionId, in: window)
         await permission.respond(toolUseId: toolUseId, decision: .deny)
     }
 
@@ -685,7 +669,7 @@ extension AppState {
             answers: answers
         )
         let summary = AskUserQuestion.summary(questions: parsed.questions, answers: answers)
-        let turnEnded = request.sessionId.map { !isSessionTurnRunning($0) } ?? false
+        let turnEnded = !CodingPlanQuestions.owns(toolUseId) && request.sessionId.map { !isSessionTurnRunning($0) } == true
 
         if let sessionId = request.sessionId {
             updateState(sessionId) { state in
@@ -740,8 +724,10 @@ extension AppState {
 
     /// Remove a resolved `AskUserQuestion` request from every window's queue and
     /// re-broadcast the (now smaller) queue to mobile.
-    func clearPendingQuestion(toolUseId: String, sessionId: String?) {
-        for window in registeredWindows() {
+    func clearPendingQuestion(toolUseId: String, sessionId: String?, in respondingWindow: WindowState? = nil) {
+        var windows = registeredWindows()
+        if let respondingWindow, !windows.contains(where: { $0 === respondingWindow }) { windows.append(respondingWindow) }
+        for window in windows {
             window.pendingPermissions.removeAll { $0.id == toolUseId }
             if window.presentedPermissionId == toolUseId {
                 window.presentedPermissionId = nil

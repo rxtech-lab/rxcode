@@ -15,6 +15,11 @@ actor FlowcyCloudBackend: AgentBackend {
     private var turns: [UUID: Task<Void, Never>] = [:]
     private var errors: [UUID: String] = [:]
 
+    private enum RequestError: LocalizedError {
+        case invalidChatRequest
+        var errorDescription: String? { "Flowcy request failed (HTTP 400)." }
+    }
+
     init(auth: RxAuthService, permission: PermissionServer) {
         self.init(baseURL: Self.productionURL, permission: permission) { await auth.accessToken(forceRefresh: $0) }
     }
@@ -43,6 +48,7 @@ actor FlowcyCloudBackend: AgentBackend {
             guard let http = response as? HTTPURLResponse else { throw IDEToolError.handlerFailed("Invalid Flowcy response.") }
             switch http.statusCode {
             case 200..<300: return (bytes, http)
+            case 400: throw RequestError.invalidChatRequest
             case 401 where !refresh: continue
             case 401: throw IDEToolError.handlerFailed("Flowcy sign-in expired. Sign in again in Settings.")
             case 429: throw IDEToolError.handlerFailed("Flowcy usage or request limit reached. Wait for the allowance to reset or select a less expensive model.")
@@ -76,7 +82,7 @@ actor FlowcyCloudBackend: AgentBackend {
 
     private struct ModelStep {
         var text = ""
-        var calls: [FlowcyTerminalCall] = []
+        var calls: [FlowcyToolCall] = []
 
         var assistantMessage: JSONValue {
             var content: [JSONValue] = []
@@ -109,7 +115,7 @@ actor FlowcyCloudBackend: AgentBackend {
                     if !step.text.isEmpty { step.text += "\n\n" }
                     step.text += text
                 } else if message.role == .assistant, let saved = block.toolCall, let output = saved.result,
-                          let call = FlowcyTerminalCall(saved: saved) {
+                          let call = FlowcyToolCall(saved: saved) {
                     step.calls.append(call)
                     results.append(call.resultPart(output, isError: saved.isError))
                 }
@@ -120,9 +126,10 @@ actor FlowcyCloudBackend: AgentBackend {
         return messages
     }
 
-    private func modelStep(model: String?, messages: [JSONValue], terminalEnabled: Bool,
+    private func modelStep(model: String?, messages: [JSONValue], terminalEnabled: Bool, questionEnabled: Bool = false,
                            onText: @Sendable (String) -> Void) async throws -> ModelStep {
-        let tools = terminalEnabled ? [FlowcyTerminalCall.definition] : []
+        var tools = terminalEnabled ? [FlowcyToolCall.terminalDefinition] : []
+        if questionEnabled { tools.append(FlowcyToolCall.questionDefinition) }
         var fields: [String: JSONValue] = ["messages": .array(messages), "tools": .array(tools)]
         if let model, model != AgentModel.flowcyDefaultID { fields["modelId"] = .string(model) }
         let body = try JSONEncoder().encode(fields)
@@ -150,7 +157,7 @@ actor FlowcyCloudBackend: AgentBackend {
                 step.text += text
                 onText(text)
             case "tool-call":
-                guard terminalEnabled, let call = FlowcyTerminalCall(event: event) else {
+                guard let call = FlowcyToolCall(event: event, terminalEnabled: terminalEnabled, questionEnabled: questionEnabled) else {
                     throw IDEToolError.handlerFailed("Flowcy requested an unavailable or invalid tool.")
                 }
                 try countPayload(line.utf8.count)
@@ -169,16 +176,23 @@ actor FlowcyCloudBackend: AgentBackend {
         var messages = try transcript(history: request.history, prompt: request.prompt)
         var seen = Set<String>()
         var round = 1
+        var questionEnabled = request.askUser != nil
         while true {
-            let step = try await modelStep(model: request.model, messages: messages, terminalEnabled: terminalEnabled) {
-                continuation.yield(.textDelta($0))
+            let step: ModelStep
+            do {
+                step = try await modelStep(model: request.model, messages: messages, terminalEnabled: terminalEnabled,
+                                           questionEnabled: questionEnabled) { continuation.yield(.textDelta($0)) }
+            } catch RequestError.invalidChatRequest where questionEnabled && round == 1 {
+                // Older deployments reject new tool declarations before starting inference.
+                questionEnabled = false
+                continue
             }
             if step.calls.isEmpty { return round }
             guard round < 8, seen.count + step.calls.count <= 32 else {
                 throw IDEToolError.handlerFailed("Flowcy reached its tool-call limit. Send another message to continue.")
             }
             guard messages.count + 2 <= 100 else {
-                throw IDEToolError.handlerFailed("This chat is too long to return a terminal result to Flowcy. Start a new chat to run the command.")
+                throw IDEToolError.handlerFailed("This chat is too long to return a tool result to Flowcy. Start a new chat to continue.")
             }
             guard step.calls.allSatisfy({ seen.insert($0.id).inserted }) else {
                 throw IDEToolError.handlerFailed("Flowcy returned a duplicate tool call.")
@@ -189,7 +203,7 @@ actor FlowcyCloudBackend: AgentBackend {
             for call in step.calls {
                 try Task.checkCancellation()
                 continuation.yield(.assistant(AssistantMessage(role: "assistant", content: [
-                    .toolUse(id: call.localID(streamID: request.streamId), name: "Bash", input: call.input),
+                    .toolUse(id: call.localID(streamID: request.streamId), name: call.displayName, input: call.input),
                 ])))
                 let result = try await call.execute(request: request, sessionID: permissionSessionID, permission: permission)
                 continuation.yield(.user(result))
@@ -216,7 +230,9 @@ actor FlowcyCloudBackend: AgentBackend {
                 // A thread switched from another provider keeps its original UI and permission key.
                 await permission.registerSession(sid: permissionSessionID, projectKey: request.cwd, mode: request.permissionMode)
             }
-            continuation.yield(.system(SystemEvent(subtype: "init", sessionId: sessionId, tools: terminalEnabled ? ["Bash"] : [],
+            var tools = terminalEnabled ? ["Bash"] : []
+            if request.askUser != nil { tools.append(IDEToolRegistry.askUser.name) }
+            continuation.yield(.system(SystemEvent(subtype: "init", sessionId: sessionId, tools: tools,
                                                     model: request.model, claudeCodeVersion: nil)))
             var rounds: Int?
             do {

@@ -88,10 +88,9 @@ final class MarkdownTextView: NSTextView, NSTextViewDelegate {
         textContainer?.lineFragmentPadding = 0
         textContainer?.widthTracksTextView = false
         textContainer?.heightTracksTextView = false
-        linkTextAttributes = [
-            .foregroundColor: NSColor(style.accentColor),
-            .underlineStyle: NSUnderlineStyle.single.rawValue
-        ]
+        // Links and change annotations style themselves; AppKit's default link
+        // attributes would recolor every annotated passage in the accent color.
+        linkTextAttributes = [.cursor: NSCursor.pointingHand]
 
         let document = MarkdownTextDocument(text: text, baseURL: baseURL, style: style, markedRanges: markedRanges, striking: striking)
         setStrikeProgress(0)
@@ -268,6 +267,8 @@ private final class MarkdownTextDocument {
         for (offset, index) in markers.sorted(by: { ($0.offset, $0.index) > ($1.offset, $1.index) }) {
             var attributes = annotationAttributes(index)
             attributes[.font] = NSFont.systemFont(ofSize: style.bodyFontSize)
+            attributes[.foregroundColor] = NSColor(style.accentColor)
+            attributes[.underlineStyle] = nil
             attributes[.toolTip] = String(localized: "Show change details", bundle: .module)
             if content.length > 0 {
                 attributes[.paragraphStyle] = content.attribute(.paragraphStyle, at: min(offset, content.length - 1), effectiveRange: nil)
@@ -279,9 +280,12 @@ private final class MarkdownTextDocument {
         }
     }
 
+    /// Changed passages keep their regular text color and get a quiet dotted
+    /// underline, so a heavily revised document still reads like a document.
     private func annotationAttributes(_ index: Int) -> [NSAttributedString.Key: Any] {
         [.markdownAnnotation: index, .link: URL(string: "rxcode-annotation:\(index)")!,
-         .underlineStyle: NSUnderlineStyle.single.rawValue]
+         .underlineStyle: NSUnderlineStyle.single.union(.patternDot).rawValue,
+         .underlineColor: NSColor(style.accentColor).withAlphaComponent(0.6)]
     }
 
     private func appendBlock(
@@ -380,6 +384,7 @@ private final class MarkdownTextDocument {
                 .paragraphStyle: paragraph
             ]
             attributes[.link] = link
+            if link != nil { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
             if isCode { attributes[.backgroundColor] = NSColor(style.codeBackground) }
             if intent.contains(.strikethrough) { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             let visible = quote != nil && intent.contains(.softBreak) ? "\n" : value

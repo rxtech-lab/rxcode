@@ -13,11 +13,14 @@ struct CodingPlanWorkspace: View {
     @State private var newestArrival: UUID?
     @State private var revision: CodingPlan.Version?
     @State private var implementing: CodingPlan.Version?
+    @State private var showingReviewers = false
+    @State private var newReviewer: CodingPlan.Reviewer?
     @State private var debateError: String?
     @State private var messageDraft = ""
     @State private var composerHeight: CGFloat = 0
     @State private var debatePosition = ScrollPosition(idType: String.self)
-    @State private var debateFraction: CGFloat = 0.37
+    @State private var debateFraction: CGFloat = 0.5
+    @State private var radio = CodingPlanRadioPlayer()
     @GestureState private var dividerTranslation: CGFloat = 0
 
     private var plan: CodingPlan { room.plan }
@@ -42,7 +45,12 @@ struct CodingPlanWorkspace: View {
                             Text("Plan").tag(1)
                         }
                         .pickerStyle(.segmented).labelsHidden().padding(8)
-                        if compactPane == 0 { debatePane } else { documentPane }
+                        if compactPane == 0 {
+                            debatePane
+                        } else {
+                            documentPane
+                                .safeAreaInset(edge: .bottom, spacing: 0) { composerBar }
+                        }
                     }
                 }
             }
@@ -56,13 +64,31 @@ struct CodingPlanWorkspace: View {
         .overlay { if room.isHandingOff { PlanningProgress(label: "Starting implementation…") } }
         .onChange(of: plan.lastError, initial: true) { _, error in debateError = error }
         .planningError($debateError)
+        .sheet(isPresented: $showingReviewers) {
+            CodingPlanReviewersSheet(room: room, addReviewer: addReviewer)
+        }
+        .sheet(item: $newReviewer) { reviewer in
+            CodingPlanReviewerSheet(reviewer: reviewer, title: "Add Reviewer", save: addReviewer)
+        }
         .sheet(item: $revision) { version in
             CodingPlanRevisionSheet(version: version) { text, askHost, comment in
                 try appState.reviseCodingPlan(room, base: version.id, text: text, askHost: askHost, comment: comment, cwd: cwd)
                 selectedVersionID = nil
             }
         }
+        .sheet(item: $implementing) { chosen in
+            CodingPlanImplementationSheet(model: plan.configuration.planner,
+                versionNumber: (plan.versions.firstIndex { $0.id == chosen.id } ?? 0) + 1) { model, effort in
+                implementing = nil
+                Task { await appState.implementCodingPlan(room, versionID: chosen.id, model: model, effort: effort, in: window) }
+            }
+        }
         .onChange(of: plan.versions.last?.id) { _, id in newestArrival = id }
+        .onChange(of: room.dispatch?.id) {
+            if let update = room.dispatch { radio.receive(update.text) }
+        }
+        .onChange(of: plan.id) { radio.stop() }
+        .onDisappear { radio.stop() }
     }
 
     private func splitWorkspace(width: CGFloat) -> some View {
@@ -103,9 +129,11 @@ struct CodingPlanWorkspace: View {
     private var debatePane: some View {
         let turnStart = room.runID == nil ? plan.contributions.endIndex : room.turnStartIndex
         return VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Label("Debate Room", systemImage: "bubble.left.and.bubble.right").font(.headline)
-                Spacer()
+            HStack(spacing: 10) {
+                Label("Debate Room", systemImage: "bubble.left.and.bubble.right").font(.headline).lineLimit(1)
+                    .layoutPriority(1)
+                debateHeaderControls
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 16).frame(height: 46)
             Divider()
@@ -122,18 +150,13 @@ struct CodingPlanWorkspace: View {
                 }
                 .scrollTargetLayout()
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, plan.approvedVersionID == nil ? composerHeight : 0)
+                .padding(.bottom, composerHeight)
             }
             .scrollPosition($debatePosition)
             .accessibilityIdentifier("coding-plan-messages")
             .overlay(alignment: .bottom) {
-                if plan.approvedVersionID == nil {
-                    messageComposer
-                        .frame(maxWidth: 640)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 12)
-                        .onGeometryChange(for: CGFloat.self, of: \.size.height) { composerHeight = $0 }
-                }
+                composerBar
+                    .onGeometryChange(for: CGFloat.self, of: \.size.height) { composerHeight = $0 }
             }
             .onChange(of: plan.nextStep) { _, step in
                 if step != nil {
@@ -149,6 +172,55 @@ struct CodingPlanWorkspace: View {
         .background(ClaudeTheme.surfaceSecondary.opacity(0.55))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("coding-plan-debate")
+    }
+
+    private var debateHeaderControls: some View {
+        ViewThatFits(in: .horizontal) {
+            debateHeaderButtons.fixedSize()
+            debateHeaderButtons.labelStyle(.iconOnly)
+        }
+        .controlSize(.small)
+        .disabled(room.isHandingOff)
+    }
+
+    private var debateHeaderButtons: some View {
+        HStack(spacing: 6) {
+            CodingPlanRadioControl(room: room, player: radio).id(plan.id)
+            reviewerButtons
+        }
+    }
+
+    private var composerBar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PermissionQueueBanner(horizontalInset: 0)
+                .lineLimit(1)
+                .accessibilityIdentifier("coding-plan-pending-question")
+            if plan.approvedVersionID == nil {
+                messageComposer
+                    .padding(.bottom, 12)
+            }
+        }
+        .frame(maxWidth: 640)
+        .padding(.horizontal, 12)
+    }
+
+    private var reviewerButtons: some View {
+        HStack(spacing: 6) {
+            Button("Reviewers", systemImage: "person.2") { showingReviewers = true }
+                .accessibilityIdentifier("coding-plan-reviewers")
+                .help("View plan reviewers")
+            if room.canAddReviewer {
+                Button("Add Reviewer…", systemImage: "person.badge.plus") {
+                    newReviewer = .init(model: plan.configuration.planner, prompt: "")
+                }
+                .accessibilityIdentifier("coding-plan-composer-add-reviewer")
+                .help("Add a reviewer to this plan")
+            }
+        }
+    }
+
+    private func addReviewer(_ reviewer: CodingPlan.Reviewer) throws {
+        try appState.addCodingPlanReviewer(reviewer, to: room, cwd: cwd)
     }
 
     private var messageComposer: some View {
@@ -194,11 +266,12 @@ struct CodingPlanWorkspace: View {
                 reviewFeedback(CodingPlanReview(message.text), live: false, applied: index.map { plan.versions[$0].edits } ?? [])
             } else if index == nil {
                 if message.isUserMessage {
-                    CodingPlanUserMessage(text: message.text)
+                    CodingPlanUserMessage(text: message.debateText)
                 } else {
-                    MarkdownContentView(text: message.text, style: .rxCodeCompact, expandsHorizontally: false)
+                    agentFeedback(message.text, expandsHorizontally: false)
                 }
             }
+            if index != nil, !message.isReview, let briefing = message.briefing { agentFeedback(briefing) }
             if let index { planChip(versionAt: index, fromUser: message.model == nil) }
         }
     }
@@ -208,6 +281,7 @@ struct CodingPlanWorkspace: View {
         return contribution(role: speaker.role, model: speaker.model, review: step.proposesEdits,
                             tools: room.liveTurn.toolCalls, live: true) {
             if step.writesPlan {
+                if let briefing = room.liveBroadcast.briefing { agentFeedback(briefing) }
                 planChip(versionAt: nil)
             } else if step.proposesEdits {
                 let review = CodingPlanReview(room.liveText)
@@ -215,15 +289,13 @@ struct CodingPlanWorkspace: View {
                 reviewFeedback(review, live: true, applied: edits)
                 if !edits.isEmpty { planChip(versionAt: nil) }
             } else if !room.liveText.isEmpty {
-                MarkdownContentView(text: room.liveText, style: .rxCodeCompact, fadeNewText: !reduceMotion)
+                agentFeedback(room.liveText, live: true)
             }
         }
     }
 
     @ViewBuilder private func reviewFeedback(_ review: CodingPlanReview, live: Bool, applied: [CodingPlanReview.Edit]) -> some View {
-        if !review.commentary.isEmpty {
-            MarkdownContentView(text: review.commentary, style: .rxCodeCompact, fadeNewText: live && !reduceMotion)
-        }
+        agentFeedback(review.commentary, live: live)
         // Suggestions without an exact match stay in the debate for the host to consider.
         let unmatched = review.edits.filter { proposal in
             !applied.contains { $0.original == proposal.original && $0.replacement == proposal.replacement }
@@ -232,6 +304,14 @@ struct CodingPlanWorkspace: View {
             TrackedPlanMarkdown(markdown: edit.replacement,
                                 edits: [.init(original: edit.original, replacement: edit.replacement, offset: 0, comment: edit.comment)],
                                 animateEdits: live, compact: true)
+        }
+    }
+
+    @ViewBuilder private func agentFeedback(_ text: String, live: Bool = false, expandsHorizontally: Bool = true) -> some View {
+        let markdown = CodingPlanReview.feedbackMarkdown(text, streaming: live)
+        if !markdown.isEmpty {
+            MarkdownContentView(text: markdown, style: .rxCodeCompact, fadeNewText: live && !reduceMotion,
+                                expandsHorizontally: expandsHorizontally)
         }
     }
 
@@ -305,6 +385,13 @@ struct CodingPlanWorkspace: View {
             HStack {
                 Label("Implementation Plan", systemImage: "doc.text").font(.headline).lineLimit(1)
                 Spacer(minLength: 4)
+                if !page.edits.isEmpty {
+                    Text("^[\(page.edits.count) change](inflect: true)")
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        .lineLimit(1)
+                        .help("Dotted underlines mark changes. Click one to see the original text and comments.")
+                        .accessibilityIdentifier("coding-plan-change-count")
+                }
                 if !plan.versions.isEmpty { versionsMenu }
             }
             .padding(.horizontal, 16).frame(height: 46)
@@ -364,9 +451,10 @@ struct CodingPlanWorkspace: View {
             }
         }
         guard let version else { return DocumentPage(id: .waiting, markdown: "") }
-        let reviewer = plan.contributions.first { $0.versionID == version.id && $0.isReview }?.role
+        let author = plan.contributions.first { $0.versionID == version.id }
+        let reviewer = author?.model != nil ? author?.role : nil
         var id = DocumentPage.ID.version(version.id)
-        if reviewer != nil, let index = plan.versions.firstIndex(where: { $0.id == version.id }), index > 0 {
+        if author?.isReview == true, let index = plan.versions.firstIndex(where: { $0.id == version.id }), index > 0 {
             id = .proposal(plan.versions[index - 1].id)
         }
         return DocumentPage(id: id, markdown: version.markdown, edits: version.edits, reviewer: reviewer,
@@ -409,30 +497,40 @@ struct CodingPlanWorkspace: View {
             } else if plan.nextStep != nil {
                 Button("Resume Debate", systemImage: "play.fill") { appState.resumeCodingPlan(room, cwd: cwd) }
                     .accessibilityIdentifier("coding-plan-resume")
-            } else if plan.approvedVersionID != nil {
-                if returnToChat == nil, let id = appState.threadStore.implementationThread(for: plan.id) {
-                    Button("Open Implementation") {
-                        appState.selectSession(id: id, inChatTab: window.generalRoute == .chat, in: window)
-                    }
-                }
             } else if let version {
-                Button("Revise…", systemImage: "pencil") { revision = version }
-                    .disabled(version.id != plan.versions.last?.id)
-                    .accessibilityIdentifier("coding-plan-revise")
+                if plan.approvedVersionID == nil {
+                    Button("Revise…", systemImage: "pencil") { revision = version }
+                        .disabled(version.id != plan.versions.last?.id)
+                        .accessibilityIdentifier("coding-plan-revise")
+                } else if returnToChat == nil {
+                    implementationLinks
+                }
                 Button("Implement…", systemImage: "play.fill") { implementing = version }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("coding-plan-implement")
-                    .popover(item: $implementing) { chosen in
-                        CodingPlanImplementationPicker(model: plan.configuration.planner,
-                            versionNumber: (plan.versions.firstIndex { $0.id == chosen.id } ?? 0) + 1) { model in
-                            implementing = nil
-                            Task { await appState.implementCodingPlan(room, versionID: chosen.id, model: model, in: window) }
-                        }
-                    }
             }
         }
         .disabled(room.isHandingOff)
         .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var implementationLinks: some View {
+        let runs = appState.threadStore.implementationThreads(for: plan.id)
+        if runs.count == 1, let run = runs.first {
+            Button("Open Implementation") { open(run) }
+        } else if !runs.isEmpty {
+            Menu("Implementations") {
+                ForEach(runs) { run in
+                    Button("\(run.title) · \(appState.modelDisplayLabel(run.model ?? "", provider: run.agentProvider))") { open(run) }
+                }
+            }
+            .fixedSize()
+        }
+    }
+
+    private func open(_ run: ChatSession.Summary) {
+        appState.selectSession(id: run.id, inChatTab: window.generalRoute == .chat, in: window)
     }
 }
 
@@ -459,24 +557,51 @@ private struct CodingPlanUserMessage: View {
     }
 }
 
-private struct CodingPlanImplementationPicker: View {
+private struct CodingPlanImplementationSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State var model: AgentModel
+    @State private var effort: String?
     let versionNumber: Int
-    let implement: (AgentModel) -> Void
+    let implement: (AgentModel, String?) -> Void
+
+    init(model: AgentModel, versionNumber: Int, implement: @escaping (AgentModel, String?) -> Void) {
+        _model = State(initialValue: model)
+        self.versionNumber = versionNumber
+        self.implement = implement
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Implement version \(versionNumber)").font(.headline)
-            Text("A fresh chat starts with this plan.").font(.callout).foregroundStyle(.secondary)
-            PlanModelPicker(title: "Model", model: $model)
-                .accessibilityIdentifier("coding-plan-implementation-model")
-            HStack {
-                Spacer()
-                Button("Start Implementation") { implement(model) }.buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("coding-plan-confirm-implementation")
+        let levels = appState.reasoningLevels(for: model.provider, model: model.id)
+        NavigationStack {
+            Form {
+                PlanModelPicker(title: "Model", model: $model)
+                    .accessibilityIdentifier("coding-plan-implementation-model")
+                if !levels.isEmpty {
+                    TaskThinkingLevelPicker(levels: levels, defaultTitle: appState.defaultEffortTitle(for: model.provider, model: model.id),
+                                            effort: $effort)
+                        .accessibilityIdentifier("coding-plan-implementation-effort")
+                }
+            }
+            .formStyle(.grouped)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle("Implement version \(versionNumber)")
+            .navigationSubtitle("Start a fresh chat with this plan.")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Start Implementation") { implement(model, levels.first { $0.id == effort }?.id) }
+                        .accessibilityIdentifier("coding-plan-confirm-implementation")
+                }
             }
         }
-        .padding(16).frame(width: 310)
+        .frame(minWidth: 420, idealWidth: 480, minHeight: 240, idealHeight: 280, maxHeight: .infinity)
+        .task(id: model.key) {
+            await appState.loadReasoningLevels(for: model.provider)
+            guard !Task.isCancelled, let effort,
+                  !appState.reasoningLevels(for: model.provider, model: model.id).contains(where: { $0.id == effort }) else { return }
+            self.effort = nil
+        }
     }
 }
 

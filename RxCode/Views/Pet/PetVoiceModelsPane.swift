@@ -89,9 +89,9 @@ struct PetVoiceModelsPane: View {
         }
         .sheet(isPresented: $isEditingFlowcyVoice) {
             PetFlowcyVoiceSheet(controller: controller, client: FlowcyMediaClient(auth: appState.rxAuth),
-                                isSignedIn: appState.rxAuth.isAuthenticated) {
+                                isSignedIn: appState.rxAuth.isAuthenticated, onSaved: {
                 actionOverlayMessage = "Flowcy voice saved"
-            }
+            })
         }
         .sheet(item: $customizingModel) { model in
             PetNeuralVoiceSettingsSheet(controller: controller, model: model) {

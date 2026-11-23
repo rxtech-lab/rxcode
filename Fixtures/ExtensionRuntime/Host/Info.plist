@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>ProbeAssociations</key>
+	<array>
+		<dict>
+			<key>service</key>
+			<string>$(FIXTURE_PRIMARY_CONTAINER_ID).service</string>
+			<key>sidebar</key>
+			<string>$(FIXTURE_PRIMARY_CONTAINER_ID).sidebar</string>
+			<key>team</key>
+			<string>$(FIXTURE_PRIMARY_TEAM)</string>
+		</dict>
+		<dict>
+			<key>service</key>
+			<string>$(FIXTURE_EXTERNAL_CONTAINER_ID).service</string>
+			<key>sidebar</key>
+			<string>$(FIXTURE_EXTERNAL_CONTAINER_ID).sidebar</string>
+			<key>team</key>
+			<string>$(FIXTURE_EXTERNAL_TEAM)</string>
+		</dict>
+	</array>
+</dict>
+</plist>

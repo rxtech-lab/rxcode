@@ -26,14 +26,13 @@ struct TranscriptMessageSliderTests {
         _ = NSApplication.shared
         let model = SliderTestModel()
         let host = NSHostingView(rootView: SliderTestChat(model: model).environment(ChatBridge()))
+        host.sizingOptions = []
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 440, height: 300),
                               styleMask: .borderless, backing: .buffered, defer: false)
         window.contentView = host
-        window.orderBack(nil)
+        window.orderFront(nil)
         defer { window.orderOut(nil) }
-        try await Task.sleep(for: .milliseconds(350))
-
-        let table = try #require(findTable(in: host))
+        let table = try #require(await waitForScrollableTable(in: host))
         let scroll = try #require(table.enclosingScrollView)
         let middle = CGPoint(x: host.bounds.maxX - 10, y: host.bounds.midY)
         #expect(host.hitTest(middle) !== host)
@@ -46,8 +45,7 @@ struct TranscriptMessageSliderTests {
         clip.scroll(to: CGPoint(x: 0, y: top))
         scroll.reflectScrolledClipView(clip)
         NotificationCenter.default.post(name: NSScrollView.didEndLiveScrollNotification, object: scroll)
-        try await Task.sleep(for: .milliseconds(100))
-        try #require(host.hitTest(middle) === host)
+        try #require(await waitForLayout(in: host) { host.hitTest(middle) === host })
         let stops = TranscriptMessageStop.stops(in: model.items)
         let target = stops[stops.count / 2].row
         func send(_ type: NSEvent.EventType, at point: CGPoint) throws {
@@ -59,31 +57,54 @@ struct TranscriptMessageSliderTests {
             window.sendEvent(event)
         }
         try send(.leftMouseDown, at: CGPoint(x: middle.x, y: middle.y - 64))
+        // The slider must stay interactive past its one-second auto-hide interval.
         try await Task.sleep(for: .milliseconds(1100))
         #expect(host.hitTest(middle) === host)
         try send(.leftMouseDragged, at: middle)
         try send(.leftMouseUp, at: middle)
-        try await Task.sleep(for: .milliseconds(180))
-        #expect(abs(clip.bounds.minY - table.rect(ofRow: target).minY) < 2)
-        #expect(!model.isAtBottom)
+        try #require(await waitForLayout(in: host) {
+            abs(clip.bounds.minY - table.rect(ofRow: target).minY) < 2 && !model.isAtBottom
+        })
 
         model.items.append(.message(ChatMessage(role: .assistant, content: "More output")))
-        try await Task.sleep(for: .milliseconds(100))
+        // The native table includes a trailing spacer row.
+        try #require(await waitForLayout(in: host) { table.numberOfRows == model.items.count + 1 })
         #expect(abs(clip.bounds.minY - table.rect(ofRow: target).minY) < 2)
         model.isStreaming = false
-        try await Task.sleep(for: .milliseconds(1200))
+        try #require(await waitForLayout(in: host) { host.hitTest(middle) !== host })
         #expect(abs(clip.bounds.minY - table.rect(ofRow: target).minY) < 2)
-        #expect(host.hitTest(middle) !== host)
 
         model.items.append(.message(ChatMessage(role: .user, content: "A new turn")))
         model.isStreaming = true
-        try await Task.sleep(for: .milliseconds(400))
-        #expect(abs(clip.bounds.minY - table.rect(ofRow: model.items.count - 1).minY) < 40)
-        #expect(model.isAtBottom)
+        try #require(await waitForLayout(in: host) {
+            table.numberOfRows == model.items.count + 1 && model.isAtBottom
+                && abs(clip.bounds.minY - table.rect(ofRow: model.items.count - 1).minY) < 40
+        })
     }
 
-    private func findTable(in view: NSView) -> NSTableView? {
-        (view as? NSTableView) ?? view.subviews.lazy.compactMap { findTable(in: $0) }.first
+    private func waitForScrollableTable(in host: NSView) async throws -> NSTableView? {
+        let ready = try await waitForLayout(in: host) {
+            guard let table = findView(NSTableView.self, in: host),
+                  let clip = table.enclosingScrollView?.contentView,
+                  let reader = findView(TranscriptScrollReader.Reader.self, in: table) else { return false }
+            return clip.bounds.minY >= 12 && reader.surface != nil
+        }
+        return ready ? findView(NSTableView.self, in: host) : nil
+    }
+
+    private func waitForLayout(in host: NSView, until ready: () -> Bool) async throws -> Bool {
+        let deadline = ContinuousClock.now + .seconds(5)
+        repeat {
+            host.layoutSubtreeIfNeeded()
+            host.window?.displayIfNeeded()
+            if ready() { return true }
+            try await Task.sleep(for: .milliseconds(16))
+        } while ContinuousClock.now < deadline
+        return false
+    }
+
+    private func findView<T: NSView>(_ type: T.Type, in view: NSView) -> T? {
+        (view as? T) ?? view.subviews.lazy.compactMap { findView(type, in: $0) }.first
     }
     #endif
 }

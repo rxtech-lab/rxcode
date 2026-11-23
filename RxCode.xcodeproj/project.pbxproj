@@ -18,6 +18,7 @@
 		4DB3FD78155F4469BBFB353C /* MCPAppConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535C9B55985741FE9A80AF27 /* MCPAppConnectionTests.swift */; };
 		4F5117912F2C443F97ED1691 /* PetCIFailureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7337E1B4B7264A38B4BA5236 /* PetCIFailureTests.swift */; };
 		501B4F13B1BC545593AF7091 /* CodingPlanTests+Versions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01555D784FD554D4B2E0DD0C /* CodingPlanTests+Versions.swift */; };
+		0B12D21F297E4FA89EACF738 /* CodingPlanTests+ImplementationReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */; };
 		54F5577C2A9B42D393384D6E /* MCPOAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F2EE0EE87F4F36B534FDDA /* MCPOAuthTests.swift */; };
 		55B292C0080C4AA2BA5AB539 /* ImageEngineValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C3D140648C4A64B7165620 /* ImageEngineValidationTests.swift */; };
 		569C22D1696CD0026DC7BFFD /* AppStateTests+ProjectSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082D838B04830BED06204608 /* AppStateTests+ProjectSessions.swift */; };
@@ -251,6 +252,7 @@
 
 /* Begin PBXFileReference section */
 		01555D784FD554D4B2E0DD0C /* CodingPlanTests+Versions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "CodingPlanTests+Versions.swift"; sourceTree = "<group>"; };
+		F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "CodingPlanTests+ImplementationReview.swift"; sourceTree = "<group>"; };
 		082D838B04830BED06204608 /* AppStateTests+ProjectSessions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "AppStateTests+ProjectSessions.swift"; sourceTree = "<group>"; };
 		08E8362A4C375BE089BE79D4 /* AppStateTests+Usage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "AppStateTests+Usage.swift"; sourceTree = "<group>"; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
@@ -593,6 +595,7 @@
 				F190AE02DEB74040ABC41201 /* CodingPlanTests.swift */,
 				EF8F745476D75239AA0231B7 /* CodingPlanTests+Tools.swift */,
 				01555D784FD554D4B2E0DD0C /* CodingPlanTests+Versions.swift */,
+				F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */,
 				7C9BD5B8A69E483B91DA8101 /* InterruptedTurnTests.swift */,
 				B73218100000000000000001 /* WorkspaceSidebarTests.swift */,
 				155EB86C89D944249176E661 /* GitRefBadgeTests.swift */,
@@ -1237,6 +1240,7 @@
 				F190AE02DEB74040ABC41202 /* CodingPlanTests.swift in Sources */,
 				B308169FACFC557D83C59360 /* CodingPlanTests+Tools.swift in Sources */,
 				501B4F13B1BC545593AF7091 /* CodingPlanTests+Versions.swift in Sources */,
+				0B12D21F297E4FA89EACF738 /* CodingPlanTests+ImplementationReview.swift in Sources */,
 				7C9BD5B8A69E483B91DA8102 /* InterruptedTurnTests.swift in Sources */,
 				B73218100000000000000002 /* WorkspaceSidebarTests.swift in Sources */,
 				155EB86C89D944249176E662 /* GitRefBadgeTests.swift in Sources */,

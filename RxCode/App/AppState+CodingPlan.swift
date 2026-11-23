@@ -233,6 +233,7 @@ extension AppState {
         guard window.currentSessionId == originID else { return nil }
         var approved = codingPlanRoom(for: sourceID)?.plan ?? room.plan
         approved.approvedVersionID = versionID
+        approved.implementationReview = nil
         let inChatTab = window.generalRoute == .chat
         startNewChat(in: window)
         window.inputText = ""

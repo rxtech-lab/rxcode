@@ -28,21 +28,41 @@ extension ThreadStore {
         snapshot.updatedAt = .now
         let data = try JSONEncoder().encode(snapshot)
         let oldData = source.codingPlanData
-        source.codingPlanData = data
         var child: ChatThread?
         if let implementation {
             let row = ChatThread.from(implementation)
-            row.codingPlanData = data
+            if !snapshot.configuration.reviewers.isEmpty {
+                snapshot.implementationReview = CodingPlanImplementationReview()
+            }
+            row.codingPlanData = try JSONEncoder().encode(snapshot)
             row.implementationPlanID = plan.id
             context.insert(row)
             child = row
         }
+        source.codingPlanData = data
         do {
             try context.save()
             onCodingPlansChanged?()
         } catch {
             source.codingPlanData = oldData
             if let child { context.delete(child) }
+            throw error
+        }
+    }
+
+    func saveImplementationReview(_ plan: CodingPlan, threadID: String) throws {
+        guard let child = fetch(id: threadID), child.implementationPlanID == plan.id else {
+            throw PlanningTurnError(message: "The implementation thread has been deleted.")
+        }
+        let previous = child.codingPlanData
+        var snapshot = plan
+        snapshot.updatedAt = .now
+        child.codingPlanData = try JSONEncoder().encode(snapshot)
+        do {
+            try context.save()
+            onCodingPlansChanged?()
+        } catch {
+            child.codingPlanData = previous
             throw error
         }
     }

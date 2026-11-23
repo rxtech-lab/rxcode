@@ -9,6 +9,7 @@ private nonisolated struct StoredCodingPlan: Sendable {
     struct Run: Sendable {
         let thread: ChatSession.Summary
         let approvedVersionID: UUID?
+        let review: CodingPlanImplementationReview?
         let check: ChatSession.Summary?
     }
 
@@ -70,8 +71,8 @@ private extension ThreadStoreReader {
                             $0.parentThreadId == parent && ($0.threadLabel == verified || $0.threadLabel == unverified || $0.threadLabel == checking)
                         }, sortBy: [SortDescriptor(\.createdAt, order: .reverse), SortDescriptor(\.id)])
                         checks.fetchLimit = 1
-                        let approved = child.id == requested.id ? plan.approvedVersionID : snapshot(child)?.approvedVersionID
-                        return StoredCodingPlan.Run(thread: child.toSummary(), approvedVersionID: approved,
+                        let childPlan = child.id == requested.id ? plan : snapshot(child)
+                        return StoredCodingPlan.Run(thread: child.toSummary(), approvedVersionID: childPlan?.approvedVersionID, review: childPlan?.implementationReview,
                                                     check: try context.fetch(checks).first?.toSummary())
                     }
                     return StoredCodingPlan(plan: plan, source: source.toSummary(), implementations: runs,
@@ -108,7 +109,7 @@ extension AppState {
             let current = plan.versions.last
             let selected = plan.versions.first { $0.id == plan.approvedVersionID } ?? current
             let results = record.implementations.map { run in
-                (run: run, evidence: implementationEvidence(for: run.thread, check: run.check, board: boards[source.projectId]))
+                (run: run, evidence: implementationEvidence(for: run.thread, check: run.check, review: run.review, board: boards[source.projectId]))
             }
             // Completion evidence belongs to the version that was implemented.
             let matching = results.filter { $0.run.approvedVersionID == plan.approvedVersionID }
@@ -177,7 +178,7 @@ extension AppState {
         return String(prefix[..<end]) + "…"
     }
 
-    private func implementationEvidence(for child: ChatSession.Summary, check: ChatSession.Summary?, board: TaskBoard?)
+    private func implementationEvidence(for child: ChatSession.Summary, check: ChatSession.Summary?, review: CodingPlanImplementationReview?, board: TaskBoard?)
         -> (status: String, reason: String, updatedAt: Date?) {
         let key = resolveCurrentSessionId(child.id)
         let board = board ?? TaskBoard()
@@ -185,6 +186,9 @@ extension AppState {
         let updated = (tasks.map(\.updatedAt) + [check?.updatedAt].compactMap { $0 }).max()
         if sessionActivity[key]?.isStreaming == true {
             return ("in_progress", "The linked implementation thread is running.", updated)
+        }
+        if let review, review.passed {
+            return ("implemented", "All plan reviewers passed the implementation. " + review.status, updated)
         }
         if !tasks.isEmpty && tasks.allSatisfy({ board.column(for: $0.status).countsAsDone && $0.attentionReason == nil }) {
             return ("implemented", "All board tasks run in the linked implementation thread are marked done.", updated)

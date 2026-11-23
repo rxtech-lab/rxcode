@@ -75,6 +75,7 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
     /// Reviewers are append-only after setup. A host turn already underway finishes
     /// before the first reviewer added during that turn gets the latest plan.
     private(set) var deferredReviewerIndex: Int?
+    var implementationReview: CodingPlanImplementationReview?
     var approvedVersionID: UUID?
     var lastError: String?
     var updatedAt: Date?

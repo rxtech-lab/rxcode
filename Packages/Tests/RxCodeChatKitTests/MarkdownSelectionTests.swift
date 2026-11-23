@@ -70,7 +70,8 @@ struct MarkdownSelectionTests {
         try #require(text.contains("First save then save ⌫via docs."))
         let bold = text.range(of: "save then")
         #expect(storage.attribute(.markdownAnnotation, at: bold.location, effectiveRange: nil) as? Int == 0)
-        #expect(storage.attribute(.underlineStyle, at: NSMaxRange(bold) - 1, effectiveRange: nil) as? Int == NSUnderlineStyle.single.rawValue)
+        let underline = storage.attribute(.underlineStyle, at: NSMaxRange(bold) - 1, effectiveRange: nil) as? Int
+        #expect(underline == NSUnderlineStyle.single.union(.patternDot).rawValue)
         let unmarked = text.range(of: "save ⌫")
         #expect(storage.attribute(.markdownAnnotation, at: unmarked.location, effectiveRange: nil) == nil)
         let codeLocation = text.range(of: "saved = true").location

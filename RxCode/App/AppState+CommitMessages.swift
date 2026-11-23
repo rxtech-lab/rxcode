@@ -6,6 +6,38 @@ import RxCodeSync
 import SwiftUI
 
 extension AppState {
+    /// Drafts with the selected model in the checkout being committed. A nil
+    /// selection uses the workspace's summarization settings.
+    func generateCommitMessage(
+        diff: String, stat: String, fileSummary: String, model: AgentModel?, cwd: String
+    ) async throws -> String? {
+        guard let model else {
+            return await generateCommitMessage(diff: diff, stat: stat, fileSummary: fileSummary)
+        }
+
+        let context = Self.buildCommitContext(diff: diff, stat: stat, budget: 16_000)
+        let prompt = OpenAISummarizationService.commitMessagePrompt(diff: context, fileSummary: fileSummary)
+        let raw: String?
+        switch model.provider {
+        case .claudeCode:
+            raw = await claude.generatePlainSummary(prompt: prompt, model: model.id, limit: 1000)
+        case .codex:
+            raw = await codex.generateCodexPlainSummary(prompt: prompt, model: model.id)
+        case .acp:
+            guard let selection = acpSelectionParts(for: model.id),
+                  let client = acpClients.first(where: { $0.id == selection.clientId && $0.enabled })
+            else { return nil }
+            raw = await acp.generatePlainResponse(
+                prompt: prompt, model: selection.model.isEmpty ? nil : selection.model, spec: client, cwd: cwd
+            )
+        case .flowcy:
+            raw = try await flowcyCloudBackend.reply(model: model.id, prompt: prompt)
+        case .localAgent:
+            raw = try await LocalAgentBackendFactory.generateTextCompletion(prompt: prompt, modelID: model.id, store: localModels)
+        }
+        return Self.sanitizeCommitMessage(raw)
+    }
+
     /// Generates a commit message for the staged changes in the given project.
     /// Routes through the configured `summarizationProvider`. Returns nil on
     /// failure or when no provider is configured. Public so the Changes view

@@ -14,10 +14,9 @@ import UniformTypeIdentifiers
 /// file is also registered as an attachment, which is what actually ships to the
 /// agent on dispatch.
 ///
-/// The source editor is the chat input's `IMETextView`, so an image reference
-/// shows as the same `[ImageN]` chip the chat composer uses. The field edits a
-/// display string in which each `![name](url)` is stood in for by its token;
-/// `DescriptionAttachmentChips` maps between that and the stored Markdown.
+/// The source editor uses the chat input's `IMETextView`. Editable tokens mark
+/// the positions of image and file references in the Markdown. The file chips
+/// above the editor open previews and let the user remove an attachment.
 struct MarkdownDescriptionEditor: View {
     enum Layout {
         case form
@@ -50,15 +49,33 @@ struct MarkdownDescriptionEditor: View {
     /// so `insert` falls back to appending.
     private var acceptsContent: Bool { !isDisabled }
 
+    private var isForm: Bool {
+        if case .form = layout { true } else { false }
+    }
+
     var body: some View {
-        Group {
-            switch layout {
-            case .form:
-                form
-            case .composer:
-                attachmentField
+        let items = displayedAttachments
+        let field = AttachmentTextField(
+            editor: editor,
+            attachments: items.filter { $0.type != .file },
+            editorHeight: isForm ? height - 12 : nil,
+            showsFilePicker: !isForm,
+            onAdd: { item, _ in
+                attach(item)
+                return nil
+            },
+            onRemove: remove
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            if isForm { header }
+            if !showsPreview { fileChips(items.filter { $0.type == .file }) }
+            if isForm {
+                formContent(field)
+            } else {
+                field
             }
         }
+        .padding(.vertical, isForm ? 2 : 0)
         .onDrop(of: AttachmentIntake.dropTypes, isTargeted: $isDropTargeted) { providers in
             guard acceptsContent else { return false }
             handleDrop(providers)
@@ -85,25 +102,24 @@ struct MarkdownDescriptionEditor: View {
         })
     }
 
-    private var form: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            header
-            content
-                .frame(height: showsPreview ? height : nil)
-                .background(ClaudeTheme.inputBackground, in: shape)
-                .overlay {
-                    shape.strokeBorder(
-                        isDropTargeted ? ClaudeTheme.accent : ClaudeTheme.inputBorder,
-                        lineWidth: isDropTargeted ? 1.5 : 1
-                    )
-                }
-            if !isDisabled {
-                Text("Markdown. Paste or drop images and files to attach them.")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
+    @ViewBuilder
+    private func formContent(_ field: AttachmentTextField) -> some View {
+        Group {
+            if showsPreview { markdownPreview.frame(height: height) }
+            else { field.padding(6) }
         }
-        .padding(.vertical, 2)
+        .background(ClaudeTheme.inputBackground, in: shape)
+        .overlay {
+            shape.strokeBorder(
+                isDropTargeted ? ClaudeTheme.accent : ClaudeTheme.inputBorder,
+                lineWidth: isDropTargeted ? 1.5 : 1
+            )
+        }
+        if !isDisabled {
+            Text("Markdown. Paste or drop images and files to attach them.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
     }
 
     private var shape: RoundedRectangle {
@@ -143,23 +159,18 @@ struct MarkdownDescriptionEditor: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if showsPreview {
-            ScrollView {
-                Group {
-                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(placeholder)
-                            .foregroundStyle(ClaudeTheme.inputPlaceholder)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        MarkdownContentView(text: text)
-                    }
+    private var markdownPreview: some View {
+        ScrollView {
+            Group {
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(ClaudeTheme.inputPlaceholder)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    MarkdownContentView(text: text)
                 }
-                .padding(8)
             }
-        } else {
-            attachmentField.padding(6)
+            .padding(8)
         }
     }
 
@@ -201,18 +212,64 @@ struct MarkdownDescriptionEditor: View {
         )
     }
 
-    private var attachmentField: some View {
-        let compact = if case .composer = layout { true } else { false }
+    private var displayedAttachments: [Attachment] {
         let inline = chips.attachments(in: displayText)
         let paths = Set(inline.map(\.path))
         let extra = attachments?.wrappedValue.filter { !paths.contains($0.path) }.map(Attachment.init(dto:)) ?? []
-        return AttachmentTextField(editor: editor, attachments: inline + extra,
-                                   editorHeight: compact ? nil : height - 12, showsFilePicker: compact,
-                                   onAdd: { item, _ in attach(item); return nil },
-                                   onRemove: { item in
-            editorText.wrappedValue = chips.removing(item, from: displayText)
-            attachments?.wrappedValue.removeAll { $0.path == item.path }
-        })
+        return inline + extra
+    }
+
+    @ViewBuilder
+    private func fileChips(_ files: [Attachment]) -> some View {
+        if !files.isEmpty {
+            FlowLayout(spacing: 6, lineSpacing: 4) {
+                ForEach(files) { file in fileChip(file) }
+            }
+        }
+    }
+
+    private func fileChip(_ file: Attachment) -> some View {
+        HStack(spacing: 2) {
+            Button { previewAttachment = file } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.fill")
+                        .foregroundStyle(ClaudeTheme.accentText)
+                    Text(verbatim: file.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, isDisabled ? 8 : 2)
+                .frame(maxWidth: 200, minHeight: 22, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .help(file.path)
+            .accessibilityLabel("Preview \(file.name)")
+            .accessibilityIdentifier("attachment-preview-\(file.name)")
+
+            if !isDisabled {
+                Button { remove(file) } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .frame(width: 20, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .help("Remove \(file.name)")
+                .accessibilityLabel("Remove \(file.name)")
+                .accessibilityIdentifier("attachment-remove-\(file.name)")
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+        .foregroundStyle(ClaudeTheme.textPrimary)
+        .background(ClaudeTheme.surfaceElevated, in: Capsule())
+        .overlay { Capsule().strokeBorder(ClaudeTheme.inputBorder).allowsHitTesting(false) }
+    }
+
+    private func remove(_ item: Attachment) {
+        guard acceptsContent else { return }
+        editorText.wrappedValue = chips.removing(item, from: displayText)
+        attachments?.wrappedValue.removeAll { $0.path == item.path }
     }
 
     @ViewBuilder

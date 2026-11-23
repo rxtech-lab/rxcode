@@ -335,6 +335,11 @@ final class AppState: IDEToolHandling {
         didSet { workspaceDefaults.set(pullRequestModelKey, for: "pullRequestModelKey") }
     }
 
+    /// An empty key uses the workspace's summarization settings for commit messages.
+    var commitMessageModelKey = "" {
+        didSet { workspaceDefaults.set(commitMessageModelKey, for: "commitMessageModelKey") }
+    }
+
     var openAISummarizationModels: [String] = []
     var openAISummarizationModelsError: String?
     var isLoadingOpenAISummarizationModels = false

@@ -104,7 +104,8 @@ final class CodingPlanUITests: XCTestCase {
         control("composer-plan-mode").click()
         XCTAssertTrue(start.waitForExistence(timeout: 10))
         XCTAssertTrue(start.isEnabled)
-        XCTAssertTrue(app.sheets.buttons["attachment-preview-Chat notes.md"].firstMatch.exists)
+        let importedFile = app.sheets.buttons["attachment-preview-Chat notes.md"].firstMatch
+        XCTAssertTrue(importedFile.exists)
         let goal = app.descendants(matching: .any).matching(identifier: "coding-plan-goal").firstMatch
         control("coding-plan-goal-add-files").click()
         let open = app.buttons["Open"].firstMatch
@@ -118,13 +119,24 @@ final class CodingPlanUITests: XCTestCase {
         XCTAssertTrue(start.isEnabled)
         let filePreview = app.buttons["attachment-preview-Plan requirements.md"]
         XCTAssertTrue(filePreview.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(filePreview.frame.height, 30)
+        XCTAssertEqual(filePreview.frame.midY, importedFile.frame.midY, accuracy: 2)
         XCTAssertLessThanOrEqual(filePreview.frame.maxY, goal.frame.minY)
+        let chipScreenshot = XCTAttachment(screenshot: app.sheets.firstMatch.screenshot())
+        chipScreenshot.name = "Planning request with file chips"
+        chipScreenshot.lifetime = .keepAlways
+        add(chipScreenshot)
         filePreview.click()
         let closeFile = app.sheets.buttons["Close"].firstMatch
         XCTAssertTrue(closeFile.waitForExistence(timeout: 5))
         XCTAssertTrue(text("Support reopening.", in: app).waitForExistence(timeout: 5))
         closeFile.click()
+        app.sheets.buttons["attachment-remove-Plan requirements.md"].click()
+        XCTAssertTrue(filePreview.waitForNonExistence(timeout: 5))
+        XCTAssertFalse((goal.value as? String)?.contains("Plan requirements.md") ?? true)
+        XCTAssertTrue(importedFile.exists)
         goal.click()
+        paste(requirements as NSURL, in: goal, matching: NSPredicate(format: "value CONTAINS %@", "[File: Plan requirements.md]"))
         app.typeKey(.downArrow, modifierFlags: .command)
         enterText("Persist the workspace settings.")
         let setupForm = app.sheets.scrollViews.firstMatch

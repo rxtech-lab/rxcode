@@ -567,6 +567,9 @@
         }
       }
     },
+    "%@ couldn't generate a commit message. Try again or choose another model." : {
+
+    },
     "%@ hidden" : {
 
     },
@@ -7055,6 +7058,9 @@
           }
         }
       }
+    },
+    "Commit message model" : {
+
     },
     "Commit when a session finishes" : {
       "localizations" : {
@@ -21369,6 +21375,9 @@
         }
       }
     },
+    "Preview %@" : {
+
+    },
     "Preview %lld" : {
 
     },
@@ -25495,6 +25504,9 @@
     "Selected" : {
 
     },
+    "Selected model unavailable" : {
+
+    },
     "Selected release workflow" : {
       "localizations" : {
         "ko" : {
@@ -25997,6 +26009,9 @@
           }
         }
       }
+    },
+    "Settings Default" : {
+
     },
     "Settings Default (%@)" : {
 

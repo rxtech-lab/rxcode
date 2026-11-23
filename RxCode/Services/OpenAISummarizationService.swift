@@ -176,17 +176,9 @@ actor OpenAISummarizationService {
         return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 384)
     }
 
-    func generateCommitMessage(
-        diff: String,
-        fileSummary: String,
-        endpoint: String,
-        apiKey: String,
-        model: String
-    ) async -> String? {
-        // Caller (AppState) has already applied a provider-aware budget; this
-        // is just an upper bound to guard against accidental misuse.
+    static func commitMessagePrompt(diff: String, fileSummary: String) -> String {
         let trimmedDiff = String(diff.prefix(20_000))
-        let prompt = """
+        return """
         Write a Git commit message for the staged changes below in the Conventional Commits format.
 
         Format rules (MUST follow exactly):
@@ -209,7 +201,16 @@ actor OpenAISummarizationService {
         Staged diff:
         \(trimmedDiff)
         """
+    }
 
+    func generateCommitMessage(
+        diff: String,
+        fileSummary: String,
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async -> String? {
+        let prompt = Self.commitMessagePrompt(diff: diff, fileSummary: fileSummary)
         let body: JSONValue = .object([
             "model": .string(model),
             "messages": .array([

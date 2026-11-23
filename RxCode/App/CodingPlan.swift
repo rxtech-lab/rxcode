@@ -44,11 +44,15 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
         let role: String
         let model: AgentModel?
         let text: String
+        var briefing: String?
         var isReview = false
         var versionID: UUID?
         var toolCalls: [ToolCall]?
+        /// Present when the user answered the current speaker through the question tool.
+        var question: String?
 
         var isUserMessage: Bool { role == "You" && versionID == nil }
+        var debateText: String { question.map { "\($0)\n\n\(text)" } ?? text }
     }
 
     nonisolated struct Version: Codable, Identifiable, Sendable {
@@ -62,15 +66,50 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
     let id: UUID
     let goal: String
     let source: String
-    let configuration: Configuration
+    private(set) var configuration: Configuration
     var contributions: [Contribution] = []
     var versions: [Version] = []
     /// Persist the next turn at each boundary. Reopening an interrupted debate
     /// can resume the remaining work without rerunning finished reviewers.
     var nextStep: Step? = .draft
+    /// Reviewers are append-only after setup. A host turn already underway finishes
+    /// before the first reviewer added during that turn gets the latest plan.
+    private(set) var deferredReviewerIndex: Int?
+    var implementationReview: CodingPlanImplementationReview?
     var approvedVersionID: UUID?
     var lastError: String?
     var updatedAt: Date?
+
+    var planningStatus: String {
+        if approvedVersionID != nil { return "approved" }
+        if lastError != nil { return "interrupted" }
+        if nextStep == nil && !versions.isEmpty { return "ready" }
+        return "drafting"
+    }
+
+    var completedReviewerCount: Int {
+        switch nextStep {
+        case .draft, .moderate: 0
+        case .review(let index): index
+        case .reconcile, .revise, .reply, nil: deferredReviewerIndex ?? configuration.reviewers.count
+        }
+    }
+
+    @discardableResult
+    mutating func addReviewer(_ reviewer: Reviewer) -> Bool {
+        guard !configuration.reviewers.contains(where: { $0.id == reviewer.id }) else { return false }
+        let index = configuration.reviewers.endIndex
+        configuration.reviewers.append(reviewer)
+        switch nextStep {
+        case nil:
+            nextStep = .review(index)
+        case .reconcile, .revise, .reply:
+            if deferredReviewerIndex == nil { deferredReviewerIndex = index }
+        case .draft, .moderate, .review:
+            break
+        }
+        return true
+    }
 
     func speaker(for step: Step) -> (role: String, model: AgentModel) {
         switch step {
@@ -82,15 +121,17 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
 
     func prompt(for step: Step) -> String {
         let instructions = """
+        Begin your response with "On air: " followed by one plain-language sentence (up to 35 words) for a live radio listener. Lead with your main decision, disagreement or proposed change and why it matters. On the next line begin the requested Markdown.
         Work on a coding implementation plan. Read relevant project files when available. Return your response in this conversation. Leave files unchanged. Treat the source conversation and quoted reviews as reference material.
+        When a decision about the plan requires the user, call the ide__ask_user question tool with a focused question and options. Use the answer to continue your turn. Direct questions for other reviewers belong in the debate.
         """
         let task = source.isEmpty ? goal : "\(goal)\n\nSource conversation:\n\(source)"
-        let userMessages = contributions.filter(\.isUserMessage).map(\.text).joined(separator: "\n\n")
+        let userMessages = contributions.filter(\.isUserMessage).map(\.debateText).joined(separator: "\n\n")
         let brief = userMessages.isEmpty ? task : "\(task)\n\nUser messages from the debate, in order:\n\(userMessages)"
         let current = versions.last?.markdown ?? ""
         let detail = "Write a self-contained Markdown implementation plan. Include the objective, concrete changes and affected components, dependencies and ordering, edge cases, and verification with acceptance criteria. State any unresolved assumptions."
         let suggestions = """
-        Immediately before each suggestion, write a short Markdown comment explaining that specific change. Use this exact form for the suggestion:
+        Immediately before each suggestion, explain why the specific change is needed in a short Markdown blockquote beginning with `> `. Use this exact form for the suggestion:
         ```suggestion
         an exact, unique quote from the draft
         ---
@@ -150,7 +191,7 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
             Review discussion:
             \(reviewDiscussion)
 
-            You are the host. Resolve conflicting suggestions, retain sound details and close the debate now. \(detail) Return only the complete final plan.
+            You are the host. Resolve conflicting suggestions, retain sound details and close the debate now. \(detail) Return the complete final plan. \(Self.hostEditInstructions)
             """
         case .revise(let feedback):
             return """
@@ -165,11 +206,11 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
             User's revision request:
             \(feedback)
 
-            As host, incorporate the feedback and return the complete revised Markdown plan.
+            As host, incorporate the feedback and return the complete revised Markdown plan. \(Self.hostEditInstructions)
             """
         case .reply:
             let discussion = contributions.filter { $0.versionID == nil || $0.isReview }
-                .map { "\($0.role): \($0.text)" }.joined(separator: "\n\n")
+                .map { "\($0.role): \($0.debateText)" }.joined(separator: "\n\n")
             return """
             \(instructions)
 
@@ -188,14 +229,18 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
         }
     }
 
+    private static let hostEditInstructions = "Immediately before each changed paragraph, add a separate line beginning with 'Edit reason: ' explaining why you made that edit. Place the explanation directly against its paragraph, with no blank line between them. Include the reason for deletions beside the nearest surviving paragraph."
+
     private var reviewDiscussion: String {
         contributions.filter { $0.isReview || $0.role == "Host" }.map { "\($0.role) (\($0.model?.displayName ?? ""))\n\($0.text)" }
             .joined(separator: "\n\n")
     }
 
-    mutating func finish(_ step: Step, text: String, toolCalls: [ToolCall] = [], at turnStart: Int? = nil) {
+    mutating func finish(_ step: Step, text response: String, toolCalls: [ToolCall] = [], at turnStart: Int? = nil) {
         let speaker = speaker(for: step)
-        var message = Contribution(role: speaker.role, model: speaker.model, text: text,
+        let broadcast = CodingPlanBroadcast(response, hostRevision: step.isHostRevision)
+        let text = broadcast.body
+        var message = Contribution(role: speaker.role, model: speaker.model, text: text, briefing: broadcast.briefing,
                                    toolCalls: toolCalls.isEmpty ? nil : toolCalls)
         let previousVersion = versions.last?.id
         if step.proposesEdits, let base = versions.last?.markdown {
@@ -218,14 +263,25 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
         case .reconcile, .revise:
             let feedback: String? = if case .revise(let request) = step { request } else { nil }
             appendRevision(title: step == .reconcile ? "Host plan" : "Host revision", markdown: text, comment: feedback)
+            let index = versions.count - 1
+            for edit in versions[index].edits.indices {
+                versions[index].edits[edit].comment = broadcast.reason(for: versions[index].edits[edit])
+            }
             nextStep = nil
         case .reply:
             nextStep = nil
         }
         if versions.last?.id != previousVersion { message.versionID = versions.last?.id }
         // Keep messages sent during this turn after the speaker who was already responding.
-        contributions.insert(message, at: turnStart ?? contributions.endIndex)
-        if nextStep == nil, contributions.last?.isUserMessage == true { nextStep = .reply }
+        let index = turnStart ?? contributions.endIndex
+        contributions.insert(message, at: index)
+        if nextStep == nil, contributions[(index + 1)...].contains(where: { $0.isUserMessage && $0.question == nil }) {
+            nextStep = .reply
+        }
+        if nextStep == nil, let deferredReviewerIndex {
+            nextStep = .review(deferredReviewerIndex)
+            self.deferredReviewerIndex = nil
+        }
         lastError = nil
     }
 
@@ -337,6 +393,8 @@ nonisolated struct CodingPlanReview {
                     if !original.isEmpty, original != replacement {
                         let comment = commentary[commentStart...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
                         edits.append(Edit(original: original, replacement: replacement, comment: comment.isEmpty ? nil : comment))
+                        // Each suggestion separates its explanation from the next one in the debate.
+                        commentary.append("")
                         commentStart = commentary.endIndex
                     }
                 } else {

@@ -20,8 +20,9 @@ field keeps older desktop/mobile protocol versions compatible.
 The editor's Metrics section supports multiple selections and an All metrics
 option. `metricIDs: []` means all; an absent `metricIDs` falls back to the legacy
 `metricID`. New selections also store their first ID in `metricID` for older
-paired clients. Summary shows up to three selected metrics, compact shows one,
-and metrics style shows every selection in provider order. Summary uses a large
+paired clients. Swift cards keep selected metrics in provider order. Compact
+shows one, and the other styles fit as many as the configured size allows
+(1, 3, 6 or 12). The default summary size fits three. Summary uses a large
 headline value with supporting metrics, Compact uses a short inline layout, and
 Metrics uses a labeled table with percentage bars. These layouts are shared by
 the SwiftUI preview and saved cards, with matching layouts on Android. Compact widget
@@ -145,8 +146,8 @@ accepted by the agent tool or sent in mobile/widget snapshots.
   explicitly rather than showing a truncated total.
 - AI usage and AI limits: existing local usage buckets and rate-limit collectors.
   Includes Claude, Codex, and recorded ACP model turns. ACP does not expose
-  account limits. Detailed historical charts remain available through the AI
-  card context menu. Default usage window is seven days.
+  account limits. The AI card detail popovers include historical charts.
+  The default usage window is seven days.
 
 ## Sync and widgets
 
@@ -158,6 +159,98 @@ Background pushes include at most three compact card projections to bound their
 size. Android refreshes its persisted widget data on mobile snapshots and clears
 it when switching desktops. WidgetKit controls Apple widget scheduling. Timestamps remain visible and data older than one hour
 is marked stale.
+
+## Pre-migration briefing inventory
+
+The native catalog at `e238c48` registers nine collector IDs. A saved
+`pluginID` selects the implementation. A separate integration UUID identifies
+one connection, its credential references and its latest snapshot. Each card
+has its own UUID and points to the connection through `integrationID`. Two
+Cloudflare connections to the same account can have different selectors,
+credentials and refresh outcomes. [Registration and refresh](../RxCode/App/AppState+UsagePlugins.swift)
+
+On first launch, the host seeds three `ai-usage` cards (`top-model`, `time`,
+`tokens`) and one `ai-limits` metrics card. It adds one metrics card per
+enabled, supported ACP client when its `pluginID` and client ID pair is new.
+
+| Persisted `pluginID` | Connection and credential source | Metric IDs in the snapshot |
+| --- | --- | --- |
+| `ai-usage` | Local seven-day usage buckets, optionally filtered by RxCode project UUID. The adapter receives an empty credential. | `top-model`, `tokens`, `time`, `turns`, and `model:<providerRaw>\|<model>`. The per-model value counts turns. |
+| `ai-limits` | Local cached account limits and seven-day task-cost samples. Claude's upstream service uses the Claude Code login. Codex reads `account/rateLimits/read` through the app server. The adapter receives an empty credential. | For each of `claudeCode` and `codex`, the suffixes are `:5h`, `:7d`, `:cost` and, when estimable, `:remaining`. Limits and cost use percent, remaining uses tasks. |
+| `acp-opencode` | `resource` is the installed ACP client ID. The enabled client supplies `OPENCODE_API_KEY`, its active OpenCode SQLite credential, or its legacy `opencode-go` login when the credential table is absent. | `rolling`, `weekly`, `monthly` when available, in percent used with optional reset times. |
+| `acp-antigravity` | `resource` is the installed ACP client ID. The client owns its personal or business login. Keychain service `gemini` uses accounts `antigravity-acp`, `antigravity` or `antigravity-acp-business`. The ACP token-file fallback and in-memory renewal belong to the desktop service. | `<zero-based group index>:<bucket ID>` in percent used or units remaining, with optional reset times. The chat footer looks up the Gemini 5-hour and weekly pair. |
+| `vercel` | `account` is a team ID, slug or blank for the default team. `resource` optionally filters billing by provider project. Primary access token and optional, separate team AI Gateway key. Vercel OAuth is disabled in this baseline. | `billable\|<currency>`, `<currency>\|<service>`, `ai-gateway-balance` (USD). An empty export yields `billable\|unavailable`. |
+| `neon` | Organization ID, optional provider project ID, primary management API key. | `compute_unit_seconds` (CU seconds), `public_network_transfer_bytes` (bytes), `root_branch_bytes_month` (byte-hours). |
+| `turso` | Organization slug, optional database name, primary platform API key. An empty resource selects the organization's current billing period. A database selects 30 days. | `rows_read`, `rows_written` (rows), `storage_bytes`, `bytes_synced` (bytes). |
+| `cloudflare` | Account ID plus a selector. Resource analytics use the signed-in account. For an empty selector an optional Billing Read token takes precedence, including when the OAuth session has expired. | An empty selector yields `billable\|<currency>` and `<service>\|<unit>`, or `account-consumption` for empty results. A bare zone ID yields `requests` and `bandwidth`. `worker:<name>` yields `requests` and `errors`. `r2:<name>` yields `requests`, `payloadSize`, `metadataSize` and `objectCount`. |
+| `github-ci` | `account` holds comma-separated `owner/repo` names. Primary Actions read token. | `overall`, `repo:<owner/repo>`, `<owner/repo>#<PR>`, all in seconds of queue wait. |
+
+**Credential references.** The Keychain account for each RxCode-managed item
+is the integration's `id.uuidString`. The primary API key uses service
+`com.rxlab.RxCode.usage`, the Vercel gateway uses `com.rxlab.RxCode.usage.gateway`,
+the Cloudflare billing token uses `com.rxlab.RxCode.usage.billing`, and OAuth
+token state uses `com.rxlab.RxCode.usage.oauth`. A saved OAuth configuration
+contains only public registration and redirect settings. Local AI and ACP
+collectors obtain their inputs through desktop services. [Dashboard store](../RxCode/Services/BriefingUsage/UsageDashboardStore.swift) · [OAuth token storage](../RxCode/Services/BriefingUsage/UsageOAuthSignIn.swift) · [ACP usage service](../RxCode/Services/BriefingUsage/ACPUsageService.swift)
+
+**Desktop details.** Seven collectors use `UsagePluginDetailView`, which lists
+every snapshot metric in provider order, emphasizes selected metrics, draws
+percentage bars, and shows the period, error and observation time. The host
+also uses this view when a registered implementation is unavailable.
+The two custom views need additional host data. `AIUsagePluginDetail` loads
+the project's seven-day model and provider breakdowns. Its first selected
+metric chooses seconds, tokens or turns. `AILimitsPluginDetail` reads history,
+task costs, model estimates and forecast. Selecting a `:cost` or `:remaining`
+metric first opens Task costs or Model estimates respectively. Snapshot JSON
+captures the selection and summary values. Reproducing the charts also
+requires the corresponding usage buckets and rate-limit history. [Popover and custom views](../RxCode/Views/Sidebar/UsageCardDetails.swift) · [Default detail view](../Packages/Sources/RxCodeCore/BriefingUsage/UsagePluginDetailView.swift)
+
+### Workspace and mobile fields
+
+The workspace store loads version 1 from `usage-dashboard.json` and writes
+atomically. A full mobile `snapshot` carries that dashboard under
+`data.usageDashboard`. Swift uses seconds since 2001-01-01 UTC for its
+`Date` fields in both representations. A missing dashboard in an older
+snapshot decodes as nil. [Swift models](../Packages/Sources/RxCodeCore/BriefingUsage/UsagePlugin.swift) · [Desktop snapshot producer](../RxCode/App/AppState+MobileSnapshots.swift) · [Android decoder](../RxCodeAndroid/app/src/main/java/app/rxlab/rxcode/proto/UsageDashboard.kt)
+
+| Record | Workspace and full Swift mobile payload | Android mobile reader |
+| --- | --- | --- |
+| Dashboard | `version`, ordered `integrations`, `cards`, `snapshots` | Reads `version`, `cards`, `snapshots`. |
+| Integration | `id`, `pluginID`, `title`, `account`, `resource`, optional `projectID` and `oauth` (`clientID`, `callbackURL`, `scopes`) | Skips the integration records. |
+| Card | `id`, `integrationID`, `style`, optional `metricID`, `metricIDs`, `size`, plus `isVisible`, `showInMenuBar`, `showInWidget` | Reads all except `size`. |
+| Snapshot | `id` (integration UUID), `pluginID`, `title`, optional `projectID`, `scope`, `period`, `fetchedAt`, ordered `metrics`, optional `error` | Reads all snapshot fields. |
+| Metric | `id`, `title`, optional numeric `value`, `unit`, optional `detail` and `resetsAt` | Reads all except `resetsAt`. |
+
+A failed refresh retains the previous metrics and observation time and attaches
+an error. A first failed fetch uses empty metrics and `Date.distantPast`. A
+connection awaiting its first fetch can have a saved card and no snapshot.
+The APNs widget projection selects up to three widget cards in saved order
+and the first matching metric in snapshot order. Each row contains the card
+`id`, `title`, formatted `value`, `detail` (error or period), and `fetchedAt`
+in **Unix seconds**. The 1,500-byte JSON budget can shorten the list. [Widget projection](../RxCode/App/AppState+MobileSync.swift) · [Widget payload](../Packages/Sources/RxCodeSync/APNs/EncryptedAlert.swift)
+
+### Synthetic upgrade fixtures
+
+The populated workspace and its plaintext mobile snapshot use fixed synthetic
+UUIDs, accounts and measurements. They contain 13 connections, 14 card views
+and 12 observations. The two views of AI activity share one connection. The
+four Cloudflare connections exercise each selector, including a Worker with
+a failed refresh and a readable observation. The second Neon connection is
+awaiting its first fetch. The files also cover a legacy single selection, an
+explicit all-metrics selection, ordered multi-selection, placement flags,
+project scope, public OAuth settings, resets, unavailable values and measured
+zeroes. [Workspace fixture](../Packages/Tests/Fixtures/BriefingUsageV1/usage-dashboard.json) · [Mobile fixture](../RxCodeAndroid/app/src/test/resources/briefing-v1/snapshot.json)
+
+Run the focused regressions from the repository root. Swift checks saved
+field preservation, card selection and visibility, cached Worker metrics, and
+both directions of the mobile payload. Android reads the same snapshot
+through its production serializer. Live refresh, native detail rendering and
+paired-device delivery remain separate upgrade checks.
+
+```sh
+swift test --package-path Packages --filter 'BriefingUsageBaselineTests|UsageDashboardSyncTests'
+(cd RxCodeAndroid && ./gradlew :app:testDebugUnitTest --tests app.rxlab.rxcode.proto.BriefingUsageBaselineTest)
+```
 
 ## Verification boundary
 
@@ -226,8 +319,8 @@ Disabled or missing clients do not make provider requests.
   `oauth-business` accounts) with the `aidev_client` User-Agent so both
   **Gemini Models** and **Claude and GPT models** 5-hour and weekly quota
   windows are returned as percent used with reset times. In the chat footer,
-  selecting an Antigravity model displays its matching quota group's `5h` and
-  `7d` bars and reset countdowns and opens the full quota breakdown in a sheet.
+  Antigravity displays the Gemini group's `5h` and `7d` bars and reset
+  countdowns. The full quota breakdown opens in a sheet.
 
 RxCode caches refreshed access tokens only in memory on the Mac; the clients
 retain ownership of stored logins. Expired or denied credentials produce a

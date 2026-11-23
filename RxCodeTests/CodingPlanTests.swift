@@ -4,14 +4,14 @@ import RxCodeCore
 
 @MainActor
 final class CodingPlanTests: XCTestCase {
-    private let planner = AgentModel(provider: .codex, id: "planner", displayName: "Planner model")
-    private let host = AgentModel(provider: .claudeCode, id: "host", displayName: "Host model")
-    private let reviewer = AgentModel(provider: .acp, id: "test::review", displayName: "Review model")
-    private var state: AppState!
-    private var window: WindowState!
-    private var project: Project!
-    private var repo: URL!
-    private var persistence: MockAppStatePersistence!
+    let planner = AgentModel(provider: .codex, id: "planner", displayName: "Planner model")
+    let host = AgentModel(provider: .claudeCode, id: "host", displayName: "Host model")
+    let reviewer = AgentModel(provider: .acp, id: "test::review", displayName: "Review model")
+    private(set) var state: AppState!
+    private(set) var window: WindowState!
+    private(set) var project: Project!
+    private(set) var repo: URL!
+    private(set) var persistence: MockAppStatePersistence!
     private let workspaceID = UUID().uuidString
 
     override func setUp() async throws {
@@ -38,13 +38,13 @@ final class CodingPlanTests: XCTestCase {
         try FileManager.default.removeItem(at: repo)
     }
 
-    private func backend(_ provider: AgentProvider) -> MockAgentBackend {
+    func backend(_ provider: AgentProvider) -> MockAgentBackend {
         let mock = MockAgentBackend(provider: provider)
         state.agentBackendOverrides[provider] = mock
         return mock
     }
 
-    private func answer(_ text: String, using backend: MockAgentBackend) async {
+    func answer(_ text: String, using backend: MockAgentBackend) async {
         await backend.enqueueScript([.assistantText(text), .result(sessionId: UUID().uuidString)], forCwd: repo.path)
     }
 
@@ -52,6 +52,156 @@ final class CodingPlanTests: XCTestCase {
         let deadline = ContinuousClock.now.advanced(by: .seconds(4))
         while room.liveText != text && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(room.liveText, text)
+    }
+
+    private func observeQuestions() async -> Task<Void, Never> {
+        state.registerLiveWindow(window)
+        let (_, requests) = await state.permission.subscribe()
+        return Task { [state] in
+            for await request in requests { state?.queuePermissionRequest(request) }
+        }
+    }
+
+    private func waitForQuestion() async throws -> PermissionRequest {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while window.pendingPermissions.isEmpty && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return try XCTUnwrap(window.pendingPermissions.first)
+    }
+
+    func testQuestionWaitsBeyondTurnTimeoutAndAnswerSurvivesReload() async throws {
+        let observer = await observeQuestions()
+        defer { observer.cancel() }
+        let writer = backend(.codex)
+        let plan = CodingPlan(id: UUID(), goal: "Save settings", source: "",
+                              configuration: .init(planner: planner, reviewers: []))
+        let room = CodingPlanRoom(plan)
+        let id = plan.id.uuidString
+        window.currentSessionId = id
+        state.threadStore.upsert(ChatSession(id: id, projectId: project.id, title: "Plan").summary)
+        state.codingPlanRooms[plan.id] = room
+        let run = UUID()
+        room.runID = run
+        let questions = CodingPlanQuestions(appState: state, room: room, runID: run)
+        room.questions = questions
+        defer { questions.close() }
+        let input: JSONValue = .object(["question": .string("Where should backups live?"),
+                                        "options": .array([.string("Locally"), .string("In the cloud")])])
+        await writer.enqueueScript([.init(delay: 0, event: .textDelta("Use local backups."), sideEffect: {
+            let request = await writer.receivedRequests.last
+            let ask = try XCTUnwrap(request?.askUser)
+            let result = try await ask(input)
+            XCTAssertEqual(result, "User answered: Locally")
+        }), .result(sessionId: "draft")], forCwd: repo.path)
+        let turn = Task {
+            try await state.planningTurn(model: planner, prompt: plan.prompt(for: .draft), cwd: repo.path,
+                                         inactivityTimeout: .milliseconds(250), questions: questions)
+        }
+        defer { turn.cancel() }
+        let pending = try await waitForQuestion()
+        XCTAssertEqual(pending.sessionId, id)
+        XCTAssertEqual(window.presentedPermissionId, pending.id)
+        try await Task.sleep(for: .milliseconds(550))
+        await state.respondToAskUserQuestion(toolUseId: pending.id, answers: [0: .single("Locally")], in: window)
+        let completed = try await turn.value
+        XCTAssertEqual(completed.text, "Use local backups.")
+        XCTAssertTrue(window.pendingPermissions.isEmpty)
+        let saved = try XCTUnwrap(state.threadStore.codingPlan(for: id))
+        XCTAssertEqual(saved.contributions.first?.question, "Where should backups live?")
+        XCTAssertEqual(saved.contributions.first?.text, "Locally")
+        XCTAssertTrue(saved.prompt(for: .reconcile).contains("Where should backups live?\n\nLocally"))
+        XCTAssertTrue(saved.prompt(for: .reply).contains("Where should backups live?\n\nLocally"))
+        let requests = await writer.receivedRequests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertNotNil(requests.first?.ideBridgeCommand)
+
+        var finalTurn = saved
+        finalTurn.finish(.reconcile, text: completed.text, at: 0)
+        XCTAssertNil(finalTurn.nextStep)
+        var withFollowUp = saved
+        withFollowUp.contributions.insert(.init(role: "You", model: nil, text: "Also test recovery."), at: 0)
+        withFollowUp.finish(.reconcile, text: completed.text, at: 0)
+        XCTAssertEqual(withFollowUp.nextStep, .reply)
+    }
+
+    func testStoppingOrSkippingAnOpenQuestionLeavesTheDebateResumable() async throws {
+        let observer = await observeQuestions()
+        defer { observer.cancel() }
+        let writer = backend(.codex)
+        let input: JSONValue = .object(["question": .string("Which format?"), "options": .array([.string("JSON"), .string("YAML")])])
+        for _ in 0..<2 {
+            await writer.enqueueScript([.init(delay: 0, event: .textDelta("Draft"), sideEffect: {
+                let request = await writer.receivedRequests.last
+                _ = try await request?.askUser?(input)
+            }), .result(sessionId: "draft")], forCwd: repo.path)
+        }
+        await answer("Final", using: writer)
+        try await state.startCodingPlan(goal: "Save a file", source: "", configuration: .init(planner: planner, reviewers: []),
+                                        project: project, worktreePath: nil, worktreeBranch: nil, in: window)
+        let id = try XCTUnwrap(window.currentSessionId)
+        let room = try XCTUnwrap(state.codingPlanRoom(for: id))
+        let first = try await waitForQuestion()
+        let stopped = room.task
+        room.stop()
+        await stopped?.value
+        XCTAssertTrue(window.pendingPermissions.isEmpty)
+        XCTAssertNil(state.mobilePendingRequests[first.id])
+        XCTAssertEqual(room.plan.nextStep, .draft)
+        state.resumeCodingPlan(room, cwd: repo.path)
+        let second = try await waitForQuestion()
+        XCTAssertNotEqual(first.id, second.id)
+        await state.skipAskUserQuestion(toolUseId: second.id, in: window)
+        await room.task?.value
+        XCTAssertNil(room.plan.nextStep)
+        XCTAssertNil(room.plan.lastError)
+        XCTAssertEqual(room.plan.versions.map(\.markdown), ["Draft", "Final"])
+        XCTAssertFalse(room.plan.contributions.contains(where: \.isUserMessage))
+    }
+
+    func testReviewerDisconnectingDuringQuestionRetriesWithAnswer() async throws {
+        let observer = await observeQuestions()
+        defer { observer.cancel() }
+        let writer = backend(.codex), critic = backend(.acp)
+        await answer("Draft", using: writer)
+        await answer("Review retention", using: writer)
+        let (disconnect, signal) = AsyncStream<Void>.makeStream()
+        await critic.enqueueScript([.result(sessionId: "disconnected", isError: true, sideEffect: {
+            for await _ in disconnect { break }
+        })], forCwd: repo.path)
+        await answer("Keep two copies.", using: critic)
+        await answer("Final", using: writer)
+        try await state.startCodingPlan(goal: "Plan backups", source: "",
+            configuration: .init(planner: planner, reviewers: [.init(model: reviewer, prompt: "Check retention.")]),
+            project: project, worktreePath: nil, worktreeBranch: nil, in: window)
+        let room = try XCTUnwrap(state.codingPlanRoom(for: try XCTUnwrap(window.currentSessionId)))
+        defer { signal.finish(); room.stop() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while await critic.receivedRequests.isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let request = await critic.receivedRequests.first
+        let ask = try XCTUnwrap(request?.askUser)
+        let call = Task { try await ask(.object(["question": .string("How many copies?"),
+                                                 "options": .array([.string("One"), .string("Two")])])) }
+        defer { call.cancel() }
+        let pending = try await waitForQuestion()
+        signal.finish()
+        while await critic.finalizedStreamIDs.isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let finished = await critic.finalizedStreamIDs
+        XCTAssertEqual(finished, [try XCTUnwrap(request?.streamId)])
+        await state.respondToAskUserQuestion(toolUseId: pending.id, answers: [0: .single("Two")], in: window)
+        let response = try await call.value
+        XCTAssertEqual(response, "User answered: Two")
+        await room.task?.value
+        let reviews = await critic.receivedRequests
+        XCTAssertEqual(reviews.count, 2)
+        XCTAssertTrue(reviews.last?.prompt.contains("How many copies?\n\nTwo") == true)
+        XCTAssertNil(room.plan.lastError)
+        XCTAssertNil(room.plan.nextStep)
+        XCTAssertEqual(room.plan.contributions.filter(\.isUserMessage).count, 1)
     }
 
     func testReasoningAndToolEventsKeepLongPlanningTurnsAlive() async throws {
@@ -170,76 +320,138 @@ final class CodingPlanTests: XCTestCase {
         XCTAssertEqual(state.threadStore.codingPlan(for: id)?.versions.last?.edits.first?.comment, "Keep two copies.")
     }
 
-    func testDebateStreamsOncePerRoleAndHandsOnlyTheChosenVersionToFreshThread() async throws {
+    func testReviewersAddedDuringDraftAndHostTurnsRunOnceInOrder() async throws {
         let writer = backend(.codex), moderator = backend(.claudeCode), critic = backend(.acp)
-        let implementer = backend(.flowcy)
-        let first = "## Storage\n\nUse a file. Reopen the project."
-        await writer.enqueueScript([
-            .init(delay: 0, event: .textDelta(first)), .assistantText(first), .result(sessionId: "writer-native")
-        ], forCwd: repo.path)
-        await answer("Check interrupted writes.", using: moderator)
-        await answer("Handle interruptions.\n```suggestion\nUse a file.\n---\nWrite atomically.\n```", using: critic)
-        await answer("The revised draft also needs a reload check.", using: critic)
-        await answer("## Implementation\n\nWrite atomically and test reopening.", using: moderator)
+        let (draftGate, releaseDraft) = AsyncStream<Void>.makeStream()
+        let (hostGate, releaseHost) = AsyncStream<Void>.makeStream()
+        defer { releaseDraft.finish(); releaseHost.finish() }
+        await writer.enqueueScript([.init(delay: 0, event: .textDelta("Draft")),
+            .result(sessionId: "draft", sideEffect: { for await _ in draftGate {} })], forCwd: repo.path)
+        await answer("Agenda", using: moderator)
+        await answer("Initial review", using: critic)
+        await moderator.enqueueScript([.init(delay: 0, event: .textDelta("First host plan")),
+            .result(sessionId: "host", sideEffect: { for await _ in hostGate {} })], forCwd: repo.path)
+        await answer("Second review", using: critic)
+        await answer("Third review", using: critic)
+        await answer("Final host plan", using: moderator)
 
-        let config = CodingPlan.Configuration(planner: planner, hostOverride: host, reviewers: [
-            .init(model: reviewer, prompt: "Audit persistence"), .init(model: reviewer, prompt: "Audit reloads")
-        ])
-        try await state.startCodingPlan(goal: "Persist settings", source: "Original chat marker", configuration: config,
-                                        project: project, worktreePath: repo.path, worktreeBranch: "feature", in: window)
-        let sourceID = try XCTUnwrap(window.currentSessionId)
-        var room = try XCTUnwrap(state.codingPlanRoom(for: sourceID))
+        try await state.startCodingPlan(goal: "Plan storage", source: "",
+            configuration: .init(planner: planner, hostOverride: host, reviewers: []),
+            project: project, worktreePath: nil, worktreeBranch: nil, in: window)
+        let id = try XCTUnwrap(window.currentSessionId)
+        let room = try XCTUnwrap(state.codingPlanRoom(for: id))
+        try await waitForText("Draft", in: room)
+        try state.addCodingPlanReviewer(.init(model: reviewer, prompt: "Check writes."), to: room, cwd: repo.path)
+        XCTAssertEqual(room.plan.nextStep, .draft)
+        releaseDraft.finish()
+
+        try await waitForText("First host plan", in: room)
+        let second = CodingPlan.Reviewer(model: reviewer, prompt: "Check recovery.")
+        let third = CodingPlan.Reviewer(model: reviewer, prompt: "Check reloads.")
+        for addition in [second, second, third] {
+            try state.addCodingPlanReviewer(addition, to: room, cwd: repo.path)
+        }
+        var saved = try XCTUnwrap(state.threadStore.codingPlan(for: id))
+        XCTAssertEqual(saved.nextStep, .reconcile)
+        XCTAssertEqual(saved.completedReviewerCount, 1)
+        saved.finish(.reconcile, text: "First host plan")
+        XCTAssertEqual(saved.nextStep, .review(1))
+        releaseHost.finish()
         await room.task?.value
-        XCTAssertNil(room.plan.lastError)
-        XCTAssertNil(room.plan.nextStep)
-        XCTAssertEqual(room.plan.contributions.map(\.role), ["Planner", "Host", "Reviewer 1", "Reviewer 2", "Host"])
-        XCTAssertEqual(room.plan.versions.map(\.title), ["Planner draft", "Reviewer 1 proposal", "Host plan"])
-        XCTAssertEqual(room.plan.versions.first?.markdown, first)
-        XCTAssertEqual(room.plan.versions[1].markdown, "## Storage\n\nWrite atomically. Reopen the project.")
+
         let reviews = await critic.receivedRequests
-        XCTAssertEqual(reviews.map(\.model), ["review", "review"])
-        XCTAssertEqual(reviews.first?.acpSpec?.id, "test")
-        XCTAssertTrue(reviews[0].prompt.contains("Audit persistence"))
-        XCTAssertTrue(reviews[1].prompt.contains("Audit reloads"))
-        XCTAssertTrue(reviews[1].prompt.contains("Write atomically. Reopen"))
-        XCTAssertTrue(reviews[0].prompt.contains("Check interrupted writes."))
-        XCTAssertTrue(reviews.allSatisfy { $0.isEphemeral && $0.sessionId == nil && $0.planMode && $0.permissionMode == .plan })
-        XCTAssertNotEqual(reviews[0].clientSessionKey, reviews[1].clientSessionKey)
+        let hostTurns = await moderator.receivedRequests
+        XCTAssertEqual(reviews.count, 3)
+        XCTAssertTrue(hostTurns.first?.prompt.contains("Check writes.") == true)
+        XCTAssertTrue(reviews.dropFirst().first?.prompt.contains("First host plan") == true)
+        XCTAssertTrue(reviews.dropFirst().first?.prompt.contains("Check recovery.") == true)
+        XCTAssertTrue(reviews.last?.prompt.contains("Check reloads.") == true)
+        XCTAssertTrue(hostTurns.last?.prompt.contains("Third review") == true)
+        XCTAssertEqual(room.plan.contributions.map(\.role), ["Planner", "Host", "Reviewer 1", "Host", "Reviewer 2", "Reviewer 3", "Host"])
+        XCTAssertEqual(room.plan.completedReviewerCount, 3)
+        XCTAssertNil(room.plan.nextStep)
+    }
+
+    func testLateReviewersWaitForRequestedHostRevisionAndFollowUp() {
+        var plan = CodingPlan(id: UUID(), goal: "Save settings", source: "",
+                              configuration: .init(planner: planner, reviewers: []))
+        plan.finish(.draft, text: "Draft")
+        plan.finish(.reconcile, text: "Host plan")
+        let revision = CodingPlan.Step.revise("Save a backup")
+        plan.nextStep = revision
+        plan.addReviewer(.init(model: reviewer, prompt: "Review backups."))
+        let turnStart = plan.contributions.endIndex
+        plan.contributions.append(.init(role: "You", model: nil, text: "Which folder?"))
+        plan.finish(revision, text: "Revised backup plan", at: turnStart)
+        XCTAssertEqual(plan.nextStep, .reply)
+        plan.addReviewer(.init(model: reviewer, prompt: "Review folders."))
+        plan.finish(.reply, text: "Use the project folder.")
+        XCTAssertEqual(plan.nextStep, .review(0))
+        XCTAssertTrue(plan.prompt(for: .review(0)).contains("Revised backup plan"))
+        plan.finish(.review(0), text: "Backups covered.")
+        XCTAssertEqual(plan.nextStep, .review(1))
+        plan.finish(.review(1), text: "Folder covered.")
+        XCTAssertEqual(plan.nextStep, .reconcile)
+        plan.finish(.reconcile, text: "Reviewed plan")
+        XCTAssertNil(plan.nextStep)
+    }
+
+    func testAddingToReadyAndPausedPlansPreservesEarlierReviewsAndManualRevisions() async throws {
+        let writer = backend(.codex), critic = backend(.acp)
+        var plan = CodingPlan(id: UUID(), goal: "Store backups", source: "",
+                              configuration: .init(planner: planner, reviewers: [.init(model: reviewer, prompt: "Check writes.")]))
+        plan.finish(.draft, text: "Draft")
+        plan.finish(.moderate, text: "Agenda")
+        plan.finish(.review(0), text: "First review")
+        plan.finish(.reconcile, text: "Host plan")
+        plan.edit(markdown: "Use the revised backup directory.")
+        let id = plan.id.uuidString
+        state.threadStore.upsert(ChatSession(id: id, projectId: project.id, title: "Plan").summary)
+        try state.threadStore.saveCodingPlan(plan)
+        var room = try XCTUnwrap(state.codingPlanRoom(for: id))
+        await critic.enqueueScript([.result(sessionId: "failed", isError: true)], forCwd: repo.path)
+        try state.addCodingPlanReviewer(.init(model: reviewer, prompt: "Check the directory."), to: room, cwd: repo.path)
+        await room.task?.value
+        XCTAssertNotNil(room.plan.lastError)
+        XCTAssertEqual(room.plan.nextStep, .review(1))
 
         state.codingPlanRooms.removeAll()
-        room = try XCTUnwrap(state.codingPlanRoom(for: sourceID))
-        let hostVersion = try XCTUnwrap(room.plan.versions.last)
-        try state.reviseCodingPlan(room, base: hostVersion.id, text: "Manually edited plan", askHost: false, cwd: repo.path)
-        let edited = try XCTUnwrap(room.plan.versions.last)
-        XCTAssertThrowsError(try state.reviseCodingPlan(room, base: hostVersion.id, text: "Stale edit", askHost: false, cwd: repo.path))
-        await answer("Newer host-only revision", using: moderator)
-        try state.reviseCodingPlan(room, base: edited.id, text: "Another approach", askHost: true, cwd: repo.path)
+        room = try XCTUnwrap(state.codingPlanRoom(for: id))
+        let addition = CodingPlan.Reviewer(model: planner, prompt: "Check permissions.")
+        room.isHandingOff = true
+        XCTAssertThrowsError(try state.addCodingPlanReviewer(addition, to: room, cwd: repo.path))
+        room.isHandingOff = false
+        try state.addCodingPlanReviewer(addition, to: room, cwd: repo.path)
+        XCTAssertNil(room.runID)
+        XCTAssertEqual(room.plan.nextStep, .review(1))
+        let saved = try XCTUnwrap(state.threadStore.codingPlan(for: id))
+        XCTAssertEqual(saved.configuration.reviewers.last?.id, addition.id)
+        XCTAssertEqual(saved.configuration.reviewers.last?.model, planner)
+        XCTAssertEqual(saved.configuration.reviewers.last?.prompt, addition.prompt)
+        await answer("Directory reviewed", using: critic)
+        await answer("Permissions reviewed", using: writer)
+        await answer("Updated plan", using: writer)
+        state.resumeCodingPlan(room, cwd: repo.path)
         await room.task?.value
-        XCTAssertEqual(room.plan.versions.last?.markdown, "Newer host-only revision")
-        let resultID = UUID().uuidString
-        await implementer.enqueueScript([.systemInit(sessionId: resultID), .assistantText("Implemented"), .result(sessionId: resultID)], forCwd: repo.path)
-        let implementationModel = AgentModel(provider: .flowcy, id: "implementation", displayName: "Implementation model")
-        let stream = await state.implementCodingPlan(room, versionID: edited.id, model: implementationModel, in: window)
-        let finished = await state.awaitStreamCompletion(streamId: try XCTUnwrap(stream), timeout: 10, acceptsPartial: false)
-        XCTAssertNotNil(finished)
-        let requests = await implementer.receivedRequests
-        let request = try XCTUnwrap(requests.first)
-        XCTAssertEqual(request.prompt, CodingPlan.implementationPrompt(for: edited))
-        XCTAssertNil(request.sessionId)
-        XCTAssertTrue(request.history.isEmpty)
-        XCTAssertFalse(request.planMode)
-        XCTAssertFalse(request.isEphemeral)
-        XCTAssertEqual(request.model, implementationModel.id)
-        XCTAssertEqual(request.cwd, repo.path)
-        XCTAssertEqual(state.threadStore.implementationThread(for: room.plan.id), resultID)
-        XCTAssertEqual(window.currentSessionId, resultID)
-        XCTAssertEqual(state.messages(in: window).filter { $0.role == .user }.map(\.content), [request.prompt])
-        XCTAssertEqual(state.threadStore.codingPlan(for: sourceID)?.approvedVersionID, edited.id)
-        state.codingPlanRooms.removeAll()
-        let archive = try XCTUnwrap(state.codingPlanRoom(for: resultID))
-        XCTAssertEqual(archive.plan.approvedVersionID, edited.id)
-        XCTAssertEqual(archive.plan.versions.count, 5)
-        XCTAssertThrowsError(try state.sendCodingPlanMessage("Change the approved plan", to: archive, cwd: repo.path))
+
+        let reviews = await critic.receivedRequests
+        XCTAssertEqual(reviews.count, 2)
+        XCTAssertTrue(reviews.allSatisfy { $0.prompt.contains("Use the revised backup directory.") })
+        XCTAssertEqual(room.plan.contributions.dropFirst(plan.contributions.count).map(\.role), ["Reviewer 2", "Reviewer 3", "Host"])
+        XCTAssertEqual(room.plan.versions.last?.markdown, "Updated plan")
+        XCTAssertNil(room.plan.nextStep)
+    }
+
+    func testDebateQuestionListenersSkipBusyPortsAndShareConcurrentRequestsForOneSession() async throws {
+        let first = IDEMCPServer(), second = IDEMCPServer()
+        let firstPort = await first.allocate(sessionKey: "first", capabilities: [])
+        async let other = second.allocate(sessionKey: "second", capabilities: [])
+        async let reused = second.allocate(sessionKey: "second", capabilities: [])
+        let (otherPort, reusedPort) = await (other, reused)
+        await first.release(sessionKey: "first")
+        await second.release(sessionKey: "second")
+        XCTAssertNotEqual(try XCTUnwrap(firstPort), try XCTUnwrap(otherPort))
+        XCTAssertEqual(otherPort, reusedPort)
     }
 
     func testFailedReviewerResumesWithoutReplayingTheDraftOrAgenda() async throws {
@@ -255,12 +467,17 @@ final class CodingPlanTests: XCTestCase {
         await room.task?.value
         XCTAssertEqual(room.plan.nextStep, .review(0))
         XCTAssertNotNil(room.plan.lastError)
+        let summary = try XCTUnwrap(state.allSessionSummaries.first { $0.id == id })
+        XCTAssertTrue(state.isThreadInterrupted(summary))
         state.codingPlanRooms.removeAll()
+        state.briefingPlans = try await state.codingPlanActivities()
+        XCTAssertTrue(state.isThreadInterrupted(summary))
         room = try XCTUnwrap(state.codingPlanRoom(for: id))
         await answer("Reviewed", using: critic)
         await answer("Finished", using: writer)
         try state.sendCodingPlanMessage("Check reopening too.", to: room, cwd: repo.path)
         state.resumeCodingPlan(room, cwd: repo.path)
+        XCTAssertFalse(state.isThreadInterrupted(summary))
         await room.task?.value
         let writerRequests = await writer.receivedRequests
         let criticRequests = await critic.receivedRequests
@@ -285,36 +502,6 @@ final class CodingPlanTests: XCTestCase {
         ], forCwd: repo.path)
         let markdown = try await state.planningText(model: planner, prompt: "Draft a plan", cwd: repo.path)
         XCTAssertEqual(markdown, "# Plan")
-    }
-
-    func testEarlierDebatesRecoverTheirExactMessageVersionLinks() throws {
-        var plan = CodingPlan(id: UUID(), goal: "Persist preferences", source: "", configuration:
-            .init(planner: planner, reviewers: [.init(model: reviewer, prompt: "Review writes")]))
-        plan.finish(.draft, text: "Save settings.")
-        plan.finish(.moderate, text: "Host answer")
-        plan.finish(.review(0), text: "```suggestion\nSave settings.\n---\nSave atomically.\n```")
-        plan.finish(.reconcile, text: "Host answer")
-        plan.edit(markdown: "My version")
-        let expected = plan.versions.map(\.id)
-        for index in plan.contributions.indices { plan.contributions[index].versionID = nil }
-        var decoded = try JSONDecoder().decode(CodingPlan.self, from: JSONEncoder().encode(plan))
-        decoded.restoreVersionLinks()
-        XCTAssertEqual(decoded.contributions.map(\.versionID), [expected[0], nil, expected[1], expected[2], expected[3]])
-    }
-
-    func testReloadKeepsQuotedPlanTextInItsOwnChatBubble() {
-        var plan = CodingPlan(id: UUID(), goal: "Edit", source: "", configuration: .init(planner: planner, reviewers: []))
-        plan.finish(.draft, text: "Draft")
-        plan.finish(.reconcile, text: "Final")
-        plan.contributions.append(.init(role: "You", model: nil, text: "Edited the implementation plan."))
-        plan.finish(.reply, text: "Save two copies.")
-        plan.edit(markdown: "Manual edit")
-        plan.contributions.append(.init(role: "You", model: nil, text: "How should we store it?"))
-        plan.finish(.reply, text: "Save two copies.")
-        plan.finish(.revise("Add backups"), text: "Save two copies.")
-        let links = plan.contributions.map(\.versionID)
-        plan.restoreVersionLinks()
-        XCTAssertEqual(plan.contributions.map(\.versionID), links)
     }
 
     func testStoppingALiveDraftResumesFromTheLastCompletedTurn() async throws {
@@ -347,105 +534,51 @@ final class CodingPlanTests: XCTestCase {
         XCTAssertEqual(state.threadStore.codingPlan(for: id)?.versions.map(\.markdown), ["Replacement draft", "Approved test plan"])
     }
 
-    func testSuggestionsRequireCompletedUniqueNonoverlappingQuotes() {
-        let review = CodingPlanReview("""
-        Findings
-        ```suggestion
-        one
-        ---
-        ONE
-        ```
-        ```suggestion
-        repeat
-        ---
-        duplicate
-        ```
-        ```suggestion
-        on
-        ---
-        overlapping
-        ```
-        ```suggestion
-        two
-        ---
-        unfinished
-        """)
-        let result = review.applying(to: "one two repeat repeat")
-        XCTAssertEqual(result.markdown, "ONE two repeat repeat")
-        XCTAssertEqual(result.edits.count, 1)
-        XCTAssertEqual(review.commentary, "Findings")
-    }
-
-    func testInlineReviewCommentsSurviveReloadAndStayWithTheirPassage() throws {
-        let id = UUID()
-        let session = ChatSession(id: id.uuidString, projectId: project.id, title: "Review", messages: [])
-        state.threadStore.upsert(session.summary)
-        var plan = CodingPlan(id: id, goal: "Review", source: "", configuration:
-            .init(planner: planner, reviewers: [.init(model: reviewer, prompt: "Review")]))
-        plan.finish(.draft, text: "👩‍💻 Keep one and two. Remove this.")
-        plan.finish(.review(0), text: """
-        This is redundant.
-        ```suggestion
-         Remove this.
-        ---
-        ```
-        Use the same term here.
-        ```suggestion
-        two
-        ---
-        one
-        ```
-        """)
-        let room = CodingPlanRoom(plan)
-        let proposal = try XCTUnwrap(plan.versions.last)
-        XCTAssertEqual(proposal.markdown, "👩‍💻 Keep one and one.")
-        XCTAssertEqual(proposal.edits.map(\.comment), ["Use the same term here.", "This is redundant."])
-        let source = proposal.markdown as NSString
-        XCTAssertEqual(proposal.edits[0].range, source.range(of: "one", options: .backwards))
-        XCTAssertEqual(proposal.edits[1].range, NSRange(location: source.length, length: 0))
-        try state.addCodingPlanComment(" Keep this wording. ", to: 0, in: proposal.id, room: room)
-        let stored = try XCTUnwrap(state.threadStore.codingPlan(for: id.uuidString)?.versions.last)
-        XCTAssertEqual(stored.edits[0].userComments, ["Keep this wording."])
-        XCTAssertNil(stored.edits[1].userComments)
-        XCTAssertEqual(stored.markdown, proposal.markdown)
-        XCTAssertThrowsError(try state.addCodingPlanComment(" ", to: 0, in: proposal.id, room: room))
-        XCTAssertThrowsError(try state.addCodingPlanComment("Stale", to: 3, in: proposal.id, room: room))
-
-        // Strip the new optional fields to exercise existing debates on disk.
-        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(plan)) as? [String: Any])
-        var versions = try XCTUnwrap(json["versions"] as? [[String: Any]])
-        versions[1]["edits"] = proposal.edits.map { ["original": $0.original, "replacement": $0.replacement] }
-        json["versions"] = versions
-        var legacy = try JSONDecoder().decode(CodingPlan.self, from: JSONSerialization.data(withJSONObject: json))
-        legacy.restoreVersionLinks()
-        XCTAssertEqual(legacy.versions.last?.edits, proposal.edits)
-        versions[1].removeValue(forKey: "edits")
-        json["versions"] = versions
-        var untracked = try JSONDecoder().decode(CodingPlan.self, from: JSONSerialization.data(withJSONObject: json))
-        untracked.restoreVersionLinks()
-        XCTAssertEqual(untracked.versions.last?.edits, proposal.edits)
-    }
-
-    func testManualAndHostRevisionsRoundTripExactMarkdownWithComments() throws {
+    func testBroadcastAndHostReasonsSurviveReloadOutsideThePlan() throws {
         var plan = CodingPlan(id: UUID(), goal: "Edit", source: "", configuration: .init(planner: planner, reviewers: []))
-        let original = "# Plan\n\nKeep 📝 then remove this paragraph.\n\n- Finish now."
-        let revised = "# Plan\n\nKeep 📝 then **save twice**.\n\n- Finish later.\n"
-        plan.finish(.draft, text: original)
-        plan.edit(markdown: revised, comment: "Exercise recovery.")
-        plan.finish(.revise("Check the reload."), text: revised + "\nReload.")
-        for (index, note) in [(1, "Exercise recovery."), (2, "Check the reload.")] {
-            let version = plan.versions[index]
-            let restored = NSMutableString(string: version.markdown)
-            XCTAssertFalse(version.edits.isEmpty)
-            for edit in version.edits.reversed() {
-                let range = try XCTUnwrap(edit.range)
-                XCTAssertEqual(restored.substring(with: range), edit.replacement)
-                XCTAssertEqual(edit.userComments, [note])
-                restored.replaceCharacters(in: range, with: edit.original)
-            }
-            XCTAssertEqual(restored as String, plan.versions[index - 1].markdown)
-        }
-        XCTAssertEqual(CodingPlan.implementationPrompt(for: plan.versions[1]), "Implement this approved plan and verify the result.\n\n" + revised)
+        plan.finish(.draft, text: "On air: Starting with two stages.\nBuild once.\n\nShip immediately.")
+        plan.finish(.revise("Make delivery safer."), text: """
+            On air: The host added checks before delivery.
+            Edit reason: Rebuilding catches stale assets.
+            Build twice.
+
+            Edit reason: Verification protects the release.
+            Ship after verification.
+            """)
+        let saved = try JSONDecoder().decode(CodingPlan.self, from: JSONEncoder().encode(plan))
+        let version = try XCTUnwrap(saved.versions.last)
+        XCTAssertEqual(version.markdown, "Build twice.\n\nShip after verification.")
+        XCTAssertEqual(version.edits.compactMap(\.comment), ["Rebuilding catches stale assets.", "Verification protects the release."])
+        XCTAssertEqual(version.edits.first?.userComments, ["Make delivery safer."])
+        XCTAssertEqual(saved.contributions.last?.briefing, "The host added checks before delivery.")
+    }
+
+    func testRadioPublishesBriefingBeforeDraftFinishes() async throws {
+        let writer = backend(.codex)
+        await writer.enqueueScript([.init(delay: 0, event: .textDelta("On air: Start with recovery.\n# Draft")),
+                                    .result(sessionId: "draft", delay: 0.6)], forCwd: repo.path)
+        await answer("On air: The recovery check is ready.\n# Final", using: writer)
+        try await state.startCodingPlan(goal: "Review recovery", source: "", configuration: .init(planner: planner, reviewers: []),
+                                        project: project, worktreePath: nil, worktreeBranch: nil, in: window)
+        let id = try XCTUnwrap(window.currentSessionId)
+        let room = try XCTUnwrap(state.codingPlanRoom(for: id))
+        try await waitForText("# Draft", in: room)
+        XCTAssertEqual(room.dispatch?.text, "Planner. Start with recovery.")
+        XCTAssertTrue(room.plan.versions.isEmpty)
+        await room.task?.value
+        XCTAssertEqual(room.dispatch?.text, "Host. The recovery check is ready.")
+        XCTAssertEqual(state.threadStore.codingPlan(for: id)?.versions.last?.markdown, "# Final")
+    }
+
+    func testLiveRadioWaitsForCompleteDispatchAndPreservesCode() {
+        let partial = CodingPlanBroadcast("On air: We need", hostRevision: false, streaming: true)
+        XCTAssertNil(partial.briefing)
+        XCTAssertTrue(partial.body.isEmpty)
+        let code = "```text\nEdit reason: example\n```\n"
+        let complete = CodingPlanBroadcast("On air: Explain the syntax.\n" + code, hostRevision: true)
+        XCTAssertEqual(complete.briefing, "Explain the syntax.")
+        XCTAssertEqual(complete.body, code)
+        XCTAssertEqual(CodingPlanBroadcast(code, hostRevision: false).body, code)
     }
 
     func testGlobalHistoryConversionUsesSelectedAgentAndRealDestinationProject() async throws {
@@ -474,168 +607,5 @@ final class CodingPlanTests: XCTestCase {
         XCTAssertTrue(requests.allSatisfy { $0.model == planner.id && $0.prompt.contains(source.transcript) })
         XCTAssertNil(state.task(id: t.id))
         XCTAssertFalse(state.stories().contains { $0.id == s.id })
-    }
-}
-
-extension CodingPlanTests {
-    private func callPlanTool(_ name: String, _ args: [String: JSONValue]) async throws -> JSONValue {
-        let result = try await state.ideHandleToolCall(name: name, arguments: .object(args), sessionKey: "plan-reader-test")
-        let body = try XCTUnwrap(result["content"]?[0]?["text"]?.stringValue)
-        return try JSONDecoder().decode(JSONValue.self, from: Data(body.utf8))
-    }
-
-    func testPlanToolsDiscoverPersistedHistoryAndRetrieveUnabridgedContent() async throws {
-        var plan = CodingPlan(id: UUID(), goal: "Extension kit", source: "", configuration: .init(planner: planner, reviewers: []))
-        let source = ChatSession(id: plan.id.uuidString, projectId: project.id, title: "Extension kit",
-                                 messages: [.init(role: .user, content: plan.goal)])
-        state.threadStore.upsert(source.summary)
-        await persistence.stubFullSession(source)
-        let draft = "# Draft\n\n" + String(repeating: "- Feature A\n", count: 300)
-        plan.finish(.draft, text: draft)
-        plan.finish(.reconcile, text: "# Final\n\n- Feature B")
-        try state.threadStore.saveCodingPlan(plan)
-        XCTAssertNil(state.codingPlanRooms[plan.id])
-
-        let discovered = try await callPlanTool("ide__list_coding_plans", ["project_id": .string(project.id.uuidString)])
-        let summary = try XCTUnwrap(discovered["plans"]?[0])
-        XCTAssertEqual(summary["plan_id"]?.stringValue, plan.id.uuidString)
-        XCTAssertEqual(summary["planning_status"]?.stringValue, "ready")
-        XCTAssertEqual(summary["implementation_status"]?.stringValue, "unimplemented")
-        XCTAssertEqual(summary["version_count"]?.numberValue, 2)
-        XCTAssertEqual(summary["current_version_id"]?.stringValue, plan.versions[1].id.uuidString)
-        XCTAssertNil(state.codingPlanRooms[plan.id], "Discovery must not open the debate room.")
-
-        let page = try await callPlanTool("ide__list_coding_plan_versions", ["plan_id": .string(plan.id.uuidString), "limit": .number(1)])
-        XCTAssertEqual(page["versions"]?[0]?["title"]?.stringValue, "Host plan")
-        XCTAssertEqual(page["versions"]?[0]?["is_current"]?.boolValue, true)
-        XCTAssertEqual(page["next_offset"]?.numberValue, 1)
-        let second = try await callPlanTool("ide__list_coding_plan_versions", ["plan_id": .string(plan.id.uuidString), "offset": .number(1)])
-        XCTAssertEqual(second["versions"]?[0]?["version_id"]?.stringValue, plan.versions[0].id.uuidString)
-        let result = try await callPlanTool("ide__get_coding_plan_version", [
-            "plan_id": .string(plan.id.uuidString), "version_id": .string(plan.versions[0].id.uuidString)])
-        XCTAssertEqual(result["version"]?["markdown"]?.stringValue, draft)
-
-        let room = try XCTUnwrap(state.codingPlanRoom(for: source.id))
-        room.plan.lastError = "Review was interrupted"
-        let hydrated = try await callPlanTool("ide__list_coding_plans", ["thread_id": .string(source.id)])
-        XCTAssertEqual(hydrated["plans"]?[0]?["planning_status"]?.stringValue, "interrupted")
-        let wrongProject = try await callPlanTool("ide__list_coding_plans", ["project_id": .string(UUID().uuidString), "thread_id": .string(source.id)])
-        XCTAssertEqual(wrongProject["total"]?.numberValue, 0)
-    }
-
-    func testPlanToolsDeduplicateHandoffAndRequireImplementationEvidence() async throws {
-        var plan = CodingPlan(id: UUID(), goal: "Save snapshots", source: "", configuration: .init(planner: planner, reviewers: []))
-        let source = ChatSession(id: plan.id.uuidString, projectId: project.id, title: plan.goal, messages: [])
-        state.threadStore.upsert(source.summary)
-        plan.finish(.draft, text: "Initial design")
-        plan.finish(.reconcile, text: "Final design")
-        plan.approvedVersionID = plan.versions[0].id
-        let childID = UUID().uuidString.lowercased()
-        let child = ChatSession(id: childID, projectId: project.id, title: "Implement snapshots", messages: [])
-        try state.threadStore.saveCodingPlan(plan, implementation: child.summary)
-
-        let plans = try await state.codingPlanActivities(projectID: project.id)
-        let summary = try XCTUnwrap(plans.first)
-        XCTAssertEqual(plans.count, 1)
-        XCTAssertEqual(summary.threadID, source.id)
-        XCTAssertEqual(summary.implementationThreadID, childID)
-        XCTAssertEqual(summary.currentVersionID, plan.versions.last?.id)
-        XCTAssertEqual(summary.approvedVersionID, plan.versions.first?.id)
-        XCTAssertEqual(summary.featureExcerpt, "Initial design")
-        XCTAssertEqual(summary.planningStatus, "approved")
-        XCTAssertEqual(summary.implementationStatus, "unknown")
-        let alias = try await callPlanTool("ide__list_coding_plans", ["thread_id": .string(childID)])
-        XCTAssertEqual(alias["plans"]?[0]?["plan_id"]?.stringValue, plan.id.uuidString)
-
-        var task = ProjectTask(projectId: project.id, title: "Implement snapshots", status: .inProgress, sessionKey: childID)
-        state.taskBoards[project.id] = TaskBoard(tasks: [task])
-        let inProgress = try await state.codingPlanActivities(threadID: source.id)
-        XCTAssertEqual(inProgress.first?.implementationStatus, "in_progress")
-        task.status = .done
-        state.taskBoards[project.id] = TaskBoard(tasks: [task])
-        let implemented = try await state.codingPlanActivities(threadID: source.id)
-        XCTAssertEqual(implemented.first?.implementationStatus, "implemented")
-
-        state.taskBoards[project.id] = TaskBoard()
-        var check = ChatSession(id: UUID().uuidString, projectId: project.id, title: "Check", messages: []).summary
-        check.parentThreadId = childID
-        check.threadLabel = TaskCompletionCheckLabel.unverified
-        state.threadStore.upsert(check)
-        let unverified = try await state.codingPlanActivities(threadID: source.id)
-        XCTAssertEqual(unverified.first?.implementationStatus, "unknown")
-        check.threadLabel = TaskCompletionCheckLabel.verified
-        state.threadStore.upsert(check)
-        let verified = try await state.codingPlanActivities(threadID: source.id)
-        XCTAssertEqual(verified.first?.implementationStatus, "implemented")
-
-        state.threadStore.delete(id: source.id)
-        let recovered = try await callPlanTool("ide__list_coding_plan_versions", ["plan_id": .string(plan.id.uuidString)])
-        XCTAssertEqual(recovered["total"]?.numberValue, 2)
-        XCTAssertEqual(recovered["plan"]?["thread_id"]?.stringValue, childID)
-    }
-
-    func testPlanToolsAdvertiseReadOnlyAccessAcrossProviders() throws {
-        let names = ["ide__list_coding_plans", "ide__list_coding_plan_versions", "ide__get_coding_plan_version"]
-        for provider in [AgentProvider.codex, .claudeCode, .acp, .localAgent] {
-            let tools = IDEToolRegistry.tools(for: provider.staticCapabilities, provider: provider)
-            for name in names {
-                let tool = try XCTUnwrap(tools.first { $0.name == name })
-                let hints = try XCTUnwrap(IDEMCPServer.toolDescriptor(tool)["annotations"] as? [String: Bool])
-                XCTAssertEqual(hints["readOnlyHint"], true)
-                XCTAssertEqual(hints["destructiveHint"], false)
-            }
-        }
-    }
-
-    func testPlanFeatureExcerptUsesScopeAndSkipsCodeExamples() {
-        let markdown = """
-        # Plugin support
-        The host has finished its discussion.
-        ## Objective and scope
-        Load signed extensions and their contributed views.
-        ```swift
-        implementationDetail()
-        ```
-        - Register custom themes.
-        ## Verification
-        Build the project.
-        """
-        XCTAssertEqual(AppState.codingPlanExcerpt(markdown, goal: "Plugins"),
-                       "Load signed extensions and their contributed views.\n- Register custom themes.")
-        XCTAssertEqual(AppState.codingPlanExcerpt(nil, goal: "Plugins"), "Plugins")
-    }
-
-    func testPlanToolEmptyResultsAndInvalidSelection() async throws {
-        let empty = try await callPlanTool("ide__list_coding_plans", [:])
-        XCTAssertEqual(empty["plans"]?.arrayValue, [])
-        let plan = CodingPlan(id: UUID(), goal: "Empty debate", source: "", configuration: .init(planner: planner, reviewers: []))
-        state.threadStore.upsert(ChatSession(id: plan.id.uuidString, projectId: project.id, title: plan.goal, messages: []).summary)
-        try state.threadStore.saveCodingPlan(plan)
-        let versions = try await callPlanTool("ide__list_coding_plan_versions", ["plan_id": .string(plan.id.uuidString)])
-        XCTAssertEqual(versions["versions"]?.arrayValue, [])
-        let corruptID = UUID().uuidString
-        state.threadStore.upsert(ChatSession(id: corruptID, projectId: project.id, title: "Damaged", messages: []).summary)
-        let corrupt = try XCTUnwrap(state.threadStore.fetch(id: corruptID))
-        corrupt.codingPlanData = Data([0])
-        try state.threadStore.context.save()
-        let recovered = try await callPlanTool("ide__list_coding_plans", [:])
-        XCTAssertEqual(recovered["total"]?.numberValue, 1)
-        do {
-            _ = try await callPlanTool("ide__list_coding_plan_versions", ["plan_id": .string(corruptID)])
-            XCTFail("Targeted reads must report corrupt history.")
-        } catch IDEToolError.handlerFailed { }
-
-        let invalid: [(String, [String: JSONValue])] = [
-            ("ide__list_coding_plan_versions", ["plan_id": .string(UUID().uuidString)]),
-            ("ide__get_coding_plan_version", ["plan_id": .string(plan.id.uuidString), "version_id": .string(UUID().uuidString)]),
-            ("ide__list_coding_plans", ["project_id": .string("typo")]),
-            ("ide__list_coding_plans", ["limit": .number(51)]),
-        ]
-        for (name, arguments) in invalid {
-            do {
-                _ = try await callPlanTool(name, arguments)
-                XCTFail("Expected invalid arguments for \(name)")
-            } catch IDEToolError.invalidArguments { }
-        }
     }
 }

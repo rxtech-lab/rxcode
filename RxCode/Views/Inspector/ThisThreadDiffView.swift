@@ -19,33 +19,34 @@ struct ThisThreadDiffView: View {
     var body: some View {
         let key = loadID
         NavigationStack {
-            changes(for: key)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle("This Thread’s Changes")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") { dismiss() }
-                            .keyboardShortcut(.cancelAction)
-                    }
+            ThreadChangeList(summaries: loaded?.sessionId == key.sessionId ? loaded?.summaries : nil) {
+                selectedFile = $0
+            }
+            .navigationTitle("This Thread’s Changes")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
-                .navigationDestination(isPresented: Binding(
-                    get: { selectedFile != nil },
-                    set: { if !$0 { selectedFile = nil } }
-                )) {
-                    if let file = selectedFile {
-                        FileDiffView(
-                            filePath: file.path,
-                            fileName: file.name,
-                            editHunks: file.hunks,
-                            showFullFileDiff: true,
-                            originalContent: file.originalContent,
-                            modifiedContent: file.modifiedContent,
-                            preferHunks: file.hasExternalInterleaving,
-                            onClose: { selectedFile = nil }
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
+            }
+            .navigationDestination(isPresented: Binding(
+                get: { selectedFile != nil },
+                set: { if !$0 { selectedFile = nil } }
+            )) {
+                if let file = selectedFile {
+                    FileDiffView(
+                        filePath: file.path,
+                        fileName: file.name,
+                        editHunks: file.hunks,
+                        showFullFileDiff: true,
+                        originalContent: file.originalContent,
+                        modifiedContent: file.modifiedContent,
+                        preferHunks: file.hasExternalInterleaving,
+                        onClose: { selectedFile = nil }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            }
         }
         .frame(minWidth: 760, idealWidth: 1000, minHeight: 560, idealHeight: 760)
         .task(id: key) {
@@ -54,11 +55,16 @@ struct ThisThreadDiffView: View {
             loaded = (key.sessionId, summaries)
         }
     }
+}
 
-    private func changes(for key: ThreadFileEditsLoadID) -> some View {
+struct ThreadChangeList: View {
+    let summaries: [FileEditSummary]?
+    let showDiff: (FileEditSummary) -> Void
+
+    var body: some View {
         Group {
-            if let loaded, loaded.sessionId == key.sessionId {
-                if loaded.summaries.isEmpty {
+            if let summaries {
+                if summaries.isEmpty {
                     InspectorEmptyState(
                         title: "No file changes yet",
                         message: "This thread has not edited any files."
@@ -66,8 +72,8 @@ struct ThisThreadDiffView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 4) {
-                            ForEach(loaded.summaries) { summary in
-                                ThisThreadFileRow(summary: summary) { selectedFile = summary }
+                            ForEach(summaries) { summary in
+                                ThisThreadFileRow(summary: summary) { showDiff(summary) }
                             }
                         }
                         .padding(12)
@@ -75,7 +81,7 @@ struct ThisThreadDiffView: View {
                     .onAppear {
                         AnalyticsService.shared.log(.diffViewOpened, parameters: [
                             "surface": "this_thread",
-                            "file_count": loaded.summaries.count,
+                            "file_count": summaries.count,
                         ])
                     }
                 }
@@ -84,6 +90,7 @@ struct ThisThreadDiffView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

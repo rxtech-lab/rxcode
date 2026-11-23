@@ -26,6 +26,70 @@ final class InterruptedTurnTests: XCTestCase {
         app.allSessionSummaries = [session.summary]
     }
 
+    func testPlanningGoalDoesNotBecomeAnInterruptedChatTurn() async throws {
+        let app = await openWorkspace()
+        let window = WindowState()
+        window.selectedProject = project
+        let backend = MockAgentBackend(provider: .codex)
+        app.agentBackendOverrides[.codex] = backend
+        let (draft, releaseDraft) = AsyncStream<Void>.makeStream()
+        defer { releaseDraft.finish() }
+        await backend.enqueueScript([.assistantText("Draft"), .result(sessionId: "draft", sideEffect: {
+            for await _ in draft {}
+        })], forCwd: project.path)
+        await backend.enqueueScript([.assistantText("Ready for review"), .result(sessionId: "host")], forCwd: project.path)
+
+        let model = AgentModel(provider: .codex, id: "planner", displayName: "Planner")
+        try await app.startCodingPlan(goal: "Add search", source: "", configuration: .init(planner: model, reviewers: []),
+                                      project: project, worktreePath: nil, worktreeBranch: nil, in: window)
+        let id = try XCTUnwrap(window.currentSessionId)
+        let room = try XCTUnwrap(app.codingPlanRoom(for: id))
+        let summary = try XCTUnwrap(app.allSessionSummaries.first { $0.id == id })
+        XCTAssertNotNil(room.runID)
+        XCTAssertEqual(app.messages(in: window).map(\.role), [.user])
+        await app.loadLegacyTurnOutcome(for: summary)
+        XCTAssertEqual(app.allSessionSummaries.first { $0.id == id }?.hasUnfinishedTurn, false)
+        XCTAssertFalse(app.isThreadInterrupted(summary))
+        XCTAssertEqual(app.mobileSessionSummary(for: id)?.isInterrupted, false)
+        let resumed = await app.resumeInterruptedTurn(in: window)
+        XCTAssertNil(resumed)
+
+        releaseDraft.finish()
+        await room.task?.value
+        XCTAssertNil(room.plan.nextStep)
+        XCTAssertNil(room.plan.lastError)
+        XCTAssertEqual(app.threadStore.fetch(id: id)?.hasUnfinishedTurn, false)
+        XCTAssertFalse(app.isThreadInterrupted(summary))
+    }
+
+    func testReopeningRepairsPlanOutcomeAndPreservesInterruptedImplementation() async throws {
+        let app = await openWorkspace()
+        let model = AgentModel(provider: .codex, id: "planner", displayName: "Planner")
+        var plan = CodingPlan(id: UUID(), goal: "Add search", source: "", configuration: .init(planner: model, reviewers: []))
+        plan.finish(.draft, text: "Search by title")
+        plan.finish(.reconcile, text: "Search by title and content")
+        let source = ChatSession(id: plan.id.uuidString, projectId: project.id, threadLabel: "Plan")
+        let child = ChatSession(id: UUID().uuidString, projectId: project.id, parentThreadId: source.id,
+                                threadLabel: ChatSession.implementationLabel)
+        app.threadStore.upsert(source.summary)
+        try app.threadStore.saveCodingPlan(plan, implementation: child.summary)
+        app.threadStore.setTurnOutcome(sessionID: source.id, unfinished: true)
+        app.threadStore.setTurnOutcome(sessionID: child.id, unfinished: true)
+
+        let draft = CodingPlan(id: UUID(), goal: "Add filters", source: "", configuration: plan.configuration)
+        app.threadStore.upsert(ChatSession(id: draft.id.uuidString, projectId: project.id, threadLabel: "Plan").summary)
+        try app.threadStore.saveCodingPlan(draft)
+
+        let reopened = await openWorkspace()
+        XCTAssertEqual(reopened.threadStore.fetch(id: draft.id.uuidString)?.hasUnfinishedTurn, false)
+        XCTAssertEqual(reopened.threadStore.fetch(id: source.id)?.hasUnfinishedTurn, false)
+        XCTAssertEqual(reopened.mobileSessionSummary(for: source.id)?.isInterrupted, false)
+        XCTAssertEqual(reopened.mobileSessionSummary(for: child.id)?.isInterrupted, true)
+        let implementation = try XCTUnwrap(reopened.allSessionSummaries.first { $0.id == child.id })
+        XCTAssertTrue(reopened.isThreadInterrupted(implementation))
+        XCTAssertEqual(reopened.threadStore.codingPlan(for: source.id)?.versions.last?.markdown, "Search by title and content")
+    }
+
     func testErrorRetainsIntermediateMessagesAndResumeContinuesTheSameThreadOnce() async throws {
         let id = UUID().uuidString
         let app = await openWorkspace()

@@ -24,7 +24,7 @@ extension CodexAppServer {
 
             // Surface the IDE tools blurb as developer instructions only when
             // the `rxcode-ide` MCP bridge is wired into this turn's overrides.
-            let ideInstructions = Self.includesIDEServer(mcpConfigOverrides) ? Self.ideToolsDeveloperInstructions : nil
+            let ideInstructions = !isEphemeral && Self.includesIDEServer(mcpConfigOverrides) ? Self.ideToolsDeveloperInstructions : nil
             var activeThreadId = threadId
             var turnStarted = false
             var turnCompleted = false

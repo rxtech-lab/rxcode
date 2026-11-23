@@ -74,6 +74,7 @@ extension AppState {
             "planning_status": .string(plan.planningStatus), "implementation_status": .string(plan.implementationStatus),
             "implementation_evidence": .string(plan.implementationEvidence),
             "implementation_thread_id": plan.implementationThreadID.map(JSONValue.string) ?? .null,
+            "implementation_thread_ids": .array(plan.linkedImplementationIDs.map(JSONValue.string)),
             "current_version_id": plan.currentVersionID.map { .string($0.uuidString) } ?? .null,
             "current_version_title": plan.currentVersionTitle.map(JSONValue.string) ?? .null,
             "approved_version_title": plan.approvedVersionTitle.map(JSONValue.string) ?? .null,

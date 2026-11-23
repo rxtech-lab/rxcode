@@ -1,6 +1,6 @@
 import Foundation
 
-/// One coding debate, including the evidence available for its separate implementation run.
+/// A coding debate and the completion evidence for its implementation chats.
 public struct CodingPlanActivity: Codable, Hashable, Identifiable, Sendable {
     public let id: UUID
     public let threadID: String
@@ -14,6 +14,8 @@ public struct CodingPlanActivity: Codable, Hashable, Identifiable, Sendable {
     public let implementationStatus: String
     public let implementationEvidence: String
     public let implementationThreadID: String?
+    public let implementationThreadIDs: [String]?
+    public var linkedImplementationIDs: [String] { implementationThreadIDs ?? [implementationThreadID].compactMap { $0 } }
     public let currentVersionID: UUID?
     public let currentVersionTitle: String?
     public let approvedVersionID: UUID?
@@ -25,7 +27,8 @@ public struct CodingPlanActivity: Codable, Hashable, Identifiable, Sendable {
                 branch: String?, createdAt: Date, updatedAt: Date, planningStatus: String,
                 implementationStatus: String, implementationEvidence: String,
                 implementationThreadID: String?, currentVersionID: UUID?, currentVersionTitle: String?,
-                approvedVersionID: UUID?, versionCount: Int, featureExcerpt: String, approvedVersionTitle: String? = nil) {
+                approvedVersionID: UUID?, versionCount: Int, featureExcerpt: String, approvedVersionTitle: String? = nil,
+                implementationThreadIDs: [String]? = nil) {
         self.id = id
         self.threadID = threadID
         self.projectID = projectID
@@ -38,6 +41,7 @@ public struct CodingPlanActivity: Codable, Hashable, Identifiable, Sendable {
         self.implementationStatus = implementationStatus
         self.implementationEvidence = implementationEvidence
         self.implementationThreadID = implementationThreadID
+        self.implementationThreadIDs = implementationThreadIDs
         self.currentVersionID = currentVersionID
         self.currentVersionTitle = currentVersionTitle
         self.approvedVersionID = approvedVersionID

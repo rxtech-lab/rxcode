@@ -138,11 +138,19 @@ private struct PlanChangePopover: View {
             if edit.original.isEmpty {
                 Text("This passage was added.").foregroundStyle(.secondary)
             } else {
-                PlanStrikethrough(markdown: edit.original, ranges: [NSRange(location: 0, length: edit.original.utf16.count)])
+                // The header already marks this as replaced text; striking and dimming
+                // the whole passage makes it unreadable on the translucent popover.
+                MarkdownContentView(text: edit.original, style: .rxCodeCompact)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
+                    .accessibilityIdentifier("coding-plan-original-text")
             }
             Divider()
             Text("Comments").font(.headline)
-            if let comment = edit.comment {
+            let comment = edit.comment.map { CodingPlanReview.feedbackMarkdown($0) } ?? ""
+            if !comment.isEmpty {
                 commentRow(author: reviewer ?? String(localized: "Reviewer"), markdown: comment)
             }
             let comments = edit.userComments ?? []
@@ -150,7 +158,7 @@ private struct PlanChangePopover: View {
                 commentRow(author: String(localized: "You"), markdown: comment)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            if edit.comment == nil && comments.isEmpty {
+            if comment.isEmpty && comments.isEmpty {
                 Text("No comments yet.").font(.callout).foregroundStyle(.secondary)
             }
             if addComment != nil {

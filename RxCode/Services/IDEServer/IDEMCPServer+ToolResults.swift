@@ -26,7 +26,7 @@ extension IDEMCPServer {
             annotations = .init(
                 readOnlyHint: true,
                 destructiveHint: false,
-                idempotentHint: true,
+                idempotentHint: hints["idempotentHint"] as? Bool,
                 openWorldHint: hints["openWorldHint"] as? Bool ?? false
             )
         } else {
@@ -41,6 +41,9 @@ extension IDEMCPServer {
     }
 
     private static func toolAnnotations(for tool: IDETool) -> [String: Any]? {
+        if tool.name == IDEToolRegistry.askUser.name {
+            return ["readOnlyHint": true, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false]
+        }
         let readOnlyTools: Set<String> = [
             "ide__flowcy_catalog",
             "ide__get_ci_status",

@@ -1,6 +1,8 @@
 import Foundation
 
 public struct ChatSession: Identifiable, Codable, Sendable {
+    public static let codingPlanLabel = "Plan"
+    public static let implementationLabel = "Implementation"
     public static let defaultTitle = "New Session"
 
     public let id: String
@@ -101,6 +103,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     }
 
     public struct Summary: Identifiable, Codable, Sendable, Equatable {
+        public var implementationParentID: String? {
+            threadLabel == ChatSession.implementationLabel ? parentThreadId : nil
+        }
         public var id: String
         public let projectId: UUID
         public var title: String

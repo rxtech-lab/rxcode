@@ -21,15 +21,49 @@ it does not revoke the authorization grant at the provider.
 
 ## Apps
 
-Open a completed MCP tool call's detail sheet and choose **Open MCP App**. RxCode
+Completed MCP tool calls can display an App inline in the transcript. RxCode
 checks the originating server's tool metadata for `_meta.ui.resourceUri` or the
 legacy `_meta["ui/resourceUri"]`, then reads the corresponding `ui://` resource.
-Opening an App does not execute the original tool again. Tools without an App
-continue to show their ordinary parameters and results.
+Opening an App does not execute the original tool again. Select the tool row to
+inspect its parameters and original result, including when an App cannot load.
 
-Apps use a dedicated sheet and a separate MCP connection over stdio or Streamable
-HTTP. Legacy SSE transport is not supported by the App connection. The resource
-must have MIME type `text/html;profile=mcp-app`. Original tool arguments and results
+Apps use a separate MCP connection over stdio or Streamable HTTP. Legacy SSE
+transport is not supported by the App connection. RxCode prefers its native JSON
+profile when the server offers both native JSON and HTML for the declared URI.
+
+### Native JSON UI
+
+Return a `resources/read` content item with the declared URI and the exact MIME
+type `application/vnd.rxcode.ui+json;version=1`. Put the UTF-8 document in
+`text`, or base64-encode it in `blob`. Its `root` and `elements` use the
+existing native component catalog. A top-level `presentation` hint has no effect
+on placement. A presentation element used as the root displays inline. A user
+can still open a nested presentation with a button. See the [JSON UI catalog and form behavior](../architecture/json-ui.md).
+
+The optional `bindings` object is keyed by submit Button element ID. Each binding
+has a local `tool` name and an `arguments` object mapping argument names to input
+names. An input name defaults to its element ID. Use an empty map for a tool
+that takes no arguments. Only fields in the submit action's form scope can be
+mapped. Unbound submits keep the form values local.
+
+Clicking a bound button captures the current mapped JSON values. The host owns
+the server and project identity, tool visibility checks, and user approval for
+those arguments. The row displays the pending state and the resulting tool
+output, denial, or error. Edits made during approval apply to the next submit.
+
+The v1 limits are 512,000 document bytes, 64 JSON nesting levels, 300 elements
+and 24 levels per element tree. Each element can have at most one parent.
+The document's render budget is 4,096 items, counting elements, array-valued
+property entries and table rows multiplied by columns. Detached trees count
+toward the same limits.
+
+The fixture includes the document, the expected tool call for its initial
+values, and the tool response. Serialize its `document` member as the resource
+body. [Weather form fixture](../fixtures/mcp-json-ui-v1.json)
+
+### HTML
+
+Use `text/html;profile=mcp-app` for HTML. Original tool arguments and results
 are delivered after the App's initialization handshake. Structured results and
 private result metadata are retained when supplied by the agent runtime.
 

@@ -1,3 +1,4 @@
+import AppKit
 import RxAuthSwift
 import RxCodeChatKit
 import RxCodeCore
@@ -8,6 +9,53 @@ struct GitWindowValue: Codable, Hashable {
     let path: String
     var workspaceID: String?
     var projectID: UUID?
+}
+
+/// Joins a newly opened Git window to the frontmost Git group, including when
+/// the open request came from a workspace window in another tab group.
+struct GitWindowTabAccessor: NSViewRepresentable {
+    final class AttachmentView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window, window.tabbingIdentifier != "rxcode.git" else { return }
+            window.tabbingIdentifier = "rxcode.git"
+            window.tabbingMode = .preferred
+
+            let sibling = NSApp.orderedWindows.first {
+                $0 !== window && $0.tabbingIdentifier == window.tabbingIdentifier
+            }
+            if let sibling, sibling.tabbedWindows?.contains(window) != true {
+                sibling.addTabbedWindow(window, ordered: .above)
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> AttachmentView { AttachmentView() }
+    func updateNSView(_ view: AttachmentView, context: Context) {}
+}
+
+struct GitNewTabView: View {
+    @Environment(AppState.self) private var appState
+    let select: (Project) -> Void
+
+    var body: some View {
+        let projects = appState.projects.filter { !$0.isGlobalChat && !$0.path.isEmpty }
+        Group {
+            if projects.isEmpty {
+                ContentUnavailableView("No projects", systemImage: "folder")
+            } else {
+                Menu("Choose Project") {
+                    ForEach(projects) { project in
+                        Button(project.name) { select(project) }
+                    }
+                }
+                .fixedSize()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minWidth: 900, minHeight: 560)
+        .navigationTitle("Git")
+    }
 }
 
 struct GitWindowRoot: View {
@@ -72,6 +120,7 @@ private struct GitProjectPicker: ToolbarContent {
     let openingCheckout: GitWindowValue
     var branch = ""
     @Environment(AppState.self) private var appState
+    @Environment(\.openWindow) private var openWindow
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
@@ -119,6 +168,15 @@ private struct GitProjectPicker: ToolbarContent {
             }
             .pickerStyle(.inline)
             .labelsHidden()
+
+            Divider()
+            Menu("Open Project in New Tab") {
+                ForEach(options, id: \.self) { option in
+                    Button(title(for: option, projects: projects)) {
+                        openWindow(id: "git-window", value: option)
+                    }
+                }
+            }
         } label: {
             Text(selectedTitle)
                 .truncationMode(.middle)

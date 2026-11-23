@@ -1,0 +1,18 @@
+{
+  "uri": "ui://example/weather",
+  "mimeType": "application/vnd.rxcode.ui+json;version=1",
+  "document": {
+    "root": "forecast",
+    "elements": {
+      "forecast": { "type": "Form", "props": { "title": "Weather forecast" }, "children": ["city", "metric", "refresh"] },
+      "city": { "type": "TextField", "props": { "label": "City", "name": "place", "value": "Tokyo", "required": true } },
+      "metric": { "type": "Toggle", "props": { "label": "Use metric units", "value": true } },
+      "refresh": { "type": "Button", "props": { "label": "Get forecast", "action": { "type": "submit", "target": "forecast" } } }
+    },
+    "bindings": {
+      "refresh": { "tool": "get_forecast", "arguments": { "city": "place", "metricUnits": "metric" } }
+    }
+  },
+  "expectedCall": { "name": "get_forecast", "arguments": { "city": "Tokyo", "metricUnits": true } },
+  "response": { "content": [{ "type": "text", "text": "Tokyo: 18 °C" }], "isError": false }
+}

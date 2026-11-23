@@ -140,8 +140,8 @@ extension ChatThread {
             worktreeBranch: worktreeBranch,
             isArchived: isArchived,
             archivedAt: archivedAt,
-            parentThreadId: parentThreadId,
-            threadLabel: threadLabel,
+            parentThreadId: implementationPlanID?.uuidString ?? parentThreadId,
+            threadLabel: implementationPlanID == nil ? threadLabel : ChatSession.implementationLabel,
             skipHooks: skipHooks
         )
         summary.hasUnfinishedTurn = hasUnfinishedTurn
@@ -167,7 +167,7 @@ extension ChatThread {
     }
 
     public static func from(_ summary: ChatSession.Summary, cliSessionId: String? = nil) -> ChatThread {
-        ChatThread(
+        let thread = ChatThread(
             id: summary.id,
             projectId: summary.projectId,
             title: summary.title,
@@ -188,5 +188,7 @@ extension ChatThread {
             threadLabel: summary.threadLabel,
             skipHooks: summary.skipHooks
         )
+        thread.hasUnfinishedTurn = summary.hasUnfinishedTurn
+        return thread
     }
 }

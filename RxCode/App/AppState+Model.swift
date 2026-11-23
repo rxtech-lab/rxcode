@@ -401,6 +401,11 @@ extension AppState {
         return tail.isEmpty ? name : String(tail)
     }
 
+    func linkedThreadLabel(for summary: ChatSession.Summary) -> String? {
+        guard summary.implementationParentID != nil, let model = summary.model else { return summary.threadLabel }
+        return "\(ChatSession.implementationLabel) · \(modelDisplayLabel(model, provider: summary.agentProvider))"
+    }
+
     /// Human-readable label for a model id, resolving ACP keys (`<clientId>::<model>`)
     /// to the client's display name plus the underlying model id ("Default" when empty).
     func modelDisplayLabel(_ model: String, provider: AgentProvider) -> String {

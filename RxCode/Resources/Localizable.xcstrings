@@ -396,6 +396,16 @@
         }
       }
     },
+    "%@ · %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@…"
+          }
+        }
+      }
+    },
     "%@ · change in each limit between a task's start and finish." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1599,6 +1609,9 @@
         }
       }
     },
+    "^[%lld change](inflect: true)" : {
+
+    },
     "^[%lld hook](inflect: true)" : {
       "localizations" : {
         "ko" : {
@@ -2034,9 +2047,6 @@
     "A forecast needs two completed days of activity and at least three isolated cost measurements for each active model. Partial days and overlapping task costs are excluded." : {
 
     },
-    "A fresh chat starts with this plan." : {
-
-    },
     "A workflow failed" : {
       "comment" : "CI failure notification body when the workflow name is unknown.",
       "localizations" : {
@@ -2444,6 +2454,9 @@
           }
         }
       }
+    },
+    "Add a reviewer to this plan" : {
+
     },
     "Add a skill catalog from a GitHub repository" : {
       "localizations" : {
@@ -2952,6 +2965,9 @@
           }
         }
       }
+    },
+    "Add Reviewer" : {
+
     },
     "Add Reviewer…" : {
 
@@ -4068,6 +4084,9 @@
           }
         }
       }
+    },
+    "Approved Plan" : {
+
     },
     "Architecture" : {
 
@@ -5843,6 +5862,9 @@
         }
       }
     },
+    "Choose Flowcy Model…" : {
+
+    },
     "Choose Flowcy Voice…" : {
 
     },
@@ -5889,6 +5911,9 @@
 
     },
     "Choose preview source" : {
+
+    },
+    "Choose Project" : {
 
     },
     "Choose Speech Voice" : {
@@ -6752,6 +6777,7 @@
       }
     },
     "Code review in progress" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -10441,6 +10467,9 @@
         }
       }
     },
+    "Dotted underlines mark changes. Click one to see the original text and comments." : {
+
+    },
     "Double-click to check out %@" : {
 
     },
@@ -12035,6 +12064,9 @@
     "Extension" : {
 
     },
+    "Extension discovery failed" : {
+
+    },
     "Extensions" : {
 
     },
@@ -12664,6 +12696,9 @@
     "Flowcy Speech Voice" : {
 
     },
+    "Flowcy voice" : {
+
+    },
     "Flowcy watches your CI, spots failures, and opens fix pull requests." : {
       "localizations" : {
         "ko" : {
@@ -13206,6 +13241,9 @@
     "GGUF models run on llama.cpp; MLX models run on Apple's MLX." : {
 
     },
+    "Git" : {
+
+    },
     "Git checks the remote branch against your local remote-tracking ref before rewriting it." : {
 
     },
@@ -13534,6 +13572,7 @@
       }
     },
     "Hide code reviews" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -13598,7 +13637,13 @@
         }
       }
     },
+    "Hide implementations" : {
+
+    },
     "Hide inspector" : {
+
+    },
+    "Hide linked chats" : {
 
     },
     "Hide more" : {
@@ -14108,6 +14153,12 @@
 
     },
     "Implementation Plan" : {
+
+    },
+    "Implementation Review" : {
+
+    },
+    "Implementations" : {
 
     },
     "Import" : {
@@ -15483,6 +15534,12 @@
         }
       }
     },
+    "Listen Live" : {
+
+    },
+    "Listen to brief updates from the debate" : {
+
+    },
     "Listening…" : {
 
     },
@@ -15860,6 +15917,9 @@
     "Local Speech Recognition" : {
 
     },
+    "Local voice" : {
+
+    },
     "Location" : {
       "localizations" : {
         "ko" : {
@@ -16095,6 +16155,9 @@
           }
         }
       }
+    },
+    "Manage Extensions" : {
+
     },
     "Manage Extensions…" : {
 
@@ -18316,6 +18379,9 @@
     "No ignored files" : {
 
     },
+    "No instructions provided." : {
+
+    },
     "No local branches" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18578,6 +18644,9 @@
           }
         }
       }
+    },
+    "No projects" : {
+
     },
     "No Projects" : {
       "localizations" : {
@@ -18861,6 +18930,9 @@
         }
       }
     },
+    "No Reviewers" : {
+
+    },
     "No running targets" : {
 
     },
@@ -19070,6 +19142,9 @@
           }
         }
       }
+    },
+    "No System-Enabled Extensions" : {
+
     },
     "No tags in this view." : {
       "localizations" : {
@@ -19708,6 +19783,9 @@
         }
       }
     },
+    "On Air" : {
+
+    },
     "On failure the hook output is sent back to the agent, which keeps fixing until the hook passes (max 3 retries)." : {
       "localizations" : {
         "ko" : {
@@ -20075,6 +20153,9 @@
           }
         }
       }
+    },
+    "Open Project in New Tab" : {
+
     },
     "Open projects, switch threads, and keep agent conversations close to the files they change." : {
       "localizations" : {
@@ -21139,6 +21220,9 @@
       }
     },
     "Plan Mode" : {
+
+    },
+    "Plan Radio" : {
 
     },
     "Plan recurring agent prompts for a project and manage them from one place." : {
@@ -23767,6 +23851,9 @@
     "Review working tree changes" : {
 
     },
+    "Reviewed" : {
+
+    },
     "Reviewed by %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -23804,6 +23891,9 @@
 
     },
     "Reviewers" : {
+
+    },
+    "Reviewing" : {
 
     },
     "Revise" : {
@@ -26155,6 +26245,7 @@
 
     },
     "Show %lld code review(s)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -26448,6 +26539,9 @@
         }
       }
     },
+    "Show implementations" : {
+
+    },
     "Show in" : {
       "localizations" : {
         "ko" : {
@@ -26504,6 +26598,9 @@
           }
         }
       }
+    },
+    "Show linked chats (%lld)" : {
+
     },
     "Show menu bar icon" : {
       "localizations" : {
@@ -27520,6 +27617,9 @@
         }
       }
     },
+    "Start a fresh chat with this plan." : {
+
+    },
     "Start a run of this task now" : {
 
     },
@@ -27743,6 +27843,9 @@
       }
     },
     "Stop Debate" : {
+
+    },
+    "Stop Listening" : {
 
     },
     "Stop loading" : {
@@ -29766,6 +29869,9 @@
         }
       }
     },
+    "This Thread" : {
+
+    },
     "This Thread’s Changes" : {
 
     },
@@ -30815,6 +30921,9 @@
         }
       }
     },
+    "Use Manage Extensions to enable an installed contributor." : {
+
+    },
     "Use planner as host" : {
 
     },
@@ -31411,6 +31520,9 @@
 
     },
     "View Plan" : {
+
+    },
+    "View plan reviewers" : {
 
     },
     "View PR" : {

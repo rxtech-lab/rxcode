@@ -3,6 +3,14 @@ import os
 import RxCodeCore
 
 extension AppState {
+    func isThreadInterrupted(_ summary: ChatSession.Summary) -> Bool {
+        if summary.threadLabel == ChatSession.codingPlanLabel, let id = UUID(uuidString: summary.id),
+           let status = codingPlanRooms[id]?.plan.planningStatus ?? briefingPlans.first(where: { $0.id == id })?.planningStatus {
+            return status == "interrupted"
+        }
+        return summary.hasUnfinishedTurn == true && sessionActivity[summary.id]?.isStreaming != true
+    }
+
     /// The thread row and its checkpoint move together when a provider assigns its native ID.
     func beginTurnRecovery(sessionID: String, streamID: UUID) async {
         guard let index = allSessionSummaries.firstIndex(where: { $0.id == sessionID }) else { return }

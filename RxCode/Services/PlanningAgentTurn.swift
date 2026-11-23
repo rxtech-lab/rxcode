@@ -1,4 +1,6 @@
 import Foundation
+import enum RxAgentBridge.MCPConfigRenderer
+import struct RxAgentCore.MCPServerSpec
 import RxCodeCore
 import Synchronization
 
@@ -132,6 +134,7 @@ extension AppState {
     func planningTurn(
         model: AgentModel, prompt: String, cwd: String,
         inactivityTimeout: Duration = .seconds(300),
+        questions: CodingPlanQuestions? = nil,
         onUpdate: @escaping @MainActor @Sendable (PlanningTurn) -> Void = { _ in }
     ) async throws -> PlanningTurn {
         let parts = model.provider == .acp ? acpSelectionParts(for: model.id) : nil
@@ -139,23 +142,44 @@ extension AppState {
         if model.provider == .acp && spec == nil {
             throw PlanningTurnError(message: "The selected ACP client is unavailable.")
         }
-        let codexOverrides = model.provider == .codex
-            ? await mcp.codexConfigOverrides(projectPath: cwd, disableAllServers: true) + ["--disable", "plugins"]
-            : []
         let id = UUID()
+        var bridge: MCPBridgeCommand?
+        if let questions, model.provider != .flowcy && model.provider != .localAgent {
+            guard let port = await ideMCPServer.allocate(sessionKey: id.uuidString, capabilities: [], handler: questions) else {
+                throw PlanningTurnError(message: "Could not start the debate question tool. Resume to retry this turn.")
+            }
+            let command = IDEMCPServer.bridgeCommand(forPort: port)
+            bridge = MCPBridgeCommand(command: command.command, args: command.args)
+        }
+        defer {
+            if bridge != nil { Task { [ideMCPServer] in await ideMCPServer.release(sessionKey: id.uuidString) } }
+        }
+        let servers: [RxAgentCore.MCPServerSpec] = bridge.map { [.ideBridge($0)] } ?? []
+        let codexOverrides = model.provider == .codex
+            ? await mcp.codexConfigOverrides(projectPath: cwd, disableAllServers: true)
+                + MCPConfigRenderer.codexOverrides(servers: servers, toolServer: nil) + ["--disable", "plugins"]
+            : []
+        let askUser: BackendSendRequest.AskUser? = if let questions {
+            { arguments in try await questions.ask(arguments) }
+        } else { nil }
         let request = BackendSendRequest(
             streamId: id, prompt: prompt, cwd: cwd, sessionId: nil,
             model: parts.map { $0.model.isEmpty ? nil : $0.model } ?? model.id,
-            permissionMode: .plan, planMode: true, isEphemeral: true, mcpCodexOverrides: codexOverrides,
-            acpSpec: spec, clientSessionKey: id.uuidString
+            permissionMode: .plan, planMode: true, isEphemeral: true,
+            mcpClaudeConfigPath: model.provider == .claudeCode && bridge != nil
+                ? MCPConfigRenderer.claudeConfigJSON(servers: servers, toolServer: nil) : nil,
+            mcpCodexOverrides: codexOverrides,
+            acpMCPServers: model.provider == .acp
+                ? MCPConfigRenderer.acpServers(servers: servers, toolServer: nil, supportsHTTP: false, supportsSSE: false).map(AppJSON.init) : [],
+            acpSpec: spec, clientSessionKey: id.uuidString, ideBridgeCommand: bridge, askUser: askUser
         )
         return try await Self.readPlanningTurn(request, backend: backend(for: model.provider),
-                                               inactivityTimeout: inactivityTimeout, onUpdate: onUpdate)
+                                               inactivityTimeout: inactivityTimeout, questions: questions, onUpdate: onUpdate)
     }
 
     private nonisolated static func readPlanningTurn(
         _ request: BackendSendRequest, backend: any AgentBackend,
-        inactivityTimeout: Duration,
+        inactivityTimeout: Duration, questions: CodingPlanQuestions?,
         onUpdate: @escaping @MainActor @Sendable (PlanningTurn) -> Void
     ) async throws -> PlanningTurn {
         let id = request.streamId
@@ -193,9 +217,11 @@ extension AppState {
                 }
                 group.addTask {
                     while true {
-                        let now = clock.now
-                        let deadline = idleDeadline.withLock { $0 }
-                        guard now < deadline else {
+                        var deadline = idleDeadline.withLock { $0 }
+                        if let questions {
+                            deadline = await questions.inactivityDeadline(streamDeadline: deadline, timeout: inactivityTimeout)
+                        }
+                        guard clock.now < deadline else {
                             let duration = inactivityTimeout.formatted(.units(width: .wide))
                             throw PlanningTurnError(message: "The agent sent no updates for \(duration).")
                         }

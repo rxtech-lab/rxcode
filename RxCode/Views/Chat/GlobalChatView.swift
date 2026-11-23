@@ -115,6 +115,16 @@ private struct GlobalNewChatButton: View {
 /// Collapsible list of chats started from the Chat tab. Picking a thread
 /// opens it in the Chat tab.
 private struct GlobalChatSidebar: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var window
+
+    private var historyProjectID: UUID {
+        guard let project = window.selectedProject, !project.isGlobalChat,
+              let id = window.currentSessionId, let summary = appState.allSessionSummaries.first(where: { $0.id == id }),
+              summary.threadLabel == ChatSession.codingPlanLabel || summary.implementationParentID != nil else { return Project.globalChatID }
+        return project.id
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -130,7 +140,7 @@ private struct GlobalChatSidebar: View {
             ClaudeThemeDivider()
 
             HistoryListView(
-                scopedProjectId: Project.globalChatID,
+                scopedProjectId: historyProjectID,
                 opensInChatTab: true
             )
             // Drop the `.sidebar` list's translucent material so the panel

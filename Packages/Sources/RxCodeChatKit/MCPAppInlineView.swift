@@ -10,21 +10,71 @@ import UIKit
 struct MCPAppInlineView: View {
     let toolCall: ToolCall
     let loader: MCPAppLoader
+
+    var body: some View {
+        MCPAppRow(toolCall: toolCall, loader: loader)
+            .id(toolCall.id)
+    }
+}
+
+private struct MCPAppRow: View {
+    let toolCall: ToolCall
+    let loader: MCPAppLoader
     @State private var resource: MCPAppResource?
 
     var body: some View {
-        Group {
+        // Keep the task attached to a mounted view while the resource is still nil.
+        VStack(alignment: .leading, spacing: 0) {
             if let resource {
-                MCPAppInlineHost(resource: resource, toolCall: toolCall)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                switch resource.content {
+                case .html:
+                    MCPAppInlineHost(resource: resource, toolCall: toolCall)
+                case .jsonUI(let document):
+                    if let submit = resource.submit {
+                        MCPJSONUIInlineHost(document: document, submit: submit)
+                    }
+                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: resource != nil)
         .task(id: toolCall.id) {
             guard resource == nil else { return }
             // Tools without an App, or servers that can't be reached, simply render no App.
-            resource = try? await loader(toolCall)
+            let loaded = try? await loader(toolCall)
+            if !Task.isCancelled { resource = loaded }
         }
+    }
+}
+
+struct MCPJSONUIInlineHost: View {
+    @State private(set) var interaction: JSONUIInteraction
+
+    init(document: MCPJSONUIResource, submit: @escaping MCPJSONUISubmit) {
+        _interaction = State(initialValue: JSONUIInteraction(document: document, submit: submit))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            JSONUIRenderer(spec: interaction.spec, interaction: interaction)
+            ForEach(interaction.submissions.keys.sorted(), id: \.self) { id in
+                let label = interaction.spec.elements[id]?.string("label") ?? id
+                switch interaction.submissions[id] {
+                case .pending:
+                    ProgressView("\(label)…").controlSize(.small)
+                case .success(let message):
+                    Label("\(label): \(message)", systemImage: "checkmark.circle")
+                        .textSelection(.enabled)
+                case .failure(let message):
+                    Label("\(label): \(message)", systemImage: "exclamationmark.circle")
+                        .foregroundStyle(ClaudeTheme.statusError)
+                        .textSelection(.enabled)
+                case nil: EmptyView()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .onDisappear { interaction.cancelSubmissions() }
     }
 }
 

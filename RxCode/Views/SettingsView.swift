@@ -9,7 +9,7 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
 
     private enum Pane: Hashable {
-        case general, agent, media, message, commands, skills, mcp, mobile, flowcy, tasks, developer
+        case general, agent, media, message, commands, skills, extensions, mcp, mobile, flowcy, tasks, developer
     }
 
     @State private var selectedPane = Pane.general
@@ -26,6 +26,7 @@ struct SettingsView: View {
                 row(.message, "Message", "bubble.left.and.bubble.right")
                 row(.commands, "Commands", "command")
                 row(.skills, "Skills", "brain.head.profile")
+                row(.extensions, "Extensions", "puzzlepiece")
                 row(.mcp, "MCP", "puzzlepiece.extension")
                 row(.mobile, "Mobile", "iphone.gen3")
                 row(.flowcy, "Flowcy", "paperplane.circle")
@@ -81,6 +82,7 @@ struct SettingsView: View {
         case .message: ChatSettingsTab()
         case .commands: CommandsSettingsTab()
         case .skills: SkillMarketView(isEmbedded: true)
+        case .extensions: ExtensionsSettingsTab()
         case .mcp: MCPSettingsTab()
         case .mobile: MobileSettingsTab()
         case .flowcy: AutopilotSettingsTab()

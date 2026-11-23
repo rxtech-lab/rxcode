@@ -84,9 +84,7 @@ struct MarkdownDescriptionEditor: View {
         .overlay { dropHint }
         .sheet(item: $previewAttachment) { AttachmentPreviewSheet(attachment: $0) }
         .rxCodeAttachmentPreviews()
-        .onAppear {
-            controller.fallbackAppend = { [binding = editorText] snippet in binding.wrappedValue += snippet }
-        }
+        .onAppear { controller.fallbackText = editorText }
         .onChange(of: text, initial: true) { _, newValue in
             // An external reset starts a fresh draft with its own image tokens.
             guard chips.markdown(for: displayText) != newValue else { return }
@@ -225,22 +223,26 @@ struct MarkdownDescriptionEditor: View {
             FlowLayout(spacing: 6, lineSpacing: 4) {
                 ForEach(files) { file in fileChip(file) }
             }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func fileChip(_ file: Attachment) -> some View {
-        HStack(spacing: 2) {
+        let outline = RoundedRectangle(cornerRadius: 11)
+        return HStack(spacing: 2) {
             Button { previewAttachment = file } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.fill")
                         .foregroundStyle(ClaudeTheme.accentText)
                     Text(verbatim: file.name)
-                        .lineLimit(1)
+                        .lineLimit(isForm ? nil : 1)
                         .truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.leading, 8)
                 .padding(.trailing, isDisabled ? 8 : 2)
-                .frame(maxWidth: 200, minHeight: 22, alignment: .leading)
+                .frame(maxWidth: isForm ? nil : 200, minHeight: 22, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .help(file.path)
@@ -262,8 +264,8 @@ struct MarkdownDescriptionEditor: View {
         .buttonStyle(.plain)
         .font(.system(size: ClaudeTheme.size(11), weight: .medium))
         .foregroundStyle(ClaudeTheme.textPrimary)
-        .background(ClaudeTheme.surfaceElevated, in: Capsule())
-        .overlay { Capsule().strokeBorder(ClaudeTheme.inputBorder).allowsHitTesting(false) }
+        .background(ClaudeTheme.surfaceElevated, in: outline)
+        .overlay { outline.strokeBorder(ClaudeTheme.inputBorder).allowsHitTesting(false) }
     }
 
     private func remove(_ item: Attachment) {
@@ -307,7 +309,7 @@ struct MarkdownDescriptionEditor: View {
             if item.type == .image {
                 controller.insert(chips.token(for: reference))
             } else {
-                controller.insertBlock(chips.token(for: reference))
+                controller.insertFile(chips.token(for: reference), onSeparateLine: !isForm)
             }
             guard let attachments, !item.path.isEmpty else { continue }
             let dto = item.persistableInTaskBoard().dto
@@ -346,8 +348,8 @@ struct MarkdownDescriptionEditor: View {
             inline.insert(image.id)
             result.replaceCharacters(in: match.range, with: markdownReference(for: image))
         }
-        let extra = files.filter { !inline.contains($0.id) }.map(markdownReference)
-        return ([result as String] + extra).filter { !$0.isEmpty }.joined(separator: "\n")
+        let extra = files.filter { !inline.contains($0.id) }.map(markdownReference).joined(separator: " ")
+        return [result as String, extra].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }
 
@@ -479,33 +481,30 @@ final class ChipThumbnailCache {
 final class MarkdownEditorController {
     weak var textView: NSTextView?
     /// Applied when no text view is mounted — the preview tab is showing.
-    var fallbackAppend: ((String) -> Void)?
+    var fallbackText: Binding<String>?
 
     func insert(_ snippet: String) {
         guard let textView, textView.isEditable else {
-            fallbackAppend?(snippet)
+            fallbackText?.wrappedValue += snippet
             return
         }
         textView.insertText(snippet, replacementRange: textView.selectedRange())
     }
 
-    /// Inserts a snippet on a line of its own, adding only the newlines that
-    /// are actually missing around the caret.
-    func insertBlock(_ snippet: String) {
-        guard let textView, textView.isEditable else {
-            fallbackAppend?("\n" + snippet + "\n")
-            return
-        }
-        let range = textView.selectedRange()
-        let string = textView.string as NSString
+    /// Form links wrap at spaces. The debate composer keeps its block-style insertion.
+    func insertFile(_ snippet: String, onSeparateLine: Bool) {
+        let string = (textView?.string ?? fallbackText?.wrappedValue ?? "") as NSString
+        let range = textView?.selectedRange() ?? NSRange(location: string.length, length: 0)
+        let whitespace = (onSeparateLine ? CharacterSet.newlines : .whitespacesAndNewlines) as NSCharacterSet
+        let separator = onSeparateLine ? "\n" : " "
         var padded = snippet
-        if range.location > 0, string.character(at: range.location - 1) != 0x0A {
-            padded = "\n" + padded
+        if range.location > 0, !whitespace.characterIsMember(string.character(at: range.location - 1)) {
+            padded = separator + padded
         }
         let end = min(NSMaxRange(range), string.length)
-        if end == string.length || string.character(at: end) != 0x0A {
-            padded += "\n"
+        if end == string.length || !whitespace.characterIsMember(string.character(at: end)) {
+            padded += separator
         }
-        textView.insertText(padded, replacementRange: range)
+        insert(padded)
     }
 }

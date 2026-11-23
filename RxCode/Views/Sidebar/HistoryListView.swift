@@ -24,6 +24,7 @@ struct HistoryListView: View {
     @State private var taskToEdit: ProjectTask?
     @State private var creatingTaskSessionIds: Set<String> = []
     @State private var showTaskCreationError = false
+    @State private var collapsedPlanIDs: Set<String> = []
 
     var body: some View {
         let visibleSessions = sessions
@@ -172,27 +173,22 @@ struct HistoryListView: View {
     private func sessionList(_ visibleSessions: [DisplaySession]) -> some View {
         let calendar = Calendar.current
         let selectedSessionID = selectedSessionBinding.wrappedValue
-        let pinned = visibleSessions.filter(\.isPinned)
-        let days = Dictionary(grouping: visibleSessions.filter { !$0.isPinned }) {
+        let groups = Self.planGroups(in: visibleSessions)
+        let pinned = groups.filter(\.isPinned)
+        let days = Dictionary(grouping: groups.filter { !$0.isPinned }) {
             calendar.startOfDay(for: $0.updatedAt)
         }
         return List(selection: selectedSessionBinding) {
             if !pinned.isEmpty {
                 Section {
-                    ForEach(pinned) { session in
-                        sessionRow(session)
-                            .themedListRow(session.id, selection: selectedSessionID)
-                    }
+                    ForEach(pinned) { group in groupRows(group, selection: selectedSessionID) }
                 } header: {
                     Text("Pinned").foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
             ForEach(days.keys.sorted(by: >), id: \.self) { day in
                 Section {
-                    ForEach(days[day] ?? []) { session in
-                        sessionRow(session)
-                            .themedListRow(session.id, selection: selectedSessionID)
-                    }
+                    ForEach(days[day] ?? []) { group in groupRows(group, selection: selectedSessionID) }
                 } header: {
                     Group {
                         if calendar.isDateInToday(day) {
@@ -209,6 +205,38 @@ struct HistoryListView: View {
         }
         .listStyle(.sidebar)
         .animation(.default, value: visibleSessions)
+        .onChange(of: selectedSessionID) { _, id in
+            if let parent = visibleSessions.first(where: { $0.id == id })?.summary.implementationParentID {
+                collapsedPlanIDs.remove(parent)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func groupRows(_ group: PlanGroup, selection: String?) -> some View {
+        HStack(spacing: 4) {
+            if !group.runs.isEmpty {
+                Button {
+                    if !collapsedPlanIDs.insert(group.id).inserted { collapsedPlanIDs.remove(group.id) }
+                } label: {
+                    Image(systemName: collapsedPlanIDs.contains(group.id) ? "chevron.right" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 16, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(collapsedPlanIDs.contains(group.id) ? "Show implementations" : "Hide implementations")
+                .accessibilityIdentifier("history-plan-disclosure-\(group.id)")
+            }
+            sessionRow(group.root)
+        }
+        .themedListRow(group.id, selection: selection)
+        if !collapsedPlanIDs.contains(group.id) {
+            ForEach(group.runs) { run in
+                sessionRow(run)
+                    .padding(.leading, 20)
+                    .themedListRow(run.id, selection: selection)
+            }
+        }
     }
 
     private var selectedSessionBinding: Binding<String?> {
@@ -227,20 +255,22 @@ struct HistoryListView: View {
 
     private func sessionRow(_ session: DisplaySession) -> some View {
         let projectName = includesAllProjects ? session.projectName : nil
+        let subtitle = session.summary.implementationParentID == nil ? projectName : appState.linkedThreadLabel(for: session.summary)
         return HStack(spacing: 8) {
             SessionSidebarRow(
                 title: session.title,
-                projectName: projectName,
+                projectName: subtitle,
                 updatedAt: session.updatedAt,
                 isPinned: session.isPinned,
                 isBackgroundStreaming: session.isBackgroundStreaming
             )
-            if session.summary.hasUnfinishedTurn == true, appState.sessionActivity[session.id]?.isStreaming != true {
+            if appState.isThreadInterrupted(session.summary) {
                 InterruptedThreadLabel()
             }
             AttentionBadge(attention: appState.threadAttention(sessionKey: session.id, in: windowState))
         }
         .task(id: session.id) { await appState.loadLegacyTurnOutcome(for: session.summary) }
+        .accessibilityIdentifier("history-thread-\(session.id)")
         .onLongPressGesture(minimumDuration: 0, maximumDistance: 10, pressing: { pressing in
             if pressing {
                 appState.selectSession(id: session.id, inChatTab: opensInChatTab, in: windowState)
@@ -375,6 +405,41 @@ struct HistoryListView: View {
         var isPinned: Bool { summary.isPinned }
         let isBackgroundStreaming: Bool
         let projectName: String?
+    }
+
+    struct PlanGroup: Identifiable {
+        let root: DisplaySession
+        let runs: [DisplaySession]
+        var id: String { root.id }
+        let isPinned: Bool
+        let updatedAt: Date
+
+        init(root: DisplaySession, runs: [DisplaySession]) {
+            self.root = root
+            self.runs = runs
+            isPinned = root.isPinned || runs.contains(where: \.isPinned)
+            updatedAt = runs.reduce(root.updatedAt) { max($0, $1.updatedAt) }
+        }
+    }
+
+    static func planGroups(in sessions: [DisplaySession]) -> [PlanGroup] {
+        let ids = Set(sessions.map(\.id))
+        var roots: [DisplaySession] = []
+        var byParent: [String: [DisplaySession]] = [:]
+        for session in sessions {
+            if let parent = session.summary.implementationParentID, ids.contains(parent), parent != session.id {
+                byParent[parent, default: []].append(session)
+            } else {
+                roots.append(session)
+            }
+        }
+        return roots
+            .map { PlanGroup(root: $0, runs: byParent[$0.id] ?? []) }
+            .sorted {
+                if $0.isPinned != $1.isPinned { return $0.isPinned }
+                if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+                return $0.id < $1.id
+            }
     }
 
     private var sessions: [DisplaySession] {

@@ -11,6 +11,11 @@ extension AppState {
     }
 
     func queuePermissionRequest(_ request: PermissionRequest) {
+        if CodingPlanQuestions.owns(request.id) {
+            // A stopped turn may already have withdrawn this queued notification.
+            guard let id = request.sessionId.flatMap(UUID.init(uuidString:)),
+                  codingPlanRooms[id]?.questions?.isPending(request.id) == true else { return }
+        }
         mobilePendingRequests[request.id] = request
         let sessionID = request.sessionId.map(resolveCurrentSessionId)
         let isQuestion = request.toolName == "AskUserQuestion"

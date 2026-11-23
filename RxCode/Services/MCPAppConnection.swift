@@ -1,4 +1,5 @@
 import Foundation
+import JSONSchemaValidator
 import RxCodeCore
 
 /// A dedicated connection for an open App. It never re-executes the original chat tool.
@@ -13,10 +14,19 @@ actor MCPAppConnection {
     private var tools: [JSONValue] = []
     private var busy = false
 
-    private let timeoutSeconds: Int
+    typealias Approval = @Sendable (MCPJSONUIActionContext) async throws -> Bool
 
-    init(detail: MCPServerDetail, timeoutSeconds: Int = 30) {
+    private let oauth: MCPOAuthService
+    private let validateOrigin: @Sendable () async throws -> Void
+    private let timeoutSeconds: Int
+    private var initialized = false
+    private var pendingActions = Set<String>()
+
+    init(detail: MCPServerDetail, timeoutSeconds: Int = 30, oauth: MCPOAuthService = .shared,
+         validateOrigin: @escaping @Sendable () async throws -> Void = {}) {
         self.detail = detail
+        self.oauth = oauth
+        self.validateOrigin = validateOrigin
         self.timeoutSeconds = timeoutSeconds
     }
 
@@ -48,50 +58,115 @@ actor MCPAppConnection {
     }
 
     private func connect() async throws {
-        guard tools.isEmpty else { return }
+        guard !initialized else { return }
         _ = try await rpc("initialize", params: .object([
             "protocolVersion": .string("2025-11-25"),
             "capabilities": .object(["extensions": .object([
-                "io.modelcontextprotocol/ui": .object(["mimeTypes": .array([.string("text/html;profile=mcp-app")])])
+                "io.modelcontextprotocol/ui": .object(["mimeTypes": .array([.string(MCPJSONUIResource.mimeType), .string("text/html;profile=mcp-app")])])
             ])]),
             "clientInfo": .object(["name": .string("RxCode"), "version": .string("1")])
         ]))
         try await notify("notifications/initialized")
-        var cursor: JSONValue?
-        repeat {
-            let page = try await rpc("tools/list", params: cursor.map { .object(["cursor": $0]) } ?? .object([:]))
-            tools += page["tools"]?.arrayValue ?? []
-            cursor = page["nextCursor"]
-        } while cursor?.stringValue != nil && tools.count < 10_000
+        tools = try await listTools()
+        initialized = true
     }
 
-    func load(toolName: String) async throws -> MCPAppResource? {
+    private func listTools() async throws -> [JSONValue] {
+        var cursor: String?
+        var seen = Set<String>()
+        var result: [JSONValue] = []
+        repeat {
+            let page = try await rpc("tools/list", params: cursor.map { .object(["cursor": .string($0)]) } ?? .object([:]))
+            guard let items = page["tools"]?.arrayValue, result.count + items.count <= 10_000 else {
+                throw failure("Invalid MCP tool listing.")
+            }
+            result += items
+            cursor = page["nextCursor"]?.stringValue
+            if let cursor, !seen.insert(cursor).inserted || seen.count > 1_000 { throw failure("Invalid MCP tool cursor.") }
+        } while cursor != nil
+        return result
+    }
+
+    func load(toolName: String, approve: @escaping Approval = { _ in false }) async throws -> MCPAppResource? {
         try await connect()
         guard let tool = tools.first(where: { $0["name"]?.stringValue == toolName }),
               let uri = MCPAppResource.resourceURI(in: tool) else { return nil }
         let read = try await rpc("resources/read", params: .object(["uri": .string(uri)]))
-        guard let content = read["contents"]?.arrayValue?.first(where: {
-            $0["uri"]?.stringValue == uri && $0["mimeType"]?.stringValue == "text/html;profile=mcp-app"
-        }) else { throw failure("The MCP App resource is missing or has an unsupported MIME type.") }
-        let html = content["text"]?.stringValue ?? content["blob"]?.stringValue
-            .flatMap { Data(base64Encoded: $0) }.flatMap { String(data: $0, encoding: .utf8) }
-        guard let html, html.utf8.count <= 5_000_000 else { throw failure("The MCP App resource is invalid or too large.") }
-        // A stricter policy than a listing-level default is permitted. No undeclared access is granted.
+        let matches = read["contents"]?.arrayValue?.filter { $0["uri"]?.stringValue?.utf8.elementsEqual(uri.utf8) == true } ?? []
+        if let content = matches.first(where: { $0["mimeType"]?.stringValue == MCPJSONUIResource.mimeType }) {
+            let data = try resourceData(content, limit: MCPJSONUIResource.maxBytes)
+            let document = try MCPJSONUIResource(data: data)
+            return MCPAppResource(jsonUI: document, tool: tool) { [self] action in
+                try await submit(action, owner: toolName, uri: uri, approve: approve)
+            }
+        }
+        guard let content = matches.first(where: { $0["mimeType"]?.stringValue == "text/html;profile=mcp-app" }) else {
+            throw failure("The MCP App resource is missing or has an unsupported MIME type.")
+        }
+        guard let html = String(data: try resourceData(content, limit: 5_000_000), encoding: .utf8) else {
+            throw failure("Invalid MCP App HTML.")
+        }
         let policy = MCPAppResource.contentSecurityPolicy(meta: content["_meta"]?["ui"])
         let document = "<meta http-equiv=\"Content-Security-Policy\" content=\"\(policy)\">" + html
         return MCPAppResource(html: document, tool: tool) { [self] method, params in
-            try await appRequest(method, params: params)
+            try await appRequest(method, params: params, owner: toolName, uri: uri)
         }
     }
 
-    private func appRequest(_ method: String, params: JSONValue) async throws -> JSONValue {
+    private func resourceData(_ content: JSONValue, limit: Int) throws -> Data {
+        if let text = content["text"]?.stringValue, text.utf8.count <= limit {
+            return Data(text.utf8)
+        }
+        if content["text"] == nil, let blob = content["blob"]?.stringValue,
+           blob.utf8.count <= ((limit + 2) / 3) * 4,
+           let data = Data(base64Encoded: blob), data.count <= limit { return data }
+        throw failure("The MCP App resource is invalid or too large.")
+    }
+
+    private func visibleTools(owner: String, uri: String) async throws -> [JSONValue] {
+        let current = try await listTools()
+        guard current.contains(where: { $0["name"]?.stringValue == owner && MCPAppResource.resourceURI(in: $0) == uri }) else {
+            throw failure("This tool no longer provides the open MCP App.")
+        }
+        return current.filter(MCPAppResource.permitsAppCall)
+    }
+
+    private func checkedTool(name: String, arguments: [String: JSONValue], owner: String, uri: String) async throws -> JSONValue {
+        let visible = try await visibleTools(owner: owner, uri: uri)
+        guard !name.hasPrefix("mcp__"), let tool = visible.first(where: { $0["name"]?.stringValue == name }) else {
+            throw failure("The App cannot call this tool.")
+        }
+        guard let schema = tool["inputSchema"]?.objectValue else { throw failure("Missing tool input schema.") }
+        do {
+            try JSONSchemaValidator.validate(arguments.mapValues(\.foundationObject), schema: schema.mapValues(\.foundationObject))
+        } catch {
+            throw failure("The App arguments do not match the tool’s current input schema.")
+        }
+        return tool
+    }
+
+    private func submit(_ action: MCPJSONUIActionContext, owner: String, uri: String, approve: Approval) async throws -> JSONValue {
+        guard pendingActions.insert(action.actionID).inserted else { throw failure("This action is already pending.") }
+        defer { pendingActions.remove(action.actionID) }
+        let descriptor = try await checkedTool(name: action.toolName, arguments: action.arguments, owner: owner, uri: uri)
+        guard try await approve(action) else { throw failure("The user declined this App action.") }
+        try Task.checkCancellation()
+        guard try await checkedTool(name: action.toolName, arguments: action.arguments, owner: owner, uri: uri) == descriptor else {
+            throw failure("The tool changed while awaiting approval. Submit the form again.")
+        }
+        return try await rpc("tools/call", params: .object(["name": .string(action.toolName), "arguments": .object(action.arguments)]))
+    }
+
+    private func appRequest(_ method: String, params: JSONValue, owner: String, uri: String) async throws -> JSONValue {
         switch method {
         case "tools/list":
-            return .object(["tools": .array(tools.filter(MCPAppResource.permitsAppCall))])
+            return .object(["tools": .array(try await visibleTools(owner: owner, uri: uri))])
         case "tools/call":
-            guard let name = params["name"]?.stringValue,
-                  let tool = tools.first(where: { $0["name"]?.stringValue == name }),
-                  MCPAppResource.permitsAppCall(tool) else { throw failure("The App cannot call this tool.") }
+            guard let name = params["name"]?.stringValue, params["arguments"] == nil || params["arguments"]?.objectValue != nil else {
+                throw failure("Invalid App tool call.")
+            }
+            let arguments = params["arguments"]?.objectValue ?? [:]
+            _ = try await checkedTool(name: name, arguments: arguments, owner: owner, uri: uri)
             return try await rpc(method, params: params)
         default:
             throw failure("Unsupported MCP App request.")
@@ -121,6 +196,8 @@ actor MCPAppConnection {
     }
 
     private func transport(_ message: JSONValue, expectsResponse: Bool) async throws -> JSONValue {
+        try Task.checkCancellation()
+        try await validateOrigin()
         let data = try JSONEncoder().encode(message)
         if detail.transport == .stdio {
             if process == nil { try startProcess() }
@@ -144,7 +221,7 @@ actor MCPAppConnection {
                         }
                     } else {
                         let chunk = await Task.detached { output.availableData }.value
-                        guard !chunk.isEmpty, buffer.count < 10_000_000 else { throw failure("MCP App connection closed or timed out.") }
+                        guard !chunk.isEmpty, chunk.count <= 10_000_000 - buffer.count else { throw failure("MCP App connection closed or timed out.") }
                         buffer.append(chunk)
                     }
                 }
@@ -153,6 +230,7 @@ actor MCPAppConnection {
             }
         }
         guard let url = detail.url.flatMap(URL.init(string:)) else { throw failure("Missing MCP URL.") }
+        try MCPOAuthService.validate(url)
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "POST"
         for (key, value) in detail.headers { request.setValue(value, forHTTPHeaderField: key) }
@@ -161,18 +239,15 @@ actor MCPAppConnection {
         request.setValue("2025-11-25", forHTTPHeaderField: "MCP-Protocol-Version")
         if let sessionID { request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id") }
         request.httpBody = data
-        let (bytes, response) = try await MCPOAuthService.shared.bytes(for: request, resource: url.absoluteString)
+        let (bytes, response) = try await oauth.bytes(for: request, resource: url.absoluteString, beforeSend: validateOrigin)
+        defer { bytes.task.cancel() }
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw failure("MCP App request failed. Test the connection or sign in again in Settings.")
         }
         sessionID = http.value(forHTTPHeaderField: "Mcp-Session-Id") ?? sessionID
         if !expectsResponse { return .null }
-        if http.value(forHTTPHeaderField: "Content-Type")?.contains("text/event-stream") == true {
-            for try await line in bytes.lines where line.hasPrefix("data:") {
-                let payload = Data(line.dropFirst(5).trimmingCharacters(in: .whitespaces).utf8)
-                if let value = try? JSONDecoder().decode(JSONValue.self, from: payload), value["id"] == message["id"] { return value }
-            }
-            throw failure("The MCP server returned no App response.")
+        if http.mimeType == "text/event-stream" {
+            return try await eventResponse(bytes: bytes, requestID: message["id"])
         }
         var responseData = Data()
         for try await byte in bytes {
@@ -180,6 +255,30 @@ actor MCPAppConnection {
             responseData.append(byte)
         }
         return try JSONDecoder().decode(JSONValue.self, from: responseData)
+    }
+
+    private func eventResponse(bytes: URLSession.AsyncBytes, requestID: JSONValue?) async throws -> JSONValue {
+        var line = Data()
+        var payload = Data()
+        var count = 0
+        for try await byte in bytes {
+            count += 1
+            guard count <= 10_000_000 else { throw failure("MCP App response is too large.") }
+            if byte != 10 {
+                line.append(byte)
+                continue
+            }
+            if line.last == 13 { line.removeLast() }
+            if line.isEmpty {
+                if let value = try? JSONDecoder().decode(JSONValue.self, from: payload), value["id"] == requestID { return value }
+                payload.removeAll(keepingCapacity: true)
+            } else if line.starts(with: "data:".utf8) {
+                if !payload.isEmpty { payload.append(10) }
+                payload.append(contentsOf: line.dropFirst(5))
+            }
+            line.removeAll(keepingCapacity: true)
+        }
+        throw failure("The MCP server returned no App response.")
     }
 
     private func startProcess() throws {

@@ -359,6 +359,7 @@ extension ACPService {
             isEphemeral: isEphemeral
         )
         entry.continuation = continuation
+        entry.hasDebateQuestionTool = isEphemeral && mcpServers.contains { $0["name"]?.stringValue == "rxcode-ide" }
         entry.currentStreamId = streamId
         sessions[bootstrapKey] = entry
         streamToKey[streamId] = bootstrapKey

@@ -6,7 +6,7 @@ extension EnvironmentValues {
     @Entry var jsonUIFormID: String? = nil
 }
 
-/// Actions only change this view's local state. Hosts may explicitly handle submitted values.
+/// Each renderer owns its form values. A bound MCP submit forwards a snapshot to its host.
 @MainActor @Observable
 public final class JSONUIInteraction {
     let spec: JSONUISpec
@@ -15,18 +15,38 @@ public final class JSONUIInteraction {
     var notice: String?
     var feedback = 0
     let onSubmit: (([String: JSONValue]) -> Void)?
+    private let nativeApp: (document: MCPJSONUIResource, submit: MCPJSONUISubmit)?
+    private var operations: [String: Task<Void, Never>] = [:]
+    private(set) var submissions: [String: SubmissionStatus] = [:]
+
+    enum SubmissionStatus: Equatable {
+        case pending
+        case success(String)
+        case failure(String)
+    }
+
+    var usesInlineRoot: Bool { nativeApp != nil }
 
     public init(spec: JSONUISpec, onSubmit: (([String: JSONValue]) -> Void)? = nil) {
         self.spec = spec
         values = spec.initialValues
         self.onSubmit = onSubmit
+        nativeApp = nil
         if let root = spec.elements[spec.root], JSONUICatalog.presentationTypes.contains(root.type) {
             presented = spec.root
         }
     }
 
-    func perform(_ raw: JSONValue?, formID: String? = nil) {
+    init(document: MCPJSONUIResource, submit: @escaping MCPJSONUISubmit) {
+        spec = document.spec
+        values = spec.initialValues
+        onSubmit = nil
+        nativeApp = (document, submit)
+    }
+
+    func perform(_ raw: JSONValue?, formID: String? = nil, elementID: String? = nil) {
         guard let action = raw?.objectValue, let type = action["type"]?.stringValue else { return }
+        if let elementID, operations[elementID] != nil { return }
         feedback += 1
         let scope = (action["target"]?.stringValue ?? formID).map { spec.inputNames(in: $0) }
         switch type {
@@ -55,10 +75,55 @@ public final class JSONUIInteraction {
                 notice = "Complete required fields: " + missing.sorted(by: { $0.key < $1.key }).map { $0.value.string("label") ?? $0.key }.joined(separator: ", ")
                 return
             }
-            onSubmit?(values.filter { scope?.contains($0.key) ?? true })
+            let submittedValues = values.filter { scope?.contains($0.key) ?? true }
+            if let nativeApp, let id = elementID {
+                do {
+                    if let context = try nativeApp.document.actionContext(for: id, values: submittedValues) {
+                        submit(context, using: nativeApp.submit)
+                        return
+                    }
+                } catch {
+                    submissions[id] = .failure(error.localizedDescription)
+                    return
+                }
+            }
+            onSubmit?(submittedValues)
             notice = onSubmit == nil ? "Form captured locally. No data was sent." : "Form submitted to the host."
         default: break
         }
+    }
+
+    private func submit(_ context: MCPJSONUIActionContext, using handler: @escaping MCPJSONUISubmit) {
+        let id = context.actionID
+        notice = nil
+        submissions[id] = .pending
+        operations[id] = Task {
+            defer { operations[id] = nil }
+            do {
+                try Task.checkCancellation()
+                let result = try await handler(context)
+                try Task.checkCancellation()
+                let message = Self.resultDescription(result)
+                submissions[id] = result["isError"] == true ? .failure(message) : .success(message)
+            } catch {
+                submissions[id] = .failure(error is CancellationError ? "Submission cancelled." : error.localizedDescription)
+            }
+        }
+    }
+
+    func cancelSubmissions() {
+        for operation in operations.values { operation.cancel() }
+    }
+
+    private static func resultDescription(_ result: JSONValue) -> String {
+        let text = (result["content"]?.arrayValue ?? []).compactMap { item in
+            item["type"] == "text" ? item["text"]?.stringValue : nil
+        }.joined(separator: "\n")
+        if !text.isEmpty { return text }
+        if let value = result["structuredContent"] ?? result["content"],
+           let data = try? JSONEncoder().encode(value) { return String(decoding: data, as: UTF8.self) }
+        if let text = result.stringValue { return text }
+        return result["isError"] == true ? "The tool reported an error." : "Submission completed."
     }
 }
 
@@ -80,7 +145,7 @@ struct JSONUIInteractiveHost<Content: View>: View {
     }
 
     var body: some View {
-        content(spec.root)
+        rootContent
             .frame(maxWidth: .infinity, alignment: .leading)
             .overlay(alignment: .top) {
                 if interaction.notice != nil {
@@ -118,6 +183,21 @@ struct JSONUIInteractiveHost<Content: View>: View {
             #if os(iOS)
             .sensoryFeedback(.selection, trigger: interaction.feedback)
             #endif
+    }
+
+    @ViewBuilder private var rootContent: some View {
+        if interaction.usesInlineRoot, let root = spec.elements[spec.root], JSONUICatalog.presentationTypes.contains(root.type) {
+            VStack(alignment: .leading, spacing: 12) {
+                if let title = root.string("title") { Text(title).font(.headline) }
+                if let message = root.string("message") { Text(message) }
+                ForEach(root.children, id: \.self) { content($0) }
+                if let action = root.props["confirmAction"] {
+                    Button(root.string("confirmLabel") ?? "Confirm") { interaction.perform(action) }
+                }
+            }
+        } else {
+            content(spec.root)
+        }
     }
 
     private var presentationContent: some View {
@@ -191,7 +271,7 @@ struct JSONUIControl: View {
 
     var body: some View {
         control
-            .disabled(element.bool("disabled") == true)
+            .disabled(element.bool("disabled") == true || interaction.submissions[id] == .pending)
             .accessibilityIdentifier("json-ui-control-\(id)")
     }
 
@@ -199,7 +279,7 @@ struct JSONUIControl: View {
         switch element.type {
         case "Button":
             Button(label, role: element.string("role") == "destructive" ? .destructive : nil) {
-                interaction.perform(element.props["action"], formID: formID)
+                interaction.perform(element.props["action"], formID: formID, elementID: id)
             }
             .buttonStyle(.bordered)
             .frame(minHeight: 44)

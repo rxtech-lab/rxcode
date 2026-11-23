@@ -96,6 +96,7 @@ extension AppState {
             guard stateForSession(sessionKey).activeStreamId == streamId else { return sessionKey }
         }
 
+        let reviewedUserMessage = stateForSession(sessionKey).messages.last(where: { $0.role == .user })?.id
         finalizeStreamSession(for: sessionKey, trackUnreadCompletion: !resultEvent.isError, interrupted: resultEvent.isError) { state in
             if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
             if let duration = resultEvent.durationMs { state.durationMs += duration }
@@ -239,6 +240,13 @@ extension AppState {
             // Foreground sessions are handled by InputBarView via isStreaming onChange.
             if !isFg {
                 await processBackgroundQueue(for: sessionKey, projectId: projectId, cwd: cwd, in: window)
+            }
+        }
+        if let stopProject, let reviewedUserMessage, threadStore.fetch(id: sessionKey)?.implementationPlanID != nil,
+           !resultEvent.isError, stopHookFailureOutput == nil, !hasQueuedFollowups {
+            Task {
+                await reviewFinishedImplementation(threadID: sessionKey, project: stopProject, cwd: cwd,
+                                                   implementation: finalAssistantText, userMessageID: reviewedUserMessage)
             }
         }
         return sessionKey

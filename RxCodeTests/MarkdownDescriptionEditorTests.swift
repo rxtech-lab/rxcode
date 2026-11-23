@@ -117,6 +117,12 @@ final class MarkdownDescriptionEditorTests: XCTestCase {
         XCTAssertEqual(chips.markdown(for: " [Image2]"), " ![b](file:///tmp/b.png)")
     }
 
+    func testFilesCarriedFromChatWrapTogetherBelowTheDraft() {
+        let files = ["a.md", "b.md"].map { Attachment(type: .file, name: $0, path: "/tmp/" + $0) }
+        let markdown = MarkdownDescriptionEditor.markdown(forChatDraft: "One line\nAnother", files: files)
+        XCTAssertEqual(markdown, "One line\nAnother\n[a.md](file:///tmp/a.md) [b.md](file:///tmp/b.md)")
+    }
+
     func testUnknownTokenIsKeptVerbatim() {
         let chips = DescriptionAttachmentChips()
         XCTAssertEqual(chips.markdown(for: "[Image7]"), "[Image7]")

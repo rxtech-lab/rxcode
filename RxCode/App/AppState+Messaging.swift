@@ -414,7 +414,7 @@ extension AppState {
         // the Task below awaits and the lookup in maybeGenerateLLMTitle would
         // otherwise race the insertion at line ~1168 and bail with "no summary".
         if isNewSession {
-            let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
+            let initialTitle = ChatSession.placeholderTitle(from: implementationPlan?.goal ?? displayText ?? prompt)
             let placeholder = ChatSession(
                 id: sessionKey,
                 projectId: project.id,
@@ -422,9 +422,12 @@ extension AppState {
                 messages: [],
                 agentProvider: effectiveProvider,
                 model: effectiveModel,
+                effort: sessionEffort,
                 origin: effectiveProvider.defaultSessionOrigin,
                 worktreePath: sessionStates[sessionKey]?.worktreePath,
-                worktreeBranch: sessionStates[sessionKey]?.worktreeBranch
+                worktreeBranch: sessionStates[sessionKey]?.worktreeBranch,
+                parentThreadId: implementationPlan?.id.uuidString,
+                threadLabel: implementationPlan == nil ? nil : ChatSession.implementationLabel
             )
             if let implementationPlan {
                 do {

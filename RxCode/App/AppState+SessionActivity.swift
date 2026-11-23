@@ -89,8 +89,9 @@ extension AppState {
         if streamingChanged {
             scheduleDesktopWidgetUpdate()
             if briefingPlans.contains(where: { plan in
-                guard let id = plan.implementationThreadID else { return false }
-                return (previousActivity[id]?.isStreaming ?? false) != (next[id]?.isStreaming ?? false)
+                plan.linkedImplementationIDs.contains { id in
+                    (previousActivity[id]?.isStreaming ?? false) != (next[id]?.isStreaming ?? false)
+                }
             }) {
                 scheduleBriefingPlansRefresh()
             }

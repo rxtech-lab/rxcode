@@ -71,7 +71,7 @@ struct QuestionSheetView: View {
             }
             bottomActionBar
         }
-        .frame(minWidth: 520, minHeight: 540, idealHeight: 640)
+        .frame(minWidth: 520, minHeight: 540, idealHeight: 640, maxHeight: .infinity)
         .background(ClaudeTheme.background)
     }
 }
@@ -132,6 +132,7 @@ private extension QuestionSheetView {
             }
             .buttonStyle(.plain)
             .disabled(isSubmitting)
+            .accessibilityLabel("Close")
             .help("Close — you can answer later from the queue")
         }
         .padding(.horizontal, 20)

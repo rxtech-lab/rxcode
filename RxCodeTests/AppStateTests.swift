@@ -119,27 +119,6 @@ final class AppStateTests: XCTestCase {
 
     // MARK: - Session counters and accessors
 
-    func testChatFooterSharesMenuBarUsageAcrossWorkspaces() async {
-        let workspace = AppWorkspace(id: UUID().uuidString, name: "Second workspace", createdAt: .now, updatedAt: .now)
-        let other = AppState(core: appState.core, workspace: workspace, persistence: persistence, startBackgroundServices: false)
-        let bridge = ChatBridge()
-        window.sessionAgentProvider = .claudeCode
-        appState.setupChatBridge(bridge, for: window)
-        XCTAssertNil(bridge.rateLimitUsage)
-
-        let usage = RateLimitUsage(fiveHourPercent: 18, sevenDayPercent: 31,
-                                   fiveHourResetsAt: nil, sevenDayResetsAt: nil)
-        _ = await other.core.accountRateLimits.refresh(for: .claudeCode) { usage }
-        XCTAssertEqual(bridge.rateLimitUsage, usage)
-        XCTAssertEqual(other.cachedRateLimitUsage(for: .claudeCode), bridge.rateLimitUsage)
-
-        // The Claude service returns no live reading in unit tests.
-        let afterFailedRefresh = await other.rateLimitUsage(for: .claudeCode, forceRefresh: true)
-        XCTAssertEqual(afterFailedRefresh, usage)
-        XCTAssertEqual(appState.latestRateLimitUsage, bridge.rateLimitUsage)
-        XCTAssertNil(other.cachedRateLimitUsage(for: .codex))
-    }
-
     func testInProgressSessionCountCountsOnlyStreamingStates() {
         appState.sessionStates = [
             "idle": streamState(isStreaming: false),

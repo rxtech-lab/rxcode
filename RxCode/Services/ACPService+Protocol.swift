@@ -414,21 +414,40 @@ extension ACPService {
         }
     }
 
+    /// ACP clients title MCP permission requests differently: `ide__ask_user`,
+    /// `mcp__rxcode-ide__ide__ask_user` (Claude), `Tool: rxcode-ide/ide__ask_user`
+    /// (Codex), `rxcode-ide_ide__ask_user` (opencode), or the JSON arguments with
+    /// the tool named only in the "Always allow" options (Gemini).
+    nonisolated static func isAskUserPermission(_ params: JSONValue) -> Bool {
+        let toolName = IDEToolRegistry.askUser.name
+        let toolCall = params.objectValue?["toolCall"]?.objectValue ?? [:]
+        let labels = [toolCall["title"]?.stringValue, toolCall["kind"]?.stringValue]
+            + (params.objectValue?["options"]?.arrayValue ?? []).map { $0.objectValue?["name"]?.stringValue }
+        if labels.contains(where: { $0?.contains(toolName) == true }) { return true }
+        // Fall back to the tool's distinctive argument shape.
+        let input = toolCall["rawInput"]?.objectValue
+            ?? toolCall["title"]?.stringValue.flatMap { try? JSONDecoder().decode([String: JSONValue].self, from: Data($0.utf8)) }
+        return input?["question"]?.stringValue != nil && input?["options"]?.arrayValue != nil
+    }
+
     func handleSessionRequestPermission(key: String, id: JSONValue, params: JSONValue) async {
         guard let entry = sessions[key] else {
             logger.warning("[ACP] permission request arrived for closed session")
             sendError(key: key, id: id, code: -32000, message: "Session closed")
             return
         }
+        let toolCall = params.objectValue?["toolCall"]?.objectValue ?? [:]
         if entry.isEphemeral {
-            let reject = params.objectValue?["options"]?.arrayValue?
-                .first { $0.objectValue?["kind"]?.stringValue == "reject_once" }?
+            let isQuestion = entry.hasDebateQuestionTool && Self.isAskUserPermission(params)
+            logger.info("[ACP] ephemeral permission title=\(toolCall["title"]?.stringValue ?? "-", privacy: .public) question=\(isQuestion, privacy: .public)")
+            let option = params.objectValue?["options"]?.arrayValue?
+                .first { $0.objectValue?["kind"]?.stringValue == (isQuestion ? "allow_once" : "reject_once") }?
                 .objectValue?["optionId"]?.stringValue
-            if let reject {
+            if let option {
                 sendResult(key: key, id: id, result: .object([
                     "outcome": .object([
                         "outcome": .string("selected"),
-                        "optionId": .string(reject)
+                        "optionId": .string(option)
                     ])
                 ]))
             } else {
@@ -438,7 +457,6 @@ extension ACPService {
             }
             return
         }
-        let toolCall = params.objectValue?["toolCall"]?.objectValue ?? [:]
         let toolCallId = toolCall["toolCallId"]?.stringValue ?? UUID().uuidString
         let toolName = toolCall["title"]?.stringValue ?? toolCall["kind"]?.stringValue ?? "tool"
         let toolInput = toolCall["rawInput"]?.objectValue ?? [:]

@@ -44,6 +44,9 @@ public struct BackendSendRequest: Sendable {
     /// How an agent reaches the in-app IDE MCP server, when one was allocated
     /// for this turn. Provider-agnostic: it is a stdio bridge to a loopback port.
     public let ideBridgeCommand: MCPBridgeCommand?
+    /// The same debate question tool the CLI clients reach over MCP, for in-process clients.
+    public typealias AskUser = @Sendable (JSONValue) async throws -> String
+    public let askUser: AskUser?
     /// Prior messages in this thread for transports that resume by replaying text.
     /// The current user prompt is supplied separately.
     public let history: [ChatMessage]
@@ -67,6 +70,7 @@ public struct BackendSendRequest: Sendable {
         clientSessionKey: String,
         mcpServers: [MCPServerRecord] = [],
         ideBridgeCommand: MCPBridgeCommand? = nil,
+        askUser: AskUser? = nil,
         history: [ChatMessage] = []
     ) {
         self.streamId = streamId
@@ -87,6 +91,7 @@ public struct BackendSendRequest: Sendable {
         self.clientSessionKey = clientSessionKey
         self.mcpServers = mcpServers
         self.ideBridgeCommand = ideBridgeCommand
+        self.askUser = askUser
         self.history = history
     }
 }

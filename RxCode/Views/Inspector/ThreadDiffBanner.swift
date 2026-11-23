@@ -31,7 +31,8 @@ struct ThreadDiffBanner: View {
     var body: some View {
         let key = loadID
         let visibleChanges = changes?.sessionId == key.sessionId ? changes : nil
-        Group {
+        // The load task needs a mounted view even before there are changes to display.
+        ZStack {
             if let visibleChanges, visibleChanges.fileCount > 0 || isCompact {
                 content(fileCount: visibleChanges.fileCount, stat: visibleChanges.stat)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -112,6 +113,7 @@ struct ThreadDiffBanner: View {
             .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("thread-diff-banner")
         .onHover { isHovered = $0 }
         .pointerCursorOnHover()
         .padding(.horizontal, isCompact ? 0 : 16)

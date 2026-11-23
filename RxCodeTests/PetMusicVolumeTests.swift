@@ -43,7 +43,8 @@ private final class VolumeTestPlayer: PetMusicPlaying {
 struct PetMusicVolumeTests {
     @Test func hoverPreservesMetadataAndFitsVisibleContent() throws {
         let controller = PetController()
-        let music = PetMusic(controller: controller, player: VolumeTestPlayer(), volumeController: VolumeTestDevice(), currentAuthorizationStatus: { .authorized })
+        let music = PetMusic(controller: controller, player: VolumeTestPlayer(), volumeController: VolumeTestDevice(),
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized })
         music.synchronize()
         music.refreshVolume()
         var sizes: [NSSize] = []
@@ -75,7 +76,8 @@ struct PetMusicVolumeTests {
         let controller = PetController()
         let device = VolumeTestDevice()
         let player = VolumeTestPlayer()
-        let music = PetMusic(controller: controller, player: player, volumeController: device, currentAuthorizationStatus: { .authorized },
+        let music = PetMusic(controller: controller, player: player, volumeController: device,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized },
                              requestAuthorization: { Issue.record("Volume must not request MusicKit authorization"); return false })
         let read = try await music.handle(.object(["action": .string("volume")]))
         #expect(read["structuredContent"]?["volume"] == .number(40))
@@ -97,7 +99,8 @@ struct PetMusicVolumeTests {
     @Test func invalidValuesNeverWrite() async {
         let controller = PetController()
         let device = VolumeTestDevice()
-        let music = PetMusic(controller: controller, player: VolumeTestPlayer(), volumeController: device, currentAuthorizationStatus: { .authorized })
+        let music = PetMusic(controller: controller, player: VolumeTestPlayer(), volumeController: device,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized })
         for value in [JSONValue.number(-1), .number(101), .number(.nan), .string("quiet"), .null] {
             do {
                 _ = try await music.handle(.object(["action": .string("set_volume"), "volume": value]))
@@ -114,7 +117,8 @@ struct PetMusicVolumeTests {
     @Test func unsupportedRejectedAndUnconfirmedWritesReportActualState() async throws {
         let controller = PetController()
         let device = VolumeTestDevice()
-        let music = PetMusic(controller: controller, player: VolumeTestPlayer(), volumeController: device, currentAuthorizationStatus: { .authorized })
+        let music = PetMusic(controller: controller, player: VolumeTestPlayer(), volumeController: device,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized })
         device.state.canSet = false
         device.state.unavailableReason = "Hardware controls required"
         var result = try await music.handle(.object(["action": .string("decrease_volume")]))

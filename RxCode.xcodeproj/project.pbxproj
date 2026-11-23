@@ -78,6 +78,7 @@
 		C0DE70C00000000000000002 /* CodexTokenUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE70C00000000000000001 /* CodexTokenUsageTests.swift */; };
 		C4F7C00C0000000000000002 /* ChromeCookieImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F7C00C0000000000000001 /* ChromeCookieImporterTests.swift */; };
 		C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000002 /* ChatHistoryTests.swift */; };
+		C71A00000000000000000007 /* ThreadDiffBannerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000008 /* ThreadDiffBannerUITests.swift */; };
 		C71A00000000000000000003 /* TaskCardModelMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000004 /* TaskCardModelMenuTests.swift */; };
 		C71A00000000000000000005 /* ProjectsEmptyStateVisualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000006 /* ProjectsEmptyStateVisualTests.swift */; };
 		C93BD2F51A0D4DCA8209E491 /* AgentConfirmationAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3DA07D5F884B7A9F233FD1 /* AgentConfirmationAttentionTests.swift */; };
@@ -308,6 +309,7 @@
 		C0DE70C00000000000000001 /* CodexTokenUsageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodexTokenUsageTests.swift; sourceTree = "<group>"; };
 		C4F7C00C0000000000000001 /* ChromeCookieImporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChromeCookieImporterTests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
+		C71A00000000000000000008 /* ThreadDiffBannerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadDiffBannerUITests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000004 /* TaskCardModelMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCardModelMenuTests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000006 /* ProjectsEmptyStateVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsEmptyStateVisualTests.swift; sourceTree = "<group>"; };
 		C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
@@ -692,6 +694,7 @@
 			children = (
 				6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */,
 				C71A00000000000000000002 /* ChatHistoryTests.swift */,
+				C71A00000000000000000008 /* ThreadDiffBannerUITests.swift */,
 				C71A00000000000000000004 /* TaskCardModelMenuTests.swift */,
 				F190AE02DEB74040ABC41204 /* CodingPlanUITests.swift */,
 				C71A00000000000000000006 /* ProjectsEmptyStateVisualTests.swift */,
@@ -1197,6 +1200,7 @@
 			files = (
 				6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */,
 				C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */,
+				C71A00000000000000000007 /* ThreadDiffBannerUITests.swift in Sources */,
 				C71A00000000000000000003 /* TaskCardModelMenuTests.swift in Sources */,
 				F190AE02DEB74040ABC41203 /* CodingPlanUITests.swift in Sources */,
 				C71A00000000000000000005 /* ProjectsEmptyStateVisualTests.swift in Sources */,

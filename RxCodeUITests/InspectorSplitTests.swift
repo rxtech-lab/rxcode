@@ -166,6 +166,57 @@ final class InspectorSplitTests: XCTestCase {
         try git(["cat-file", "-e", "HEAD:pending.txt"])
     }
 
+    func testLocalChangesCanIgnoreAFolderAndAFile() throws {
+        let project = FileManager.default.temporaryDirectory.appendingPathComponent("GitIgnore-\(UUID())")
+        let folder = project.appendingPathComponent("Scratch")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: project) }
+
+        for arguments in [
+            ["init", "-q", "-b", "main"],
+            ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false",
+             "commit", "--allow-empty", "-qm", "Initial"],
+        ] {
+            let process = Process()
+            process.executableURL = gitExecutableURL
+            process.currentDirectoryURL = project
+            process.arguments = arguments
+            try process.run()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0)
+        }
+        try Data().write(to: folder.appendingPathComponent("cache.tmp"))
+        try Data().write(to: project.appendingPathComponent("draft.txt"))
+
+        let app = try launchInspector(project: project)
+        let openGit = app.buttons["sidebar-git-window"]
+        XCTAssertTrue(openGit.waitForExistence(timeout: 10))
+        openGit.click()
+        let localChanges = app.staticTexts["Local Changes"].firstMatch
+        XCTAssertTrue(localChanges.waitForExistence(timeout: 10))
+        localChanges.click()
+        let window = app.windows.containing(.checkBox, identifier: "Amend").firstMatch
+        let sheet = window.sheets.firstMatch
+        let editor = sheet.textViews["git-ignore-patterns"]
+        let save = sheet.buttons["git-ignore-save"]
+        let ignore = project.appendingPathComponent(".gitignore")
+        for (name, pattern, ignoredPath) in [("Scratch", "/Scratch/", "Scratch/cache.tmp"), ("draft.txt", "/draft.txt", "draft.txt")] {
+            let row = window.staticTexts[name].firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 10))
+            row.rightClick()
+            app.menuItems["Add to .gitignore…"].click()
+            XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+            XCTAssertTrue((editor.value as? String)?.contains(pattern) == true)
+            save.click()
+            XCTAssertTrue(sheet.staticTexts[ignoredPath].waitForExistence(timeout: 10))
+            XCTAssertTrue(try String(contentsOf: ignore, encoding: .utf8).contains(pattern))
+            let close = sheet.buttons["Close"]
+            XCTAssertTrue(close.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+            close.click()
+            XCTAssertTrue(row.waitForNonExistence(timeout: 5))
+        }
+    }
+
     func testGitWindowSwitchesProjectsInPlace() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

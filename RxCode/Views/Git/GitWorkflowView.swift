@@ -431,6 +431,8 @@ private struct GitWorkflowView: View {
             GitInteractiveRebaseSheet(store: store, base: base, steps: steps)
         case .stash:
             GitStashSheet(store: store)
+        case .editGitIgnore(let patterns):
+            GitIgnoreSheet(root: store.root, patterns: patterns, repository: repository)
         case .addRemote:
             GitAddRemoteSheet(store: store)
         case .searchTags:

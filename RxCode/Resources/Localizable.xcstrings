@@ -396,16 +396,6 @@
         }
       }
     },
-    "%@ · 5h %@ · 7d %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ · 5h %2$@ · 7d %3$@"
-          }
-        }
-      }
-    },
     "%@ · change in each limit between a task's start and finish." : {
       "localizations" : {
         "zh-Hans" : {
@@ -489,9 +479,6 @@
           }
         }
       }
-    },
-    "%@ (partial)" : {
-
     },
     "%@ %@" : {
       "localizations" : {
@@ -1867,9 +1854,6 @@
         }
       }
     },
-    "5h — · 7d —" : {
-
-    },
     "5h · 7d" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3061,6 +3045,9 @@
           }
         }
       }
+    },
+    "Add to .gitignore…" : {
+
     },
     "Add to projects" : {
       "localizations" : {
@@ -7947,6 +7934,9 @@
     "Couldn’t initialize Git" : {
 
     },
+    "Couldn’t list ignored files" : {
+
+    },
     "Couldn't Load Flowcy Voices" : {
 
     },
@@ -7954,6 +7944,9 @@
 
     },
     "Couldn’t load the commit to amend." : {
+
+    },
+    "Couldn’t open .gitignore" : {
 
     },
     "Couldn't Open the Model Page" : {
@@ -7971,6 +7964,9 @@
           }
         }
       }
+    },
+    "Couldn’t save .gitignore" : {
+
     },
     "Couldn’t save browser extensions: %@" : {
 
@@ -8681,6 +8677,9 @@
           }
         }
       }
+    },
+    "Currently Ignored Files" : {
+
     },
     "Currently installed: %@" : {
       "localizations" : {
@@ -10881,6 +10880,9 @@
         }
       }
     },
+    "Edit .gitignore" : {
+
+    },
     "Edit %@" : {
 
     },
@@ -11557,6 +11559,9 @@
     "Enter a whole number from 0 to 2147483647." : {
 
     },
+    "Enter one pattern per line. Rules apply to untracked files." : {
+
+    },
     "Enter the repositories whose workflow queue times you want to monitor." : {
 
     },
@@ -11646,7 +11651,7 @@
         }
       }
     },
-    "Estimated from changes in provider limits across this thread’s recorded turns. Partial totals exclude readings marked as overlapping or reset. A dash means no measurement is available." : {
+    "Estimated from changes in provider limits across this thread’s turns. Partial totals (*) exclude turns that overlapped other runs or crossed a reset." : {
 
     },
     "Estimates appear after tasks finish" : {
@@ -14062,6 +14067,9 @@
     "If active, the pet returns to RxBuddy. Your conversation continues." : {
 
     },
+    "Ignore Patterns" : {
+
+    },
     "Images" : {
       "localizations" : {
         "en" : {
@@ -15570,6 +15578,9 @@
 
     },
     "Loading" : {
+
+    },
+    "Loading .gitignore…" : {
 
     },
     "Loading accounts…" : {
@@ -18302,6 +18313,9 @@
         }
       }
     },
+    "No ignored files" : {
+
+    },
     "No local branches" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18423,6 +18437,9 @@
           }
         }
       }
+    },
+    "No measured turns yet" : {
+
     },
     "No memories" : {
       "localizations" : {
@@ -20709,6 +20726,9 @@
     "Parents" : {
 
     },
+    "Partial" : {
+
+    },
     "Passing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22074,6 +22094,9 @@
 
     },
     "Rate this coding session" : {
+
+    },
+    "Rate-limit usage for this thread" : {
 
     },
     "Rated %@ — change rating" : {
@@ -24473,6 +24496,9 @@
         }
       }
     },
+    "Saving .gitignore…" : {
+
+    },
     "Saving and probing…" : {
       "localizations" : {
         "ko" : {
@@ -26073,6 +26099,9 @@
           }
         }
       }
+    },
+    "Share of each provider’s limits used by this thread" : {
+
     },
     "Shared Window" : {
 
@@ -29873,7 +29902,7 @@
         }
       }
     },
-    "Thread usage" : {
+    "Thread Usage" : {
 
     },
     "Threads" : {
@@ -31621,6 +31650,9 @@
           }
         }
       }
+    },
+    "Weekly limit" : {
+
     },
     "Welcome to RxCode" : {
       "localizations" : {

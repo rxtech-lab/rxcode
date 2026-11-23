@@ -65,17 +65,16 @@ extension PetVoiceAndStateTests {
     func realtimeToolActivity() {
         let item: RxAgentCore.JSONValue = .object([
             "id": .string("realtime-mcp"), "type": .string("mcpToolCall"),
-            "tool": .string("external_search")
+            "server": .string("example"), "tool": .string("external_search")
         ])
         let controller = PetController()
-        let label = PetCodexRealtimeEngine.describeToolItem(item)
-        #expect(label == "Using external search")
+        #expect(PetCodexRealtimeEngine.toolActivityName(item) == "mcp__example__external_search")
         let params: RxAgentCore.JSONValue = .object(["item": item])
         let start = PetCodexRealtimeEngine.toolEvent(method: "item/started", params: params)
         controller.handlePetToolEvent(start)
         controller.handlePetToolEvent(start)
         #expect(controller.toolActivity.pending.count == 1)
-        #expect(controller.activeToolDescription == label)
+        #expect(controller.activeToolDescription == "External search")
         controller.handlePetToolEvent(PetCodexRealtimeEngine.toolEvent(method: "item/completed", params: params))
         #expect(controller.toolActivity.pending.isEmpty)
         #expect(controller.activeToolDescription == nil)
@@ -90,7 +89,7 @@ extension PetVoiceAndStateTests {
         let result = try await controller.withRealtimeIDEToolActivity(name: "ide__get_threads") {
             #expect(controller.toolActivity.calls.count == 1)
             #expect(controller.toolActivity.calls.first?.status == .running)
-            #expect(controller.activeToolDescription == "Using get threads")
+            #expect(controller.activeToolDescription == "Finding threads")
             #expect(controller.petState.status == .working)
             controller.handlePetToolEvent(.turnEnded(TurnResult()))
             await Task.yield()
@@ -143,15 +142,14 @@ extension PetVoiceAndStateTests {
     @MainActor
     func petToolLabels() {
         let raw = "mcp__rxcode_ide__ide__get_projects"
-        let label = PetCodexRealtimeConnectionFriendlyTool.describe(raw)
-        #expect(label == "Using get projects")
-        #expect(PetCodexRealtimeConnectionFriendlyTool.describe(label) == label)
+        let label = "Listing projects"
         let controller = PetController()
         controller.handlePetToolEvent(.toolCallStarted(id: "realtime", name: label))
         #expect(controller.toolActivity.calls.first?.name == label)
         controller.handlePetToolEvent(.toolCallStarted(id: "pipeline", name: raw))
         #expect(controller.toolActivity.calls.last?.name == label)
-        #expect(PetCodexRealtimeConnectionFriendlyTool.describe("Running swift build") == "Running swift build")
+        controller.handlePetToolEvent(.toolCallStarted(id: "command", name: "Running swift build"))
+        #expect(controller.toolActivity.calls.last?.name == "Running swift build")
         controller.handlePetToolEvent(nil)
     }
 

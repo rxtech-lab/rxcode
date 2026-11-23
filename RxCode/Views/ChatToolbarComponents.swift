@@ -81,6 +81,10 @@ struct ChatToolbarControls: View {
     var body: some View {
         HStack(spacing: placement == .composer ? 8 : 4) {
             if placement == .composer {
+                if let threadID = windowState.currentSessionId {
+                    ThreadUsageChip(threadID: threadID, preferredProvider: effectiveProvider)
+                        .id(threadID)
+                }
                 Spacer(minLength: 12)
             }
 
@@ -330,13 +334,7 @@ struct ChatDetailModifiers: ViewModifier {
                 appState.setViewedChat(id, for: chatViewID)
             }
             .onDisappear { appState.setViewedChat(nil, for: chatViewID) }
-            .environment(\.chatTranscriptEndActions, AnyView(HStack(spacing: 8) {
-                if let threadID = windowState.currentSessionId {
-                    ThreadUsageFooter(threadID: threadID)
-                        .id(threadID)
-                }
-                CodingSessionRatingButton()
-            }))
+            .environment(\.chatTranscriptEndActions, AnyView(CodingSessionRatingButton()))
             .contentShape(Rectangle())
             .contextMenu {
                 if let sessionID = windowState.currentSessionId,

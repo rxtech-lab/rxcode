@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    ".gitignore changed on disk. Reopen the editor to load the latest version." : {
+
+    },
+    ".gitignore must be a regular file." : {
+
+    },
+    ".gitignore must be UTF-8 to open in this editor." : {
+
+    },
     "·" : {
 
     },
@@ -223,6 +232,9 @@
 
     },
     "Codex" : {
+
+    },
+    "Couldn’t list ignored files." : {
 
     },
     "Created date" : {

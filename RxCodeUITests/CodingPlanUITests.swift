@@ -320,7 +320,7 @@ final class CodingPlanUITests: XCTestCase {
         let usageFooter = control("thread-usage-footer")
         XCTAssertTrue(usageFooter.waitForExistence(timeout: 10))
         let usageText = usageFooter.label + (usageFooter.value as? String ?? "")
-        XCTAssertTrue(usageText.contains("5h — · 7d —"), usageFooter.debugDescription)
+        XCTAssertTrue(usageText.contains("5h") && usageText.contains("7d") && usageText.contains("—"), usageFooter.debugDescription)
 
         let create = control("create-from-chat")
         for (action, title) in [("Create Task from Chat…", "Test task"), ("Create Story from Chat…", "Test story")] {

@@ -25,7 +25,9 @@ struct TranscriptMessageSliderTests {
     @Test func scrollRevealsSliderAndJumpSurvivesStreaming() async throws {
         _ = NSApplication.shared
         let model = SliderTestModel()
-        let host = NSHostingView(rootView: SliderTestChat(model: model).environment(ChatBridge()))
+        let host = NSHostingView(rootView: SliderTestChat(model: model)
+            .environment(ChatBridge())
+            .transaction { $0.disablesAnimations = true })
         host.sizingOptions = []
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 440, height: 300),
                               styleMask: .borderless, backing: .buffered, defer: false)
@@ -35,7 +37,11 @@ struct TranscriptMessageSliderTests {
         let table = try #require(await waitForScrollableTable(in: host))
         let scroll = try #require(table.enclosingScrollView)
         let middle = CGPoint(x: host.bounds.maxX - 10, y: host.bounds.midY)
-        #expect(host.hitTest(middle) !== host)
+        func sliderTakesPointer() -> Bool {
+            guard let hit = host.hitTest(middle) else { return false }
+            return !hit.isDescendant(of: scroll)
+        }
+        try #require(!sliderTakesPointer())
 
         // Move just a few points from the pinned live turn. The slider must be
         // able to detach from that turn even while the list is still near bottom.
@@ -44,8 +50,12 @@ struct TranscriptMessageSliderTests {
         NotificationCenter.default.post(name: NSScrollView.willStartLiveScrollNotification, object: scroll)
         clip.scroll(to: CGPoint(x: 0, y: top))
         scroll.reflectScrolledClipView(clip)
+        // AppKit may coalesce programmatic bounds notifications. Deliver this
+        // change inside the live scroll phase just as a wheel gesture would.
+        NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: clip)
+        let appeared = try await waitForLayout(in: host, until: sliderTakesPointer)
         NotificationCenter.default.post(name: NSScrollView.didEndLiveScrollNotification, object: scroll)
-        try #require(await waitForLayout(in: host) { host.hitTest(middle) === host })
+        try #require(appeared, "The slider must receive the pointer over the trailing edge after scrolling.")
         let stops = TranscriptMessageStop.stops(in: model.items)
         let target = stops[stops.count / 2].row
         func send(_ type: NSEvent.EventType, at point: CGPoint) throws {
@@ -59,7 +69,7 @@ struct TranscriptMessageSliderTests {
         try send(.leftMouseDown, at: CGPoint(x: middle.x, y: middle.y - 64))
         // The slider must stay interactive past its one-second auto-hide interval.
         try await Task.sleep(for: .milliseconds(1100))
-        #expect(host.hitTest(middle) === host)
+        #expect(sliderTakesPointer())
         try send(.leftMouseDragged, at: middle)
         try send(.leftMouseUp, at: middle)
         try #require(await waitForLayout(in: host) {
@@ -71,7 +81,7 @@ struct TranscriptMessageSliderTests {
         try #require(await waitForLayout(in: host) { table.numberOfRows == model.items.count + 1 })
         #expect(abs(clip.bounds.minY - table.rect(ofRow: target).minY) < 2)
         model.isStreaming = false
-        try #require(await waitForLayout(in: host) { host.hitTest(middle) !== host })
+        try #require(await waitForLayout(in: host) { !sliderTakesPointer() })
         #expect(abs(clip.bounds.minY - table.rect(ofRow: target).minY) < 2)
 
         model.items.append(.message(ChatMessage(role: .user, content: "A new turn")))

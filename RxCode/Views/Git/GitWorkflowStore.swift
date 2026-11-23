@@ -62,6 +62,7 @@ enum GitSheet: Identifiable {
     case reword(GitCommit)
     case interactiveRebase(base: GitCommit, steps: [GitRebaseStep])
     case stash
+    case editGitIgnore(patterns: [String])
     case addRemote
     case searchTags
     case createPullRequest(GitPullRequestTarget)
@@ -79,6 +80,7 @@ enum GitSheet: Identifiable {
         case .reword(let commit): "reword-\(commit.id)"
         case .interactiveRebase(let base, _): "rebase-\(base.id)"
         case .stash: "stash"
+        case .editGitIgnore: "gitignore"
         case .addRemote: "remote"
         case .searchTags: "search-tags"
         case .createPullRequest(let target): "pull-request-\(target.repository)-\(target.branch)"

@@ -83,6 +83,7 @@ struct BriefingView: View {
         let day: Date
         let briefing: BranchBriefingItem?
         let threadSummaries: [ThreadSummaryItem]
+        var plans: [CodingPlanActivity] = []
         let updatedAt: Date
         /// Earliest activity recorded for this day — the day briefing's
         /// creation or the first chat started — used for timeline order.
@@ -174,7 +175,8 @@ struct BriefingView: View {
         let knownIds = knownProjectIds
         return Self.dayGroups(
             briefings: allBranchBriefingItems.filter { knownIds.contains($0.projectId) },
-            threads: visibleThreadSummaryItems()
+            threads: visibleThreadSummaryItems(),
+            plans: appState.briefingPlans.filter { knownIds.contains($0.projectID) }
         )
     }
 
@@ -185,6 +187,7 @@ struct BriefingView: View {
     static func dayGroups(
         briefings: [BranchBriefingItem],
         threads: [ThreadSummaryItem],
+        plans: [CodingPlanActivity] = [],
         calendar: Calendar = .current
     ) -> [BriefingGroup] {
         struct Bucket {
@@ -193,6 +196,7 @@ struct BriefingView: View {
             var day: Date
             var briefing: BranchBriefingItem?
             var threads: [ThreadSummaryItem] = []
+            var plans: [CodingPlanActivity] = []
             var updated: Date = .distantPast
             var created: Date = .distantFuture
         }
@@ -227,6 +231,16 @@ struct BriefingView: View {
             }
         }
 
+        for plan in plans {
+            let day = calendar.startOfDay(for: plan.updatedAt)
+            add(projectId: plan.projectID, branch: plan.branch ?? "unknown", day: day) { bucket in
+                bucket.plans.append(plan)
+                bucket.updated = max(bucket.updated, plan.updatedAt)
+                let firstActivity = calendar.isDate(plan.createdAt, inSameDayAs: day) ? plan.createdAt : plan.updatedAt
+                bucket.created = min(bucket.created, firstActivity)
+            }
+        }
+
         return buckets.values.map {
             BriefingGroup(
                 projectId: $0.projectId,
@@ -234,6 +248,7 @@ struct BriefingView: View {
                 day: $0.day,
                 briefing: $0.briefing,
                 threadSummaries: $0.threads.sorted { $0.updatedAt > $1.updatedAt },
+                plans: $0.plans.sorted { $0.updatedAt > $1.updatedAt },
                 updatedAt: $0.updated == .distantPast ? $0.day : $0.updated,
                 createdAt: $0.created == .distantFuture ? $0.day : $0.created
             )
@@ -294,6 +309,7 @@ struct BriefingView: View {
                 .filter { knownIds.contains($0.projectId) }
                 .map(\.projectId)
             + visibleThreadSummaryItems().map(\.projectId)
+            + appState.briefingPlans.map(\.projectID)
             + appState.briefingDocuments.filter(\.isPublished).compactMap(\.projectId)
         )
         return appState.projects.filter { ids.contains($0.id) }
@@ -307,7 +323,7 @@ struct BriefingView: View {
                 emptyState(
                     icon: "text.page",
                     title: "No Briefings Yet",
-                    message: "Briefings appear after a thread finishes on a project branch, or when an agent publishes one."
+                    message: "Project plans, thread summaries, and published briefings appear here."
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -370,6 +386,7 @@ struct BriefingView: View {
         let knownIds = knownProjectIds
         return appState.briefingDocuments.contains(where: \.isPublished)
             || allBranchBriefingItems.contains { knownIds.contains($0.projectId) }
+            || appState.briefingPlans.contains { knownIds.contains($0.projectID) }
             || !visibleThreadSummaryItems().isEmpty
     }
 

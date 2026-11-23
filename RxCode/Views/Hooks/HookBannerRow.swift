@@ -89,7 +89,7 @@ struct HookBannerRow: View {
             onDismiss: {}
         )
 
-        Divider()
+        ClaudeThemeDivider()
 
         HookBannerRow(
             icon: "key.fill",
@@ -99,7 +99,7 @@ struct HookBannerRow: View {
             onDismiss: {}
         )
 
-        Divider()
+        ClaudeThemeDivider()
 
         HookBannerRow(
             icon: "arrow.triangle.2.circlepath",

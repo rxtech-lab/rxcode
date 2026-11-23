@@ -32,12 +32,7 @@ struct GitCommitSheet: View {
                     .font(.subheadline.monospaced())
                     .lineLimit(1)
                     .truncationMode(.middle)
-                HStack {
-                    Text("Commit message").font(.headline)
-                    Spacer()
-                    Button("Generate", systemImage: "sparkles") { generate() }
-                        .disabled(tree.changes.staged.isEmpty)
-                }
+                messageHeader
                 TextEditor(text: $message)
                     .font(.body.monospaced())
                     .focused($editingMessage)
@@ -95,19 +90,61 @@ struct GitCommitSheet: View {
         .onAppear { editingMessage = true }
     }
 
-    private func generate() {
+    private var messageHeader: some View {
+        @Bindable var appState = appState
+        let sections = appState.codingModelSections
+        let key = appState.commitMessageModelKey
+        let model = sections.lazy.flatMap(\.models).first { $0.key == key }
+        let unavailable = !key.isEmpty && model == nil
+        return HStack {
+            Text("Commit message").font(.headline).fixedSize()
+            Spacer(minLength: 4)
+            Picker("Commit message model", selection: $appState.commitMessageModelKey) {
+                Text("Settings Default").tag("")
+                if unavailable {
+                    Text("Selected model unavailable").tag(key).disabled(true)
+                }
+                ForEach(sections) { section in
+                    Section(section.title) {
+                        ForEach(section.models, id: \.key) { model in
+                            Text(verbatim: model.displayName).tag(model.key)
+                        }
+                    }
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .lineLimit(1)
+            .frame(maxWidth: 180)
+            .help("Commit message model")
+            .accessibilityIdentifier("git-commit-model")
+            Button("Generate", systemImage: "sparkles") { generate(with: model) }
+                .fixedSize()
+                .disabled(tree.changes.staged.isEmpty || unavailable)
+        }
+    }
+
+    private func generate(with model: AgentModel?) {
         guard operation == nil, !tree.changes.staged.isEmpty else { return }
-        operation = "Generating message…"
+        operation = model.map { "Drafting with \($0.displayName)…" } ?? "Generating message…"
         Task {
+            defer { operation = nil }
             async let diff = GitHelper.stagedDiff(at: tree.root)
             async let stat = GitHelper.stagedStat(at: tree.root)
             let summary = tree.changes.staged.map { "\($0.statusChar) \($0.displayPath)" }.joined(separator: "\n")
-            if let result = await appState.generateCommitMessage(diff: diff, stat: stat, fileSummary: summary), !result.isEmpty {
-                message = result
-            } else {
-                error = String(localized: "Configure a summarization provider in Settings to generate a commit message.")
+            do {
+                if let result = try await appState.generateCommitMessage(
+                    diff: diff, stat: stat, fileSummary: summary, model: model, cwd: tree.root
+                ) {
+                    message = result
+                } else if let model {
+                    error = String(localized: "\(model.displayName) couldn't generate a commit message. Try again or choose another model.")
+                } else {
+                    error = String(localized: "Configure a summarization provider in Settings to generate a commit message.")
+                }
+            } catch {
+                self.error = error.localizedDescription
             }
-            operation = nil
         }
     }
 

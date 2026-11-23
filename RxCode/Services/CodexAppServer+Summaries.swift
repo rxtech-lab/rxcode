@@ -178,11 +178,9 @@ extension CodexAppServer {
     }
 
     func generateBranchBriefing(
-        threadSummaries: [(title: String, summary: String)],
+        prompt: String,
         model: String?
     ) async -> String? {
-        guard !threadSummaries.isEmpty else { return nil }
-        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: threadSummaries)
         guard let raw = await generateCodexPlainSummary(prompt: prompt, model: model) else { return nil }
         return cleanSummary(raw, limit: 1800)
     }

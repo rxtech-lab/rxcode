@@ -249,7 +249,13 @@ extension MobileAppState {
     /// the desktop's drafts: first column, the story's version and milestone,
     /// and the desktop's default agent.
     func newTaskDraft(projectID: UUID, story: ProjectStory?) -> ProjectTask {
-        let snapshot = taskSnapshots[projectID]
+        var agent = taskSnapshots[projectID]?.defaultAgent ?? TaskAgentConfig()
+        if !usesCloudTasks, let selection = MobileModelPreferences.selection(in: desktopSettings),
+           selection.provider != .flowcy {
+            agent.provider = selection.provider
+            agent.model = selection.model
+            agent.effort = selection.effort
+        }
         return ProjectTask(
             projectId: projectID,
             storyId: story?.id,
@@ -257,7 +263,7 @@ extension MobileAppState {
             status: taskBoard(for: projectID).firstColumn.id,
             version: story?.version,
             milestone: story?.milestone,
-            agent: snapshot?.defaultAgent ?? TaskAgentConfig()
+            agent: agent
         )
     }
 

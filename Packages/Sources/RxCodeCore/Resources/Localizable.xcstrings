@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    ".gitignore changed on disk. Reopen the editor to load the latest version." : {
+
+    },
+    ".gitignore must be a regular file." : {
+
+    },
+    ".gitignore must be UTF-8 to open in this editor." : {
+
+    },
     "·" : {
 
     },
@@ -225,6 +234,9 @@
     "Codex" : {
 
     },
+    "Couldn’t list ignored files." : {
+
+    },
     "Created date" : {
 
     },
@@ -260,6 +272,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已延期 ×%lld"
+          }
+        }
+      }
+    },
+    "Deleted “%@” from the remote. Git could not delete the local branch “%@”.\n\n%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Deleted “%1$@” from the remote. Git could not delete the local branch “%2$@”.\n\n%3$@"
           }
         }
       }
@@ -766,6 +788,9 @@
 
     },
     "The first kept commit can’t be squashed or fixed up." : {
+
+    },
+    "The local branch “%@” has changed or is checked out in a worktree." : {
 
     },
     "The remote “%@” is unavailable." : {

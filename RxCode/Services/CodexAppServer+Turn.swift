@@ -11,6 +11,7 @@ extension CodexAppServer {
         model: String?,
         permissionMode: PermissionMode,
         planMode: Bool,
+        isEphemeral: Bool = false,
         mcpConfigOverrides: [String],
         permissionServer: PermissionServer,
         continuation: AsyncStream<StreamEvent>.Continuation
@@ -56,7 +57,7 @@ extension CodexAppServer {
                         try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
                         let method = activeThreadId == nil ? "thread/start" : "thread/resume"
                         let params = method == "thread/start"
-                            ? threadStartParams(threadId: activeThreadId, cwd: cwd, permissionMode: permissionMode, planMode: planMode, ideInstructions: ideInstructions)
+                            ? threadStartParams(threadId: activeThreadId, cwd: cwd, permissionMode: permissionMode, planMode: planMode, ideInstructions: ideInstructions, isEphemeral: isEphemeral)
                             : threadParams(threadId: activeThreadId, cwd: cwd)
                         try Self.writeJSONLine(Self.request(id: 2, method: method, params: params), to: handles.stdin)
                     case "2":
@@ -71,7 +72,9 @@ extension CodexAppServer {
                             )))
                         }
                         if let activeThreadId, !turnStarted {
-                            try Self.writeJSONLine(Self.request(id: 3, method: "turn/start", params: turnParams(threadId: activeThreadId, prompt: prompt, cwd: cwd, model: model, permissionMode: permissionMode, planMode: planMode)), to: handles.stdin)
+                            var params = turnParams(threadId: activeThreadId, prompt: prompt, cwd: cwd, model: model, permissionMode: permissionMode, planMode: planMode)
+                            if isEphemeral { params["approvalPolicy"] = .string("never") }
+                            try Self.writeJSONLine(Self.request(id: 3, method: "turn/start", params: params), to: handles.stdin)
                             turnStarted = true
                         }
                     case "3":
@@ -96,6 +99,11 @@ extension CodexAppServer {
                         )
                     } else {
                         let params = object["params"]?.objectValue ?? [:]
+                        if isEphemeral, method == "item/started" || method == "item/completed",
+                           params["item"]?.objectValue?["type"]?.stringValue == "agentMessage" {
+                            // Keep message boundaries so a progress update doesn't run into a plan heading.
+                            continuation.yield(.unknown(line))
+                        }
                         switch method {
                         case "turn/started":
                             // `turn/steer` requires the live turn id as a

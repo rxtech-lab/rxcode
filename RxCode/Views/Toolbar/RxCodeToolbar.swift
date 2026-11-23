@@ -2,6 +2,15 @@ import AppKit
 import RxCodeCore
 import SwiftUI
 
+extension View {
+    /// Give the toolbar the label's ideal width, capped for long titles.
+    func toolbarTitleWidth() -> some View {
+        lineLimit(1)
+            .frame(maxWidth: 240, alignment: .leading)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
 // MARK: - RxCodeToolbar
 
 /// Shared trailing toolbar group: Open in Editor, Terminal, Views, Inspector toggle.

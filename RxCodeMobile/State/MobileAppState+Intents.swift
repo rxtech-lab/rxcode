@@ -32,9 +32,9 @@ extension MobileAppState {
         return threadSummaries.first { $0.sessionId == resolved }
     }
 
-    func sendUserMessage(_ text: String, sessionID: String) async {
+    func sendUserMessage(_ text: String, sessionID: String, resumeInterruptedTurn: Bool? = nil) async {
         guard isPaired else { return }
-        let payload = UserMessagePayload(sessionID: resolveSessionID(sessionID), text: text)
+        let payload = UserMessagePayload(sessionID: resolveSessionID(sessionID), text: text, resumeInterruptedTurn: resumeInterruptedTurn)
         do {
             try await client.send(.userMessage(payload), toHex: pairedDesktopPubkey)
         } catch {
@@ -91,12 +91,8 @@ extension MobileAppState {
         sessions.first(where: { $0.id == resolveSessionID(sessionID) })?.queuedMessages ?? []
     }
 
-    /// Ask the desktop to create a new thread. The per-thread agent config
-    /// (model, permission mode, plan mode) travels in the request so the thread
-    /// is created with exactly the chosen config — fixing the bug where a
-    /// non-default model was dropped in favor of the project default. ACP client
-    /// and effort have no mobile picker, so they ride along from the last synced
-    /// desktop settings.
+    /// Sends the sheet's model, thinking level, and modes together so they
+    /// apply to the thread's first turn.
     /// Returns `false` when the request could not be sent (not paired or the
     /// transport rejected it), so the caller can stop waiting for the thread.
     @discardableResult
@@ -105,6 +101,7 @@ extension MobileAppState {
         initialText: String? = nil,
         agentProvider: AgentProvider? = nil,
         model: String? = nil,
+        effort: String? = nil,
         permissionMode: PermissionMode? = nil,
         planMode: Bool = false
     ) async -> Bool {
@@ -118,7 +115,7 @@ extension MobileAppState {
             selectedAgentProvider: agentProvider,
             selectedModel: model,
             selectedACPClientId: desktopSettings?.selectedACPClientId,
-            selectedEffort: desktopSettings?.selectedEffort,
+            selectedEffort: effort,
             permissionMode: permissionMode,
             planMode: planMode
         )

@@ -61,9 +61,9 @@ struct SFSymbolPicker: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.border))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -116,12 +116,12 @@ struct SFSymbolPicker: View {
             Image(systemName: name)
                 .font(.system(size: ClaudeTheme.size(15)))
                 .frame(width: 38, height: 34)
-                .background(isSelected ? ClaudeTheme.accent.opacity(0.18) : Color(NSColor.controlBackgroundColor))
+                .background(isSelected ? ClaudeTheme.accent.opacity(0.18) : ClaudeTheme.surfacePrimary)
                 .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(isSelected ? ClaudeTheme.accent : Color(NSColor.separatorColor), lineWidth: isSelected ? 1.5 : 1)
+                        .strokeBorder(isSelected ? ClaudeTheme.accent : ClaudeTheme.border, lineWidth: isSelected ? 1.5 : 1)
                 )
                 .contentShape(Rectangle())
         }

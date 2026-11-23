@@ -1,6 +1,46 @@
 import XCTest
 
 final class ChatHistoryTests: XCTestCase {
+    @MainActor
+    func testWindowPreviewCommandFollowsChatNavigation() throws {
+        let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        let project = ["id": UUID().uuidString, "name": "Preview Project", "path": support.path]
+        try JSONSerialization.data(withJSONObject: [project]).write(to: support.appendingPathComponent("projects.json"))
+        let app = XCUIApplication()
+        defer {
+            app.terminate()
+            try? FileManager.default.removeItem(at: support)
+        }
+        app.launchArguments = [
+            "-onboardingCompleted", "YES", "-showMenuBarExtra", "NO",
+            "-SUEnableAutomaticChecks", "NO", "-ApplePersistenceIgnoreState", "YES",
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+        ]
+        app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UNIT_TESTING": "1"]
+        app.launch()
+        let whatsNew = app.sheets.containing(.staticText, identifier: "New in RxCode").firstMatch
+        if whatsNew.waitForExistence(timeout: 5) { whatsNew.buttons["xmark"].click() }
+        app.activate()
+
+        func assertPreviewCommand(enabled: Bool) {
+            app.menuBarItems["View"].click()
+            let preview = app.menuItems["Preview a Window…"]
+            XCTAssertTrue(preview.waitForExistence(timeout: 5))
+            XCTAssertEqual(preview.isEnabled, enabled)
+            app.typeKey(.escape, modifierFlags: [])
+        }
+
+        let chat = app.buttons["general-route-chat"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 10))
+        chat.click()
+        XCTAssertTrue(app.buttons["global-new-chat"].firstMatch.waitForExistence(timeout: 10))
+        assertPreviewCommand(enabled: true)
+        app.buttons["general-route-tasks"].click()
+        XCTAssertTrue(app.buttons["task-board-add"].waitForExistence(timeout: 10))
+        assertPreviewCommand(enabled: false)
+    }
+
     func testBrowseHistoryInsideChatTab() throws {
         continueAfterFailure = false
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ChatHistory-\(UUID())")

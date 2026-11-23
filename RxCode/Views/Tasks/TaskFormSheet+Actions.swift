@@ -143,16 +143,6 @@ extension TaskFormSheet {
         }
     }
 
-    func handleAttachmentImport(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result else { return }
-        for url in urls {
-            guard let attachment = AttachmentFactory.fromFileURL(url) else { continue }
-            let dto = attachment.persistableInTaskBoard().dto
-            guard !task.attachments.contains(where: { $0.path == dto.path }) else { continue }
-            task.attachments.append(dto)
-        }
-    }
-
     func save() {
         guard canSave else { return }
         // Values typed but not yet confirmed with Return still count.

@@ -247,9 +247,8 @@ struct ProjectChatsList: View {
         let start = DispatchTime.now().uptimeNanoseconds
         defer { performance.record("row-preparation", since: start, project: project.id) }
         let sessionId = summary.id
-        let session = summary.makeSession()
         let status = appState.chatStatus(forSessionId: sessionId, in: windowState)
-        let progress = appState.todoProgress(forSessionId: sessionId)
+        let progress = status == .streaming ? appState.todoProgress(forSessionId: sessionId) : nil
         let linkedTask = appState.linkedTask(forSessionId: sessionId, projectId: summary.projectId)
 
         return ProjectChatRow(
@@ -277,21 +276,21 @@ struct ProjectChatsList: View {
                     }
                 }
             },
-            onRename: { onRenameSession(session) },
+            onRename: { onRenameSession(summary.makeSession()) },
             onTogglePin: {
-                Task { await appState.togglePinSession(session) }
+                Task { await appState.togglePinSession(summary.makeSession()) }
             },
             onToggleArchive: {
                 if summary.isArchived {
                     Task {
-                        await appState.unarchiveSession(session, in: windowState)
+                        await appState.unarchiveSession(summary.makeSession(), in: windowState)
                     }
                 } else {
-                    onArchiveSession(session)
+                    onArchiveSession(summary.makeSession())
                 }
             },
             onDelete: {
-                onDeleteSession(session)
+                onDeleteSession(summary.makeSession())
             },
             onCodeReview: {
                 Task {

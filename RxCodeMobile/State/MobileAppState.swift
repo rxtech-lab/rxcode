@@ -106,6 +106,9 @@ final class MobileAppState: ObservableObject {
     @Published var branchBriefings: [MobileBranchBriefing] = [] {
         didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
     }
+    @Published var briefingPlans: [CodingPlanActivity] = [] {
+        didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
+    }
     private var cachedBriefingGroups: [GroupedBriefing]?
     private var cachedBriefingTimeline: (filters: MobileBriefingFilters, calendar: Calendar, start: Date, end: Date, sections: [MobileBriefingDaySection])?
 
@@ -140,7 +143,7 @@ final class MobileAppState: ObservableObject {
     /// state publications must not rebuild and sort the entire thread history.
     var briefingGroups: [GroupedBriefing] {
         if let cachedBriefingGroups { return cachedBriefingGroups }
-        let groups = groupBriefings(briefings: branchBriefings, threads: threadSummaries)
+        let groups = groupBriefings(briefings: branchBriefings, threads: threadSummaries, plans: briefingPlans)
             .sortedByProjectOrder(projects)
         cachedBriefingGroups = groups
         return groups
@@ -332,8 +335,7 @@ final class MobileAppState: ObservableObject {
     /// answer, across all sessions. Mirrored from the desktop's queue; the chat
     /// view filters it by session to drive the question banner and sheet.
     @Published var pendingQuestions: [PendingQuestionPayload] = []
-    /// Every `ide__show_confirmation` prompt the desktop currently has awaiting
-    /// a decision, across all sessions. The chat view filters it by session.
+    /// IDE and computer-use prompts awaiting a decision, across all sessions.
     @Published var pendingConfirmations: [PendingConfirmationPayload] = []
 
     @Published var searchQuery: String = ""

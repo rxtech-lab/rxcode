@@ -168,6 +168,8 @@ struct MessageListView: View {
             .onChange(of: chatBridge.sendRequestID) { _, _ in
                 prepareForNewUserSend()
             }
+            .onChange(of: chatBridge.interruptedSessionID) { rebuildSettledItems() }
+            .onChange(of: windowState.focusMode) { rebuildSettledItems() }
             .onChange(of: chatBridge.messages.last?.id) { _, _ in
                 handleLastMessageChange()
             }
@@ -311,7 +313,8 @@ struct MessageListView: View {
             items.append(.accessory(.init(id: "desktop-end-loading-indicator", kind: .loadingNext)))
         }
 
-        if !chatBridge.isStreaming && !settledItems.isEmpty && transcriptEndActions != nil {
+        if !chatBridge.isStreaming, !chatBridge.isLoadingFromDisk,
+           settledItems.last?.role == .assistant, transcriptEndActions != nil {
             items.append(.accessory(.init(id: "desktop-end-actions", kind: .endActions)))
         }
         return items
@@ -458,7 +461,12 @@ struct MessageListView: View {
             settled = messages.filter { !$0.isStreaming }
         }
         if windowState.focusMode {
-            settled = settled.filter { $0.role == .user || $0.isResponseComplete || $0.isCompactBoundary }
+            let interruptedStart = chatBridge.interruptedSessionID == windowState.currentSessionId
+                && chatBridge.interruptedSessionID != nil ? settled.lastIndex(where: { $0.role == .user }) : nil
+            let filtered = settled[..<(interruptedStart ?? settled.endIndex)].filter {
+                $0.role == .user || $0.isResponseComplete || $0.isCompactBoundary
+            }
+            settled = filtered + settled[(interruptedStart ?? settled.endIndex)...]
         }
         return chatSuppressPlanReadyFollowups(in: settled)
     }

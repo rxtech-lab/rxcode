@@ -1,10 +1,28 @@
 import Foundation
+import os
 import RxCodeCore
 import RxCodeSync
 
 /// Document briefings (agent-written, stored on disk by `BriefingStore`).
 /// Project summaries stay in `ThreadStore` as `BranchBriefingRecord`s.
 extension AppState {
+
+    /// Rebuild the same projection for the desktop timeline and mobile snapshots.
+    /// Debates can finish several turns while an older database read is in flight.
+    func scheduleBriefingPlansRefresh() {
+        briefingPlansRefresh?.cancel()
+        briefingPlansRefresh = Task { [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            do {
+                let activities = try await codingPlanActivities()
+                guard !Task.isCancelled else { return }
+                if briefingPlans != activities { briefingPlans = activities }
+            } catch {
+                guard !Task.isCancelled else { return }
+                logger.error("Failed to load briefing plans: \(error.localizedDescription)")
+            }
+        }
+    }
 
     /// Re-reads the briefing manifests off the main actor and publishes the
     /// result. Content files are not read here; cards load them on demand.

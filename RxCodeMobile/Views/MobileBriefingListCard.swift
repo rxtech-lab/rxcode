@@ -44,6 +44,11 @@ struct BriefingListCard: View {
 
                 // Metadata
                 BriefingFlowLayout(spacing: 8) {
+                    if !group.plans.isEmpty {
+                        Label(String(group.plans.count), systemImage: "list.bullet.clipboard")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if threadCount > 0 {
                         HStack(spacing: 4) {
                             Image(systemName: "bubble.left.and.bubble.right")

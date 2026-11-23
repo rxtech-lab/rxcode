@@ -43,7 +43,7 @@ struct DocsDocumentDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider()
+            ClaudeThemeDivider()
             body(for: displayedContent)
         }
         .frame(width: 680, height: 600)

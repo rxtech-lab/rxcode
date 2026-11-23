@@ -5,8 +5,9 @@ import Testing
 
 @Suite("Syntax highlighter")
 struct SyntaxHighlighterTests {
-    @Test(arguments: AppTheme.allCases)
-    func usesThemeForSwiftUIAndAppKit(theme: AppTheme) {
+    @Test(arguments: AppTheme.allCases, [NSAppearance.Name.aqua, .darkAqua])
+    func usesThemeForSwiftUIAndAppKit(theme: AppTheme, appearanceName: NSAppearance.Name) throws {
+        let appearance = try #require(NSAppearance(named: appearanceName))
         let colors = theme.colors
         let source = "let item = 42"
         let swiftUI = SyntaxHighlighter.highlight(source, language: "swift", colors: colors)
@@ -16,7 +17,11 @@ struct SyntaxHighlighterTests {
             let range = swiftUI.range(of: text)!
             #expect(swiftUI[range].foregroundColor == ink)
             let offset = (source as NSString).range(of: text).location
-            #expect(native.attribute(.foregroundColor, at: offset, effectiveRange: nil) as? NSColor == NSColor(ink))
+            let foreground = try #require(native.attribute(.foregroundColor, at: offset, effectiveRange: nil) as? NSColor)
+            appearance.performAsCurrentDrawingAppearance {
+                let expected = NSColor(ink).usingColorSpace(.sRGB)
+                #expect(expected != nil && foreground.usingColorSpace(.sRGB) == expected)
+            }
         }
     }
 

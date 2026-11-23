@@ -31,6 +31,9 @@ final class AppState: IDEToolHandling {
 
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
+    /// Shared across windows so each plan has at most one active debate.
+    @ObservationIgnored var codingPlanRooms: [UUID: CodingPlanRoom] = [:]
+
     /// Independent state for all active sessions. Key: sessionId
     /// `internal` (not private) — read access required from WindowState / extensions
     ///
@@ -46,10 +49,13 @@ final class AppState: IDEToolHandling {
     /// unchecked-completion flag, live todos). Only published when a value
     /// actually changes, so views reading it don't re-render per stream event.
     var sessionActivity: [String: SessionActivity] = [:]
+    /// Only sessions with a visible computer-use preview contribute to this projection.
+    var computerUseWindowsBySession: [String: [ComputerUseMonitorWindow]] = [:]
     /// Mounted chat views in a key window, keyed by view so a disappearing chat only removes itself.
     @ObservationIgnored var viewedChatSessions: [UUID: String] = [:]
 
     @ObservationIgnored var sessionActivityTodoFingerprints: [String: SessionActivity.TodoFingerprint] = [:]
+    @ObservationIgnored var sessionActivityTodoRefreshRequested = false
     @ObservationIgnored var sessionActivityTodoRefreshTask: Task<Void, Never>?
 
     /// Maps a stale session id (a `pending-...` placeholder, or a sid that was
@@ -57,7 +63,14 @@ final class AppState: IDEToolHandling {
     /// Lets long-running async tasks (LLM title generation) resolve the current
     /// id after the swap that happens mid-stream in `processStream`.
     var sessionIdRedirect: [String: String] = [:] {
-        didSet { attentionSessionIDsByProject = nil }
+        didSet {
+            attentionSessionIDsByProject = nil
+            cachedTaskLinkedSessions = nil
+            taskSessionIndexes.removeAll(keepingCapacity: true)
+            if briefingPlans.contains(where: { $0.implementationThreadID != nil }) {
+                scheduleBriefingPlansRefresh()
+            }
+        }
     }
 
     /// Callers waiting for `pending-<streamId>` to be replaced by the CLI's
@@ -107,10 +120,12 @@ final class AppState: IDEToolHandling {
     var allSessionSummaries: [ChatSession.Summary] = [] {
         didSet {
             attentionSessionIDsByProject = nil
+            cachedTaskLinkedSessions = nil
             scheduleDesktopWidgetUpdate()
         }
     }
 
+    @ObservationIgnored var cachedTaskLinkedSessions: TaskLinkedSessionIndex?
     @ObservationIgnored var attentionSessionIDsByProject: [UUID: Set<String>]?
 
     /// Invalidates visible file-change views after recorded edits change.
@@ -154,9 +169,9 @@ final class AppState: IDEToolHandling {
     /// Compiles + runs agent-written Swift view filters (`TaskFilterScript`).
     let taskFilterEvaluator = TaskFilterScriptEvaluator()
 
-    /// Pending permission/question prompts keyed by hook id. This mirrors the
-    /// per-window queues so mobile thread rows can show the same attention state.
+    /// Pending permissions for this workspace, including when no chat window is open.
     var mobilePendingRequests: [String: PermissionRequest] = [:]
+    @ObservationIgnored private var permissionRequestTask: Task<Void, Never>?
 
     // MARK: - Theme
 
@@ -320,6 +335,11 @@ final class AppState: IDEToolHandling {
         didSet { workspaceDefaults.set(pullRequestModelKey, for: "pullRequestModelKey") }
     }
 
+    /// An empty key uses the workspace's summarization settings for commit messages.
+    var commitMessageModelKey = "" {
+        didSet { workspaceDefaults.set(commitMessageModelKey, for: "commitMessageModelKey") }
+    }
+
     var openAISummarizationModels: [String] = []
     var openAISummarizationModelsError: String?
     var isLoadingOpenAISummarizationModels = false
@@ -335,6 +355,8 @@ final class AppState: IDEToolHandling {
     /// Agent-written document briefings from `briefingStore`, newest first.
     /// Loaded lazily by the briefing tab via `reloadBriefingDocuments()`.
     var briefingDocuments: [BriefingDocument] = []
+    var briefingPlans: [CodingPlanActivity] = []
+    @ObservationIgnored var briefingPlansRefresh: Task<Void, Never>?
     /// Settings for sending published briefings as Autopilot notifications,
     /// mirrored from `notificationStore`.
     var briefingNotificationSettings = BriefingNotificationSettings()
@@ -555,12 +577,9 @@ final class AppState: IDEToolHandling {
 
     // MARK: - Menu Bar Status
 
-    /// Last-fetched usage percentages for the menu-bar status popup. Updated by
-    /// `refreshRateLimitUsage()`; nil until first successful fetch (or when not
-    /// signed in to Claude Code).
     @ObservationIgnored var usageLimitResumeTasks: [String: Task<Void, Never>] = [:]
-    var latestRateLimitUsage: RateLimitUsage?
-    var latestCodexRateLimitUsage: RateLimitUsage?
+    var latestRateLimitUsage: RateLimitUsage? { cachedRateLimitUsage(for: .claudeCode) }
+    var latestCodexRateLimitUsage: RateLimitUsage? { cachedRateLimitUsage(for: .codex) }
     @ObservationIgnored var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]
     @ObservationIgnored var rateLimitSamplingTask: Task<Void, Never>?
     /// Agent streams currently measuring their usage-limit cost, per provider.
@@ -844,18 +863,23 @@ final class AppState: IDEToolHandling {
 
     // MARK: - Task Board
 
+    @ObservationIgnored var taskSessionIndexes: [UUID: ProjectTaskSessionIndex] = [:]
+
     /// One `TaskBoard` per project, loaded lazily. Keyed by `Project.id`, and a
     /// non-nil entry means "already read from disk" — same convention as
     /// `runProfilesByProject` below. The global board rendered by
     /// `TaskBoardView` is an aggregation of these.
     var taskBoards: [UUID: TaskBoard] = [:] {
-        didSet { scheduleDesktopWidgetUpdate() }
+        didSet {
+            taskSessionIndexes.removeAll(keepingCapacity: true)
+            scheduleDesktopWidgetUpdate()
+        }
     }
     var desktopWidgetNavigationURL: URL?
     @ObservationIgnored var desktopWidgetUpdateTask: Task<Void, Never>?
     @ObservationIgnored var desktopWidgetsActive = false
-    @ObservationIgnored var desktopClaudeUsageDate: Date?
-    @ObservationIgnored var desktopCodexUsageDate: Date?
+    var desktopClaudeUsageDate: Date? { core.accountRateLimits[.claudeCode]?.measuredAt }
+    var desktopCodexUsageDate: Date? { core.accountRateLimits[.codex]?.measuredAt }
     /// Quick-added tasks whose properties the default agent is still filling
     /// in, so their rows can show progress.
     var classifyingTaskIds: Set<UUID> = []
@@ -1018,13 +1042,14 @@ final class AppState: IDEToolHandling {
         self.codex = CodexAppServer()
         let acp = ACPService()
         self.acp = acp
-        self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore, baseURL: active.storageURL)
         self.marketplace = MarketplaceService(baseURL: active.storageURL)
         self.mcp = MCPService(baseURL: active.storageURL, claudeService: claude)
         let threadStore = ThreadStore.make(baseURL: active.storageURL)
         if active.isPersonal && !AppSupport.isTestProcess { MemoryService.registerPersonalStore(threadStore) }
         self.threadStore = threadStore
         self.threadStoreReader = ThreadStoreReader(container: threadStore.container)
+        self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore,
+            baseURL: active.storageURL, threadReader: threadStoreReader)
         self.briefingStore = BriefingStore(
             baseURL: active.storageURL.appendingPathComponent("briefings", isDirectory: true)
         )
@@ -1042,6 +1067,7 @@ final class AppState: IDEToolHandling {
             baseURL: active.storageURL.appendingPathComponent("notifications", isDirectory: true)
         )
         loadWorkspaceSettings()
+        threadStore.onCodingPlansChanged = { [weak self] in self?.scheduleBriefingPlansRefresh() }
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.broadcastMobileRunTasks()
@@ -1096,6 +1122,20 @@ final class AppState: IDEToolHandling {
         self.hookManager = HookManager(controller: hookController)
         self.reviewScheduler = ReviewScheduler(app: self)
         registerBuiltInHooks()
+
+        if startBackgroundServices {
+            permissionRequestTask = Task { [weak self, permission] in
+                let (_, stream) = await permission.subscribe()
+                for await request in stream {
+                    guard let self else { break }
+                    queuePermissionRequest(request)
+                }
+            }
+        }
+    }
+
+    deinit {
+        permissionRequestTask?.cancel()
     }
 
     // MARK: - Relocated Stored Properties

@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// A window observed by a computer-use tool in the current turn.
-public struct ComputerUseMonitorWindow: Identifiable, Sendable {
+public struct ComputerUseMonitorWindow: Identifiable, Equatable, Sendable {
     public enum ID: Hashable, Sendable {
         /// A native app driven by computer use, keyed by its bundle identifier so
         /// title changes (new tab, new document) keep updating the same preview.
@@ -34,6 +34,12 @@ public struct ComputerUseMonitorWindow: Identifiable, Sendable {
         self.windowTitle = windowTitle
         self.preview = preview
         self.observedAt = observedAt
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.appName == rhs.appName
+            && lhs.windowTitle == rhs.windowTitle && lhs.observedAt == rhs.observedAt
+            && lhs.preview === rhs.preview
     }
 
     /// Combines a newer observation of the same window with what is already

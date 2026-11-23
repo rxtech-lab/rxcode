@@ -361,6 +361,7 @@ public struct SnapshotPayload: Codable, Sendable {
     public let projects: [Project]
     public let sessions: [SessionSummary]
     public let branchBriefings: [MobileBranchBriefing]?
+    public let briefingPlans: [CodingPlanActivity]?
     public let briefingDocuments: [MobileBriefingDocument]?
     public let usageDashboard: UsageDashboard?
     public let threadSummaries: [MobileThreadSummary]?
@@ -406,6 +407,7 @@ public struct SnapshotPayload: Codable, Sendable {
         projects: [Project],
         sessions: [SessionSummary],
         branchBriefings: [MobileBranchBriefing]? = nil,
+        briefingPlans: [CodingPlanActivity]? = nil,
         briefingDocuments: [MobileBriefingDocument]? = nil,
         usageDashboard: UsageDashboard? = nil,
         threadSummaries: [MobileThreadSummary]? = nil,
@@ -425,6 +427,7 @@ public struct SnapshotPayload: Codable, Sendable {
         self.projects = projects
         self.sessions = sessions
         self.branchBriefings = branchBriefings
+        self.briefingPlans = briefingPlans
         self.briefingDocuments = briefingDocuments
         self.usageDashboard = usageDashboard
         self.threadSummaries = threadSummaries
@@ -443,7 +446,7 @@ public struct SnapshotPayload: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case projects, sessions, branchBriefings, briefingDocuments, usageDashboard, threadSummaries, ciStatuses, settings
+        case projects, sessions, branchBriefings, briefingPlans, briefingDocuments, usageDashboard, threadSummaries, ciStatuses, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
         case usage, hostMetrics, runProfiles, runTasks, webProxy, seq
     }
@@ -453,6 +456,7 @@ public struct SnapshotPayload: Codable, Sendable {
         projects = try c.decode([Project].self, forKey: .projects)
         sessions = try c.decode([SessionSummary].self, forKey: .sessions)
         branchBriefings = try c.decodeIfPresent([MobileBranchBriefing].self, forKey: .branchBriefings)
+        briefingPlans = try c.decodeIfPresent([CodingPlanActivity].self, forKey: .briefingPlans)
         briefingDocuments = try c.decodeIfPresent([MobileBriefingDocument].self, forKey: .briefingDocuments)
         usageDashboard = try c.decodeIfPresent(UsageDashboard.self, forKey: .usageDashboard)
         threadSummaries = try c.decodeIfPresent([MobileThreadSummary].self, forKey: .threadSummaries)

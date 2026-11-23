@@ -14,21 +14,21 @@ struct ChatSettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 modelSection
-                Divider()
+                ClaudeThemeDivider()
                 summarizationSection
-                Divider()
+                ClaudeThemeDivider()
                 generalAISection
-                Divider()
+                ClaudeThemeDivider()
                 permissionModeSection
-                Divider()
+                ClaudeThemeDivider()
                 effortSection
-                Divider()
+                ClaudeThemeDivider()
                 focusModeSection
-                Divider()
+                ClaudeThemeDivider()
                 autoPreviewSection
-                Divider()
+                ClaudeThemeDivider()
                 archiveSection
-                Divider()
+                ClaudeThemeDivider()
                 autoDeleteSection
             }
             .padding(24)

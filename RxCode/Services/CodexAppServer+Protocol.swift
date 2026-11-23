@@ -20,14 +20,18 @@ extension CodexAppServer {
         return params
     }
 
-    nonisolated func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool, ideInstructions: String?) -> [String: JSONValue] {
+    nonisolated func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool, ideInstructions: String?, isEphemeral: Bool = false) -> [String: JSONValue] {
         var params: [String: JSONValue] = ["cwd": .string(cwd)]
         if let threadId { params["threadId"] = .string(threadId) }
         params["approvalPolicy"] = .string(Self.codexApprovalPolicy(permissionMode: permissionMode, planMode: planMode))
         params["sandbox"] = .string(Self.codexSandboxMode(permissionMode: permissionMode, planMode: planMode))
+        if isEphemeral {
+            params["ephemeral"] = .bool(true)
+            params["approvalPolicy"] = .string("never")
+        }
         var instructions: [String] = []
         if let ideInstructions, !ideInstructions.isEmpty { instructions.append(ideInstructions) }
-        if planMode { instructions.append(Self.planModeInstructions) }
+        if planMode && !isEphemeral { instructions.append(Self.planModeInstructions) }
         if !instructions.isEmpty {
             params["developerInstructions"] = .string(instructions.joined(separator: "\n\n"))
         }
@@ -141,6 +145,7 @@ extension CodexAppServer {
     briefings, and `ide__briefing_delete` only when the user asks. The \
     briefing title is shown above its content, so do not repeat the title as \
     a heading in the content.
+    \(IDEToolRegistry.codingPlanBriefingInstructions)
     Published briefings may be emailed to the user automatically after your \
     run. Call `ide__send_notification` only when the user or a \
     scheduled task's prompt asks to be notified or emailed (pass \

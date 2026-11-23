@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -35,6 +37,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -50,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.rxlab.rxcode.proto.CodingPlanActivity
 import app.rxlab.rxcode.proto.MobileThreadSummary
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
@@ -82,7 +86,7 @@ fun BriefingDetailScreen(
     onOpenSearch: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
-    val group by remember(state.branchBriefings, state.threadSummaries, groupKey) {
+    val group by remember(state.branchBriefings, state.threadSummaries, state.briefingPlans, groupKey) {
         derivedStateOf {
             groupBriefings(
                 briefings = state.branchBriefings.filter {
@@ -91,7 +95,8 @@ fun BriefingDetailScreen(
                 threads = state.threadSummaries.filter {
                     it.projectId == groupKey.projectId && it.branch == groupKey.branch
                 },
-            ).firstOrNull()
+                plans = state.briefingPlans.filter { it.projectID == groupKey.projectId && (it.branch ?: "unknown") == groupKey.branch },
+            ).firstOrNull { it.key == groupKey }
         }
     }
     val project = remember(state.projects, groupKey.projectId) {
@@ -103,6 +108,7 @@ fun BriefingDetailScreen(
     val isInitializingGit = groupKey.projectId in state.pendingBranchOps
     val isUnknownBranch = groupKey.branch.equals("unknown", ignoreCase = true)
     val branchInfo = state.projectBranches[groupKey.projectId]
+    var selectedPlanID by remember(groupKey) { mutableStateOf<java.util.UUID?>(null) }
     var newThreadOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -174,8 +180,23 @@ fun BriefingDetailScreen(
                 )
             }
 
-            item("summary") {
-                SummaryCard(text = group?.briefing?.briefing.orEmpty())
+            val plans = group?.plans.orEmpty()
+            if (group?.briefing != null || plans.isEmpty()) {
+                item("summary") { SummaryCard(text = group?.briefing?.briefing.orEmpty()) }
+            }
+            if (plans.isNotEmpty()) {
+                item("plans-header") { SectionHeader(Icons.Outlined.Description, "Coding plans", plans.size) }
+                items(plans, key = { "plan-${it.id}" }) { plan ->
+                    ElevatedCard(onClick = {
+                        haptics.play(HapticEvent.LightTap)
+                        selectedPlanID = plan.id
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(plan.title, fontWeight = FontWeight.SemiBold)
+                            Text(plan.statusLabel(), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
 
             item("threads-header") {
@@ -205,9 +226,38 @@ fun BriefingDetailScreen(
         }
     }
 
+    group?.plans?.firstOrNull { it.id == selectedPlanID }?.let { plan ->
+        ModalBottomSheet(onDismissRequest = { selectedPlanID = null }) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(plan.title, style = MaterialTheme.typography.titleLarge)
+                Text(plan.statusLabel())
+                if (plan.versionCount > 0) {
+                    Text(listOfNotNull("v${plan.versionCount}", plan.currentVersionTitle).joinToString(" · "))
+                }
+                if (plan.approvedVersionID != null && plan.approvedVersionID != plan.currentVersionID) {
+                    Text("Approved: ${plan.approvedVersionTitle ?: plan.approvedVersionID}")
+                }
+                Text("Updated ${relativeTime(plan.updatedAt)}")
+                if (plan.featureExcerpt.isNotBlank()) {
+                    Text("Planned features", fontWeight = FontWeight.SemiBold)
+                    MarkdownWithCode(markdown = plan.featureExcerpt, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (plan.implementationEvidence.isNotBlank()) {
+                    Text("Implementation evidence", fontWeight = FontWeight.SemiBold)
+                    Text(plan.implementationEvidence)
+                }
+                Text("Plan ID: ${plan.id}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
     if (newThreadOpen) {
         NewThreadSheet(
             viewModel = viewModel,
+            modelSettings = state.modelSettings,
             projectId = groupKey.projectId,
             projectName = project?.name,
             branchInfo = branchInfo,
@@ -219,6 +269,20 @@ fun BriefingDetailScreen(
             },
         )
     }
+}
+
+private fun CodingPlanActivity.statusLabel(): String {
+    val planning = when (planningStatus) {
+        "drafting", "ready", "approved", "interrupted" -> planningStatus.replaceFirstChar { it.uppercase() }
+        else -> "Unknown"
+    }
+    val implementation = when (implementationStatus) {
+        "unimplemented" -> "Unimplemented"
+        "in_progress" -> "In progress"
+        "implemented" -> "Implemented"
+        else -> "Unknown"
+    }
+    return "Plan: $planning · Implementation: $implementation"
 }
 
 @Composable

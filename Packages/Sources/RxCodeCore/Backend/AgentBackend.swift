@@ -14,6 +14,8 @@ public struct BackendSendRequest: Sendable {
     public let effort: String?
     public let permissionMode: PermissionMode
     public let planMode: Bool
+    /// A standalone, read-only text turn without a resumable chat session.
+    public let isEphemeral: Bool
     /// Path to the Claude hook settings JSON written for this turn. Claude-only.
     public let hookSettingsPath: String?
     /// Path to the Claude MCP config JSON written for this turn. Claude-only.
@@ -55,6 +57,7 @@ public struct BackendSendRequest: Sendable {
         effort: String? = nil,
         permissionMode: PermissionMode,
         planMode: Bool = false,
+        isEphemeral: Bool = false,
         hookSettingsPath: String? = nil,
         mcpClaudeConfigPath: String? = nil,
         extraSystemPrompt: String? = nil,
@@ -74,6 +77,7 @@ public struct BackendSendRequest: Sendable {
         self.effort = effort
         self.permissionMode = permissionMode
         self.planMode = planMode
+        self.isEphemeral = isEphemeral
         self.hookSettingsPath = hookSettingsPath
         self.mcpClaudeConfigPath = mcpClaudeConfigPath
         self.extraSystemPrompt = extraSystemPrompt

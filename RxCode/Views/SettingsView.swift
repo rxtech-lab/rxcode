@@ -3,93 +3,49 @@ import RxCodeCore
 import SwiftUI
 import TipKit
 
-// MARK: - Settings Sheet
+// MARK: - Settings Window
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
 
-    @State private var selectedTab = 0
+    private enum Pane: Hashable {
+        case general, agent, media, message, commands, skills, mcp, mobile, flowcy, tasks, developer
+    }
+
+    @State private var selectedPane = Pane.general
     @State private var showUserManual = false
     @State private var showOnboarding = false
     @State private var showWhatsNew = false
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            GeneralSettingsTab(
-                showUserManual: $showUserManual,
-                showOnboarding: $showOnboarding,
-                showWhatsNew: $showWhatsNew
-            )
-            .tabItem {
-                Label("General", systemImage: "slider.horizontal.3")
+        NavigationSplitView {
+            List(selection: Binding($selectedPane)) {
+                row(.general, "General", "slider.horizontal.3")
+                row(.agent, "Agent", "person.crop.rectangle.stack")
+                row(.media, "Media", "photo.on.rectangle")
+                row(.message, "Message", "bubble.left.and.bubble.right")
+                row(.commands, "Commands", "command")
+                row(.skills, "Skills", "brain.head.profile")
+                row(.mcp, "MCP", "puzzlepiece.extension")
+                row(.mobile, "Mobile", "iphone.gen3")
+                row(.flowcy, "Flowcy", "paperplane.circle")
+                row(.tasks, "Tasks", "checklist")
+                row(.developer, "Developer", "hammer")
             }
-            .tag(0)
-
-            AgentSettingsTab()
-                .tabItem {
-                    Label("Agent", systemImage: "person.crop.rectangle.stack")
-                }
-                .tag(5)
-
-            MediaGenerationSettingsTab()
-                .tabItem { Label("Media", systemImage: "photo.on.rectangle") }
-                .tag(10)
-
-            ChatSettingsTab()
-                .tabItem {
-                    Label("Message", systemImage: "bubble.left.and.bubble.right")
-                }
-                .tag(1)
-
-            CommandsSettingsTab()
-                .tabItem {
-                    Label("Commands", systemImage: "command")
-                }
-                .tag(2)
-
-            SkillMarketView(isEmbedded: true)
-                .tabItem {
-                    Label("Skills", systemImage: "brain.head.profile")
-                }
-                .tag(3)
-
-            MCPSettingsTab()
-                .tabItem {
-                    Label("MCP", systemImage: "puzzlepiece.extension")
-                }
-                .tag(4)
-
-            MobileSettingsTab()
-                .tabItem {
-                    Label("Mobile", systemImage: "iphone.gen3")
-                }
-                .tag(6)
-
-            AutopilotSettingsTab()
-                .tabItem {
-                    Label("Flowcy", systemImage: "paperplane.circle")
-                }
-                .tag(7)
-
-            TasksSettingsTab()
-                .tabItem {
-                    Label("Tasks", systemImage: "checklist")
-                }
-                .tag(8)
-
-            DeveloperSettingsTab()
-                .tabItem { Label("Developer", systemImage: "hammer") }
-                .tag(9)
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
+            .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 260)
+        } detail: {
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .scrollContentBackground(.hidden)
+                .background(ClaudeTheme.background.ignoresSafeArea())
+                .navigationTitle("Settings")
         }
-        .frame(width: 720, height: 620)
+        .frame(minWidth: 820, idealWidth: 940, minHeight: 620, idealHeight: 680)
         .background(ClaudeTheme.background)
-        .focusable(false)
-        .onAppear { selectedTab = 0 }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
-            guard let window = notification.object as? NSWindow,
-                  window.title == "Settings" else { return }
-            selectedTab = 0
-        }
+        .onAppear { selectedPane = .general }
         .sheet(isPresented: $showUserManual) {
             UserManualView()
         }
@@ -104,6 +60,32 @@ struct SettingsView: View {
                 showWhatsNew = false
             }
             .environment(appState)
+        }
+    }
+
+    private func row(_ pane: Pane, _ title: LocalizedStringKey, _ symbol: String) -> some View {
+        Label(title, systemImage: symbol)
+            .themedListRow(pane, selection: selectedPane)
+    }
+
+    @ViewBuilder private var detail: some View {
+        switch selectedPane {
+        case .general:
+            GeneralSettingsTab(
+                showUserManual: $showUserManual,
+                showOnboarding: $showOnboarding,
+                showWhatsNew: $showWhatsNew
+            )
+        case .agent: AgentSettingsTab()
+        case .media: MediaGenerationSettingsTab()
+        case .message: ChatSettingsTab()
+        case .commands: CommandsSettingsTab()
+        case .skills: SkillMarketView(isEmbedded: true)
+        case .mcp: MCPSettingsTab()
+        case .mobile: MobileSettingsTab()
+        case .flowcy: AutopilotSettingsTab()
+        case .tasks: TasksSettingsTab()
+        case .developer: DeveloperSettingsTab()
         }
     }
 }
@@ -126,29 +108,29 @@ struct GeneralSettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 themeSection
-                Divider()
+                ClaudeThemeDivider()
                 fontSizeSection
-                Divider()
+                ClaudeThemeDivider()
                 PetSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 notificationsSection(appState: $appState.notificationsEnabled)
-                Divider()
+                ClaudeThemeDivider()
                 githubActionsSection(isOn: $appState.enableAutoCIFix)
-                Divider()
+                ClaudeThemeDivider()
                 menuBarSection
-                Divider()
+                ClaudeThemeDivider()
                 searchIndexSection
-                Divider()
+                ClaudeThemeDivider()
                 cacheSection
-                Divider()
+                ClaudeThemeDivider()
                 AgentPromptsSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 MemorySettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 HooksSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 CustomMenusSettingsSection()
-                Divider()
+                ClaudeThemeDivider()
                 VStack(alignment: .leading, spacing: 8) {
                     onboardingSection
                     whatsNewSection

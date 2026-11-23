@@ -49,13 +49,16 @@ struct PetCodexRealtimeEngine: VoiceEngine {
             }
     }
 
-    nonisolated static func describeToolItem(_ item: RxAgentCore.JSONValue?) -> String? {
+    nonisolated static func toolActivityName(_ item: RxAgentCore.JSONValue?) -> String? {
         guard let item else { return nil }
         let type = item["type"]?.stringValue ?? ""
         switch type {
         case "mcpToolCall":
-            let tool = item["tool"]?.stringValue ?? "MCP tool"
-            return PetCodexRealtimeConnectionFriendlyTool.describe(tool)
+            guard let tool = item["tool"]?.stringValue else { return "Running MCP tool" }
+            if let server = item["server"]?.stringValue, !tool.hasPrefix("mcp__") {
+                return "mcp__\(server)__\(tool)"
+            }
+            return tool
         case "commandExecution":
             let cmd = item["command"]?.stringValue ?? "command"
             return "Running \(cmd.prefix(36))"
@@ -65,7 +68,7 @@ struct PetCodexRealtimeEngine: VoiceEngine {
             return "Searching web"
         default:
             if let name = item["name"]?.stringValue, !name.isEmpty {
-                return PetCodexRealtimeConnectionFriendlyTool.describe(name)
+                return name
             }
             return nil
         }
@@ -74,7 +77,7 @@ struct PetCodexRealtimeEngine: VoiceEngine {
 
     /// Shared by the live app-server callback and regression tests.
     nonisolated static func toolEvent(method: String, params: RxAgentCore.JSONValue) -> AgentEvent? {
-        guard let item = params["item"], let label = describeToolItem(item) else { return nil }
+        guard let item = params["item"], let name = toolActivityName(item) else { return nil }
         // These calls are displayed at the IDE execution boundary, before the
         // app-server's potentially delayed start/completion notifications.
         let tool = item["tool"]?.stringValue ?? ""
@@ -84,7 +87,7 @@ struct PetCodexRealtimeEngine: VoiceEngine {
         }
         switch method {
         case "item/started":
-            return .toolCallStarted(id: item["id"]?.stringValue ?? UUID().uuidString, name: label)
+            return .toolCallStarted(id: item["id"]?.stringValue ?? UUID().uuidString, name: name)
         case "item/completed":
             return completedToolEvent(item)
         default:

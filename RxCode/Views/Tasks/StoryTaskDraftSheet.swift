@@ -24,10 +24,11 @@ struct StoryTaskDraftSheet: View {
                     TextField("Title", text: $draft.title, prompt: Text("What needs doing?"))
                         .multilineTextAlignment(.leading)
                         .accessibilityIdentifier("story-draft-task-title")
-                    TextField("Details", text: $draft.details, prompt: Text("Task details"), axis: .vertical)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(4...12)
-                        .accessibilityIdentifier("story-draft-task-details")
+                    MarkdownDescriptionEditor(
+                        text: $draft.details, placeholder: String(localized: "Task details"),
+                        title: "Details", height: 100, identifierPrefix: "story-draft-task-details",
+                        editorIdentifier: "story-draft-task-details"
+                    )
                     Picker("Size", selection: $draft.size) {
                         Text("None").tag(TaskSize?.none)
                         ForEach(TaskSize.allCases, id: \.self) { size in
@@ -67,6 +68,6 @@ struct StoryTaskDraftSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 460, height: 440)
+        .frame(minWidth: 460, minHeight: 440, maxHeight: .infinity)
     }
 }

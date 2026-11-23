@@ -28,7 +28,7 @@ struct PetSettingsView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 settingsTabBar
-                Divider()
+                ClaudeThemeDivider()
                 if selectedTab == .looks {
                     PetLooksPane(controller: controller)
                 } else {
@@ -321,6 +321,7 @@ struct PetSettingsView: View {
                 }
             }
             .pickerStyle(.radioGroup)
+            .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
         } header: {
             Text("Voice Mode")
         } footer: {

@@ -276,7 +276,7 @@ struct CustomMenuEditorSheet: View {
             SwiftConditionEditor(text: $draft.conditionScript, fontSize: ClaudeTheme.size(12), minHeight: 200)
                 .frame(minHeight: 200)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.border))
 
             Text("`context` exposes projectName, projectPath, gitHubRepo, branch, sessionId, and async `shell(_:)` / `git(_:)` helpers that run in the project directory. Return true to show the item.")
                 .font(.system(size: ClaudeTheme.size(10)))
@@ -377,7 +377,7 @@ struct CustomMenuEditorSheet: View {
                 JSONCodeEditor(text: $draft.bodyTemplate, fontSize: ClaudeTheme.size(12), minHeight: 200)
                     .frame(minHeight: 200)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.border))
                     .onChange(of: draft.bodyTemplate) { _, _ in
                         bodyJSONFormatError = nil
                     }
@@ -440,7 +440,7 @@ struct CustomMenuEditorSheet: View {
                 TextEditor(text: $draft.messageTemplate)
                     .font(.system(size: ClaudeTheme.size(12)))
                     .frame(minHeight: 110)
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.border))
             }
         }
     }

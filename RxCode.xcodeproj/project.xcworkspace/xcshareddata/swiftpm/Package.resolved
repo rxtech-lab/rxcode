@@ -164,6 +164,15 @@
       }
     },
     {
+      "identity" : "rxattachmentfield",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/rxtech-lab/RxAttachmentField.git",
+      "state" : {
+        "revision" : "0aae1212435a17537431f6bf3fdf95dfdf3784ac",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "rxauthswift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rxtech-lab/RxAuthSwift",

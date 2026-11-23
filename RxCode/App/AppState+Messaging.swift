@@ -97,6 +97,9 @@ extension AppState {
         let command = parts.first.map { String($0.dropFirst()) } ?? ""
 
         switch command {
+        case "plan":
+            window.chatCreationIntent = ChatCreationIntent(.plan, sessionID: window.currentSessionId, goal: parts.dropFirst().first.map(String.init) ?? "")
+            return true
         case "clear":
             startNewChat(in: window)
             return true
@@ -257,6 +260,7 @@ extension AppState {
         debugLogPrefix: String? = nil,
         includeIDEMCP: Bool = true,
         useProjectEffortForNewChat: Bool = false,
+        implementationPlan: CodingPlan? = nil,
         in sourceWindow: WindowState
     ) async -> UUID? {
         let resumeKey = sourceWindow.currentSessionId ?? sourceWindow.newSessionKey
@@ -268,9 +272,7 @@ extension AppState {
 
         let window: WindowState
         if let id = sourceWindow.currentSessionId, initialMessages == nil,
-           !sourceWindow.pendingPlaceholderIds.contains(id),
            sessionStates[id]?.messages.isEmpty != false,
-           (sessionStates[id]?.agentProvider ?? effectiveModelSelection(in: sourceWindow).provider) == .flowcy,
            let summary = allSessionSummaries.first(where: { $0.id == id }) ?? threadStore.fetch(id: id)?.toSummary() {
             await hydrateSessionIfNeeded(summary: summary, project: project)
             if sourceWindow.currentSessionId == id, sourceWindow.selectedProject?.id == project.id {
@@ -424,8 +426,21 @@ extension AppState {
                 worktreePath: sessionStates[sessionKey]?.worktreePath,
                 worktreeBranch: sessionStates[sessionKey]?.worktreeBranch
             )
+            if let implementationPlan {
+                do {
+                    try threadStore.saveCodingPlan(implementationPlan, implementation: placeholder.summary)
+                    codingPlanRooms[implementationPlan.id]?.plan = implementationPlan
+                } catch {
+                    sessionStates.removeValue(forKey: sessionKey)
+                    window.removePendingPlaceholder(sessionKey)
+                    window.currentSessionId = nil
+                    codingPlanRooms[implementationPlan.id]?.plan.lastError = error.localizedDescription
+                    return nil
+                }
+            } else {
+                threadStore.upsert(placeholder.summary)
+            }
             allSessionSummaries.insert(placeholder.summary, at: 0)
-            threadStore.upsert(placeholder.summary)
         } else if let index = allSessionSummaries.firstIndex(where: { $0.id == sessionKey }) {
             // Bring resumed task chats back into the visible sidebar immediately,
             // before streaming defers summary updates until completion.
@@ -458,6 +473,7 @@ extension AppState {
         }
         broadcastMobileSessionStatus(sessionID: sessionKey, kind: .streamingStarted)
         resumeTaskForStreamingSession(sessionKey)
+        await beginTurnRecovery(sessionID: sessionKey, streamID: streamId)
 
         let basePermissionMode = window.sessionPermissionMode ?? permissionMode
         // Plan-mode boolean overrides the dropdown for the CLI `--permission-mode` flag only.
@@ -482,9 +498,7 @@ extension AppState {
             await permission.registerSession(sid: sid, projectKey: project.path, mode: hookSessionMode)
         }
 
-        if !isNewSession {
-            await saveCurrentSession(in: window)
-        }
+        guard sessionStates[sessionKey]?.activeStreamId == streamId else { return nil }
 
         let effectiveCwd = sessionStates[sessionKey]?.worktreePath
             ?? allSessionSummaries.first(where: { $0.id == sessionKey })?.worktreePath
@@ -506,6 +520,8 @@ extension AppState {
                 clientID: acpSelection?.clientId ?? sessionStates[sessionKey]?.acpClientId, phase: .start)
         )
 
+        let includePriorContext = implementationPlan == nil
+        guard sessionStates[sessionKey]?.activeStreamId == streamId else { return nil }
         let task = Task { [weak self, window] in
             guard let self else { return }
             await self.processStream(
@@ -522,6 +538,7 @@ extension AppState {
                 hookSessionMode: hookSessionMode,
                 projectId: project.id,
                 includeIDEMCP: includeIDEMCP,
+                includePriorContext: includePriorContext,
                 history: history,
                 window: window
             )
@@ -574,9 +591,11 @@ extension AppState {
     func finalizeStreamSession(
         for sessionKey: String,
         trackUnreadCompletion: Bool = false,
+        interrupted: Bool = false,
         extraMutations: ((inout SessionStreamState) -> Void)? = nil
     ) {
         flushPendingUpdates(for: sessionKey, forceText: true)
+        settleTurn(sessionID: sessionKey, interrupted: interrupted)
         updateState(sessionKey) { state in
             state.flushTask?.cancel()
             state.flushTask = nil
@@ -612,12 +631,16 @@ extension AppState {
                 guard wasStreaming || hasIncompleteTool else { continue }
                 state.messages[idx].isStreaming = false
                 if idx == lastStreamingIdx {
-                    state.messages[idx].isResponseComplete = true
+                    state.messages[idx].isResponseComplete = !interrupted
                     if let start = state.streamingStartDate {
                         state.messages[idx].duration = Date().timeIntervalSince(start)
                     }
                 }
-                state.messages[idx].finalizeToolCalls()
+                if interrupted {
+                    state.messages[idx].markStreamInterrupted()
+                } else {
+                    state.messages[idx].finalizeToolCalls()
+                }
                 Self.stripNoOpText(at: idx, in: &state.messages)
             }
             state.streamingStartDate = nil

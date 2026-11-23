@@ -238,9 +238,11 @@ data class RequestSnapshotPayload(val activeSessionID: String? = null)
 
 @Serializable
 data class SnapshotPayload(
+    val settings: MobileModelSettings? = null,
     val projects: List<Project> = emptyList(),
     val sessions: List<SessionSummary> = emptyList(),
     val branchBriefings: List<MobileBranchBriefing>? = null,
+    val briefingPlans: List<CodingPlanActivity>? = null,
     val briefingDocuments: List<MobileBriefingDocument>? = null,
     val usageDashboard: UsageDashboard? = null,
     val threadSummaries: List<MobileThreadSummary>? = null,
@@ -272,8 +274,9 @@ data class NewSessionRequestPayload(
     @Serializable(with = UuidSerializer::class) val clientRequestID: UUID = UUID.randomUUID(),
     @Serializable(with = UuidSerializer::class) val projectID: UUID,
     val initialText: String? = null,
-    val selectedAgentProvider: AgentProvider? = null,
+    val selectedAgentProvider: String? = null,
     val selectedModel: String? = null,
+    val selectedEffort: String? = null,
     val permissionMode: PermissionMode? = null,
     val planMode: Boolean? = null,
 )
@@ -368,7 +371,7 @@ data class QuestionAnswerPayload(
     val answers: List<QuestionAnswerEntry>,
 )
 
-/** One `ide__show_confirmation` prompt the desktop is waiting on. */
+/** An IDE or computer-use confirmation the desktop is waiting on. */
 @Serializable
 data class PendingConfirmationPayload(
     val id: String,

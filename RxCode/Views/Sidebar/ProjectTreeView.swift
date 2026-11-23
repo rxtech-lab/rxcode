@@ -360,7 +360,7 @@ private struct ProjectTreeRow: View {
                     .padding(.vertical, 6)
                 }
 
-            ProjectTreeAttentionBadge(projectId: project.id)
+            ProjectAttentionBadge(projectId: project.id)
 
             if let status = appState.ciStatusByProject[project.id],
                status.pullRequestState == .open,
@@ -449,16 +449,6 @@ private struct ProjectTreeRow: View {
         }
     }
 
-}
-
-private struct ProjectTreeAttentionBadge: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    let projectId: UUID
-
-    var body: some View {
-        AttentionBadge(attention: appState.projectAttention(projectId: projectId, in: windowState))
-    }
 }
 
 /// Keep hook dependencies out of the row's hover and disclosure updates.

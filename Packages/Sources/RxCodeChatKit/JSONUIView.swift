@@ -196,7 +196,7 @@ private struct JSONUINode: View {
         case "Code":
             JSONUICode(element: element)
         case "Divider":
-            Divider()
+            ClaudeThemeDivider()
         case "Link":
             link(element)
         case "Image":
@@ -502,7 +502,7 @@ private struct JSONUIKeyValue: View {
                 .font(.subheadline)
                 .padding(.vertical, 7)
                 .accessibilityElement(children: .combine)
-                if index < items.count - 1 { Divider() }
+                if index < items.count - 1 { ClaudeThemeDivider() }
             }
         }
     }

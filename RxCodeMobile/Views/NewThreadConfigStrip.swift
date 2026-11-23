@@ -8,7 +8,7 @@ import TipKit
 // MARK: - New Thread Config Strip
 
 /// Compact configuration row for a new thread: branch (create/switch menu),
-/// permission mode, model, and a plan-mode toggle. Model/permission/plan picks
+/// permission mode, model, thinking level, and a plan-mode toggle. These choices
 /// are bound to the parent sheet's local state and travel in the
 /// `new_session_request` payload — they apply only to the created thread and no
 /// longer mutate the desktop's global defaults.
@@ -18,11 +18,14 @@ struct NewThreadConfigStrip: View {
     var preferredBranch: String? = nil
     @Binding var selectedProvider: AgentProvider?
     @Binding var selectedModelID: String?
+    @Binding var selectedEffort: String?
     @Binding var selectedPermissionMode: PermissionMode
     @Binding var planModeEnabled: Bool
+    let onPickModelSettings: () -> Void
     var onPresentSettings: () -> Void = {}
     @State private var showingCreateBranch = false
     @State private var modelPicker: NewThreadModelPickerSnapshot?
+    @State private var showingThinkingLevels = false
     @State private var didApplyPreferredBranch = false
     /// Optimistically tracks the branch the user picked in this sheet so the
     /// chip label updates immediately. The desktop's `projectBranches` snapshot
@@ -52,6 +55,7 @@ struct NewThreadConfigStrip: View {
                 permissionMenu
                 planToggleChip
             }
+            if !reasoningLevels.isEmpty { thinkingLevelButton }
         }
         .sheet(isPresented: $showingCreateBranch) {
             CreateBranchSheet(
@@ -65,6 +69,12 @@ struct NewThreadConfigStrip: View {
                 applyModel(model)
             }
             .mobileSheetPresentation([.large])
+        }
+        .sheet(isPresented: $showingThinkingLevels) {
+            MobileThinkingLevelSheet(levels: reasoningLevels, selected: selectedEffort, defaultTitle: defaultEffortTitle) { effort in
+                selectedEffort = effort
+                rememberSelection()
+            }
         }
         .onAppear(perform: applyPreferredBranchIfNeeded)
         .onChange(of: state.projectBranches[projectID]) { _, _ in
@@ -212,8 +222,39 @@ struct NewThreadConfigStrip: View {
     }
 
     private func applyModel(_ model: AgentModel) {
+        if selectedProvider != model.provider || selectedModelID != model.id {
+            let levels = state.desktopSettings?.reasoningLevels(for: model.provider, model: model.id) ?? []
+            selectedEffort = levels.first { $0.id == selectedEffort }?.id
+        }
         selectedProvider = model.provider
         selectedModelID = model.id
+        rememberSelection()
+    }
+
+    private func rememberSelection() {
+        onPickModelSettings()
+        MobileModelPreferences.remember(provider: selectedProvider, model: selectedModelID, effort: selectedEffort)
+    }
+
+    private var reasoningLevels: [ReasoningLevel] {
+        state.desktopSettings?.reasoningLevels(for: selectedProvider, model: selectedModelID) ?? []
+    }
+
+    private var defaultEffortTitle: String {
+        state.desktopSettings?.defaultEffortTitle(for: selectedProvider, model: selectedModelID)
+            ?? String(localized: "Agent default")
+    }
+
+    private var thinkingLevelButton: some View {
+        let level = reasoningLevels.first { $0.id == selectedEffort }?.displayName ?? defaultEffortTitle
+        return Button {
+            MobileHaptics.buttonTap()
+            onPresentSettings()
+            showingThinkingLevels = true
+        } label: {
+            chipLabel(icon: "brain", title: String(localized: "Thinking level: \(level)"))
+        }
+        .accessibilityIdentifier("new-thread-thinking-level")
     }
 
     // MARK: Permission Mode

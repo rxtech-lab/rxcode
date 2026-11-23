@@ -20,14 +20,14 @@ struct HookConfigurationsView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            ClaudeThemeDivider()
             HSplitView {
                 hookList
                     .frame(minWidth: 220, idealWidth: 240, maxHeight: .infinity)
                 detailPane
                     .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
             }
-            Divider()
+            ClaudeThemeDivider()
             footer
         }
         .frame(minWidth: 760, minHeight: 560, idealHeight: 620)
@@ -65,7 +65,7 @@ struct HookConfigurationsView: View {
             .buttonStyle(.borderless)
             .padding(8)
 
-            Divider()
+            ClaudeThemeDivider()
 
             if draft.isEmpty {
                 VStack {

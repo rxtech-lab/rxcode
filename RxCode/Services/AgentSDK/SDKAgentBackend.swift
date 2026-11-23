@@ -194,10 +194,10 @@ actor SDKAgentBackend: AgentBackend {
             planMode: request.planMode,
             contextText: request.extraSystemPrompt ?? "",
             mcpServers: request.sdkMCPServers,
-            permissions: SDKPermissionResolver(
-                server: permissionServer,
-                sessionKey: request.clientSessionKey
-            )
+            permissions: request.isEphemeral ? DenyAllPermissions() : SDKPermissionResolver(
+                server: permissionServer, sessionKey: request.clientSessionKey
+            ),
+            allowedTools: request.isEphemeral ? ["Read", "Glob", "Grep"] : nil
         )
     }
 

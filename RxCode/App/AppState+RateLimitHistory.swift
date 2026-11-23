@@ -92,14 +92,16 @@ extension AppState {
             let after = await self.rateLimitUsage(for: provider, forceRefresh: true)
             guard let before, let after else { return after }
             let delta = RateLimitDelta.between(before, after)
-            let storedTitle = self.threadStore.fetch(id: threadId)?.title
+            // The provider can replace the session ID while the final reading settles.
+            let resolvedThreadId = self.resolveCurrentSessionId(threadId)
+            let storedTitle = self.threadStore.fetch(id: resolvedThreadId)?.title
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let title = storedTitle.flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
             self.threadStore.recordRateLimitTaskCost(RateLimitTaskCost(
                 providerRaw: provider.rawValue,
                 model: model,
                 projectId: projectId,
-                threadId: threadId,
+                threadId: resolvedThreadId,
                 threadTitle: title,
                 startedAt: startedAt,
                 endedAt: endedAt,

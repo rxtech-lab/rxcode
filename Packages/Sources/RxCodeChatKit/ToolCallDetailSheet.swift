@@ -13,7 +13,7 @@ struct ToolCallDetailSheet: View {
                     .foregroundStyle(ClaudeTheme.accent)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayName)
+                    ToolActionLabel(toolCall)
                         .font(.system(size: ClaudeTheme.messageSize(15), weight: .semibold))
                         .foregroundStyle(ClaudeTheme.textPrimary)
                     Text(statusText)
@@ -75,18 +75,6 @@ struct ToolCallDetailSheet: View {
         case "skill":        return "sparkles"
         default:             return ToolCategory(toolName: toolNameLower).sfSymbol
         }
-    }
-
-    private var displayName: String {
-        if isMCP {
-            if toolNameLower == "mcptoolcall" {
-                return "MCP tool call"
-            }
-            return toolCall.name
-                .replacingOccurrences(of: "mcp__", with: "")
-                .replacingOccurrences(of: "__", with: " / ")
-        }
-        return toolCall.name
     }
 
     private var statusText: String {

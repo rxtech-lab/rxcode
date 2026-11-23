@@ -124,11 +124,17 @@ struct ChatTransientToolSummaryView: View {
                     Image(systemName: "eye.slash")
                         .font(.system(size: ClaudeTheme.messageSize(13)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text(tools.last?.displayedToolName ?? "Tool calls")
-                        .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    Group {
+                        if let latest = tools.last {
+                            ToolActionLabel(latest)
+                        } else {
+                            Text("Tool calls")
+                        }
+                    }
+                    .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                     Text(tools.count == 1 ? "1 tool call" : "\(tools.count) tool calls")
                         .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)

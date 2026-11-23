@@ -34,7 +34,7 @@ struct PetLookCreationSheet: View {
                     aboveInputAccessory: { EmptyView() }
                 )
                 if let draft = session.draft {
-                    Divider()
+                    ClaudeThemeDivider()
                     PetLookPreview(look: draft, playback: session.preview)
                         .padding()
                         .frame(width: 280)

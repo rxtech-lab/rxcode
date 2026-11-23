@@ -179,7 +179,7 @@ private struct SecretsRepoRow: View {
                     Text("\(repo.environmentsCount) env · \(repo.filesCount) secrets")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Text("Not yet managed").font(.caption).foregroundStyle(.tertiary)
+                    Text("Not yet managed").font(.caption).foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
             Spacer()

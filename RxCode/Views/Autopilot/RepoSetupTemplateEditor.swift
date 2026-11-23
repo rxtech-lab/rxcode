@@ -52,7 +52,7 @@ struct RepoSetupTemplateEditor: View {
         VStack(spacing: 0) {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
+            ClaudeThemeDivider()
             footer
         }
         .navigationTitle(template == nil ? "New Template" : "Edit Template")
@@ -75,7 +75,7 @@ struct RepoSetupTemplateEditor: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     settingsForm
-                    Divider()
+                    ClaudeThemeDivider()
                     Toggle(isOn: $isDefault) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Default template")
@@ -83,7 +83,7 @@ struct RepoSetupTemplateEditor: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Divider()
+                    ClaudeThemeDivider()
                     rulesetSection
                 }
                 .padding(16)

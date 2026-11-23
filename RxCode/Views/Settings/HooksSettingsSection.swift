@@ -32,7 +32,7 @@ struct HooksSettingsSection: View {
             if appState.projects.isEmpty {
                 Text("Add a project to configure hooks.")
                     .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             } else {
                 HStack(spacing: 10) {
                     Picker("Project", selection: Binding(

@@ -28,7 +28,6 @@ struct TaskFormSheet: View {
     @State var task = ProjectTask(projectId: UUID(), title: "")
     @State var story = ProjectStory(projectId: UUID(), title: "")
     @State var tagInput = ""
-    @State var showingAttachmentPicker = false
     @State var isExistingRecord = false
     @State var tab: Tab = .details
     @State var followUpDraft = ""
@@ -122,9 +121,17 @@ struct TaskFormSheet: View {
     /// nothing left to draft.
     var isComposing: Bool { !isExistingRecord && creationMode == .ai }
 
+    private var isReadOnly: Bool {
+        guard isExistingRecord else { return false }
+        switch payload {
+        case .task(let original, _): return !appState.canEditCard(original)
+        case .story(let original, _): return !appState.canEditCard(original)
+        }
+    }
+
     var canSave: Bool {
         let title = isStory ? story.title : task.title
-        return !isAutoFilling && !isGeneratingTitle && !isGeneratingDraft
+        return !isReadOnly && !isAutoFilling && !isGeneratingTitle && !isGeneratingDraft
             && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (!isStory || storyTaskDrafts.allSatisfy {
                 !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -272,42 +279,50 @@ struct TaskFormSheet: View {
                 profiles: field(\.assigneeProfiles, \.assigneeProfiles),
                 members: appState.cardAssigneeMembers(projectID: currentProjectId)
             )
-            .disabled(isExistingRecord && (isStory ? !appState.canEditCard(story) : !appState.canEditCard(task)))
         }
     }
 
     var detailsForm: some View {
         Form {
             detailsSection
+                .disabled(isReadOnly)
+            if isReadOnly, !isStory, !task.attachments.isEmpty {
+                Section("Attachments") {
+                    AttachmentPreviewStrip(attachments: task.attachments.map(Attachment.init(dto:)))
+                        .rxCodeAttachmentPreviews()
+                }
+            }
             if isStory {
                 storyTasksSection
             } else if isExistingRecord && !linkedChildren.isEmpty {
                 linkedTasksSection
             }
-            assigneesSection
-            classificationSection
-            scheduleSection
-            tagsSection
-            if !isStory {
-                if appState.projects.first(where: { $0.id == currentProjectId })?.isCloud == true {
-                    Section("Assigned Mac") {
-                        Picker("Laptop", selection: $task.assignedDeviceId) {
-                            Text("Unassigned").tag(String?.none)
-                            ForEach(cloudDevices) { Text($0.name).tag(Optional($0.id)) }
-                            if let id = task.assignedDeviceId, !cloudDevices.contains(where: { $0.id == id }) {
-                                Text("Previously assigned Mac").tag(Optional(id))
+            Group {
+                assigneesSection
+                classificationSection
+                scheduleSection
+                tagsSection
+                if !isStory {
+                    if appState.projects.first(where: { $0.id == currentProjectId })?.isCloud == true {
+                        Section("Assigned Mac") {
+                            Picker("Laptop", selection: $task.assignedDeviceId) {
+                                Text("Unassigned").tag(String?.none)
+                                ForEach(cloudDevices) { Text($0.name).tag(Optional($0.id)) }
+                                if let id = task.assignedDeviceId, !cloudDevices.contains(where: { $0.id == id }) {
+                                    Text("Previously assigned Mac").tag(Optional(id))
+                                }
                             }
+                            if let cloudDeviceError { Text(cloudDeviceError).foregroundStyle(ClaudeTheme.statusError) }
                         }
-                        if let cloudDeviceError { Text(cloudDeviceError).foregroundStyle(ClaudeTheme.statusError) }
+                        .task {
+                            do { cloudDevices = try await appState.projectCloud.listDevices() }
+                            catch { cloudDeviceError = error.localizedDescription }
+                        }
                     }
-                    .task {
-                        do { cloudDevices = try await appState.projectCloud.listDevices() }
-                        catch { cloudDeviceError = error.localizedDescription }
-                    }
+                    agentSection
                 }
-                agentSection
-                attachmentsSection
             }
+            .disabled(isReadOnly)
         }
         .formStyle(.grouped)
         .sheet(item: $fieldsSheet) { field in
@@ -327,27 +342,19 @@ struct TaskFormSheet: View {
                 task.agent.effort = nil
             }
         }
-        .fileImporter(
-            isPresented: $showingAttachmentPicker,
-            // Any file, not just images: the description can reference
-            // anything, and the agent reads text files straight off disk.
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            handleAttachmentImport(result)
-        }
     }
 
     // MARK: - Footer
 
     var headerTitle: String {
+        if isReadOnly { return isStory ? "Story Details" : "Task Details" }
         if isExistingRecord { return isStory ? "Edit Story" : "Edit Task" }
         return isStory ? "New Story" : "New Task"
     }
 
     var footer: some View {
         HStack {
-            if isExistingRecord {
+            if isExistingRecord && !isReadOnly {
                 Button("Delete", role: .destructive) {
                     pendingDeletion = isStory ? .story(story) : .task(task)
                 }
@@ -366,12 +373,14 @@ struct TaskFormSheet: View {
                 .accessibilityIdentifier("task-form-jump-to-project")
             }
             Spacer()
-            Button("Cancel") { requestExit(.cancel) }
+            Button(isReadOnly ? "Done" : "Cancel") { requestExit(.cancel) }
                 .keyboardShortcut(.cancelAction)
-            Button("Save") { requestExit(.save) }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canSave)
-                .keyboardShortcut(.defaultAction)
+            if !isReadOnly {
+                Button("Save") { requestExit(.save) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSave)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -423,6 +432,8 @@ struct TaskFormSheet: View {
                 // typing a space looked like it did nothing. Leading alignment
                 // shows it immediately.
                 .multilineTextAlignment(.leading)
+                .accessibilityLabel("Title")
+                .accessibilityIdentifier("task-form-title")
 
                 Button(action: generateTitle) {
                     if isGeneratingTitle {
@@ -438,13 +449,17 @@ struct TaskFormSheet: View {
                 .accessibilityIdentifier("task-form-generate-title")
             }
 
-            MarkdownDescriptionEditor(
-                text: isStory ? $story.details : $task.details,
-                // Stories keep no attachment list, so a file dropped on a story
-                // description is recorded as a Markdown link only.
-                attachments: isStory ? nil : $task.attachments,
-                placeholder: String(localized: "Add more detail for the agent")
-            )
+            if isReadOnly {
+                MarkdownContentView(text: currentDetails)
+            } else {
+                MarkdownDescriptionEditor(
+                    text: isStory ? $story.details : $task.details,
+                    // Stories keep no attachment list, so a file dropped on a story
+                    // description is recorded as a Markdown link only.
+                    attachments: isStory ? nil : $task.attachments,
+                    placeholder: String(localized: "Add more detail for the agent")
+                )
+            }
 
             Picker("Project", selection: projectBinding) {
                 ForEach(appState.projects) { project in
@@ -528,40 +543,6 @@ struct TaskFormSheet: View {
                 defaultTitle: appState.defaultEffortTitle(for: selection.provider, model: selection.model),
                 effort: $task.agent.effort
             )
-        }
-    }
-
-    var attachmentsSection: some View {
-        Section {
-            if !task.attachments.isEmpty {
-                ForEach(task.attachments, id: \.id) { dto in
-                    HStack(spacing: 6) {
-                        Image(systemName: dto.type == Attachment.AttachmentType.image.rawValue ? "photo" : "doc")
-                            .foregroundStyle(ClaudeTheme.textSecondary)
-                        Text(dto.name)
-                            .lineLimit(1)
-                        Spacer()
-                        Button {
-                            task.attachments.removeAll { $0.id == dto.id }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Remove attachment")
-                    }
-                }
-            }
-
-            Button {
-                showingAttachmentPicker = true
-            } label: {
-                Label("Add Files…", systemImage: "paperclip")
-            }
-        } header: {
-            Text("Attachments")
-        } footer: {
-            Text("Files pasted or dropped into the description are listed here and sent to the agent with the task.")
         }
     }
 

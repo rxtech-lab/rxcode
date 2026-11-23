@@ -1,3 +1,5 @@
+import RxCodeCore
+import RxCodeSync
 import XCTest
 
 /// iPhone navigation flows (UI test cases 1 & 3).
@@ -5,6 +7,31 @@ import XCTest
 /// On iPhone the app uses a `TabView` with `NavigationStack` tabs, so each flow
 /// pushes a detail screen and navigates back with the navigation-bar back button.
 final class iPhoneNavigationUITests: XCTestCase {
+
+    @MainActor
+    func testComputerUseConfirmationSendsBothDecisionsToTheMac() throws {
+        let session = try UITestRunner.launch(.phone, on: self)
+        let r = session.robot
+        r.tap(r.projectsTab, "Projects tab")
+        r.tap(r.app.buttons["project-row-A0000000-0000-0000-0000-000000000001"], "Project Alpha")
+        r.tap(r.app.buttons["thread-row-sess-alpha-1"].firstMatch, "Alpha Thread One")
+        r.assertExists(r.chatScreen, "chat screen")
+
+        let alert = r.app.alerts["Confirm computer use"]
+        let banner = r.app.buttons["Confirmation needed: Confirm computer use. Tap to review."]
+        for confirmed in [true, false] {
+            let prompt = PendingConfirmationPayload(
+                id: UUID().uuidString, sessionID: "sess-alpha-1", projectID: nil,
+                title: "Confirm computer use", message: "Allow the agent to control your Mac for the rest of this session?",
+                confirmLabel: "Confirm for This Session", cancelLabel: "Reject", isDestructive: false
+            )
+            session.server.sendConfirmations([prompt])
+            r.assertExists(alert, "computer-use confirmation")
+            r.tap(alert.buttons[confirmed ? prompt.confirmLabel : prompt.cancelLabel], "permission decision")
+            r.assertDisappears(banner, "resolved permission")
+            XCTAssertEqual(session.server.confirmationDecision(for: prompt.id), confirmed)
+        }
+    }
 
     @MainActor
     func testPublishedDocumentAppearsBesideProjectBriefings() throws {
@@ -75,6 +102,24 @@ final class iPhoneNavigationUITests: XCTestCase {
         add(attachment)
     }
 
+    @MainActor
+    func testSyncedCodingPlanShowsVersionAndImplementationState() throws {
+        let r = try UITestRunner.launch(.phone, on: self, includePlan: true).robot
+        r.tap(r.briefingTab, "Briefing")
+        let card = r.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "briefing-card-A0000000-0000-0000-0000-000000000001"))
+            .firstMatch
+        r.tap(card, "Project Alpha briefing")
+        let row = r.app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Plugin discovery plan")).firstMatch
+        r.tap(row, "Coding plan")
+        r.assertExists(r.app.staticTexts["Plugin discovery plan"], "plan title")
+        r.assertExists(r.app.staticTexts["Implementation, Unimplemented"], "implementation status")
+        r.assertExists(r.app.staticTexts["Plan, Ready"], "planning status")
+        r.assertExists(r.app.staticTexts["Version, v3 · Plugin manifest"], "current version")
+        r.assertExists(r.app.staticTexts["Discover installed plugins"], "planned feature")
+        r.assertExists(r.app.staticTexts["Implementation has not started."], "implementation evidence")
+    }
+
     /// Case 1: Briefing tab → briefing detail → thread → messages → back →
     /// briefing detail is shown again.
     @MainActor
@@ -115,6 +160,45 @@ final class iPhoneNavigationUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2.0)
         r.assertExists(r.chatScreen, "chat screen remains after snapshot settles")
         r.assertMessagesShown()
+    }
+
+    @MainActor
+    func testNewThreadRemembersModelAndThinkingLevel() throws {
+        let model = AgentModel(provider: .codex, id: "test-codex", displayName: "Test Codex")
+        let settings = MobileSettingsSnapshot(
+            selectedAgentProvider: .claudeCode, selectedModel: "test-claude", selectedACPClientId: "",
+            selectedEffort: "low", permissionMode: .default, summarizationProvider: "",
+            summarizationProviderDisplayName: "", openAISummarizationEndpoint: "", openAISummarizationModel: "",
+            notificationsEnabled: true, focusMode: false, autoArchiveEnabled: false, archiveRetentionDays: 7,
+            autoPreviewSettings: .init(), availableEfforts: ["low", "high"],
+            reasoningLevelsByModel: [model.key: .levels(["low", "high"])],
+            availableModels: [.init(provider: .claudeCode, id: "test-claude", displayName: "Test Claude"), model]
+        )
+        let session = try UITestRunner.launch(.phone, on: self, settings: settings)
+        let r = session.robot
+        r.tap(r.briefingTab, "Briefing")
+        r.tap(r.anyBriefingCard, "project briefing")
+        r.tap(r.briefingDetailNewThreadButton, "new thread")
+
+        let modelPicker = r.app.buttons["new-thread-model-picker"]
+        let thinkingLevel = r.app.buttons["new-thread-thinking-level"]
+        r.app.scrollViews.firstMatch.swipeUp()
+        r.tap(modelPicker, "model picker")
+        r.tap(r.app.buttons["Test Codex"], "Codex model")
+        r.tap(thinkingLevel, "thinking level")
+        r.tap(r.app.buttons["High"], "High")
+        r.tap(r.app.navigationBars["New Thread"].buttons["Cancel"], "close new thread")
+
+        r.tap(r.briefingDetailNewThreadButton, "reopen new thread")
+        XCTAssertTrue(modelPicker.waitForExistence(timeout: 5))
+        XCTAssertTrue(modelPicker.label.contains("Test Codex"))
+        XCTAssertTrue(thinkingLevel.label.contains("High"))
+        r.createNewThread(with: "Use the saved model and thinking level.")
+        r.assertMessagesShown()
+        let request = try XCTUnwrap(session.server.latestNewSessionRequest)
+        XCTAssertEqual(request.selectedAgentProvider, .codex)
+        XCTAssertEqual(request.selectedModel, model.id)
+        XCTAssertEqual(request.selectedEffort, "high")
     }
 
     /// Case 3: Projects tab → project → thread list → thread → messages → back →

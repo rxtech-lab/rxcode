@@ -103,7 +103,7 @@ struct BriefingMarkdownView: View {
                     tableCell(column < header.count ? header[column] : "", isHeader: true)
                 }
             }
-            Divider().opacity(0.6)
+            ClaudeThemeDivider()
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 GridRow {
                     ForEach(0..<columnCount, id: \.self) { column in

@@ -71,6 +71,27 @@ public struct MarkdownContentView: View {
     let fadeNewText: Bool
     let expandsHorizontally: Bool
     let onOpenLink: MarkdownView.LinkHandler?
+    #if os(macOS)
+    private var markedRanges: [NSRange] = []
+    private var strikeProgress: CGFloat?
+    private var openAnnotation: ((Int, CGRect) -> Void)?
+
+    /// Ranges refer to the UTF-16 source Markdown. The callback receives the
+    /// tapped range's index and the bounds of the glyph that opened it.
+    public func annotating(_ ranges: [NSRange], onOpen: @escaping (Int, CGRect) -> Void) -> Self {
+        var copy = self
+        copy.markedRanges = ranges
+        copy.openAnnotation = onOpen
+        return copy
+    }
+
+    public func crossingOut(_ ranges: [NSRange], progress: CGFloat) -> Self {
+        var copy = self
+        copy.markedRanges = ranges
+        copy.strikeProgress = progress
+        return copy
+    }
+    #endif
 
     public init(
         text: String,
@@ -99,13 +120,16 @@ public struct MarkdownContentView: View {
     @ViewBuilder
     private var content: some View {
         #if os(macOS)
-        if !showsTrailingCursor && !fadeNewText && text.contains(where: \.isNewline) {
+        if !markedRanges.isEmpty || (!showsTrailingCursor && !fadeNewText && text.contains(where: \.isNewline)) {
             SelectableMarkdownView(
                 text: text,
                 baseURL: baseURL,
                 style: style,
                 expandsHorizontally: expandsHorizontally,
-                onOpenLink: onOpenLink
+                onOpenLink: onOpenLink,
+                markedRanges: markedRanges,
+                strikeProgress: strikeProgress,
+                openAnnotation: openAnnotation
             )
         } else {
             swiftUIMarkdown

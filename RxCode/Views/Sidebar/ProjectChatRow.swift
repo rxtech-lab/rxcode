@@ -1,6 +1,15 @@
 import RxCodeCore
 import SwiftUI
 
+struct InterruptedThreadLabel: View {
+    var body: some View {
+        Label("Interrupted", systemImage: "pause.circle")
+            .font(.caption2)
+            .foregroundStyle(ClaudeTheme.statusWarning)
+            .fixedSize()
+    }
+}
+
 // MARK: - ChatStatus
 
 /// Per-chat status derived from streaming state, pending permissions, and errors.
@@ -225,6 +234,7 @@ struct ProjectChatRow: View {
     }
 
     var body: some View {
+        let title = displayTitle
         HStack(spacing: 6) {
             if let disclosure = reviewDisclosure {
                 reviewDisclosureControl(disclosure)
@@ -241,7 +251,7 @@ struct ProjectChatRow: View {
             // The title takes every point the accessories don't use, so it only
             // truncates against what is actually on screen.
             HStack(spacing: 6) {
-                Text(displayTitle)
+                Text(title)
                     .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
                     .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                     .lineLimit(1)
@@ -282,7 +292,8 @@ struct ProjectChatRow: View {
             isHovered = hovering
         }
         .task(id: changeTotalsLoadID) { await loadChangeTotals() }
-        .help(taskCompletionChip.map { "\(displayTitle) — \($0.text)" } ?? displayTitle)
+        .task(id: summary.id) { await appState.loadLegacyTurnOutcome(for: summary) }
+        .help(taskCompletionChip.map { "\(title) — \($0.text)" } ?? title)
         .onTapGesture { onSelect() }
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
         .contextMenu { rowMenu }
@@ -322,6 +333,9 @@ struct ProjectChatRow: View {
 
     @ViewBuilder
     private var titleDetails: some View {
+        if summary.hasUnfinishedTurn == true && status != .streaming && status != .awaitingPermission {
+            InterruptedThreadLabel()
+        }
         AttentionBadge(attention: appState.threadAttention(sessionKey: summary.id, in: windowState))
 
         if let taskCompletionChip {

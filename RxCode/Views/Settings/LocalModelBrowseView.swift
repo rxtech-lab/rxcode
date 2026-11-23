@@ -48,7 +48,7 @@ struct LocalModelBrowseView: View {
                     if loading { ProgressView().controlSize(.small) }
                 }
                 .padding(8)
-                .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: 8))
                 HStack(spacing: 8) {
                     Menu {
                         Picker("Format", selection: $format) {
@@ -282,7 +282,7 @@ struct LocalModelDetailView: View {
                 .labelsHidden()
                 .fixedSize()
                 .padding(.vertical, 10)
-                Divider()
+                ClaudeThemeDivider()
             }
             .frame(maxWidth: .infinity)
             .background(.bar)

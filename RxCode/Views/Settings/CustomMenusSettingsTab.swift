@@ -40,7 +40,7 @@ private struct ContextMenusManagerSheet: View {
         VStack(spacing: 0) {
             header
                 .padding(20)
-            Divider()
+            ClaudeThemeDivider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     placeholderHint
@@ -50,7 +50,7 @@ private struct ContextMenusManagerSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
+            ClaudeThemeDivider()
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
@@ -200,11 +200,11 @@ private struct BuiltInMenuRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 }
@@ -235,7 +235,7 @@ private struct CustomMenuRow: View {
                     }
                     Text(verbatim: projectName)
                         .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
             Spacer(minLength: 12)
@@ -259,11 +259,11 @@ private struct CustomMenuRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 

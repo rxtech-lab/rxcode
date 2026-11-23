@@ -32,6 +32,7 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
     let desktopIdentity: DeviceIdentity
     var desktopPublicKeyHex: String { desktopIdentity.publicKeyHex }
 
+    private let settings: MobileSettingsSnapshot?
     private let baseFixtures: MockFixtures
     private let queue = DispatchQueue(label: "com.idealapp.RxCodeMobile.MockRelayServer")
 
@@ -50,7 +51,21 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
     private var dynamicSessions: [SessionSummary] = []
     private var dynamicThreadSummaries: [MobileThreadSummary] = []
     private var dynamicMessagesBySession: [String: [ChatMessage]] = [:]
+    private var newSessionRequest: NewSessionRequestPayload?
+    var latestNewSessionRequest: NewSessionRequestPayload? { queue.sync { newSessionRequest } }
     private var newSessionCounter = 0
+    private var confirmationDecisions: [String: Bool] = [:]
+
+    func sendConfirmations(_ prompts: [PendingConfirmationPayload]) {
+        queue.sync {
+            guard let connection else { return }
+            send(.confirmationQueue(.init(confirmations: prompts)), on: connection)
+        }
+    }
+
+    func confirmationDecision(for id: String) -> Bool? {
+        queue.sync { confirmationDecisions[id] }
+    }
 
     /// Ephemeral port the listener bound to. Valid after `start()` returns.
     private(set) var port: UInt16 = 0
@@ -58,7 +73,8 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
     /// WebSocket URL the app should connect to. Valid only after `start()`.
     var relayURL: String { "ws://127.0.0.1:\(port)/ws" }
 
-    init(fixtures: MockFixtures) {
+    init(fixtures: MockFixtures, settings: MobileSettingsSnapshot? = nil) {
+        self.settings = settings
         self.baseFixtures = fixtures
         // Fixed 32 bytes — guaranteed a valid private key, so `try!` is safe.
         let key = try! Curve25519.KeyAgreement.PrivateKey(
@@ -172,6 +188,9 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
         else { return }
 
         switch payload {
+        case .confirmationDecision(let decision):
+            confirmationDecisions[decision.id] = decision.confirmed
+            send(.confirmationQueue(.init(confirmations: [])), on: connection)
         case .requestSnapshot(let request):
             send(.snapshot(currentSnapshot(activeSessionID: request.activeSessionID)),
                  on: connection)
@@ -187,6 +206,7 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
                 hasMore: false
             )), on: connection)
         case .newSessionRequest(let request):
+            newSessionRequest = request
             let created = registerNewSession(for: request)
             send(.snapshot(currentSnapshot(activeSessionID: created.pendingID)), on: connection)
             queue.asyncAfter(deadline: .now() + 1.0) { [weak self, weak connection] in
@@ -217,9 +237,10 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
             projects: baseFixtures.projects,
             sessions: sessions,
             branchBriefings: baseFixtures.branchBriefings,
+            briefingPlans: baseFixtures.briefingPlans,
             briefingDocuments: baseFixtures.briefingDocuments,
             threadSummaries: threadSummaries,
-            settings: nil,
+            settings: settings,
             activeSessionID: activeSessionID,
             activeSessionMessages: messages,
             activeSessionHasMore: false,

@@ -104,9 +104,9 @@ fun BriefingScreen(
                 .eachCount()
         }
     }
-    val allGroups by remember(state.branchBriefings, state.threadSummaries, state.projects) {
+    val allGroups by remember(state.branchBriefings, state.threadSummaries, state.briefingPlans, state.projects) {
         derivedStateOf {
-            groupBriefings(state.branchBriefings, state.threadSummaries)
+            groupBriefings(state.branchBriefings, state.threadSummaries, state.briefingPlans)
                 .sortedByProjectOrder(state.projects.map { it.id })
         }
     }
@@ -147,7 +147,7 @@ fun BriefingScreen(
             }
         }
     }
-    val hasAnyData = state.branchBriefings.isNotEmpty() || state.threadSummaries.isNotEmpty() || state.briefingDocuments.isNotEmpty()
+    val hasAnyData = state.branchBriefings.isNotEmpty() || state.threadSummaries.isNotEmpty() || state.briefingPlans.isNotEmpty() || state.briefingDocuments.isNotEmpty()
         || state.usageDashboard.cards.any { card -> card.isVisible && state.usageDashboard.snapshots.any { it.id == card.integrationID } }
     val isFilterActive = showAllBranches || selectedProjectIds.isNotEmpty()
 
@@ -364,7 +364,7 @@ private fun BriefingCard(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            if (isUnknownBranch) "Initialize Git" else group.branch,
+                            (if (isUnknownBranch) "Initialize Git" else group.branch) + " · " + group.key.day,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -381,6 +381,8 @@ private fun BriefingCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 4,
                 )
+            } else if (group.plans.isNotEmpty()) {
+                Text(group.plans.first().title, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
             } else {
                 Text(
                     "No summary available yet",

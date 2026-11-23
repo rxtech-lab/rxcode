@@ -224,6 +224,10 @@ struct MobileThreadCard: View {
                 isNotable: true
             )
         }
+        if session.isInterrupted {
+            return Status(icon: "pause.circle", tint: ClaudeTheme.statusWarning, caption: "Interrupted",
+                          rail: ClaudeTheme.statusWarning, isNotable: true)
+        }
         if session.hasUncheckedCompletion {
             return Status(
                 icon: "checkmark",

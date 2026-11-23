@@ -101,7 +101,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     }
 
     public struct Summary: Identifiable, Codable, Sendable, Equatable {
-        public let id: String
+        public var id: String
         public let projectId: UUID
         public var title: String
         public let createdAt: Date
@@ -119,6 +119,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         public var parentThreadId: String?
         public var threadLabel: String?
         public var skipHooks: Bool
+        /// True until a turn finishes or the user stops it. Older threads have no recorded outcome.
+        public var hasUnfinishedTurn: Bool?
 
         public init(
             id: String,
@@ -161,7 +163,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, projectId, title, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt, parentThreadId, threadLabel, skipHooks
+            case id, projectId, title, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt, parentThreadId, threadLabel, skipHooks, hasUnfinishedTurn
         }
 
         public init(from decoder: Decoder) throws {
@@ -184,6 +186,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             parentThreadId = try container.decodeIfPresent(String.self, forKey: .parentThreadId)
             threadLabel = try container.decodeIfPresent(String.self, forKey: .threadLabel)
             skipHooks = try container.decodeIfPresent(Bool.self, forKey: .skipHooks) ?? false
+            hasUnfinishedTurn = try container.decodeIfPresent(Bool.self, forKey: .hasUnfinishedTurn)
         }
     }
 
@@ -297,6 +300,7 @@ extension ChatSession.Summary {
                     model: model, effort: effort, permissionMode: permissionMode,
                     origin: origin,
                     worktreePath: worktreePath, worktreeBranch: worktreeBranch,
-                    isArchived: isArchived, archivedAt: archivedAt)
+                    isArchived: isArchived, archivedAt: archivedAt, parentThreadId: parentThreadId,
+                    threadLabel: threadLabel, skipHooks: skipHooks)
     }
 }

@@ -52,7 +52,7 @@ struct CacheStorageSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             if let storage {
                 VStack(alignment: .leading, spacing: 10) {
@@ -64,7 +64,7 @@ struct CacheStorageSheet: View {
                     storageRow("Workspaces and task boards", bytes: storage.workspaces)
                     storageRow("Diagnostics", bytes: storage.diagnostics)
                     storageRow("Other app data", bytes: storage.other)
-                    Divider()
+                    ClaudeThemeDivider()
                     storageRow("Clearable files and briefings", bytes: storage.clearableFiles)
                 }
             }

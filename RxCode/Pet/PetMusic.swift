@@ -77,6 +77,7 @@ final class PetMusic {
 
     init(controller: PetController, player: (any PetMusicPlaying)? = nil,
          volumeController: (any PetMusicVolumeControlling)? = nil,
+         notificationCenter: NotificationCenter = .default,
          currentAuthorizationStatus: @escaping @Sendable () -> MusicAuthorization.Status = { MusicAuthorization.currentStatus },
          requestAuthorization: @escaping @Sendable () async -> Bool = {
              // Same flow as LyricStudio: only prompt while undetermined; re-requesting after a
@@ -103,7 +104,7 @@ final class PetMusic {
         self.player = player ?? PetNativeMusicPlayer()
         self.volumeController = volumeController ?? PetDeviceMusicVolume()
         observations = self.player.observe { [weak self] in self?.synchronize() }
-        observations.append(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        observations.append(notificationCenter.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in Task { @MainActor in await self?.refreshConnection() } })
     }
 

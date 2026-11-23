@@ -23,6 +23,7 @@ struct GroupedBriefing: Identifiable {
     let day: Date
     let briefing: MobileBranchBriefing?
     let threads: [MobileThreadSummary]
+    let plans: [CodingPlanActivity]
     let updatedAt: Date
     /// Earliest activity recorded for the day; drives timeline order.
     let createdAt: Date
@@ -39,6 +40,7 @@ struct GroupedBriefing: Identifiable {
 func groupBriefings(
     briefings: [MobileBranchBriefing],
     threads: [MobileThreadSummary],
+    plans: [CodingPlanActivity] = [],
     calendar: Calendar = .current
 ) -> [GroupedBriefing] {
     struct Bucket {
@@ -47,6 +49,7 @@ func groupBriefings(
         var day: Date
         var briefing: MobileBranchBriefing?
         var threads: [MobileThreadSummary] = []
+        var plans: [CodingPlanActivity] = []
         var updated: Date = .distantPast
         var created: Date = .distantFuture
     }
@@ -85,6 +88,15 @@ func groupBriefings(
         }
     }
 
+    for plan in plans {
+        let day = calendar.startOfDay(for: plan.updatedAt)
+        add(projectId: plan.projectID, branch: plan.branch ?? "unknown", day: day) { bucket in
+            bucket.plans.append(plan)
+            bucket.updated = max(bucket.updated, plan.updatedAt)
+            bucket.created = min(bucket.created, calendar.isDate(plan.createdAt, inSameDayAs: day) ? plan.createdAt : plan.updatedAt)
+        }
+    }
+
     return buckets.values.map {
         GroupedBriefing(
             projectId: $0.projectId,
@@ -92,6 +104,7 @@ func groupBriefings(
             day: $0.day,
             briefing: $0.briefing,
             threads: $0.threads.sorted { $0.updatedAt > $1.updatedAt },
+            plans: $0.plans.sorted { $0.updatedAt > $1.updatedAt },
             updatedAt: $0.updated == .distantPast ? $0.day : $0.updated,
             createdAt: $0.created == .distantFuture ? $0.day : $0.created
         )

@@ -1,46 +1,9 @@
 import Foundation
-#if os(macOS)
-import AppKit
-#elseif os(iOS)
-import UIKit
-#endif
+@_exported import struct RxAttachmentField.FieldAttachment
 
-// MARK: - Attachment
+public typealias Attachment = FieldAttachment
 
-public struct Attachment: Identifiable, Sendable {
-    public let id: UUID
-    public let type: AttachmentType
-    public let name: String
-    public let path: String
-    public let fileSize: Int64?
-    public let textContent: String?
-    public let imageData: Data?
-
-    public init(
-        id: UUID = UUID(),
-        type: AttachmentType,
-        name: String,
-        path: String = "",
-        fileSize: Int64? = nil,
-        textContent: String? = nil,
-        imageData: Data? = nil
-    ) {
-        self.id = id
-        self.type = type
-        self.name = name
-        self.path = path
-        self.fileSize = fileSize
-        self.textContent = textContent
-        self.imageData = imageData
-    }
-
-    public enum AttachmentType: String, Sendable {
-        case image
-        case file
-        case text
-        case link
-    }
-
+extension FieldAttachment {
     public var promptContext: String {
         if type == .text, let text = textContent {
             return "[Pasted text:\n\(text)\n]"
@@ -94,9 +57,7 @@ extension Attachment {
 
 public enum AttachmentFactory {
 
-    public static let imageExtensions: Set<String> = [
-        "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tiff", "heic"
-    ]
+    public static let imageExtensions = FieldAttachment.imageExtensions
 
     public static let textExtensions: Set<String> = [
         "txt", "md", "markdown", "rst", "csv", "tsv", "log", "json", "jsonl", "ndjson",
@@ -121,20 +82,7 @@ public enum AttachmentFactory {
     }
 
     public static func fromFileURL(_ url: URL) -> Attachment? {
-        let name = url.lastPathComponent
-        let ext = url.pathExtension.lowercased()
-
-        let type: Attachment.AttachmentType = imageExtensions.contains(ext) ? .image : .file
-        let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int64
-        let imgData: Data? = type == .image ? (try? Data(contentsOf: url)) : nil
-
-        return Attachment(
-            type: type,
-            name: name,
-            path: url.path,
-            fileSize: fileSize,
-            imageData: imgData
-        )
+        FieldAttachment.file(at: url)
     }
 
     /// Persisted location for clipboard-pasted images. Lives under Application Support

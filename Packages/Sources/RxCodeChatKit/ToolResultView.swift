@@ -117,7 +117,7 @@ struct ToolResultView: View {
                                 .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                                 .foregroundStyle(ClaudeTheme.textPrimary)
                         } else {
-                            Text(ComputerUsePresentation.recognizes(toolCall.name) ? "Computer use" : toolCall.displayedToolName)
+                            ToolActionLabel(toolCall)
                                 .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                                 .foregroundStyle(ClaudeTheme.textPrimary)
                         }
@@ -409,9 +409,11 @@ struct ToolResultView: View {
            let filePath = toolCall.editedFilePath {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
             HStack(spacing: 0) {
-                Text("\(toolDescriptionPrefix) — ")
-                    .font(.system(size: ClaudeTheme.messageSize(12)))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
+                ToolActionLabel(toolCall) { title in
+                    Text("\(title) — ")
+                }
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 fileActionLink(label: fileName, color: ClaudeTheme.accent) {
                     windowState?.inspectorFile = PreviewFile(path: filePath, name: fileName)
                 }
@@ -437,12 +439,14 @@ struct ToolResultView: View {
             }
             .animation(.easeOut(duration: 0.25), value: toolCall.result != nil)
         } else {
-            ChatTextContentView(
-                inputSummary,
-                size: ClaudeTheme.messageSize(12),
-                color: ClaudeTheme.textSecondary,
-                maximumNumberOfLines: maximumNumberOfLines
-            )
+            ToolActionLabel(toolCall) { title in
+                ChatTextContentView(
+                    inputSummary(title: title),
+                    size: ClaudeTheme.messageSize(12),
+                    color: ClaudeTheme.textSecondary,
+                    maximumNumberOfLines: maximumNumberOfLines
+                )
+            }
         }
     }
 
@@ -459,7 +463,7 @@ struct ToolResultView: View {
         )
     }
 
-    private var inputSummary: String {
+    private func inputSummary(title: String) -> String {
         if let summary = ComputerUsePresentation.summary(name: toolCall.name, input: toolCall.input) {
             return summary
         }
@@ -476,66 +480,39 @@ struct ToolResultView: View {
                 let truncated = prompt.count > 60 ? String(prompt.prefix(60)) + "..." : prompt
                 return truncated
             }
-            return toolDescriptionPrefix
+            return title
         }
 
         if toolNameLower == "skill" {
             if let name = toolCall.input["skill"]?.stringValue {
-                return "\(toolDescriptionPrefix) — \(name)"
+                return "\(title) — \(name)"
             }
-            return toolDescriptionPrefix
+            return title
         }
 
         if isMCPTool {
-            return mcpDisplayName
+            return title
         }
 
         if let filePath = toolCall.input["file_path"]?.stringValue {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
-            return "\(toolDescriptionPrefix) — \(fileName)"
+            return "\(title) — \(fileName)"
         }
         if let filePath = toolCall.editedFilePath {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
-            return "\(toolDescriptionPrefix) — \(fileName)"
+            return "\(title) — \(fileName)"
         }
         if let command = toolCall.input["command"]?.stringValue ?? toolCall.shellCommandString {
-            return "\(toolDescriptionPrefix) — \(command.count > 50 ? String(command.prefix(50)) + "..." : command)"
+            return "\(title) — \(command.count > 50 ? String(command.prefix(50)) + "..." : command)"
         }
         if let pattern = toolCall.input["pattern"]?.stringValue {
-            return "\(toolDescriptionPrefix) — '\(pattern)'"
+            return "\(title) — '\(pattern)'"
         }
         if let path = toolCall.input["path"]?.stringValue {
             let fileName = URL(fileURLWithPath: path).lastPathComponent
-            return "\(toolDescriptionPrefix) — \(fileName)"
+            return "\(title) — \(fileName)"
         }
 
-        return toolDescriptionPrefix
-    }
-
-    private var mcpDisplayName: String {
-        if toolCall.displayedToolName != toolCall.name || toolCall.name.hasPrefix("ide__") { return toolCall.displayedToolName }
-        if toolNameLower == "mcptoolcall" {
-            return "MCP tool call"
-        }
-        return toolCall.name
-            .replacingOccurrences(of: "mcp__", with: "")
-            .replacingOccurrences(of: "__", with: " / ")
-    }
-
-    private var toolDescriptionPrefix: String {
-        switch toolNameLower {
-        case "read": "Read file"
-        case "edit": "Edit file"
-        case "write": "Create new file"
-        case "bash", "exec_command", "run_command": "Run command"
-        case "glob": "Find files"
-        case "grep": "Search in code"
-        case "multiedit": "Edit multiple locations"
-        case "notebookedit": "Edit notebook"
-        case "agent": "Subagent"
-        case "skill": "Skill"
-        case InteractiveTerminalState.toolName: "Interactive terminal"
-        default: isMCPTool ? "MCP tool" : toolCall.name
-        }
+        return title
     }
 }

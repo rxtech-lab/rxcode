@@ -264,6 +264,7 @@ fun SessionsScreen(
     if (newThreadOpen) {
         NewThreadSheet(
             viewModel = viewModel,
+            modelSettings = state.modelSettings,
             projectId = projectId,
             projectName = project?.name,
             branchInfo = branchInfo,

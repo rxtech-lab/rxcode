@@ -34,7 +34,7 @@ extension AppState {
         switch provider {
         case .flowcy:
             return ""
-        case .claudeCode:
+        case .claudeCode where !hasIDEBridge:
             toolGuidance = "Use Claude Code’s native todo tools, `TaskCreate` and `TaskUpdate` or `TodoWrite`, whichever is available."
         case .codex where planMode || !hasIDEBridge:
             toolGuidance = "Use Codex’s `update_plan` tool to track the checklist."
@@ -42,9 +42,10 @@ extension AppState {
             toolGuidance = "Use the native `todowrite` tool to track the checklist."
         case .acp where !hasIDEBridge:
             toolGuidance = "Use the client’s native todo or plan tool when available."
-        case .codex, .localAgent, .acp:
+        case .claudeCode, .codex, .localAgent, .acp:
+            let toolName = provider == .claudeCode ? "mcp__rxcode-ide__ide__set_todos" : "ide__set_todos"
             toolGuidance = """
-            Use the RxCode IDE tool `ide__set_todos` when available. Send the full `todos` array on every update \
+            Use the RxCode IDE tool `\(toolName)` when available. Send the full `todos` array on every update \
             with `content` and `status` for each step. Use `pending`, `in_progress`, and `completed`.
             """
         }
@@ -79,6 +80,7 @@ extension AppState {
         registerMode: PermissionMode,
         projectId: UUID,
         includeIDEMCP: Bool,
+        includePriorContext: Bool = true,
         streamStart: Date
     ) async -> StreamPreflight {
         if projectId == Project.globalChatID {
@@ -112,7 +114,6 @@ extension AppState {
 
         // Resolve per-backend send-request fields (MCP injection, ACP client
         // spec, model split) before dispatching through the unified protocol.
-        var mcpClaudeConfigPath: String? = nil
         var extraSystemPrompt: String? = nil
         var mcpCodexOverrides: [String] = []
         var acpMCPServers: [JSONValue] = []
@@ -144,7 +145,7 @@ extension AppState {
         // `memoryEnabled` / `memoryInjectEnabled` / `memoryMaxContextItems`
         // directly. The local `let` capture solves both isolation and the
         // "captured var" warning for `sessionKey`.
-        let memoryActive = memoryEnabled && memoryInjectEnabled
+        let memoryActive = includePriorContext && memoryEnabled && memoryInjectEnabled
         let memoryLimit = memoryMaxContextItems
         let memoryMode = memoryRetrievalMode
         let memoryMinScore = memoryInjectionScoreThreshold
@@ -212,16 +213,10 @@ extension AppState {
             "ideMCP",
             detail: "enabled=\(shouldIncludeIDEMCP) port=\(idePort.map(String.init) ?? "<nil>")"
         )
-        let briefingContext = projectBriefingSystemPrompt(projectId: projectId, canFetchDetails: bridge != nil)
+        let briefingContext = includePriorContext ? projectBriefingSystemPrompt(projectId: projectId, canFetchDetails: bridge != nil) : ""
         logPreflight("projectBriefing", detail: "contextChars=\(briefingContext.count)")
         let skillContext = bridge != nil ? await skillContextAsync : ""
         logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-        let taskProgressContext = Self.taskProgressPromptContext(
-            for: agentProvider,
-            hasIDEBridge: bridge != nil,
-            planMode: permissionMode == .plan
-        )
-
         // Session-start hooks fire once, only for a brand-new thread (no resumed
         // CLI session). Their stdout is injected into this turn's agent context
         // alongside the briefing and memory context, and the status
@@ -231,19 +226,26 @@ extension AppState {
         // visible chat views. Keep them out of this preflight path: awaiting
         // network-backed banner checks here delays the first backend event.
         var hookStartContext = ""
-        if cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
+        if includePriorContext, cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
             hookStartContext = await hookManager.dispatchSessionStart(
                 SessionStartPayload(project: project, sessionKey: sessionKey)
             ).combinedOutput
             logPreflight("hooksStart", detail: "contextChars=\(hookStartContext.count)")
         }
 
+        let mcpClaudeConfigPath = agentProvider == .claudeCode
+            ? await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
+            : nil
+        let taskProgressContext = Self.taskProgressPromptContext(
+            for: agentProvider,
+            hasIDEBridge: bridge != nil && (agentProvider != .claudeCode || mcpClaudeConfigPath != nil),
+            planMode: permissionMode == .plan
+        )
         let codexAndACPContext = [
             taskProgressContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
         ]
         switch agentProvider {
         case .claudeCode:
-            mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
             appendExtraSystemPrompt(taskProgressContext)
             appendExtraSystemPrompt(configuredPromptContext)

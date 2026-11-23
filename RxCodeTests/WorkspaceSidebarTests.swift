@@ -2,6 +2,7 @@ import AppKit
 import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
+import ViewInspector
 import XCTest
 @testable import RxCode
 
@@ -176,5 +177,86 @@ final class WorkspaceSidebarTests: XCTestCase {
         let actual = try FileManager.default.attributesOfItem(atPath: detached.root)
         let expected = try FileManager.default.attributesOfItem(atPath: worktree.path)
         XCTAssertEqual(actual[.systemFileNumber] as? NSNumber, expected[.systemFileNumber] as? NSNumber)
+    }
+
+    func testGitWindowPollsRemoteBranchesAndShowsTheDeleteOption() async throws {
+        let repo = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repo) }
+        func git(_ arguments: String...) async throws {
+            if let error = await GitHelper.runWithError(arguments, at: repo.path) {
+                XCTFail(error)
+                throw CocoaError(.fileWriteUnknown)
+            }
+        }
+        try await git("init", "-b", "publisher")
+        for message in ["First", "Second"] {
+            try await git("-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false",
+                          "commit", "--allow-empty", "-m", message)
+        }
+        try await git("init", "--bare", "-b", "main", ".git/server")
+        try await git("remote", "add", "origin", repo.appending(path: ".git/server").path)
+        try await git("push", "origin", "HEAD:refs/heads/publisher", "HEAD^:refs/heads/main")
+        try await git("branch", "--track", "review", "origin/main")
+        let store = GitWorkflowStore(root: repo.path)
+        await store.reload()
+        let review = try XCTUnwrap(store.snapshot.localBranches.first { $0.name == "review" })
+        let sheet = GitDeleteBranchSheet(store: store, branch: review)
+        let toggle = try sheet.inspect().find(ViewType.Toggle.self)
+        XCTAssertFalse(try toggle.isOn())
+        XCTAssertEqual(try toggle.labelView().find(ViewType.Text.self).string(), "Also delete “origin/main” from the remote")
+
+        try await git("-C", ".git/server", "update-ref", "refs/heads/main", "refs/heads/publisher")
+        let polling = Task { await store.fetchRemotesPeriodically(every: .milliseconds(40)) }
+        defer { polling.cancel() }
+        func waitForCount(_ count: Int) async throws {
+            let deadline = ContinuousClock.now + .seconds(5)
+            while store.snapshot.localBranches.first(where: { $0.name == "review" })?.behind != count {
+                guard ContinuousClock.now < deadline else { return XCTFail("Expected \(count) incoming commits") }
+                try await Task.sleep(for: .milliseconds(30))
+            }
+        }
+        try await waitForCount(1)
+        let host = NSHostingView(rootView: GitWorkflowSidebar(store: store).environment(RepositoryStatus()))
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 310, height: 550),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        func tableView(in view: NSView) -> NSTableView? {
+            if let table = view as? NSTableView { return table }
+            return view.subviews.lazy.compactMap { tableView(in: $0) }.first
+        }
+        let table = try XCTUnwrap(tableView(in: host))
+        for row in 0..<table.numberOfRows {
+            table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            await Task.yield()
+            if store.selection == .branch("review") { break }
+        }
+        XCTAssertEqual(store.selection, .branch("review"))
+        XCTAssertEqual(store.snapshot.currentBranch, "publisher")
+        let rowBounds = table.rect(ofRow: table.selectedRow)
+        let point = table.convert(CGPoint(x: rowBounds.midX, y: rowBounds.midY), to: nil)
+        // Let AppKit dispatch the full double-click to the SwiftUI list.
+        for click in 1...2 {
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: click, pressure: type == .leftMouseDown ? 1 : 0))
+                NSApp.postEvent(event, atStart: false)
+            }
+        }
+        let checkoutDeadline = ContinuousClock.now + .seconds(5)
+        while store.snapshot.currentBranch != "review", ContinuousClock.now < checkoutDeadline {
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        XCTAssertEqual(store.snapshot.currentBranch, "review")
+        try await git("-C", ".git/server", "update-ref", "refs/heads/main", "refs/heads/publisher^")
+        try await waitForCount(0)
+        polling.cancel()
+        await polling.value
+        XCTAssertNil(store.operation)
+        XCTAssertNil(store.error)
     }
 }

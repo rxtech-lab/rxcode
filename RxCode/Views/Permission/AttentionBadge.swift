@@ -1,6 +1,16 @@
 import RxCodeCore
 import SwiftUI
 
+struct ProjectAttentionBadge: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+    let projectId: UUID
+
+    var body: some View {
+        AttentionBadge(attention: appState.projectAttention(projectId: projectId, in: windowState))
+    }
+}
+
 struct AttentionBadge: View {
     let attention: PendingAttention
 

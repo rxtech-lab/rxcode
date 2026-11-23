@@ -60,7 +60,7 @@ struct AudioStudioView<Composer: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if !takes.isEmpty {
-                Divider()
+                ClaudeThemeDivider()
                 StudioTakeList(
                     title: String(localized: "Takes", bundle: .module),
                     takes: takes,
@@ -109,7 +109,7 @@ private struct AudioStage: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 18)
                 .padding(.bottom, 12)
-            Divider()
+            ClaudeThemeDivider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

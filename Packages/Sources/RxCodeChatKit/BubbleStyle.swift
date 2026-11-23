@@ -3,7 +3,7 @@ import RxCodeCore
 
 // MARK: - Bubble Variant
 
-enum BubbleVariant {
+public enum BubbleVariant {
     case user
     case assistant
     case error
@@ -97,7 +97,7 @@ struct BubbleStyle: ViewModifier {
 
 // MARK: - View Extension
 
-extension View {
+public extension View {
     func bubbleStyle(_ variant: BubbleVariant) -> some View {
         modifier(BubbleStyle(variant: variant))
     }

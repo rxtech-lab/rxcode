@@ -120,7 +120,7 @@ struct MemorySettingsSection: View {
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
 
-            Divider()
+            ClaudeThemeDivider()
 
             memoryMCPServerSection
         }
@@ -154,7 +154,7 @@ struct MemorySettingsSection: View {
                         .foregroundStyle(.secondary)
                 }
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             }
             .font(.system(size: ClaudeTheme.size(11)))
             .padding(12)
@@ -344,11 +344,11 @@ struct MemoryBrowserSheet: View {
             .help("Delete memory")
         }
         .padding(10)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 
@@ -418,7 +418,7 @@ struct MemoryEditorSheet: View {
                 .frame(height: 110)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                        .strokeBorder(ClaudeTheme.border, lineWidth: 1)
                 )
 
             HStack(spacing: 12) {

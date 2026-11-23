@@ -5,8 +5,7 @@ import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The description field for tasks and stories: a Markdown source editor with a
-/// preview toggle that accepts pasted and dropped images, files and text.
+/// A Markdown field shared by task descriptions and plan-mode requests and messages.
 ///
 /// Dropped and pasted content is written into the description as Markdown —
 /// `![name](file://…)` for an image, `[name](file://…)` for anything else — so
@@ -15,74 +14,111 @@ import UniformTypeIdentifiers
 /// file is also registered as an attachment, which is what actually ships to the
 /// agent on dispatch.
 ///
-/// The source editor is the chat input's `IMETextView`, so an image reference
-/// shows as the same `[ImageN]` chip the chat composer uses. The field edits a
-/// display string in which each `![name](url)` is stood in for by its token;
-/// `DescriptionImageChips` maps between that and the stored Markdown.
+/// The source editor uses the chat input's `IMETextView`. Editable tokens mark
+/// the positions of image and file references in the Markdown. The file chips
+/// above the editor open previews and let the user remove an attachment.
 struct MarkdownDescriptionEditor: View {
+    enum Layout {
+        case form
+        case composer(onSubmit: () -> Void)
+    }
+
     @Binding var text: String
     var attachments: Binding<[Attachment.DTO]>?
     var placeholder: String
+    var title: LocalizedStringKey = "Description"
     var isDisabled: Bool = false
     var height: CGFloat = 170
     /// Prefix for the accessibility identifiers, so two editors can be on
     /// screen at once and still be told apart.
     var identifierPrefix: String = "task-description"
+    var editorIdentifier: String?
+    var layout: Layout = .form
 
     @State private var controller = MarkdownEditorController()
     @State private var isDropTargeted = false
     @State private var showsPreview = false
-    @State private var chips = DescriptionImageChips()
+    @State private var chips = DescriptionAttachmentChips()
     @State private var displayText = ""
     @State private var isFocused = false
     @State private var hasMarkedText = false
-    @State private var previewImage: Attachment?
+    @State private var previewAttachment: Attachment?
+    @State private var choosingFiles = false
 
     /// Drops are accepted in preview mode too — the caret is unavailable there,
     /// so `insert` falls back to appending.
     private var acceptsContent: Bool { !isDisabled }
 
+    private var isForm: Bool {
+        if case .form = layout { true } else { false }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            header
-            content
-                .frame(height: height)
-                .background(ClaudeTheme.inputBackground, in: shape)
-                .overlay {
-                    shape.strokeBorder(
-                        isDropTargeted ? ClaudeTheme.accent : ClaudeTheme.inputBorder,
-                        lineWidth: isDropTargeted ? 1.5 : 1
-                    )
-                }
-                .onDrop(of: AttachmentIntake.dropTypes, isTargeted: $isDropTargeted) { providers in
-                    guard acceptsContent else { return false }
-                    handleDrop(providers)
-                    return true
-                }
-                .overlay { dropHint }
-            if !isDisabled {
-                Text("Markdown. Paste or drop images and files to attach them.")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+        let items = displayedAttachments
+        let field = AttachmentTextField(
+            editor: editor,
+            attachments: items.filter { $0.type != .file },
+            editorHeight: isForm ? height - 12 : nil,
+            showsFilePicker: !isForm,
+            onAdd: { item, _ in
+                attach(item)
+                return nil
+            },
+            onRemove: remove
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            if isForm { header }
+            if !showsPreview { fileChips(items.filter { $0.type == .file }) }
+            if isForm {
+                formContent(field)
+            } else {
+                field
             }
         }
-        .padding(.vertical, 2)
-        .sheet(item: $previewImage) { ImagePreviewSheet(attachment: $0) }
+        .padding(.vertical, isForm ? 2 : 0)
+        .onDrop(of: AttachmentIntake.dropTypes, isTargeted: $isDropTargeted) { providers in
+            guard acceptsContent else { return false }
+            handleDrop(providers)
+            return true
+        }
+        .overlay { dropHint }
+        .sheet(item: $previewAttachment) { AttachmentPreviewSheet(attachment: $0) }
+        .rxCodeAttachmentPreviews()
         .onAppear {
-            displayText = chips.display(for: text)
-            controller.fallbackAppend = { [binding = $displayText] snippet in
-                binding.wrappedValue += snippet
-            }
+            controller.fallbackAppend = { [binding = editorText] snippet in binding.wrappedValue += snippet }
         }
-        .onChange(of: text) { _, newValue in
-            // Only an outside change (e.g. a reset) re-derives the chips; our own
-            // write-back already matches the display string.
+        .onChange(of: text, initial: true) { _, newValue in
+            // An external reset starts a fresh draft with its own image tokens.
             guard chips.markdown(for: displayText) != newValue else { return }
+            chips = DescriptionAttachmentChips()
             displayText = chips.display(for: newValue)
         }
-        .onChange(of: displayText) { _, newValue in
-            let markdown = chips.markdown(for: newValue)
-            if markdown != text { text = markdown }
+    }
+
+    private var editorText: Binding<String> {
+        Binding(get: { displayText }, set: { value in
+            displayText = value
+            text = chips.markdown(for: value)
+        })
+    }
+
+    @ViewBuilder
+    private func formContent(_ field: AttachmentTextField) -> some View {
+        Group {
+            if showsPreview { markdownPreview.frame(height: height) }
+            else { field.padding(6) }
+        }
+        .background(ClaudeTheme.inputBackground, in: shape)
+        .overlay {
+            shape.strokeBorder(
+                isDropTargeted ? ClaudeTheme.accent : ClaudeTheme.inputBorder,
+                lineWidth: isDropTargeted ? 1.5 : 1
+            )
+        }
+        if !isDisabled {
+            Text("Markdown. Paste or drop images and files to attach them.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
         }
     }
 
@@ -92,8 +128,9 @@ struct MarkdownDescriptionEditor: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Description")
+            Text(title)
             Spacer()
+            addFilesButton
             Picker("Editor Mode", selection: $showsPreview) {
                 Image(systemName: "pencil").tag(false)
                 Image(systemName: "eye").tag(true)
@@ -106,46 +143,133 @@ struct MarkdownDescriptionEditor: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if showsPreview {
-            ScrollView {
-                Group {
-                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(placeholder)
-                            .foregroundStyle(ClaudeTheme.inputPlaceholder)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        MarkdownContentView(text: text)
-                    }
-                }
-                .padding(8)
-            }
-        } else {
-            IMETextView(
-                text: $displayText,
-                isFocused: $isFocused,
-                hasMarkedText: $hasMarkedText,
-                font: .monospacedSystemFont(ofSize: ClaudeTheme.size(12), weight: .regular),
-                textColor: NSColor(isDisabled ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary),
-                placeholder: placeholder,
-                onReturn: { [controller] in controller.insert("\n") },
-                onPasteCommandV: handlePaste,
-                onImageChipTap: openImage,
-                isEditable: !isDisabled,
-                accessibilityIdentifier: "\(identifierPrefix)-editor",
-                onTextViewReady: { [controller] textView in
-                    // NSTextView would swallow a dropped file into a path string;
-                    // unregistering lets the drag reach the SwiftUI drop target.
-                    textView.unregisterDraggedTypes()
-                    controller.textView = textView
-                },
-                chipThumbnail: { index in
-                    chips.url(forChip: index).flatMap(ChipThumbnailCache.shared.thumbnail(for:))
-                }
-            )
-            .padding(6)
+    private var addFilesButton: some View {
+        Button { choosingFiles = true } label: {
+            Label("Add Files…", systemImage: "paperclip")
         }
+        .buttonStyle(.borderless)
+        .disabled(isDisabled)
+        .help("Add Files…")
+        .accessibilityIdentifier("\(identifierPrefix)-add-files")
+        .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard acceptsContent, case .success(let urls) = result else { return }
+            for url in urls {
+                if let attachment = AttachmentFactory.fromFileURL(url) { attach(attachment) }
+            }
+        }
+    }
+
+    private var markdownPreview: some View {
+        ScrollView {
+            Group {
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(ClaudeTheme.inputPlaceholder)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    MarkdownContentView(text: text)
+                }
+            }
+            .padding(8)
+        }
+    }
+
+    private var font: NSFont {
+        switch layout {
+        case .form: .monospacedSystemFont(ofSize: ClaudeTheme.size(12), weight: .regular)
+        case .composer: .systemFont(ofSize: ClaudeTheme.size(13))
+        }
+    }
+
+    private var editor: IMETextView {
+        IMETextView(
+            text: editorText,
+            isFocused: $isFocused,
+            hasMarkedText: $hasMarkedText,
+            font: font,
+            textColor: NSColor(isDisabled ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary),
+            chipColor: NSColor(ClaudeTheme.accent),
+            placeholder: placeholder,
+            onReturn: {
+                switch layout {
+                case .form: controller.insert("\n")
+                case .composer(let onSubmit): onSubmit()
+                }
+            },
+            onImageChipTap: { previewAttachment = chips.attachment(at: $0) },
+            isEditable: !isDisabled,
+            accessibilityIdentifier: editorIdentifier ?? "\(identifierPrefix)-editor",
+            onTextViewReady: { [controller] textView in
+                // Route dropped files to the SwiftUI drop target instead of inserting a bare path.
+                textView.unregisterDraggedTypes()
+                controller.textView = textView
+            },
+            chipThumbnail: { index in
+                guard let item = chips.attachment(at: index) else { return nil }
+                return item.type == .image ? ChipThumbnailCache.shared.thumbnail(for: item) : NSWorkspace.shared.icon(forFile: item.path)
+            },
+            chipTokens: chips.indices
+        )
+    }
+
+    private var displayedAttachments: [Attachment] {
+        let inline = chips.attachments(in: displayText)
+        let paths = Set(inline.map(\.path))
+        let extra = attachments?.wrappedValue.filter { !paths.contains($0.path) }.map(Attachment.init(dto:)) ?? []
+        return inline + extra
+    }
+
+    @ViewBuilder
+    private func fileChips(_ files: [Attachment]) -> some View {
+        if !files.isEmpty {
+            FlowLayout(spacing: 6, lineSpacing: 4) {
+                ForEach(files) { file in fileChip(file) }
+            }
+        }
+    }
+
+    private func fileChip(_ file: Attachment) -> some View {
+        HStack(spacing: 2) {
+            Button { previewAttachment = file } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.fill")
+                        .foregroundStyle(ClaudeTheme.accentText)
+                    Text(verbatim: file.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, isDisabled ? 8 : 2)
+                .frame(maxWidth: 200, minHeight: 22, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .help(file.path)
+            .accessibilityLabel("Preview \(file.name)")
+            .accessibilityIdentifier("attachment-preview-\(file.name)")
+
+            if !isDisabled {
+                Button { remove(file) } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .frame(width: 20, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .help("Remove \(file.name)")
+                .accessibilityLabel("Remove \(file.name)")
+                .accessibilityIdentifier("attachment-remove-\(file.name)")
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+        .foregroundStyle(ClaudeTheme.textPrimary)
+        .background(ClaudeTheme.surfaceElevated, in: Capsule())
+        .overlay { Capsule().strokeBorder(ClaudeTheme.inputBorder).allowsHitTesting(false) }
+    }
+
+    private func remove(_ item: Attachment) {
+        guard acceptsContent else { return }
+        editorText.wrappedValue = chips.removing(item, from: displayText)
+        attachments?.wrappedValue.removeAll { $0.path == item.path }
     }
 
     @ViewBuilder
@@ -163,15 +287,6 @@ struct MarkdownDescriptionEditor: View {
     }
 
     // MARK: - Paste & Drop
-
-    /// Returns `true` when the paste was consumed here; `false` lets the text
-    /// view run its own plain-text paste, which keeps undo and IME intact.
-    private func handlePaste() -> Bool {
-        guard acceptsContent else { return true }
-        guard let pasted = AttachmentIntake.attachments(from: .general) else { return false }
-        pasted.forEach(attach)
-        return true
-    }
 
     private func handleDrop(_ providers: [NSItemProvider]) {
         AttachmentIntake.load(
@@ -192,7 +307,7 @@ struct MarkdownDescriptionEditor: View {
             if item.type == .image {
                 controller.insert(chips.token(for: reference))
             } else {
-                controller.insertBlock(reference)
+                controller.insertBlock(chips.token(for: reference))
             }
             guard let attachments, !item.path.isEmpty else { continue }
             let dto = item.persistableInTaskBoard().dto
@@ -201,51 +316,84 @@ struct MarkdownDescriptionEditor: View {
         }
     }
 
-    private func openImage(_ index: Int) {
-        guard let url = chips.url(forChip: index) else { return }
-        previewImage = Attachment(type: .image, name: url.lastPathComponent, path: url.path)
-    }
-
     /// `![alt](file://…)` for an image, `[label](file://…)` otherwise. The URL
     /// form is used rather than a bare path because Markdown link destinations
     /// end at the first space, and paths routinely contain spaces.
     static func markdownReference(for attachment: Attachment) -> String {
         let label = attachment.name
+            .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "[", with: "\\[")
             .replacingOccurrences(of: "]", with: "\\]")
         let destination = attachment.path.isEmpty
             ? attachment.name
             : URL(fileURLWithPath: attachment.path).absoluteString
+                .replacingOccurrences(of: "(", with: "%28")
+                .replacingOccurrences(of: ")", with: "%29")
         return "\(attachment.type == .image ? "!" : "")[\(label)](\(destination))"
+    }
+
+    /// Preserve the chat draft's image positions and include files chosen without an inline token.
+    static func markdown(forChatDraft draft: String, files: [Attachment]) -> String {
+        guard !files.isEmpty else { return draft }
+        let images = files.filter { $0.type == .image }
+        let text = draft as NSString
+        let result = NSMutableString(string: draft)
+        let pattern = try! NSRegularExpression(pattern: #"\[Image(\d+)\]"#)
+        var inline: Set<UUID> = []
+        for match in pattern.matches(in: draft, range: NSRange(location: 0, length: text.length)).reversed() {
+            guard let slot = Int(text.substring(with: match.range(at: 1))), slot > 0, slot <= images.count else { continue }
+            let image = images[slot - 1]
+            inline.insert(image.id)
+            result.replaceCharacters(in: match.range, with: markdownReference(for: image))
+        }
+        let extra = files.filter { !inline.contains($0.id) }.map(markdownReference)
+        return ([result as String] + extra).filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }
 
-// MARK: - Image chips
+// MARK: - Attachment chips
 
-/// Maps a description's Markdown to the chat input's chip form and back: each
-/// image reference becomes `[ImageN]`, where N is its 1-based slot in
-/// `references`. Slots are only ever appended, so a token keeps pointing at the
-/// same image while the user edits around it.
-struct DescriptionImageChips {
-    private(set) var references: [String] = []
+/// The editable tokens keep a stable slot as the user moves or removes references.
+struct DescriptionAttachmentChips {
+    private struct Entry {
+        let reference: String
+        let token: String
+        let attachment: Attachment?
+    }
 
-    private static let imageReference = try! NSRegularExpression(
-        pattern: #"!\[(?:\\.|[^\]\\\n])*\]\([^)\s]+\)"#
-    )
-    private static let chipToken = try! NSRegularExpression(pattern: #"\[Image(\d+)\]"#)
+    private var entries: [Entry] = []
+    private(set) var indices: [String: Int] = [:]
+    private var imageCount = 0
+    private static let reference = try! NSRegularExpression(pattern: #"!?\[((?:\\.|[^\]\\\n])*)\]\(([^)\s]+)\)"#)
+    private static let tokenPattern = try! NSRegularExpression(pattern: #"\[(?:\\.|[^\[\]\\\n])+\]"#)
 
-    /// The `[ImageN]` token for a reference, registering it if it is new.
     mutating func token(for reference: String) -> String {
-        if let index = references.firstIndex(of: reference) {
-            return "[Image\(index + 1)]"
+        if let entry = entries.first(where: { $0.reference == reference }) { return entry.token }
+        let ns = reference as NSString
+        guard let match = Self.reference.firstMatch(in: reference, range: NSRange(location: 0, length: ns.length)),
+              let url = URL(string: ns.substring(with: match.range(at: 2))) else { return reference }
+        let image = reference.hasPrefix("!")
+        guard image || url.isFileURL else { return reference }
+
+        let label = ns.substring(with: match.range(at: 1))
+        let name = label.replacingOccurrences(of: #"\\(.)"#, with: "$1", options: .regularExpression)
+        let item = url.isFileURL ? Attachment(type: image ? .image : .file, name: name, path: url.path) : nil
+        let token: String
+        if image {
+            imageCount += 1
+            token = Attachment.imageToken(imageCount)
+        } else {
+            let base = "[File: \(label)]"
+            token = indices[base] == nil ? base : "[File \(entries.count + 1): \(label)]"
         }
-        references.append(reference)
-        return "[Image\(references.count)]"
+        entries.append(Entry(reference: reference, token: token, attachment: item))
+        indices[token] = entries.count
+        return token
     }
 
     mutating func display(for markdown: String) -> String {
         let ns = markdown as NSString
-        let matches = Self.imageReference.matches(in: markdown, range: NSRange(location: 0, length: ns.length))
+        let matches = Self.reference.matches(in: markdown, range: NSRange(location: 0, length: ns.length))
         var result = ""
         var cursor = 0
         for match in matches {
@@ -256,34 +404,29 @@ struct DescriptionImageChips {
         return result + ns.substring(from: cursor)
     }
 
-    /// Tokens with no registered reference are left as typed.
     func markdown(for display: String) -> String {
         let ns = display as NSString
-        let matches = Self.chipToken.matches(in: display, range: NSRange(location: 0, length: ns.length))
-        var result = ""
-        var cursor = 0
-        for match in matches {
-            result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
-            let token = ns.substring(with: match.range)
-            if let slot = Int(ns.substring(with: match.range(at: 1))), references.indices.contains(slot - 1) {
-                result += references[slot - 1]
-            } else {
-                result += token
+        let result = NSMutableString(string: display)
+        for match in Self.tokenPattern.matches(in: display, range: NSRange(location: 0, length: ns.length)).reversed() {
+            if let slot = indices[ns.substring(with: match.range)] {
+                result.replaceCharacters(in: match.range, with: entries[slot - 1].reference)
             }
-            cursor = NSMaxRange(match.range)
         }
-        return result + ns.substring(from: cursor)
+        return result as String
     }
 
-    /// The file an `[ImageN]` chip points at, when it is a local file.
-    func url(forChip index: Int) -> URL? {
-        guard references.indices.contains(index - 1) else { return nil }
-        let reference = references[index - 1]
-        guard let open = reference.lastIndex(of: "("),
-              let url = URL(string: String(reference[reference.index(after: open)...].dropLast())),
-              url.isFileURL
-        else { return nil }
-        return url
+    func attachment(at slot: Int) -> Attachment? {
+        guard slot > 0, slot <= entries.count else { return nil }
+        return entries[slot - 1].attachment
+    }
+
+    func attachments(in display: String) -> [Attachment] {
+        entries.compactMap { display.contains($0.token) ? $0.attachment : nil }
+    }
+
+    func removing(_ item: Attachment, from display: String) -> String {
+        guard let entry = entries.first(where: { $0.attachment?.id == item.id }) else { return display }
+        return display.replacingOccurrences(of: entry.token, with: "")
     }
 }
 

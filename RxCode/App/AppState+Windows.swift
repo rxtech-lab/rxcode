@@ -3,6 +3,7 @@ import RxCodeCore
 
 extension AppState {
     func registerLiveWindow(_ window: WindowState) {
+        window.pendingPermissions = mobilePendingRequests.values.sorted { $0.id < $1.id }
         window.mcpAppLoader = { [weak self, weak window] call in
             guard let self, let window else { return nil }
             return try await self.loadMCPApp(for: call, projectPath: window.selectedProject?.path)

@@ -43,13 +43,13 @@ struct SkillMarketView: View {
     private var marketplaceContent: some View {
         VStack(spacing: 0) {
             headerBar
-            Divider()
+            ClaudeThemeDivider()
             searchAndFilterBar
             if !appState.marketplaceCustomSources.isEmpty || appState.marketplaceSourceError != nil {
-                Divider()
+                ClaudeThemeDivider()
                 customSourcesBar
             }
-            Divider()
+            ClaudeThemeDivider()
             pluginGrid
                 .overlay {
                     if appState.marketplaceLoading && !appState.marketplaceCatalog.isEmpty {
@@ -126,11 +126,11 @@ struct SkillMarketView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color(NSColor.textBackgroundColor))
+            .background(ClaudeTheme.inputBackground)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor).opacity(0.5), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border.opacity(0.5), lineWidth: 1)
             )
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -183,7 +183,7 @@ struct SkillMarketView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
-            .background(Color(NSColor.controlBackgroundColor).opacity(0.45))
+            .background(ClaudeTheme.surfacePrimary.opacity(0.45))
         }
     }
 
@@ -299,7 +299,7 @@ struct PluginCard: View {
                     .foregroundStyle(ClaudeTheme.accentText)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.08))
+                    .background(ClaudeTheme.accent.opacity(0.08))
                     .clipShape(Capsule())
 
                 Text(plugin.marketplaceLabel)
@@ -307,7 +307,7 @@ struct PluginCard: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color(NSColor.controlBackgroundColor))
+                    .background(ClaudeTheme.surfacePrimary)
                     .clipShape(Capsule())
 
                 Spacer()
@@ -338,11 +338,11 @@ struct PluginCard: View {
             }
         }
         .padding(14)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color(NSColor.separatorColor).opacity(isHovering ? 0.8 : 0.5), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border.opacity(isHovering ? 0.8 : 0.5), lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
@@ -434,7 +434,7 @@ struct PluginDetailView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Content
             ScrollView {
@@ -446,7 +446,7 @@ struct PluginDetailView: View {
                             .foregroundStyle(ClaudeTheme.accentText)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Color.accentColor.opacity(0.08))
+                            .background(ClaudeTheme.accent.opacity(0.08))
                             .clipShape(Capsule())
 
                         Text(plugin.sourceType.rawValue)
@@ -454,7 +454,7 @@ struct PluginDetailView: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Color(NSColor.controlBackgroundColor))
+                            .background(ClaudeTheme.surfacePrimary)
                             .clipShape(Capsule())
                     }
 
@@ -468,7 +468,7 @@ struct PluginDetailView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Divider()
+                    ClaudeThemeDivider()
 
                     // Info grid
                     Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
@@ -480,7 +480,7 @@ struct PluginDetailView: View {
                         }
                     }
 
-                    Divider()
+                    ClaudeThemeDivider()
 
                     // Install command
                     VStack(alignment: .leading, spacing: 6) {
@@ -492,7 +492,7 @@ struct PluginDetailView: View {
                             .foregroundStyle(.secondary)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(NSColor.controlBackgroundColor))
+                            .background(ClaudeTheme.surfacePrimary)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }

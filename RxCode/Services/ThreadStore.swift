@@ -8,6 +8,7 @@ import os
 @MainActor
 final class ThreadStore {
     let logger = Logger(subsystem: "com.claudework", category: "ThreadStore")
+    var onCodingPlansChanged: (() -> Void)?
     let context: ModelContext
     /// Kept so background readers can open their own context over the same
     /// store — see `ThreadStoreReader`.
@@ -51,6 +52,10 @@ final class ThreadStore {
     }
 
     func retainedProject(id: UUID) -> Project? {
+        Self.retainedProject(id: id, in: context)
+    }
+
+    nonisolated static func retainedProject(id: UUID, in context: ModelContext) -> Project? {
         var descriptor = FetchDescriptor<ChatThread>(predicate: #Predicate {
             $0.projectId == id && $0.retainedProjectPath != nil
         })
@@ -223,14 +228,21 @@ final class ThreadStore {
     // MARK: - Writes
 
     /// Insert or update a thread row from a summary.
-    func upsert(_ summary: ChatSession.Summary, cliSessionId: String? = nil) {
+    func upsert(_ summary: ChatSession.Summary, cliSessionId: String? = nil, finalTranscriptSaved: Bool = false) {
+        var updatesPlan = false
         if let existing = fetch(id: summary.id) {
+            updatesPlan = existing.implementationPlanID != nil || existing.codingPlanData != nil
             existing.apply(summary)
+            if finalTranscriptSaved {
+                existing.hasUnfinishedTurn = summary.hasUnfinishedTurn
+                existing.unfinishedTranscript = nil
+            }
             if let cliSessionId { existing.cliSessionId = cliSessionId }
         } else {
             context.insert(ChatThread.from(summary, cliSessionId: cliSessionId))
         }
         save()
+        if updatesPlan { onCodingPlansChanged?() }
     }
 
     func upsertThreadSummary(
@@ -404,16 +416,31 @@ final class ThreadStore {
         save()
     }
 
+    func setTurnOutcome(sessionID: String, unfinished: Bool) {
+        guard let row = fetch(id: sessionID) else { return }
+        row.hasUnfinishedTurn = unfinished
+        if !unfinished { row.unfinishedTranscript = nil }
+        save()
+    }
+
+    func saveUnfinishedTranscript(_ data: Data, sessionID: String) {
+        guard let row = fetch(id: sessionID), row.hasUnfinishedTurn == true else { return }
+        row.unfinishedTranscript = data
+        save()
+    }
+
     func setCheckoutBranch(sessionId: String, branch: String) {
         guard let row = fetch(id: sessionId), row.checkoutBranch != branch else { return }
         row.checkoutBranch = branch
         save()
+        if row.codingPlanData != nil { onCodingPlansChanged?() }
     }
 
     /// Rename a thread row's id (used when AppState swaps placeholder → CLI sid in `allSessionSummaries`).
     func renameId(from oldId: String, to newId: String) {
         guard oldId != newId else { return }
         guard let row = fetch(id: oldId) else { return }
+        let renamesPlan = row.implementationPlanID != nil || row.codingPlanData != nil
         if let existingAtNew = fetch(id: newId) {
             if existingAtNew.title == ChatSession.defaultTitle, row.title != ChatSession.defaultTitle {
                 existingAtNew.title = row.title
@@ -422,6 +449,12 @@ final class ThreadStore {
             if existingAtNew.providerSessionIdsJSON == nil {
                 existingAtNew.providerSessionIdsJSON = row.providerSessionIdsJSON
             }
+            existingAtNew.implementationPlanID = row.implementationPlanID ?? existingAtNew.implementationPlanID
+            if let unfinished = row.hasUnfinishedTurn {
+                existingAtNew.hasUnfinishedTurn = unfinished
+                existingAtNew.unfinishedTranscript = row.unfinishedTranscript
+            }
+            existingAtNew.codingPlanData = row.codingPlanData ?? existingAtNew.codingPlanData
             existingAtNew.checkoutBranch = row.checkoutBranch ?? existingAtNew.checkoutBranch
             context.delete(row)
         } else {
@@ -437,6 +470,7 @@ final class ThreadStore {
         renameHookCards(from: oldId, to: newId)
         renameThreadSummary(from: oldId, to: newId)
         save()
+        if renamesPlan { onCodingPlansChanged?() }
     }
 
     /// Mark a thread row as archived (or restore it).
@@ -477,6 +511,7 @@ final class ThreadStore {
 
     func delete(id: String) {
         guard let row = fetch(id: id) else { return }
+        let deletesPlan = row.implementationPlanID != nil || row.codingPlanData != nil || isCodingPlanVerification(parentID: row.parentThreadId)
         context.delete(row)
         deleteTodoSnapshotRow(sessionId: id)
         deleteFileEditRows(sessionId: id)
@@ -488,6 +523,7 @@ final class ThreadStore {
         deleteThreadSummaryRow(sessionId: id)
         deleteEmbeddingChunkRows(threadId: id)
         save()
+        if deletesPlan { onCodingPlansChanged?() }
     }
 
     func deleteAll(projectId: UUID?) {
@@ -546,6 +582,7 @@ final class ThreadStore {
                 for row in chunks { context.delete(row) }
             }
             save()
+            onCodingPlansChanged?()
         } catch {
             logger.error("deleteAll failed: \(error.localizedDescription)")
         }

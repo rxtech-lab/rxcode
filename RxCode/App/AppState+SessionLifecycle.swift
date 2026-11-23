@@ -288,8 +288,14 @@ extension AppState {
             .threadSummaryItems(projectId: projectId, branch: branch)
             .filter { calendar.isDate($0.createdAt, inSameDayAs: chatDay) }
             .map { (title: $0.title, summary: $0.summary) }
+        let activity = (try? await codingPlanActivities(projectID: projectId)) ?? []
+        let dayPlans = activity.filter {
+            ($0.branch ?? "unknown") == branch && calendar.isDate($0.updatedAt, inSameDayAs: chatDay)
+        }
+        guard !dayThreadSummaries.isEmpty || !dayPlans.isEmpty else { return }
+        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: dayThreadSummaries, plans: dayPlans)
         guard let briefing = await generateBranchBriefing(
-            threadSummaries: dayThreadSummaries,
+            prompt: prompt,
             summary: summary
         ) else { return }
 
@@ -334,29 +340,28 @@ extension AppState {
     }
 
     func generateBranchBriefing(
-        threadSummaries: [(title: String, summary: String)],
+        prompt: String,
         summary: ChatSession.Summary
     ) async -> String? {
-        guard !threadSummaries.isEmpty else { return nil }
         switch summarizationProvider {
         case .selectedClient:
             let provider = summary.agentProvider
             let model = summary.model ?? selectedSummarizationModel(for: provider)
             return await generateBranchBriefing(
-                threadSummaries: threadSummaries,
+                prompt: prompt,
                 provider: provider,
                 model: model
             )
         case .openAI:
             guard !openAISummarizationModel.isEmpty else { return nil }
             return await openAISummarization.generateBranchBriefing(
-                threadSummaries: threadSummaries,
+                prompt: prompt,
                 endpoint: openAISummarizationEndpoint,
                 apiKey: openAISummarizationAPIKey,
                 model: openAISummarizationModel
             )
         case .appleFoundationModel:
-            return await foundationModelSummarization.generateBranchBriefing(threadSummaries: threadSummaries)
+            return await foundationModelSummarization.generateBranchBriefing(prompt: prompt)
         }
     }
 
@@ -432,19 +437,19 @@ extension AppState {
     }
 
     func generateBranchBriefing(
-        threadSummaries: [(title: String, summary: String)],
+        prompt: String,
         provider: AgentProvider,
         model: String?
     ) async -> String? {
         switch provider {
         case .claudeCode:
             return await claude.generateBranchBriefing(
-                threadSummaries: threadSummaries,
+                prompt: prompt,
                 model: model ?? "haiku"
             )
         case .codex:
             return await codex.generateBranchBriefing(
-                threadSummaries: threadSummaries,
+                prompt: prompt,
                 model: model
             )
         case .acp, .localAgent, .flowcy:

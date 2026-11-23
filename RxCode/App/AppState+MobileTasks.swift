@@ -56,7 +56,12 @@ extension AppState {
     }
 
     func taskLinkedSessionIndex() -> TaskLinkedSessionIndex {
-        TaskLinkedSessionIndex(summaries: allSessionSummaries, resolveSessionID: resolveCurrentSessionId)
+        let summaries = allSessionSummaries
+        _ = sessionIdRedirect
+        if let cachedTaskLinkedSessions { return cachedTaskLinkedSessions }
+        let index = TaskLinkedSessionIndex(summaries: summaries, resolveSessionID: resolveCurrentSessionId)
+        cachedTaskLinkedSessions = index
+        return index
     }
 
     func mobileTaskLinkedSessions(
@@ -348,6 +353,10 @@ struct TaskLinkedSessionIndex {
                 positionsByParentID[resolveSessionID(parentID), default: []].append(position)
             }
         }
+    }
+
+    func summaries(forSessionID sessionID: String) -> [ChatSession.Summary] {
+        (positionsByID[sessionID] ?? []).map { summaries[$0] }
     }
 
     func contains(sessionID: String) -> Bool {

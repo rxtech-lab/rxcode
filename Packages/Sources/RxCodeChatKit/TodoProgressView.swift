@@ -75,7 +75,7 @@ public struct TodoListPopoverView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            ClaudeTheme.borderSubtle.frame(height: 0.5)
+            ClaudeTheme.divider.frame(height: 0.5)
             if todos.isEmpty {
                 Text("No todos", bundle: .module)
                     .font(.system(size: ClaudeTheme.size(12)))

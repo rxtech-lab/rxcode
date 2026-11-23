@@ -140,11 +140,8 @@ extension AppState {
         // already reflects the cleared state.
         if let activeID = active.id { markCompletionRead(for: activeID) }
         let branches = await mobileProjectBranches()
-        // Keep mobile usage reasonably fresh. Non-forced — RateLimitService's
-        // 5-minute cache turns this into a no-op when usage was fetched
-        // recently, so frequent snapshots don't translate into API calls. A
-        // genuine refresh updates `latestRateLimitUsage`, which
-        // `observeMobileSnapshotInputs` tracks, re-broadcasting the snapshot.
+        // Warm the shared provider readings for mobile. Subsequent snapshots
+        // reuse them, and observeMobileSnapshotInputs broadcasts fresh readings.
         Task { [weak self] in
             await self?.refreshRateLimitUsage()
             await self?.refreshCodexRateLimitUsage()
@@ -166,10 +163,12 @@ extension AppState {
         }
         let sessions = await mobileSessionSummaries()
         guard !Task.isCancelled else { return }
+        let knownProjectIDs = Set(projects.map(\.id))
         let payload = SnapshotPayload(
             projects: projects,
             sessions: sessions,
             branchBriefings: mobileBranchBriefings(),
+            briefingPlans: briefingPlans.filter { knownProjectIDs.contains($0.projectID) },
             briefingDocuments: documentBriefings,
             usageDashboard: usageDashboard,
             threadSummaries: mobileThreadSummaries(),
@@ -196,6 +195,7 @@ extension AppState {
             .questionQueue(QuestionQueuePayload(questions: mobilePendingQuestionPayloads())),
             toHex: hex
         )
+        guard !mobileSyncObservers.isEmpty else { return }
         await MobileSyncService.shared.send(
             .confirmationQueue(ConfirmationQueuePayload(confirmations: mobilePendingConfirmationPayloads())),
             toHex: hex
@@ -259,6 +259,7 @@ extension AppState {
             todos: todos,
             queuedMessages: queued.map { QueuedUserMessage(id: $0.id, text: $0.text) },
             hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false,
+            isInterrupted: summary.hasUnfinishedTurn == true && sessionActivity[summary.id]?.isStreaming != true,
             parentThreadId: summary.parentThreadId,
             threadLabel: summary.threadLabel,
             changedFileCount: changedFileCount
@@ -289,7 +290,7 @@ extension AppState {
     }
 
     func mobileAttentionKind(forSessionId id: String) -> SessionAttentionKind? {
-        let requests = mobilePendingRequests.values.filter { $0.sessionId == id }
+        let requests = mobilePendingRequests.values.filter { $0.sessionId.map(resolveCurrentSessionId) == id }
         if requests.contains(where: { $0.toolName == "AskUserQuestion" }) {
             return .question
         }
@@ -389,10 +390,10 @@ extension AppState {
         MobileSyncService.shared.broadcastQuestionQueue(mobilePendingQuestionPayloads())
     }
 
-    /// Wire representation of every `ide__show_confirmation` prompt awaiting
-    /// the user, used to mirror the desktop's confirmation queue to mobile.
+    /// The same queue is sent on arrival, resolution and reconnect. The phone
+    /// echoes the opaque prompt ID for both IDE and computer-use confirmations.
     func mobilePendingConfirmationPayloads() -> [PendingConfirmationPayload] {
-        agentPrompts.confirmations.map { confirmation in
+        let idePrompts = agentPrompts.confirmations.map { confirmation in
             PendingConfirmationPayload(
                 id: confirmation.id.uuidString,
                 sessionID: resolveCurrentSessionId(confirmation.sessionKey),
@@ -404,11 +405,25 @@ extension AppState {
                 isDestructive: confirmation.request.isDestructive
             )
         }
+        let computerUsePrompts = mobilePendingRequests.values.sorted { $0.id < $1.id }.compactMap { request -> PendingConfirmationPayload? in
+            guard ComputerUsePresentation.recognizes(request.toolName), let sessionID = request.sessionId else { return nil }
+            return PendingConfirmationPayload(
+                id: request.promptID.uuidString,
+                sessionID: resolveCurrentSessionId(sessionID),
+                projectID: projectID(forPromptSession: sessionID),
+                title: String(localized: "Confirm computer use"),
+                message: String(localized: "Allow the agent to control your Mac for the rest of this session?"),
+                confirmLabel: String(localized: "Confirm for This Session"),
+                cancelLabel: String(localized: "Reject"),
+                isDestructive: false
+            )
+        }
+        return idePrompts + computerUsePrompts
     }
 
     /// Broadcast the current confirmation queue to paired mobile devices.
     func broadcastMobileConfirmationQueue() {
-        guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
+        guard !mobileSyncObservers.isEmpty, !MobileSyncService.shared.pairedDevices.isEmpty else { return }
         MobileSyncService.shared.broadcastConfirmationQueue(mobilePendingConfirmationPayloads())
     }
 
@@ -486,6 +501,10 @@ extension AppState {
             )
         }
         let models = sections.flatMap(\.models)
+        var levelsByModel: [String: [ReasoningLevel]] = [:]
+        for model in models {
+            levelsByModel[model.key] = reasoningLevels(for: model.provider, model: model.id)
+        }
         return MobileSettingsSnapshot(
             selectedAgentProvider: selectedAgentProvider,
             selectedModel: defaultModelSelection(for: nil).model,
@@ -502,6 +521,7 @@ extension AppState {
             archiveRetentionDays: archiveRetentionDays,
             autoPreviewSettings: autoPreviewSettings,
             availableEfforts: ["auto"] + availableEfforts,
+            reasoningLevelsByModel: levelsByModel,
             availableModels: models,
             modelSections: sections,
             availableSummarizationProviders: SummarizationProvider.availableCases.map {

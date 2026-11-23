@@ -188,7 +188,8 @@ extension ClaudeCodeServer: AgentBackend {
             hookSettingsPath: request.hookSettingsPath,
             mcpConfigPath: request.mcpClaudeConfigPath,
             extraSystemPrompt: request.extraSystemPrompt,
-            permissionMode: request.permissionMode
+            permissionMode: request.permissionMode,
+            isEphemeral: request.isEphemeral
         )
     }
 }

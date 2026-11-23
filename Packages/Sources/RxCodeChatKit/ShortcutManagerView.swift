@@ -28,7 +28,7 @@ public struct ShortcutManagerView: View {
             } else {
                 header
             }
-            Divider()
+            ClaudeThemeDivider()
 
             if shortcutList.isEmpty {
                 emptyState
@@ -320,7 +320,7 @@ struct ShortcutEditView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Form
             ScrollView {
@@ -379,7 +379,7 @@ struct ShortcutEditView: View {
                 .padding(20)
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Bottom buttons
             HStack {

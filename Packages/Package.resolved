@@ -1,5 +1,5 @@
 {
-  "originHash" : "ca1b2cc1f92e930e020a47269af00263e2ed00469fbc56cc25ccfab52ac5769b",
+  "originHash" : "47f86eab5dd561343c5e2f343cd1a343be88eec35e010dde10cf2cd964f53ccb",
   "pins" : [
     {
       "identity" : "libwebp-xcode",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "632f6be0333febe322a5efa1ed2a7e47be60137e",
         "version" : "1.5.0"
+      }
+    },
+    {
+      "identity" : "rxattachmentfield",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/rxtech-lab/RxAttachmentField.git",
+      "state" : {
+        "revision" : "0aae1212435a17537431f6bf3fdf95dfdf3784ac",
+        "version" : "0.1.0"
       }
     },
     {

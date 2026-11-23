@@ -5,7 +5,7 @@ import SwiftUI
 /// rules as a project view apply to its stories, after the default view.
 struct TaskOverviewStoryFilter: View {
     let projectId: UUID
-    let stories: [ProjectStory]
+    @Environment(AppState.self) private var appState
     let board: TaskBoard
     @Binding var filter: TaskSavedView
     let isEvaluatingScript: Bool
@@ -18,7 +18,7 @@ struct TaskOverviewStoryFilter: View {
 
     private var isActive: Bool { !filter.isEmpty || filter.hasFilterScript }
 
-    private var matchingStories: [ProjectStory] {
+    private func matchingStories(in stories: [ProjectStory]) -> [ProjectStory] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return stories }
         return stories.filter { $0.title.localizedCaseInsensitiveContains(query) }
@@ -56,7 +56,9 @@ struct TaskOverviewStoryFilter: View {
     }
 
     private var filterPopover: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let stories = appState.recentStories(for: projectId)
+        let matchingStories = matchingStories(in: stories)
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Filter stories")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))

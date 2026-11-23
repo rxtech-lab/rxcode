@@ -72,6 +72,15 @@ struct RateLimitHistoryTests {
         #expect(delta.sevenDay == 1)
     }
 
+    @Test func weeklyOnlyPlanRecordsJustTheWeeklyDelta() {
+        let delta = RateLimitDelta.between(
+            usage(20, 20, fiveHourResetsAt: now, sevenDayResetsAt: now),
+            usage(22, 22, fiveHourResetsAt: now, sevenDayResetsAt: now)
+        )
+        #expect(delta.fiveHour == nil)
+        #expect(delta.sevenDay == 2)
+    }
+
     // MARK: - Summary
 
     @Test func summaryRanksMostAndLeastAndEstimatesRemaining() {

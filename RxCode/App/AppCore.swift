@@ -26,6 +26,7 @@ final class AppCore {
     let cliStore: CLISessionStore
     let claude: ClaudeService
     let workspaceRegistry: WorkspaceRegistry
+    let accountRateLimits = AccountRateLimits()
     /// Process-wide listener for the optional, user-configured memory MCP API.
     /// Its handler follows the frontmost workspace through `WorkspaceManager`.
     let memoryMCPServer = IDEMCPServer()

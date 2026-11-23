@@ -98,6 +98,7 @@ extension ClaudeCodeServer {
     briefings, and `ide__briefing_delete` only when the user asks. The \
     briefing title is shown above its content, so do not repeat the title as \
     a heading in the content.
+    \(IDEToolRegistry.codingPlanBriefingInstructions)
     Published briefings may be emailed to the user automatically after your \
     run. Call `mcp__rxcode-ide__ide__send_notification` only when the user or a \
     scheduled task's prompt asks to be notified or emailed (pass \
@@ -119,7 +120,8 @@ extension ClaudeCodeServer {
         hookSettingsPath: String?,
         mcpConfigPath: String?,
         extraSystemPrompt: String?,
-        permissionMode: PermissionMode
+        permissionMode: PermissionMode,
+        isEphemeral: Bool = false
     ) -> [String] {
         var args: [String] = [
             "-p",
@@ -139,7 +141,9 @@ extension ClaudeCodeServer {
             args += ["--permission-mode", permissionMode.rawValue]
         }
 
-        if !permissionMode.skipsHookPipeline {
+        if isEphemeral {
+            args += ["--no-session-persistence", "--tools", "Read,Glob,Grep", "--strict-mcp-config"]
+        } else if !permissionMode.skipsHookPipeline {
             // Pre-approve safe tools that don't need to go through hooks via --allowedTools.
             // This eliminates HTTP round-trips from internal agent mechanics like Read/Grep/Task,
             // since no approval UI is shown for these.

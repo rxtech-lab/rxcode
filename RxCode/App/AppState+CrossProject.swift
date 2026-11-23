@@ -20,6 +20,7 @@ extension AppState {
         hookSessionMode: PermissionMode? = nil,
         projectId: UUID,
         includeIDEMCP: Bool = true,
+        includePriorContext: Bool = true,
         history: [ChatMessage] = [],
         window: WindowState
     ) async {
@@ -56,6 +57,7 @@ extension AppState {
             registerMode: registerMode,
             projectId: projectId,
             includeIDEMCP: includeIDEMCP,
+            includePriorContext: includePriorContext,
             streamStart: streamStart
         )
 
@@ -124,11 +126,17 @@ extension AppState {
             streamId: streamId,
             sessionKey: sessionKey,
             agentProvider: agentProvider,
+            projectID: projectId,
             in: window
         )
         defer { watchdogTask.cancel() }
 
+        // Resume keeps the previous assistant messages after the same user request.
+        // Only text produced by this stream can duplicate a consolidated response.
+        let priorMessages = stateForSession(sessionKey).messages
+        let firstResponseIndex = priorMessages.count - (priorMessages.last?.isStreaming == true ? 1 : 0)
         var eventCount = 0
+        var reportedError: String?
         var lastEventTime = Date()
         // Start of the span the next `result` accounts for in the persisted
         // usage stats; advanced on each result so background follow-up
@@ -174,7 +182,7 @@ extension AppState {
 
                 if !ownsSession {
                     if case .result(let resultEvent) = event {
-                        logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
+                        logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership")
                         recordUsageStats(
                             resultEvent: resultEvent,
                             since: usageSpanStart,
@@ -193,28 +201,15 @@ extension AppState {
                         )
                         usageSpanStart = Date()
                         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
-                        if sessionKey != resultEvent.sessionId,
-                           providerOwnsThreadId(agentProvider, threadId: sessionKey) {
-                            let prevKey = sessionKey
-                            if let state = sessionStates.removeValue(forKey: prevKey) {
-                                sessionStates[resultEvent.sessionId] = state
-                            }
-                            applySessionIdRedirect(from: prevKey, to: resultEvent.sessionId)
-                            shellTrackerRenameSession(from: prevKey, to: resultEvent.sessionId, cwd: cwd)
-                            sessionKey = resultEvent.sessionId
-                        }
-                        recordProviderSessionId(agentProvider, nativeId: resultEvent.sessionId, threadId: sessionKey)
-                        await awaitPendingShellDetections(for: sessionKey)
-                        let msgs = stateForSession(sessionKey).messages
-                        if !msgs.isEmpty {
-                            await saveSession(sessionId: sessionKey, projectId: projectId, messages: msgs)
-                        }
+                        // A late result belongs to the old turn. Its successor owns
+                        // the thread identity, transcript, and recovery checkpoint.
                     } else {
                         logger.debug("[Stream:UI] event #\(eventCount) — stream \(streamId) no longer owns session \(sessionKey), skipping")
                     }
                     continue
                 }
 
+                defer { scheduleTurnCheckpoint(sessionID: sessionKey, streamID: streamId) }
                 switch event {
                 case .system(let systemEvent):
                     logger.info("[Stream:UI] event #\(eventCount) .system (gap=\(String(format: "%.1f", gap))s)")
@@ -262,148 +257,12 @@ extension AppState {
                         let ownsThreadId = window.pendingPlaceholderIds.contains(streamPlaceholder)
                             || providerOwnsThreadId(agentProvider, threadId: sessionKey)
                         if ownsThreadId {
-                        // Capture the sessionKey BEFORE the reassignment so the
-                        // reconciler can rename the previous row in place when
-                        // the CLI advances `session_id` mid-stream.
-                        let previousSessionKey = sessionKey
-                        if sessionKey != sid {
-                            if let state = sessionStates.removeValue(forKey: previousSessionKey) {
-                                sessionStates[sid] = state
-                            }
-                            renameDraftState(from: previousSessionKey, to: sid, in: window)
-                            applySessionIdRedirect(from: previousSessionKey, to: sid)
-                            shellTrackerRenameSession(from: previousSessionKey, to: sid, cwd: cwd)
-                            sessionKey = sid
-                            startFlushTimer(for: sid)
-
-                            // If this is the foreground session, also update window.currentSessionId.
-                            // Do NOT treat `currentSessionId == nil` (the new-thread page) as foreground
-                            // for an arbitrary streaming session — that caused the UI to auto-navigate
-                            // to a previously-detached thread whenever its CLI advanced its session_id
-                            // (e.g. pending→real on first system event, or compact_boundary swap).
-                            let isFg = (window.currentSessionId ?? window.newSessionKey) == previousSessionKey
-                            if isFg { window.currentSessionId = sid }
-                        }
-
-                        let expectedPlaceholder = "pending-\(streamId.uuidString)"
-                        if window.pendingPlaceholderIds.contains(expectedPlaceholder),
-                           let idx = allSessionSummaries.firstIndex(where: { $0.id == expectedPlaceholder })
-                        {
-                            let old = allSessionSummaries[idx]
-                            // Preserve the placeholder's original timestamp so an empty
-                            // session (no assistant content yet) doesn't leapfrog
-                            // genuinely-recent chats with an "in 0s" updatedAt. The
-                            // first save once content arrives will refresh updatedAt.
-                            let replacement = ChatSession(
-                                id: sid,
-                                projectId: old.projectId,
-                                title: old.title,
-                                messages: [],
-                                createdAt: old.createdAt,
-                                updatedAt: old.createdAt,
-                                isPinned: old.isPinned,
-                                agentProvider: old.agentProvider,
-                                model: old.model,
-                                effort: old.effort,
-                                permissionMode: old.permissionMode,
-                                origin: old.origin,
-                                worktreePath: old.worktreePath,
-                                worktreeBranch: old.worktreeBranch,
-                                isArchived: old.isArchived,
-                                archivedAt: old.archivedAt
-                            )
-                            allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == sid }
-                            allSessionSummaries.insert(replacement.summary, at: 0)
-                            threadStore.renameId(from: expectedPlaceholder, to: sid)
-                            renameThreadFileEdits(from: expectedPlaceholder, to: sid)
-                            threadStore.upsert(replacement.summary, cliSessionId: sid)
-                            window.removePendingPlaceholder(expectedPlaceholder)
-                        } else {
-                            if window.pendingPlaceholderIds.contains(expectedPlaceholder) {
-                                window.removePendingPlaceholder(expectedPlaceholder)
-                                allSessionSummaries.removeAll { $0.id == expectedPlaceholder }
-                                threadStore.delete(id: expectedPlaceholder)
-                                removeThreadFileEditsFromIndex([expectedPlaceholder])
-                            }
-
-                            // A retry reuses the same pending session key (oldKey) with a new streamId,
-                            // so expectedPlaceholder won't match oldKey. Clean up the stale placeholder
-                            // here to prevent the old entry from persisting as a duplicate in history.
-                            let oldKey = sessionKey == sid ? internalSessionKey : sessionKey
-                            if oldKey != expectedPlaceholder, window.pendingPlaceholderIds.contains(oldKey) {
-                                allSessionSummaries.removeAll { $0.id == oldKey }
-                                threadStore.delete(id: oldKey)
-                                removeThreadFileEditsFromIndex([oldKey])
-                                window.removePendingPlaceholder(oldKey)
-                            }
-
-                            // Decide whether to rename the previous row, insert a fresh
-                            // one, or do nothing. Renaming in place is the load-bearing
-                            // case: it stops empty "New Session" rows from accumulating
-                            // every time the CLI advances `session_id` mid-stream (e.g.
-                            // after a `compact_boundary`).
-                            if let project = sessionProject(id: projectId) {
-                                let msgs = stateForSession(sessionKey).messages
-                                let firstUser = msgs.first(where: { $0.role == .user })
-                                let action = SessionRowReconciler.decide(
-                                    newSid: sid,
-                                    previousKey: previousSessionKey,
-                                    existingIds: Set(allSessionSummaries.map { $0.id }),
-                                    firstUserMessageContent: firstUser?.content
-                                )
-                                switch action {
-                                case .noop:
-                                    break
-                                case .renameInPlace(let from, let to):
-                                    if let idx = allSessionSummaries.firstIndex(where: { $0.id == from }) {
-                                        let old = allSessionSummaries[idx]
-                                        let renamed = ChatSession.Summary(
-                                            id: to,
-                                            projectId: old.projectId,
-                                            title: old.title,
-                                            createdAt: old.createdAt,
-                                            updatedAt: old.updatedAt,
-                                            isPinned: old.isPinned,
-                                            agentProvider: old.agentProvider,
-                                            model: old.model,
-                                            effort: old.effort,
-                                            permissionMode: old.permissionMode,
-                                            origin: old.origin,
-                                            worktreePath: old.worktreePath,
-                                            worktreeBranch: old.worktreeBranch,
-                                            isArchived: old.isArchived,
-                                            archivedAt: old.archivedAt
-                                        )
-                                        allSessionSummaries.remove(at: idx)
-                                        allSessionSummaries.removeAll { $0.id == to }
-                                        allSessionSummaries.insert(renamed, at: 0)
-                                        threadStore.renameId(from: from, to: to)
-                                        renameThreadFileEdits(from: from, to: to)
-                                        threadStore.upsert(renamed, cliSessionId: to)
-                                    }
-                                case .insertNew(let id, let title):
-                                    // Use the user-message timestamp so the row doesn't
-                                    // reorder above more recent chats while still empty.
-                                    let firstUserDate = firstUser?.timestamp ?? Date()
-                                    let inserted = ChatSession.Summary(
-                                        id: id,
-                                        projectId: project.id,
-                                        title: title,
-                                        createdAt: firstUserDate,
-                                        updatedAt: firstUserDate,
-                                        isPinned: false,
-                                        agentProvider: agentProvider,
-                                        origin: agentProvider.defaultSessionOrigin
-                                    )
-                                    allSessionSummaries.insert(inserted, at: 0)
-                                    threadStore.upsert(inserted, cliSessionId: id)
-                                }
+                            if sessionKey != sid {
+                                promoteStreamingThread(from: sessionKey, to: sid, cwd: cwd, in: window)
+                                sessionKey = sid
+                                startFlushTimer(for: sid)
                             }
                         }
-                        if previousSessionKey != sid {
-                            broadcastMobileSessionRedirect(from: previousSessionKey, to: sid)
-                        }
-                        } // end ownsThreadId
                         // Record this provider's native session id — for the owner
                         // on the possibly-renamed thread id, for a switched provider
                         // on the stable thread id — so each provider can later
@@ -460,7 +319,7 @@ extension AppState {
                         let canBufferText: Bool = {
                             guard state.textDeltaBuffer.isEmpty else { return false }
                             let afterLastUser = (state.messages.lastIndex(where: { $0.role == .user }).map { $0 + 1 }) ?? 0
-                            return !state.messages.suffix(from: afterLastUser).contains {
+                            return !state.messages.dropFirst(max(afterLastUser, firstResponseIndex)).contains {
                                 $0.role == .assistant && $0.blocks.contains(where: \.isText)
                             }
                         }()
@@ -539,6 +398,9 @@ extension AppState {
                         sawPromptReplay = true
                         break
                     }
+                    if userMessage.toolUseId == nil, userMessage.isError, !userMessage.content.isEmpty {
+                        reportedError = userMessage.content
+                    }
                     updateState(sessionKey) { state in
                         guard let toolUseId = userMessage.toolUseId else { return }
                         state.pendingToolResults.append((toolUseId, userMessage.content, userMessage.isError))
@@ -586,7 +448,7 @@ extension AppState {
 
                     sessionKey = await handleStreamResult(
                         resultEvent, sessionKey: sessionKey, streamId: streamId, agentProvider: agentProvider,
-                        projectId: projectId, cwd: cwd, eventCount: eventCount, in: window
+                        projectId: projectId, cwd: cwd, eventCount: eventCount, reportedError: reportedError, in: window
                     )
 
                 case .rateLimitEvent(let info):
@@ -649,54 +511,11 @@ extension AppState {
             // If already consumed at result.isError time, this returns nil.
             let stderrOutput = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
 
-            if eventCount == 0 {
-                // User cancellation revokes activeStreamId or cancels the task — distinguish
-                // that from a real "CLI died with no output" failure.
-                let wasCancelled = Task.isCancelled || stateForSession(sessionKey).activeStreamId != streamId
-                if !wasCancelled {
-                    let errorMsg = stderrOutput ?? "No response received"
-                    addErrorMessage(errorMsg, in: window)
-                    logger.error("[Stream:UI] no events received — appending error bubble. stderr=\(stderrOutput ?? "nil")")
-                } else {
-                    logger.debug("[Stream:UI] no events received — suppressed (cancelled). stderr=\(stderrOutput ?? "nil")")
-                }
-            }
-
-            let isStillOwner = stateForSession(sessionKey).activeStreamId == streamId
-            let stillStreaming = stateForSession(sessionKey).isStreaming
-            if stillStreaming, isStillOwner {
-                logger.warning("[Stream:UI] isStreaming was still true at stream end — forcing cleanup")
-                finalizeStreamSession(for: sessionKey, trackUnreadCompletion: true)
-                await awaitPendingShellDetections(for: sessionKey)
-
-                // If the last assistant message is invisible after cleanup (blocks=[] because
-                // all tool calls had empty/nil results), show an error bubble so the user
-                // understands what happened rather than seeing no response at all.
-                let lastMsg = stateForSession(sessionKey).messages.last
-                if lastMsg.map({ $0.role == .assistant && $0.blocks.isEmpty }) == true {
-                    let errorMsg = stderrOutput ?? "Response was interrupted"
-                    updateState(sessionKey) { state in
-                        state.messages.append(ChatMessage(role: .assistant, content: errorMsg, isError: true))
-                    }
-                }
-
-                let msgs = stateForSession(sessionKey).messages
-                if !msgs.isEmpty {
-                    await saveSession(sessionId: sessionKey, projectId: projectId, messages: msgs)
-                }
-            } else if stillStreaming, !isStillOwner {
-                let currentOwner = stateForSession(sessionKey).activeStreamId
-                if currentOwner == nil {
-                    logger.warning("[Stream:UI] stream \(streamId) ended — no active owner for session, forcing cleanup")
-                    finalizeStreamSession(for: sessionKey)
-                    await awaitPendingShellDetections(for: sessionKey)
-                    let msgs = stateForSession(sessionKey).messages
-                    if !msgs.isEmpty {
-                        await saveSession(sessionId: sessionKey, projectId: projectId, messages: msgs)
-                    }
-                } else {
-                    logger.info("[Stream:UI] stream \(streamId) ended but newer stream \(currentOwner!) owns session — skipping cleanup")
-                }
+            let stillOwnsTurn = stateForSession(sessionKey).activeStreamId == streamId
+            let interrupted = stillOwnsTurn && stateForSession(sessionKey).isStreaming && !Task.isCancelled
+            if interrupted {
+                let message = reportedError ?? stderrOutput ?? (eventCount == 0 ? "No response received" : "Response was interrupted")
+                await interruptStream(sessionID: sessionKey, streamID: streamId, projectID: projectId, message: message)
             }
 
             // Fallback completion record: covers cancellations, no-events errors,
@@ -706,7 +525,7 @@ extension AppState {
             // successful completion we don't want to clobber it with an error.
             if !recordedStreamCompletionIds.contains(streamId) {
                 let assistantText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
-                let errorMsg: String? = eventCount == 0
+                let errorMsg: String? = interrupted ? (stderrOutput ?? "Response was interrupted") : eventCount == 0
                     ? (stderrOutput ?? "Stream ended with no events.")
                     : (Task.isCancelled ? "Stream was cancelled." : nil)
                 recordStreamCompletion(

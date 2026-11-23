@@ -217,8 +217,7 @@ extension MobileChatView {
 
     // MARK: - Confirmation banner
 
-    /// Pill above the input bar while the agent waits on an
-    /// `ide__show_confirmation` prompt. Tapping it reopens the native alert.
+    /// Reopens the native alert for a pending desktop confirmation.
     var confirmationBanner: some View {
         let first = sessionConfirmations.first
         let isDestructive = first?.isDestructive == true

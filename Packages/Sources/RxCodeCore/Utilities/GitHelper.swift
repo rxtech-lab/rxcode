@@ -126,8 +126,8 @@ public enum GitHelper {
         return ProcessOutput(status: process.terminationStatus, stdout: out.data, stderr: err.data)
     }
 
-    public static func run(_ args: [String], at path: String) async -> String? {
-        guard let output = await execute(args, at: path), output.status == 0 else { return nil }
+    public static func run(_ args: [String], at path: String, environment: [String: String] = [:]) async -> String? {
+        guard let output = await execute(args, at: path, environment: environment), output.status == 0 else { return nil }
         return String(data: output.stdout, encoding: .utf8)
     }
 

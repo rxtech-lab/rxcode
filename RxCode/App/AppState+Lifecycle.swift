@@ -79,7 +79,7 @@ extension AppState {
 
         permissionMode = PermissionMode(rawValue: workspaceDefaults.string(for: "selectedPermissionMode") ?? "") ?? .default
 
-        // Permission request routing is handled per-window in initializeWindow's listener.
+        scheduleBriefingPlansRefresh()
         isInitialized = true
         if !AppSupport.isTestProcess { startCIStatusPoller() }
         scheduleDesktopWidgetUpdate()
@@ -200,7 +200,7 @@ extension AppState {
         }
 
         // Warm the rate-limit usage so the menu-bar label has data before the
-        // popover is opened. RateLimitService caches for 5 minutes internally.
+        // popover is opened.
         Task { [weak self] in
             await self?.refreshRateLimitUsage()
             await self?.refreshCodexRateLimitUsage()
@@ -324,60 +324,6 @@ extension AppState {
             ?? AppStorageKeys.rightInspectorLayout
         window.restoreInspectorLayout(forKey: workspaceDefaults.key(inspectorKey))
 
-        // Subscribe to permission broadcasts — appends requests to this window's pendingPermissions.
-        // subscribe() issues a window-exclusive stream, so events are not stolen across multiple windows.
-        Task { [weak self, weak window] in
-            guard let self else { return }
-            let (_, stream) = await self.permission.subscribe()
-            for await request in stream {
-                guard !Task.isCancelled else { break }
-                guard let window else { break }
-                if !window.pendingPermissions.contains(where: { $0.id == request.id }) {
-                    window.pendingPermissions.append(request)
-                    mobilePendingRequests[request.id] = request
-                    let projectName = window.selectedProject?.name
-                    let projectId = window.selectedProject?.id
-                    let sessionId = window.currentSessionId
-                    let toolName = request.toolName
-                    if let requestSessionId = request.sessionId {
-                        broadcastMobileSessionStatus(sessionID: requestSessionId)
-                    }
-                    if toolName == "AskUserQuestion" {
-                        broadcastMobileQuestionQueue()
-                    }
-                    // Auto-present the question sheet only when the user is actively viewing
-                    // the thread the question belongs to. Otherwise it stays in the queue
-                    // (yellow dot in sidebar + banner) so the user can decide when to answer.
-                    if toolName == "AskUserQuestion",
-                       window.presentedPermissionId == nil,
-                       let qSession = request.sessionId,
-                       qSession == window.currentSessionId
-                    {
-                        window.presentedPermissionId = request.id
-                    }
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        if toolName == "AskUserQuestion" {
-                            await self.hookManager.dispatchQuestionAsk(QuestionAskPayload(
-                                toolUseId: request.id,
-                                sessionId: sessionId,
-                                projectId: projectId,
-                                projectName: projectName
-                            ))
-                        } else {
-                            await self.hookManager.dispatchPermissionAsk(PermissionAskPayload(
-                                toolUseId: request.id,
-                                toolName: toolName,
-                                sessionId: sessionId,
-                                projectId: projectId,
-                                projectName: projectName
-                            ))
-                        }
-                    }
-                }
-            }
-        }
-
         // Install the AskUserQuestion handlers. The question sheet calls submit when the
         // user finishes answering, and skip when they dismiss without answering.
         window.submitQuestionAnswersHandler = { [weak self, weak window] toolUseId, answers in
@@ -493,6 +439,10 @@ extension AppState {
             guard let self, let window else { return }
             await self.cancelStreaming(in: window)
         }
+        bridge.resumeInterruptedTurnHandler = { [weak self, weak window] sessionID in
+            guard let self, let window, window.currentSessionId == sessionID else { return }
+            await self.resumeInterruptedTurn(in: window)
+        }
         bridge.sendSlashCommandHandler = { [weak self, weak window] command in
             guard let self, let window else { return }
             await self.sendSlashCommand(command, in: window)
@@ -536,6 +486,7 @@ extension AppState {
                     usage.context ?? min(self.localModels.effectiveContextSize,
                                          model.contextLength ?? self.localModels.effectiveContextSize))
         }
+        bridge.accountRateLimits = core.accountRateLimits
         bridge.fetchRateLimitHandler = { [weak self] provider in
             await self?.rateLimitUsage(for: provider)
         }
@@ -613,6 +564,12 @@ extension AppState {
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
                 bridge.isLoadingFromDisk = state.isLoadingFromDisk
+                if !state.isStreaming, !state.isLoadingFromDisk, let id = window.currentSessionId,
+                   allSessionSummaries.first(where: { $0.id == id })?.hasUnfinishedTurn == true {
+                    bridge.interruptedSessionID = id
+                } else {
+                    bridge.interruptedSessionID = nil
+                }
                 bridge.streamingStartDate = state.streamingStartDate
                 bridge.liveOutputTokens = state.currentTurnOutputTokens
                 bridge.lastTurnContextUsedPercentage = state.lastTurnContextUsedPercentage

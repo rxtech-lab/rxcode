@@ -22,6 +22,7 @@ struct PetPresentationTests {
         #expect(panel.parent === parent)
         #expect(!panel.hidesOnDeactivate)
         let before = panel.frame
+        #expect(before.size == CGSize(width: 240, height: 160))
         // Dragging and automatic travel both move the parent's native frame.
         parent.setFrameOrigin(CGPoint(x: 350, y: 350))
         try await Task.sleep(for: .milliseconds(50))

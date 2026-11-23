@@ -397,13 +397,14 @@ struct TaskOverviewView: View {
 struct StoryGlassCard: View {
     let story: ProjectStory
     let board: TaskBoard
+    let rollup: StoryRollup
     let onOpen: () -> Void
 
     @State private var isHovering = false
 
     var body: some View {
-        let status = board.column(for: board.rolledUpStatus(for: story))
-        let progress = board.progress(for: story)
+        let status = board.column(for: rollup.status)
+        let progress = rollup.progress
         let isActive = progress.active > 0
         let shape = RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
         Button(action: onOpen) {
@@ -450,7 +451,7 @@ struct StoryGlassCard: View {
                     FlowLayout(spacing: 4) { pills }
                 }
 
-                StoryProgressBar(story: story, board: board)
+                StoryProgressBar(progress: progress, board: board)
                     .padding(.top, 2)
             }
             .padding(12)

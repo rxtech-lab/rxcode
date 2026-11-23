@@ -12,6 +12,7 @@ nonisolated struct MockFixtures: Sendable {
     let projects: [Project]
     let sessions: [SessionSummary]
     let branchBriefings: [MobileBranchBriefing]
+    let briefingPlans: [CodingPlanActivity]
     let briefingDocuments: [MobileBriefingDocument]
     let threadSummaries: [MobileThreadSummary]
     /// Full message list keyed by session id.
@@ -26,6 +27,7 @@ nonisolated struct MockFixtures: Sendable {
             projects: projects,
             sessions: sessions,
             branchBriefings: branchBriefings,
+            briefingPlans: briefingPlans,
             briefingDocuments: briefingDocuments,
             threadSummaries: threadSummaries,
             settings: nil,
@@ -42,7 +44,7 @@ nonisolated struct MockFixtures: Sendable {
     }
 
     /// The standard fixture set used by every UI test.
-    static func standard(includeToolActivity: Bool = false) -> MockFixtures {
+    static func standard(includeToolActivity: Bool = false, includePlan: Bool = false) -> MockFixtures {
         let projectAlpha = UUID(uuidString: "A0000000-0000-0000-0000-000000000001")!
         let projectBeta = UUID(uuidString: "B0000000-0000-0000-0000-000000000002")!
         let branch = "main"
@@ -153,10 +155,20 @@ nonisolated struct MockFixtures: Sendable {
             }
         }
 
+        let briefingPlans = includePlan ? [CodingPlanActivity(
+            id: UUID(uuidString: "C0000000-0000-0000-0000-000000000003")!,
+            threadID: "sess-alpha-1", projectID: projectAlpha, title: "Plugin discovery plan", goal: "",
+            branch: "main", createdAt: now, updatedAt: now, planningStatus: "ready",
+            implementationStatus: "unimplemented", implementationEvidence: "Implementation has not started.",
+            implementationThreadID: nil, currentVersionID: nil, currentVersionTitle: "Plugin manifest",
+            approvedVersionID: nil, versionCount: 3, featureExcerpt: "- Discover installed plugins"
+        )] : []
+
         return MockFixtures(
             projects: projects,
             sessions: sessions,
             branchBriefings: branchBriefings,
+            briefingPlans: briefingPlans,
             briefingDocuments: briefingDocuments,
             threadSummaries: threadSummaries,
             messagesBySession: messagesBySession

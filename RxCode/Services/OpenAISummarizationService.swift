@@ -168,27 +168,17 @@ actor OpenAISummarizationService {
     }
 
     func generateBranchBriefing(
-        threadSummaries: [(title: String, summary: String)],
+        prompt: String,
         endpoint: String,
         apiKey: String,
         model: String
     ) async -> String? {
-        guard !threadSummaries.isEmpty else { return nil }
-        let prompt = Self.branchBriefingPrompt(threadSummaries: threadSummaries)
         return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 384)
     }
 
-    func generateCommitMessage(
-        diff: String,
-        fileSummary: String,
-        endpoint: String,
-        apiKey: String,
-        model: String
-    ) async -> String? {
-        // Caller (AppState) has already applied a provider-aware budget; this
-        // is just an upper bound to guard against accidental misuse.
+    static func commitMessagePrompt(diff: String, fileSummary: String) -> String {
         let trimmedDiff = String(diff.prefix(20_000))
-        let prompt = """
+        return """
         Write a Git commit message for the staged changes below in the Conventional Commits format.
 
         Format rules (MUST follow exactly):
@@ -211,7 +201,16 @@ actor OpenAISummarizationService {
         Staged diff:
         \(trimmedDiff)
         """
+    }
 
+    func generateCommitMessage(
+        diff: String,
+        fileSummary: String,
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async -> String? {
+        let prompt = Self.commitMessagePrompt(diff: diff, fileSummary: fileSummary)
         let body: JSONValue = .object([
             "model": .string(model),
             "messages": .array([
@@ -285,12 +284,36 @@ actor OpenAISummarizationService {
         """
     }
 
-    static func branchBriefingPrompt(threadSummaries: [(title: String, summary: String)]) -> String {
+    static func branchBriefingPrompt(
+        threadSummaries: [(title: String, summary: String)],
+        plans: [CodingPlanActivity] = []
+    ) -> String {
         let joined = threadSummaries.map { item -> String in
             let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let summary = String(item.summary.prefix(1500)).trimmingCharacters(in: .whitespacesAndNewlines)
             return "### \(title.isEmpty ? "Untitled thread" : title)\n\(summary)"
         }.joined(separator: "\n\n")
+
+        let planSection: String
+        if plans.isEmpty {
+            planSection = ""
+        } else {
+            let entries = plans.map { plan in
+                """
+                - \(plan.title) (plan \(plan.id.uuidString)): \(plan.briefingDescription)
+                  Evidence: \(plan.implementationEvidence)
+                  Planned work: \(plan.featureExcerpt.prefix(400))
+                """
+            }.joined(separator: "\n")
+            planSection = """
+
+
+            Coding plan activity on this branch and day:
+            \(entries)
+
+            Mention each plan once, by title, with the work it covers. Use Decisions for completed planning or Follow-ups for outstanding implementation. Describe a feature as implemented only when implementation evidence supports it.
+            """
+        }
 
         return """
         Write a concise briefing for one git branch by synthesizing the per-thread summaries below into a single coherent overview, grouped into clearly labelled categories so it is easy to scan.
@@ -305,7 +328,7 @@ actor OpenAISummarizationService {
 
         Thread summaries (newest first):
 
-        \(joined)
+        \(joined)\(planSection)
         """
     }
 

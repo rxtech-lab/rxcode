@@ -28,22 +28,22 @@ struct AutopilotSettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
-                Divider()
+                ClaudeThemeDivider()
                 accountSection
                 if appState.isSignedIn {
-                    Divider()
+                    ClaudeThemeDivider()
                     notificationsSection
-                    Divider()
+                    ClaudeThemeDivider()
                     automationSection
-                    Divider()
+                    ClaudeThemeDivider()
                     repoSetupSection
-                    Divider()
+                    ClaudeThemeDivider()
                     secretsSection
-                    Divider()
+                    ClaudeThemeDivider()
                     ciUpdatesSection
-                    Divider()
+                    ClaudeThemeDivider()
                     docsSection
-                    Divider()
+                    ClaudeThemeDivider()
                     releaseSection
                 }
             }
@@ -366,11 +366,11 @@ struct AutopilotSettingsTab: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
     }
 
@@ -436,11 +436,11 @@ struct AutopilotSettingsTab: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
         }
     }
@@ -464,11 +464,11 @@ struct AutopilotSettingsTab: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 

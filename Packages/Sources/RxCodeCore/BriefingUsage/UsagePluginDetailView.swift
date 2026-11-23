@@ -48,7 +48,7 @@ public struct UsagePluginDetailView: View {
                             Text(detail).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Divider()
+                    ClaudeThemeDivider()
                 }
             }
             Text("Updated \(snapshot.fetchedAt.formatted(date: .abbreviated, time: .shortened))\(snapshot.isStale() ? " · Stale" : "")")

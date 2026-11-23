@@ -1,4 +1,5 @@
 import XCTest
+import RxCodeChatKit
 import RxCodeCore
 @testable import RxCode
 
@@ -118,6 +119,27 @@ final class AppStateTests: XCTestCase {
 
     // MARK: - Session counters and accessors
 
+    func testChatFooterSharesMenuBarUsageAcrossWorkspaces() async {
+        let workspace = AppWorkspace(id: UUID().uuidString, name: "Second workspace", createdAt: .now, updatedAt: .now)
+        let other = AppState(core: appState.core, workspace: workspace, persistence: persistence, startBackgroundServices: false)
+        let bridge = ChatBridge()
+        window.sessionAgentProvider = .claudeCode
+        appState.setupChatBridge(bridge, for: window)
+        XCTAssertNil(bridge.rateLimitUsage)
+
+        let usage = RateLimitUsage(fiveHourPercent: 18, sevenDayPercent: 31,
+                                   fiveHourResetsAt: nil, sevenDayResetsAt: nil)
+        _ = await other.core.accountRateLimits.refresh(for: .claudeCode) { usage }
+        XCTAssertEqual(bridge.rateLimitUsage, usage)
+        XCTAssertEqual(other.cachedRateLimitUsage(for: .claudeCode), bridge.rateLimitUsage)
+
+        // The Claude service returns no live reading in unit tests.
+        let afterFailedRefresh = await other.rateLimitUsage(for: .claudeCode, forceRefresh: true)
+        XCTAssertEqual(afterFailedRefresh, usage)
+        XCTAssertEqual(appState.latestRateLimitUsage, bridge.rateLimitUsage)
+        XCTAssertNil(other.cachedRateLimitUsage(for: .codex))
+    }
+
     func testInProgressSessionCountCountsOnlyStreamingStates() {
         appState.sessionStates = [
             "idle": streamState(isStreaming: false),
@@ -232,6 +254,22 @@ final class AppStateTests: XCTestCase {
         appState.sessionStates = ["real-1": streamState(isStreaming: true)]
 
         XCTAssertTrue(appState.isAgentRunning(for: task))
+    }
+
+    func testSidebarLinkedTaskLookupPerformance() {
+        let projectID = UUID()
+        let tasks = (0..<270).map { index in
+            ProjectTask(projectId: projectID, title: "Task \(index)", sessionKey: "session-\(index)")
+        }
+        appState.taskBoards[projectID] = TaskBoard(tasks: tasks)
+        let visibleSessions = ["session-269", "session-120", "a", "b", "c", "d"]
+        measure {
+            for _ in 0..<50 {
+                for session in visibleSessions {
+                    _ = appState.linkedTask(forSessionId: session, projectId: projectID)
+                }
+            }
+        }
     }
 
     func testLinkedTaskFindsRenamedThreadOnlyInItsProject() {

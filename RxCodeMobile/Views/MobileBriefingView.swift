@@ -183,7 +183,7 @@ struct MobileBriefingView: View {
 
     /// True when at least one briefing or summary exists, regardless of filters.
     private var hasAnyData: Bool {
-        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty || !state.briefingDocuments.isEmpty
+        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty || !state.briefingPlans.isEmpty || !state.briefingDocuments.isEmpty
             || !state.usageDashboard.visibleCards().isEmpty
     }
 
@@ -342,7 +342,7 @@ struct BriefingListView: View {
     }
 
     private var hasAnyData: Bool {
-        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty || !state.briefingDocuments.isEmpty
+        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty || !state.briefingPlans.isEmpty || !state.briefingDocuments.isEmpty
     }
 
     private var projectsWithData: [Project] {
@@ -394,6 +394,7 @@ private struct BriefingCard: View, Equatable {
             && lhs.ciStatus == rhs.ciStatus
             && lhs.group.key == rhs.group.key
             && lhs.group.updatedAt == rhs.group.updatedAt
+            && lhs.group.plans == rhs.group.plans
             && lhs.group.briefing?.briefing == rhs.group.briefing?.briefing
             && lhs.threadCount == rhs.threadCount
     }
@@ -444,6 +445,10 @@ private struct BriefingCard: View, Equatable {
                         .lineSpacing(3)
                         .frame(maxWidth: .infinity, maxHeight: 88, alignment: .topLeading)
                         .clipped()
+                } else if let plan = group.plans.first {
+                    Label(plan.title, systemImage: "list.bullet.clipboard")
+                        .font(.subheadline)
+                        .lineLimit(2)
                 } else {
                     Text("No summary available yet")
                         .font(.subheadline)

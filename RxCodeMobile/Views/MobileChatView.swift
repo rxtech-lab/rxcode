@@ -38,8 +38,9 @@ struct MobileChatView: View {
     @State var presentedQuestion: PendingQuestionPayload?
     /// The plan whose review sheet is currently presented, if any.
     @State var presentedPlan: PendingPlan?
-    /// The `ide__show_confirmation` prompt shown in the native alert.
+    /// The pending desktop confirmation shown in the native alert.
     @State var presentedConfirmation: PendingConfirmationPayload?
+    @State private var confirmationError: String?
     /// Local file link tapped in rendered markdown. Mobile fetches the content
     /// from the paired desktop before presenting it.
     @State var presentedFileLink: LocalFileLink?
@@ -255,6 +256,7 @@ struct MobileChatView: View {
                     Text(message)
                 }
             }
+            .mobileStatusToast($confirmationError)
             .onChange(of: sessionConfirmations) { old, confirmations in
                 // A prompt settled elsewhere (desktop or another device) closes
                 // the now-stale alert; a newly queued one opens right away.
@@ -458,7 +460,10 @@ struct MobileChatView: View {
                 MobileChatComposer(
                     isStreaming: isStreaming,
                     onSend: handleSend,
-                    onStop: handleStop
+                    onStop: handleStop,
+                    onResume: state.sessionSummary(sessionID: sessionID)?.isInterrupted == true ? {
+                        Task { await state.sendUserMessage("Resume", sessionID: sessionID, resumeInterruptedTurn: true) }
+                    } : nil
                 )
             }
             .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
@@ -598,7 +603,7 @@ struct MobileChatView: View {
         state.pendingQuestions(sessionID: sessionID)
     }
 
-    /// `ide__show_confirmation` prompts awaiting a decision for this thread.
+    /// Desktop prompts awaiting a decision for this thread.
     var sessionConfirmations: [PendingConfirmationPayload] {
         state.pendingConfirmations(sessionID: sessionID)
     }
@@ -610,7 +615,14 @@ struct MobileChatView: View {
             MobileHaptics.buttonTap()
         }
         presentedConfirmation = nil
-        Task { await state.respondToConfirmation(id: confirmation.id, confirmed: confirmed) }
+        Task {
+            do {
+                try await state.respondToConfirmation(id: confirmation.id, confirmed: confirmed)
+            } catch {
+                MobileHaptics.connectionError()
+                confirmationError = String(localized: "Couldn’t send your decision to your Mac. Tap Review to retry.")
+            }
+        }
     }
 
     /// Every plan card for this thread (pending + decided), derived from the
@@ -686,9 +698,10 @@ private struct MobileChatComposer: View {
     let isStreaming: Bool
     let onSend: (String) -> Void
     let onStop: () -> Void
+    let onResume: (() -> Void)?
     @State private var text = ""
 
     var body: some View {
-        MobileInputBar(text: $text, isStreaming: isStreaming, onSend: onSend, onStop: onStop)
+        MobileInputBar(text: $text, isStreaming: isStreaming, onSend: onSend, onStop: onStop, onResume: onResume)
     }
 }

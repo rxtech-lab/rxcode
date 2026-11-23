@@ -48,7 +48,7 @@ struct PetCompanionView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 companionHeader
-                Divider()
+                ClaudeThemeDivider()
                 transcriptBody
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
@@ -569,7 +569,7 @@ struct PetAgentConfirmationSheet: View {
             }
             .frame(height: min(contentHeight, 320))
 
-            Divider()
+            ClaudeThemeDivider()
 
             HStack {
                 Button("Close", systemImage: "xmark") {

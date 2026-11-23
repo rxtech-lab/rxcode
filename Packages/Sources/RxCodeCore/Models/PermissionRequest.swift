@@ -4,6 +4,8 @@ import Foundation
 
 public struct PermissionRequest: Identifiable, Sendable {
     public let id: String
+    /// Identifies this particular prompt even if a backend later reuses its tool-call ID.
+    public let promptID = UUID()
     public let toolName: String
     public let toolInput: [String: JSONValue]
     public let runToken: String

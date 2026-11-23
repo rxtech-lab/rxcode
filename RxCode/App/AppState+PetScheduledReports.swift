@@ -26,12 +26,25 @@ extension AppState {
             let detail = reported.map { " Latest agent report (unverified): \(SpokenTextChunker.sanitizeForSpeech(String($0.prefix(250))))." } ?? ""
             return "\(summary.title): \(state?.isStreaming == true ? "agent running" : "no agent currently streaming").\(detail)"
         }.joined(separator: "; ")
-        return """
+        var report = """
         Progress observed in \(project.name) at \(now.formatted(date: .abbreviated, time: .shortened)): \
         \(board.tasks.count) board tasks\(counts.isEmpty ? "" : " (\(counts))"); \(running) agents streaming. \
         \(latest.isEmpty ? "No saved project threads were found." : "Recent threads: \(latest).") \
         These are observed board labels and agent activity, not proof of tests, merges or deployments. No project action was dispatched by this check.
         """
+        do {
+            let plans = try await codingPlanActivities(projectID: projectID)
+            if !plans.isEmpty {
+                let details = plans.prefix(3).map { plan in
+                    let feature = SpokenTextChunker.sanitizeForSpeech(String(plan.featureExcerpt.prefix(180)))
+                    return "\(plan.title), \(plan.planningStatusLabel), implementation \(plan.implementationStatusLabel). \(feature)"
+                }
+                report += " Coding plans (\(plans.count)). " + details.joined(separator: " ")
+            }
+        } catch {
+            report += " Coding plan history could not be loaded."
+        }
+        return report
     }
 
     /// Reminders are saved notification text, never agent/project instructions to execute.

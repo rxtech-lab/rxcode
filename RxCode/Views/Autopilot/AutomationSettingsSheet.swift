@@ -29,10 +29,10 @@ struct AutomationSettingsSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            ClaudeThemeDivider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
+            ClaudeThemeDivider()
             footer
         }
         .frame(width: 560, height: 600)

@@ -191,7 +191,7 @@ struct ManageWorkspacesSheet: View {
                 if workspace.isPersonal {
                     Text("Default")
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 } else {
                     Button {
                         startRename(workspace)

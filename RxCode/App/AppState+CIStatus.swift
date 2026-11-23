@@ -35,6 +35,7 @@ nonisolated struct BranchStatusSnapshot: Codable, Sendable {
     let accountID: String?
     var byBranch: [String: ProjectCIStatus] = [:]
     var inferredBySession: [String: ThreadPullRequest] = [:]
+    var threadHistory: ThreadPullRequestHistory?
 }
 
 extension AppState {
@@ -64,7 +65,7 @@ extension AppState {
         ciStatusPollerTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refreshCIStatusOnce()
-                await self?.refreshInferredThreadPullRequests()
+                await self?.refreshThreadPullRequests()
                 let interval = AppState.ciStatusPollInterval
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             }
@@ -158,7 +159,14 @@ extension AppState {
             ?? summary.parentThreadId.flatMap { ciBranchesBySessionId[$0] }
             ?? []
         for branch in branches {
-            if let pullRequest = pullRequest(forRepository: repository, branch: branch) { return pullRequest }
+            let key = "\(repository.lowercased())#\(branch)"
+            guard let status = branchStatus.byBranch[key], status.found else { continue }
+            let current = ThreadPullRequest(repository: repository, status: status)
+            if let historical = branchStatus.threadHistory?.finishedPullRequest(
+                branchKey: key, threadStarted: summary.createdAt, current: current
+            ) { return historical }
+            // A terminal branch status alone cannot identify this thread's PR.
+            if let current, current.state != .merged, current.state != .closed { return current }
         }
         return nil
     }
@@ -289,34 +297,46 @@ extension AppState {
         }
     }
 
-    /// Recover links for threads whose edits were picked up by a PR on another branch.
-    private func refreshInferredThreadPullRequests() async {
+    /// Resolve successive PRs on the same branch, then look for edits picked up on other branches.
+    private func refreshThreadPullRequests() async {
         guard isSignedIn, !Task.isCancelled else { return }
         let accountID = rxUser?.id
         let projects = projects
         let repositories = Dictionary(uniqueKeysWithValues: projects.compactMap { project in
             project.gitHubRepo.map { (project.id, $0) }
         })
-        let unmatched = allSessionSummaries.filter {
-            guard let repository = repositories[$0.projectId], threadHasDiffPreview(sessionId: $0.id) else { return false }
-            return pullRequestForRecordedBranch($0, repository: repository) == nil
-        }
-        guard !unmatched.isEmpty else {
-            if !branchStatus.inferredBySession.isEmpty {
+        let threads = allSessionSummaries.filter { repositories[$0.projectId] != nil }
+        guard let earliestThread = threads.map(\.createdAt).min() else {
+            if branchStatus.threadHistory != nil || !branchStatus.inferredBySession.isEmpty {
+                branchStatus.threadHistory = nil
                 branchStatus.inferredBySession = [:]
                 await persistBranchStatus()
             }
             return
         }
         do {
-            let revisions = try await autopilot.recentPullRequestRevisions()
+            let slugs = Set(repositories.values.map { $0.lowercased() })
+            var history = branchStatus.threadHistory ?? ThreadPullRequestHistory(repositories: slugs, earliestThread: earliestThread)
+            if history.repositories != slugs || history.earliestThread > earliestThread {
+                history = ThreadPullRequestHistory(repositories: slugs, earliestThread: earliestThread)
+            }
+            let revisions = try await autopilot.pullRequestRevisions(since: history.newestUpdate ?? earliestThread)
+            guard !Task.isCancelled, isSignedIn, rxUser?.id == accountID else { return }
+            history.record(revisions)
+            let historyChanged = history != branchStatus.threadHistory
+            if historyChanged { branchStatus.threadHistory = history }
+            let unmatched = threads.filter {
+                guard let repository = repositories[$0.projectId], threadHasDiffPreview(sessionId: $0.id) else { return false }
+                return pullRequestForRecordedBranch($0, repository: repository) == nil
+            }
             let matches = await threadPullRequestMatcher.match(
-                revisions,
+                Array(revisions.prefix(100)),
                 to: unmatched,
                 in: projects,
                 reader: threadStoreReader
             )
-            guard !Task.isCancelled, isSignedIn, rxUser?.id == accountID, matches != branchStatus.inferredBySession else { return }
+            guard !Task.isCancelled, isSignedIn, rxUser?.id == accountID,
+                  historyChanged || matches != branchStatus.inferredBySession else { return }
             branchStatus.inferredBySession = matches
             await persistBranchStatus()
         } catch {

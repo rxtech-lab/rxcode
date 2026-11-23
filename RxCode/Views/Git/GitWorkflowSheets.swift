@@ -42,6 +42,7 @@ private struct GitFormSheet<Content: View>: View {
     let confirmTitle: LocalizedStringResource
     let progressTitle: LocalizedStringResource
     let canConfirm: Bool
+    var confirmRole: ButtonRole? = nil
     let store: GitWorkflowStore
     let action: () async -> String?
     @ViewBuilder let content: () -> Content
@@ -59,7 +60,7 @@ private struct GitFormSheet<Content: View>: View {
                             Button("Cancel") { dismiss() }
                         }
                         ToolbarItem(placement: .confirmationAction) {
-                            Button(String(localized: confirmTitle), action: submit)
+                            Button(String(localized: confirmTitle), role: confirmRole, action: submit)
                                 .disabled(!canConfirm)
                         }
                     }
@@ -99,6 +100,7 @@ struct GitPullSheet: View {
                 Text("Rebase").tag(GitWorkflow.PullStrategy.rebase)
             }
             .pickerStyle(.radioGroup)
+            .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
             .disabled(branch?.upstream == nil)
         }
     }
@@ -192,6 +194,50 @@ struct GitRenameBranchSheet: View {
     }
 }
 
+struct GitDeleteBranchSheet: View {
+    let store: GitWorkflowStore
+    let branch: GitLocalBranch
+    @State private var selectedRemoteID: String?
+    @State private var remoteToDelete: GitRemoteBranch?
+
+    var body: some View {
+        let targets = store.snapshot.remoteBranches(for: branch)
+        let target = targets.first { $0.id == selectedRemoteID } ?? targets.first
+        GitFormSheet(
+            title: "Delete Branch",
+            confirmTitle: remoteToDelete == nil ? "Delete Local Branch" : "Delete Both Branches",
+            progressTitle: "Deleting branch…",
+            canConfirm: store.snapshot.localBranches.contains { $0.name == branch.name && !$0.isCurrent },
+            confirmRole: .destructive,
+            store: store,
+            action: { await GitWorkflow.deleteBranch(branch, alsoDelete: remoteToDelete, at: store.root) }
+        ) {
+            Section {
+                LabeledContent("Local branch", value: branch.name)
+            } footer: {
+                Text("Unmerged commits on this branch are deleted too.")
+            }
+            if let target {
+                Section {
+                    if targets.count > 1 {
+                        Picker("Remote branch", selection: Binding(get: { target.id }, set: { selectedRemoteID = $0 })) {
+                            ForEach(targets) { Text($0.refName).tag($0.id) }
+                        }
+                    }
+                    Toggle("Also delete “\(target.refName)” from the remote", isOn: Binding(
+                        get: { remoteToDelete != nil },
+                        set: { remoteToDelete = $0 ? target : nil }
+                    ))
+                    .toggleStyle(.checkbox)
+                } footer: {
+                    Text("Deleting the remote branch removes it for everyone using that remote.")
+                }
+            }
+        }
+        .onChange(of: target?.id) { remoteToDelete = nil }
+    }
+}
+
 struct GitCreateTagSheet: View {
     let store: GitWorkflowStore
     let commit: GitCommit
@@ -237,7 +283,7 @@ struct GitTagSearchSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($searchFocused)
                     .padding(12)
-                Divider()
+                ClaudeThemeDivider()
                 if tags.isEmpty {
                     ContentUnavailableView.search(text: query)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -401,7 +447,7 @@ struct GitInteractiveRebaseSheet: View {
                     }
                 }
                 .listStyle(.inset)
-                Divider()
+                ClaudeThemeDivider()
                 HStack {
                     Text("Rebasing \(steps.count) commits onto \(base.parents.first.map { String($0.prefix(7)) } ?? String(localized: "the root"))")
                         .font(.caption)

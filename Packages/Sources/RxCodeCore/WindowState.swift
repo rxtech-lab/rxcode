@@ -375,6 +375,7 @@ public final class WindowState {
     /// Whether the global thread-search overlay is presented. Toggled by the
     /// toolbar magnifier button and the Cmd+K shortcut.
     public var showGlobalSearch = false
+    public var chatCreationIntent: ChatCreationIntent?
     public var showModelPicker = false
     public var showEffortPicker = false
     /// Per-session model override. When set, this model is used instead of the global default.
@@ -391,7 +392,7 @@ public final class WindowState {
     public var sessionPermissionMode: PermissionMode?
     /// Per-session plan-mode toggle. Orthogonal to `sessionPermissionMode` — when true,
     /// the CLI is launched with `--permission-mode plan` regardless of the dropdown selection.
-    /// Toggled by Shift+Tab and the Plan pill in the input bar.
+    /// Native backend plan mode used by task runs and mobile sessions.
     public var sessionPlanMode: Bool = false
     public var requestInputFocus = false
     public var isInitialized = false
@@ -440,13 +441,7 @@ public final class WindowState {
     }
 
     public func removeAttachment(_ id: UUID) {
-        if let idx = attachments.firstIndex(where: { $0.id == id }) {
-            let removed = attachments.remove(at: idx)
-            if removed.type == .image {
-                removeImageToken(for: removed)
-                renumberImageTokens()
-            }
-        }
+        Attachment.remove(id, from: &attachments, text: &inputText)
     }
 
     /// Numeric index of an image attachment (1-based) in display order.
@@ -470,41 +465,5 @@ public final class WindowState {
         } else {
             inputText.append(" \(token) ")
         }
-    }
-
-    private func removeImageToken(for attachment: Attachment) {
-        guard let token = imageDisplayToken(for: attachment.id) else { return }
-        // Strip the token plus an optional adjacent space.
-        let patterns = [token + " ", " " + token, token]
-        var text = inputText
-        for p in patterns {
-            if let range = text.range(of: p) {
-                text.removeSubrange(range)
-                break
-            }
-        }
-        inputText = text
-    }
-
-    /// After removing an image, renumber the remaining `[ImageN]` tokens.
-    private func renumberImageTokens() {
-        var text = inputText
-        let images = attachments.filter { $0.type == .image }
-        // First replace existing tokens with placeholders to avoid collision (e.g. [Image10] vs [Image1]).
-        // Match any [Image<digits>] and substitute by a stable placeholder.
-        var counter = 1
-        var output = ""
-        var remaining = Substring(text)
-        while let r = remaining.range(of: #"\[Image\d+\]"#, options: .regularExpression) {
-            output += remaining[..<r.lowerBound]
-            if counter <= images.count {
-                output += "[Image\(counter)]"
-                counter += 1
-            }
-            remaining = remaining[r.upperBound...]
-        }
-        output += remaining
-        text = output
-        inputText = text
     }
 }

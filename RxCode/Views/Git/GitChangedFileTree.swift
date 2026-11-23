@@ -100,6 +100,7 @@ struct GitFileIcon: View {
 struct GitFolderContents: View {
     let folder: String
     let tree: GitPathTree
+    var ignoreFile: ((String) -> Void)? = nil
     let selectFile: (String) -> Void
 
     var body: some View {
@@ -109,7 +110,7 @@ struct GitFolderContents: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .padding(10)
-            Divider()
+            ClaudeThemeDivider()
             List(tree.filePaths(in: [folder]), id: \.self) { path in
                 Button {
                     selectFile(path)
@@ -124,6 +125,11 @@ struct GitFolderContents: View {
                 }
                 .buttonStyle(.plain)
                 .listRowSeparator(.hidden)
+                .contextMenu {
+                    if let ignoreFile {
+                        Button("Add to .gitignore…") { ignoreFile(path) }
+                    }
+                }
             }
             .listStyle(.inset)
         }

@@ -554,6 +554,9 @@
         }
       }
     },
+    "%@ couldn't generate a commit message. Try again or choose another model." : {
+
+    },
     "%@ hidden" : {
 
     },
@@ -607,6 +610,9 @@
       }
     },
     "%@ is pushed but has no pull request. Create one with an agent-drafted title and description." : {
+
+    },
+    "%@ is responding" : {
 
     },
     "%@ isn't backed up to Flowcy" : {
@@ -831,6 +837,7 @@
       }
     },
     "%@%%" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -926,6 +933,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个智能体可用"
+          }
+        }
+      }
+    },
+    "%lld ahead, %lld behind" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld ahead, %2$lld behind"
           }
         }
       }
@@ -1493,6 +1510,12 @@
         }
       }
     },
+    "%lld↑" : {
+
+    },
+    "%lld↓" : {
+
+    },
     "•" : {
       "localizations" : {
         "ko" : {
@@ -1602,9 +1625,6 @@
         }
       }
     },
-    "↑%lld" : {
-
-    },
     "↑↓ Select  ↵ Confirm  esc Cancel" : {
       "localizations" : {
         "en" : {
@@ -1626,9 +1646,6 @@
           }
         }
       }
-    },
-    "↓%lld" : {
-
     },
     "+%lld" : {
       "localizations" : {
@@ -2015,6 +2032,9 @@
       }
     },
     "A forecast needs two completed days of activity and at least three isolated cost measurements for each active model. Partial days and overlapping task costs are excluded." : {
+
+    },
+    "A fresh chat starts with this plan." : {
 
     },
     "A workflow failed" : {
@@ -2509,6 +2529,9 @@
         }
       }
     },
+    "Add a workspace project to create a board item." : {
+
+    },
     "Add an Agent Client Protocol client" : {
       "localizations" : {
         "ko" : {
@@ -2543,6 +2566,9 @@
           }
         }
       }
+    },
+    "Add Comment" : {
+
     },
     "Add Comment…" : {
 
@@ -2927,6 +2953,9 @@
         }
       }
     },
+    "Add Reviewer…" : {
+
+    },
     "Add Scheduled Task?" : {
       "localizations" : {
         "ko" : {
@@ -3016,6 +3045,9 @@
           }
         }
       }
+    },
+    "Add to .gitignore…" : {
+
     },
     "Add to projects" : {
       "localizations" : {
@@ -3686,6 +3718,9 @@
     "Allow Screen Recording…" : {
 
     },
+    "Allow the agent to control your Mac for the rest of this session?" : {
+
+    },
     "Allow this copy of RxCode in Privacy & Security → Accessibility to focus windows and perform requested clicks or scrolling. Then retry the action." : {
 
     },
@@ -3712,6 +3747,9 @@
       }
     },
     "Allowance used up" : {
+
+    },
+    "Also delete “%@” from the remote" : {
 
     },
     "Always" : {
@@ -4145,6 +4183,9 @@
           }
         }
       }
+    },
+    "Ask Host" : {
+
     },
     "Ask the agent about this run…" : {
 
@@ -4718,6 +4759,9 @@
           }
         }
       }
+    },
+    "Awaiting the Draft" : {
+
     },
     "Back" : {
       "localizations" : {
@@ -5517,6 +5561,9 @@
           }
         }
       }
+    },
+    "Chat Unavailable" : {
+
     },
     "Chat with any agent" : {
 
@@ -6754,6 +6801,9 @@
     "Coding Analytics Error" : {
 
     },
+    "Coding Plans" : {
+
+    },
     "Collapse %@" : {
 
     },
@@ -6889,10 +6939,19 @@
         }
       }
     },
+    "Comment" : {
+
+    },
+    "Comment (optional)" : {
+
+    },
     "Comment on Preview" : {
 
     },
     "Comment on the visible preview" : {
+
+    },
+    "Comments" : {
 
     },
     "Commit" : {
@@ -6986,6 +7045,9 @@
           }
         }
       }
+    },
+    "Commit message model" : {
+
     },
     "Commit when a session finishes" : {
       "localizations" : {
@@ -7221,6 +7283,9 @@
         }
       }
     },
+    "Confirm computer use" : {
+
+    },
     "Confirm deleting story “%@”" : {
       "comment" : "Final story deletion confirmation",
       "localizations" : {
@@ -7242,6 +7307,9 @@
           }
         }
       }
+    },
+    "Confirm for This Session" : {
+
     },
     "Confirmation" : {
 
@@ -7844,6 +7912,9 @@
     "Couldn't Build Voice Settings" : {
 
     },
+    "Couldn’t Complete Action" : {
+
+    },
     "Couldn't Create Pull Request" : {
       "localizations" : {
         "ko" : {
@@ -7863,6 +7934,9 @@
     "Couldn’t initialize Git" : {
 
     },
+    "Couldn’t list ignored files" : {
+
+    },
     "Couldn't Load Flowcy Voices" : {
 
     },
@@ -7870,6 +7944,9 @@
 
     },
     "Couldn’t load the commit to amend." : {
+
+    },
+    "Couldn’t open .gitignore" : {
 
     },
     "Couldn't Open the Model Page" : {
@@ -7887,6 +7964,9 @@
           }
         }
       }
+    },
+    "Couldn’t save .gitignore" : {
+
     },
     "Couldn’t save browser extensions: %@" : {
 
@@ -7980,6 +8060,9 @@
         }
       }
     },
+    "Create a plan, task, or story from this chat" : {
+
+    },
     "Create a project on this Mac or in the cloud" : {
       "localizations" : {
         "ko" : {
@@ -8067,6 +8150,9 @@
     "Create Branch Here…" : {
 
     },
+    "Create from Chat" : {
+
+    },
     "Create new branch…" : {
       "localizations" : {
         "ko" : {
@@ -8103,6 +8189,9 @@
 
     },
     "Create Pet Look" : {
+
+    },
+    "Create Plan from Chat…" : {
 
     },
     "Create PR" : {
@@ -8237,6 +8326,12 @@
         }
       }
     },
+    "Create Story from Chat" : {
+
+    },
+    "Create Story from Chat…" : {
+
+    },
     "Create Story with AI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8283,6 +8378,9 @@
         }
       }
     },
+    "Create Task from Chat" : {
+
+    },
     "Create Task from Chat with AI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8292,6 +8390,9 @@
           }
         }
       }
+    },
+    "Create Task from Chat…" : {
+
     },
     "Create Task with AI" : {
       "localizations" : {
@@ -8577,6 +8678,9 @@
         }
       }
     },
+    "Currently Ignored Files" : {
+
+    },
     "Currently installed: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8844,6 +8948,18 @@
           }
         }
       }
+    },
+    "Debate" : {
+
+    },
+    "Debate host" : {
+
+    },
+    "Debate Room" : {
+
+    },
+    "Debate room width" : {
+
     },
     "Debug" : {
       "localizations" : {
@@ -9296,7 +9412,10 @@
     "Delete all user-global memories shared by pets and workspaces on this Mac, plus this workspace's project and pet memories? Other workspaces' project memories and voice transcripts are unchanged. This action cannot be undone." : {
 
     },
-    "Delete branch “%@”?" : {
+    "Delete Both Branches" : {
+
+    },
+    "Delete Branch" : {
 
     },
     "Delete Briefing" : {
@@ -9394,6 +9513,9 @@
           }
         }
       }
+    },
+    "Delete Local Branch" : {
+
     },
     "Delete Local Voice Model?" : {
 
@@ -9686,6 +9808,9 @@
     "Deleting tag…" : {
 
     },
+    "Deleting the remote branch removes it for everyone using that remote." : {
+
+    },
     "Deleting…" : {
 
     },
@@ -9728,6 +9853,9 @@
       }
     },
     "Describe the refinement" : {
+
+    },
+    "Describe the requested changes…" : {
 
     },
     "Describe the story and tasks, or choose a text or PDF file." : {
@@ -10313,6 +10441,9 @@
         }
       }
     },
+    "Double-click to check out %@" : {
+
+    },
     "Download" : {
       "localizations" : {
         "ko" : {
@@ -10749,6 +10880,9 @@
         }
       }
     },
+    "Edit .gitignore" : {
+
+    },
     "Edit %@" : {
 
     },
@@ -10867,6 +11001,9 @@
 
     },
     "Edit Pet Look" : {
+
+    },
+    "Edit Plan" : {
 
     },
     "Edit Relay Server" : {
@@ -11422,6 +11559,9 @@
     "Enter a whole number from 0 to 2147483647." : {
 
     },
+    "Enter one pattern per line. Rules apply to untracked files." : {
+
+    },
     "Enter the repositories whose workflow queue times you want to monitor." : {
 
     },
@@ -11510,6 +11650,9 @@
           }
         }
       }
+    },
+    "Estimated from changes in provider limits across this thread’s turns. Partial totals (*) exclude turns that overlapped other runs or crossed a reset." : {
+
     },
     "Estimates appear after tasks finish" : {
       "localizations" : {
@@ -12202,6 +12345,7 @@
       }
     },
     "Files pasted or dropped into the description are listed here and sent to the agent with the task." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12632,6 +12776,9 @@
       }
     },
     "Follow Codex" : {
+
+    },
+    "Follow Live Plan" : {
 
     },
     "Follow-up" : {
@@ -13920,6 +14067,9 @@
     "If active, the pet returns to RxBuddy. Your conversation continues." : {
 
     },
+    "Ignore Patterns" : {
+
+    },
     "Images" : {
       "localizations" : {
         "en" : {
@@ -13941,6 +14091,24 @@
           }
         }
       }
+    },
+    "Implement version %lld" : {
+
+    },
+    "Implement…" : {
+
+    },
+    "Implementation" : {
+
+    },
+    "Implementation Chat" : {
+
+    },
+    "Implementation plan" : {
+
+    },
+    "Implementation Plan" : {
+
     },
     "Import" : {
 
@@ -15412,6 +15580,9 @@
     "Loading" : {
 
     },
+    "Loading .gitignore…" : {
+
+    },
     "Loading accounts…" : {
 
     },
@@ -15637,6 +15808,9 @@
           }
         }
       }
+    },
+    "Local branch" : {
+
     },
     "Local branches" : {
 
@@ -16566,6 +16740,9 @@
 
     },
     "Message the agent" : {
+
+    },
+    "Message the debate…" : {
 
     },
     "Messages" : {
@@ -17804,6 +17981,9 @@
         }
       }
     },
+    "No Chat Messages" : {
+
+    },
     "No chats yet" : {
       "localizations" : {
         "ko" : {
@@ -17842,6 +18022,9 @@
           }
         }
       }
+    },
+    "No comments yet." : {
+
     },
     "No commits yet" : {
 
@@ -18130,6 +18313,9 @@
         }
       }
     },
+    "No ignored files" : {
+
+    },
     "No local branches" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18251,6 +18437,9 @@
           }
         }
       }
+    },
+    "No measured turns yet" : {
+
     },
     "No memories" : {
       "localizations" : {
@@ -19636,6 +19825,9 @@
         }
       }
     },
+    "Open %@ in the plan pane" : {
+
+    },
     "Open a new chat with this model selected" : {
 
     },
@@ -19701,6 +19893,9 @@
 
     },
     "Open Git Window" : {
+
+    },
+    "Open Implementation" : {
 
     },
     "Open in Default App" : {
@@ -19815,6 +20010,9 @@
       }
     },
     "Open Pet Companion" : {
+
+    },
+    "Open plan · %@" : {
 
     },
     "Open PR" : {
@@ -20141,6 +20339,9 @@
     "Opens on GitHub" : {
 
     },
+    "Opens this version in the plan pane" : {
+
+    },
     "Optional" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20227,6 +20428,9 @@
           }
         }
       }
+    },
+    "Original text" : {
+
     },
     "Original: %@" : {
 
@@ -20520,6 +20724,9 @@
 
     },
     "Parents" : {
+
+    },
+    "Partial" : {
 
     },
     "Passing" : {
@@ -20931,6 +21138,9 @@
         }
       }
     },
+    "Plan Mode" : {
+
+    },
     "Plan recurring agent prompts for a project and manage them from one place." : {
       "localizations" : {
         "zh-Hans" : {
@@ -20940,6 +21150,15 @@
           }
         }
       }
+    },
+    "Plan versions" : {
+
+    },
+    "Planning request" : {
+
+    },
+    "Planning workspace" : {
+
     },
     "Plans without a separate 5-hour limit show only their 7-day line." : {
       "extractionState" : "stale",
@@ -21175,6 +21394,9 @@
           }
         }
       }
+    },
+    "Preview %@" : {
+
     },
     "Preview %lld" : {
 
@@ -21874,6 +22096,9 @@
     "Rate this coding session" : {
 
     },
+    "Rate-limit usage for this thread" : {
+
+    },
     "Rated %@ — change rating" : {
 
     },
@@ -21951,6 +22176,9 @@
 
     },
     "Read your browsing activity" : {
+
+    },
+    "Reading chat…" : {
 
     },
     "Reading README…" : {
@@ -22546,6 +22774,9 @@
         }
       }
     },
+    "Remote branch" : {
+
+    },
     "Remote branches" : {
 
     },
@@ -22620,6 +22851,7 @@
       }
     },
     "Remove attachment" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -22738,6 +22970,9 @@
 
     },
     "Remove Remote…" : {
+
+    },
+    "Remove Reviewer" : {
 
     },
     "Remove saved credentials for this server?" : {
@@ -23130,6 +23365,9 @@
     "Request (context only)" : {
 
     },
+    "Request Revision" : {
+
+    },
     "Required for requested window focus, clicks, scrolling and typing. Enable this copy of RxCode in System Settings. If authorization does not update, fully quit and reopen the same app. Screen Recording is a separate permission." : {
 
     },
@@ -23330,6 +23568,9 @@
         }
       }
     },
+    "Resume Debate" : {
+
+    },
     "Resume Download" : {
 
     },
@@ -23485,6 +23726,9 @@
         }
       }
     },
+    "Review instructions" : {
+
+    },
     "Review model" : {
       "localizations" : {
         "ko" : {
@@ -23556,6 +23800,12 @@
         }
       }
     },
+    "Reviewer %lld" : {
+
+    },
+    "Reviewers" : {
+
+    },
     "Revise" : {
       "localizations" : {
         "zh-Hans" : {
@@ -23566,7 +23816,16 @@
         }
       }
     },
+    "Revise Plan" : {
+
+    },
     "Revise with Prompt…" : {
+
+    },
+    "Revise…" : {
+
+    },
+    "Revision" : {
 
     },
     "Reword" : {
@@ -24147,6 +24406,12 @@
     "Save & Use" : {
 
     },
+    "Save Comment" : {
+
+    },
+    "Save Reviewer" : {
+
+    },
     "Save Server" : {
       "localizations" : {
         "ko" : {
@@ -24164,6 +24429,9 @@
       }
     },
     "Save the connection and refresh its usage to preview this card." : {
+
+    },
+    "Save Version" : {
 
     },
     "Saved" : {
@@ -24227,6 +24495,9 @@
           }
         }
       }
+    },
+    "Saving .gitignore…" : {
+
     },
     "Saving and probing…" : {
       "localizations" : {
@@ -25259,6 +25530,9 @@
     "Selected" : {
 
     },
+    "Selected model unavailable" : {
+
+    },
     "Selected release workflow" : {
       "localizations" : {
         "ko" : {
@@ -25289,6 +25563,9 @@
       }
     },
     "Send a follow-up to this run's thread" : {
+
+    },
+    "Send a message in this chat to create a draft from it." : {
 
     },
     "Send a prompt with coding analytics enabled to record and rate this session." : {
@@ -25422,6 +25699,9 @@
       }
     },
     "Send to Chat" : {
+
+    },
+    "Send to the next speaker" : {
 
     },
     "Sends a system notification while RxCode is in the background." : {
@@ -25756,6 +26036,9 @@
         }
       }
     },
+    "Settings Default" : {
+
+    },
     "Settings Default (%@)" : {
 
     },
@@ -25816,6 +26099,9 @@
           }
         }
       }
+    },
+    "Share of each provider’s limits used by this thread" : {
+
     },
     "Shared Window" : {
 
@@ -27147,6 +27433,9 @@
         }
       }
     },
+    "Source chat" : {
+
+    },
     "Source control" : {
 
     },
@@ -27243,6 +27532,12 @@
           }
         }
       }
+    },
+    "Start Debate" : {
+
+    },
+    "Start Implementation" : {
+
     },
     "Start New Chat" : {
       "localizations" : {
@@ -27446,6 +27741,9 @@
           }
         }
       }
+    },
+    "Stop Debate" : {
+
     },
     "Stop loading" : {
 
@@ -28740,6 +29038,12 @@
     "The pet only takes a single photo when you ask. It can photograph its display, another display, or a visible window. macOS may require reopening RxCode after access changes." : {
 
     },
+    "The planner drafts first. The host sets a review agenda, then resolves the reviewers’ feedback into a final plan." : {
+
+    },
+    "The planner’s response will appear here." : {
+
+    },
     "The preview uses the latest saved usage. Widget layouts adapt to the widget size." : {
 
     },
@@ -29296,6 +29600,9 @@
     "This month" : {
 
     },
+    "This passage was added." : {
+
+    },
     "This profile has no extensions." : {
 
     },
@@ -29594,6 +29901,9 @@
           }
         }
       }
+    },
+    "Thread Usage" : {
+
     },
     "Threads" : {
       "localizations" : {
@@ -30505,6 +30815,9 @@
         }
       }
     },
+    "Use planner as host" : {
+
+    },
     "Use Shared With to add this story to other projects" : {
       "localizations" : {
         "zh-Hans" : {
@@ -30779,6 +31092,9 @@
           }
         }
       }
+    },
+    "v%lld" : {
+
     },
     "v1.0.0" : {
 
@@ -31094,6 +31410,9 @@
     "View or generate today's workspace daily report" : {
 
     },
+    "View Plan" : {
+
+    },
     "View PR" : {
       "localizations" : {
         "ko" : {
@@ -31332,6 +31651,9 @@
         }
       }
     },
+    "Weekly limit" : {
+
+    },
     "Welcome to RxCode" : {
       "localizations" : {
         "ko" : {
@@ -31357,6 +31679,15 @@
           }
         }
       }
+    },
+    "What should the host change?" : {
+
+    },
+    "What should the plan cover?" : {
+
+    },
+    "What should this agent review?" : {
+
     },
     "What you type becomes the description; the agent writes the title." : {
       "localizations" : {

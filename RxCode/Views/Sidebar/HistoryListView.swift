@@ -26,15 +26,16 @@ struct HistoryListView: View {
     @State private var showTaskCreationError = false
 
     var body: some View {
+        let visibleSessions = sessions
         VStack(alignment: .leading, spacing: 0) {
             headerRow
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
 
-            if sessions.isEmpty {
+            if visibleSessions.isEmpty {
                 emptyState
             } else {
-                sessionList
+                sessionList(visibleSessions)
             }
         }
         .alert(showArchived ? "Delete All Archived" : "Delete All", isPresented: $showDeleteAllAlert) {
@@ -168,9 +169,8 @@ struct HistoryListView: View {
 
     // MARK: - Session List
 
-    private var sessionList: some View {
+    private func sessionList(_ visibleSessions: [DisplaySession]) -> some View {
         let calendar = Calendar.current
-        let visibleSessions = sessions
         let selectedSessionID = selectedSessionBinding.wrappedValue
         let pinned = visibleSessions.filter(\.isPinned)
         let days = Dictionary(grouping: visibleSessions.filter { !$0.isPinned }) {
@@ -208,7 +208,7 @@ struct HistoryListView: View {
             }
         }
         .listStyle(.sidebar)
-        .animation(.default, value: sessions)
+        .animation(.default, value: visibleSessions)
     }
 
     private var selectedSessionBinding: Binding<String?> {
@@ -235,8 +235,12 @@ struct HistoryListView: View {
                 isPinned: session.isPinned,
                 isBackgroundStreaming: session.isBackgroundStreaming
             )
+            if session.summary.hasUnfinishedTurn == true, appState.sessionActivity[session.id]?.isStreaming != true {
+                InterruptedThreadLabel()
+            }
             AttentionBadge(attention: appState.threadAttention(sessionKey: session.id, in: windowState))
         }
+        .task(id: session.id) { await appState.loadLegacyTurnOutcome(for: session.summary) }
         .onLongPressGesture(minimumDuration: 0, maximumDistance: 10, pressing: { pressing in
             if pressing {
                 appState.selectSession(id: session.id, inChatTab: opensInChatTab, in: windowState)
@@ -244,86 +248,88 @@ struct HistoryListView: View {
             }
         }, perform: {})
         .contextMenu {
-            if let summary = appState.allSessionSummaries.first(where: { $0.id == session.id }) {
-                let chatSession = summary.makeSession()
-                let linkedTask = appState.linkedTask(forSessionId: summary.id, projectId: summary.projectId)
+            let summary = session.summary
+            let linkedTask = appState.linkedTask(forSessionId: summary.id, projectId: summary.projectId)
 
-                Button {
-                    openWindow(
-                        id: "chat-window",
-                        value: ChatWindowValue(
-                            instanceId: UUID(),
-                            workspaceID: appState.activeWorkspace.id,
-                            sessionId: session.id
-                        )
+            Button {
+                openWindow(
+                    id: "chat-window",
+                    value: ChatWindowValue(
+                        instanceId: UUID(),
+                        workspaceID: appState.activeWorkspace.id,
+                        sessionId: session.id
                     )
+                )
+            } label: {
+                Label("Open in New Window", systemImage: "macwindow")
+            }
+
+            if let linkedTask {
+                Button {
+                    taskToEdit = linkedTask
                 } label: {
-                    Label("Open in New Window", systemImage: "macwindow")
+                    Label("Jump to Task", systemImage: "link")
                 }
-
-                if let linkedTask {
-                    Button {
-                        taskToEdit = linkedTask
-                    } label: {
-                        Label("Jump to Task", systemImage: "link")
-                    }
-                } else if summary.projectId != Project.globalChatID {
-                    Button {
-                        createTask(from: summary)
-                    } label: {
-                        Label("Create Task from Chat with AI", systemImage: "sparkles")
-                    }
-                    .disabled(creatingTaskSessionIds.contains(summary.id))
+            } else if !opensInChatTab, summary.projectId != Project.globalChatID {
+                Button {
+                    createTask(from: summary)
+                } label: {
+                    Label("Create Task from Chat with AI", systemImage: "sparkles")
                 }
+                .disabled(creatingTaskSessionIds.contains(summary.id))
+            }
 
+            if opensInChatTab {
+                ChatCreationActions(sessionID: summary.id) { windowState.chatCreationIntent = $0 }
+            }
+
+            Divider()
+
+            Button {
+                renameText = session.title
+                renamingSession = summary.makeSession()
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+
+            Button {
+                Task { await appState.togglePinSession(summary.makeSession()) }
+            } label: {
+                if session.isPinned {
+                    Label("Unpin", systemImage: "pin.slash")
+                } else {
+                    Label("Pin", systemImage: "pin")
+                }
+            }
+
+            Button {
+                if summary.isArchived {
+                    Task {
+                        await appState.unarchiveSession(summary.makeSession(), in: windowState)
+                    }
+                } else {
+                    sessionToArchive = summary.makeSession()
+                }
+            } label: {
+                if summary.isArchived {
+                    Label("Unarchive", systemImage: "tray.and.arrow.up")
+                } else {
+                    Label("Archive", systemImage: "archivebox")
+                }
+            }
+
+            let hookItems = appState.threadContextMenuItems(for: summary)
+            if !hookItems.isEmpty {
                 Divider()
+                HookContextMenuItems(items: hookItems)
+            }
 
-                Button {
-                    renameText = session.title
-                    renamingSession = chatSession
-                } label: {
-                    Label("Rename", systemImage: "pencil")
-                }
+            Divider()
 
-                Button {
-                    Task { await appState.togglePinSession(chatSession) }
-                } label: {
-                    if session.isPinned {
-                        Label("Unpin", systemImage: "pin.slash")
-                    } else {
-                        Label("Pin", systemImage: "pin")
-                    }
-                }
-
-                Button {
-                    if summary.isArchived {
-                        Task {
-                            await appState.unarchiveSession(chatSession, in: windowState)
-                        }
-                    } else {
-                        sessionToArchive = chatSession
-                    }
-                } label: {
-                    if summary.isArchived {
-                        Label("Unarchive", systemImage: "tray.and.arrow.up")
-                    } else {
-                        Label("Archive", systemImage: "archivebox")
-                    }
-                }
-
-                let hookItems = appState.threadContextMenuItems(for: summary)
-                if !hookItems.isEmpty {
-                    Divider()
-                    HookContextMenuItems(items: hookItems)
-                }
-
-                Divider()
-
-                Button(role: .destructive) {
-                    sessionToDelete = chatSession
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
+            Button(role: .destructive) {
+                sessionToDelete = summary.makeSession()
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
     }
@@ -362,11 +368,11 @@ struct HistoryListView: View {
     // MARK: - Display Model
 
     struct DisplaySession: Identifiable, Equatable {
-        let id: String
-        let projectId: UUID
-        let title: String
-        let updatedAt: Date
-        let isPinned: Bool
+        let summary: ChatSession.Summary
+        var id: String { summary.id }
+        var title: String { summary.title }
+        var updatedAt: Date { summary.updatedAt }
+        var isPinned: Bool { summary.isPinned }
         let isBackgroundStreaming: Bool
         let projectName: String?
     }
@@ -419,11 +425,7 @@ struct HistoryListView: View {
             showArchived: showArchived
         ).map { summary in
             DisplaySession(
-                id: summary.id,
-                projectId: summary.projectId,
-                title: summary.title,
-                updatedAt: summary.updatedAt,
-                isPinned: summary.isPinned,
+                summary: summary,
                 isBackgroundStreaming: streamingIds.contains(summary.id),
                 projectName: nil
             )
@@ -441,11 +443,7 @@ struct HistoryListView: View {
             showArchived: showArchived
         ).map { summary in
             DisplaySession(
-                id: summary.id,
-                projectId: summary.projectId,
-                title: summary.title,
-                updatedAt: summary.updatedAt,
-                isPinned: summary.isPinned,
+                summary: summary,
                 isBackgroundStreaming: streamingIds.contains(summary.id),
                 projectName: projectNames[summary.projectId] ?? appState.sessionProject(id: summary.projectId)?.name
             )

@@ -148,7 +148,7 @@ struct VideoStudioView<Composer: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if !takes.isEmpty {
-                Divider()
+                ClaudeThemeDivider()
                 VideoTakeList(
                     takes: takes,
                     selectedID: selectedTake?.id,

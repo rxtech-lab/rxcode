@@ -118,11 +118,7 @@ extension AppState {
     /// Queues `request` for the user and waits for their decision. Returns
     /// `false` when they cancel or the waiting call is cancelled.
     func requestAgentConfirmation(_ request: ConfirmationTool.Request, sessionKey: String) async -> Bool {
-        let resolved = resolveCurrentSessionId(sessionKey)
-        let projectId = allSessionSummaries.first { resolveCurrentSessionId($0.id) == resolved }?.projectId
-            ?? registeredWindows().first {
-                resolveCurrentSessionId($0.currentSessionId ?? $0.newSessionKey) == resolved
-            }?.selectedProject?.id
+        let projectId = projectID(forPromptSession: sessionKey)
         let confirmation = AgentConfirmation(request: request, sessionKey: sessionKey, projectId: projectId)
         let id = confirmation.id
         return await withTaskCancellationHandler {

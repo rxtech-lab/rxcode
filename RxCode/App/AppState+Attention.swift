@@ -45,8 +45,8 @@ extension AppState {
                 sessionIds.insert(id)
             }
         }
-        let tasks = taskBoard(for: projectId).inProgressTasks
-        let taskSessionIds = Set(tasks.compactMap(\.sessionKey).map { resolveCurrentSessionId($0) })
+        let tasks = taskSessionIndex(for: projectId)
+        let taskSessionIds = tasks.activeRunIDs
         var running = 0
         var unread = 0
         for (id, activity) in sessionActivity
@@ -56,7 +56,7 @@ extension AppState {
             else { unread += 1 }
         }
         // A task and its chat represent the same activity, even after a session rename.
-        let taskCount = taskSessionIds.count + tasks.filter { $0.sessionKey == nil }.count
+        let taskCount = taskSessionIds.count + tasks.activeWithoutRun
         return PendingAttention(
             permissions: Set(window.pendingPermissions.filter {
                 $0.sessionId.map { sessionIds.contains(resolveCurrentSessionId($0)) } ?? false

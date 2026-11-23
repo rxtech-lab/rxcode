@@ -53,11 +53,17 @@ public struct ToolActivityGroupView: View {
                     ToolActivityBadge(status: overallStatus, systemImage: "wrench.and.screwdriver.fill", size: 32)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(tools.last?.displayedToolName ?? "Tool calls")
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
+                            Group {
+                                if let latest = tools.last {
+                                    ToolActionLabel(latest)
+                                } else {
+                                    Text("Tool calls")
+                                }
+                            }
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
                             ToolGroupFileChangesView(tools: tools)
                         }
                         Text("\(tools.count == 1 ? "1 tool call" : "\(tools.count) tool calls") · \(summary)")
@@ -68,7 +74,7 @@ public struct ToolActivityGroupView: View {
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.tertiaryLabel)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .padding(.horizontal, 12)
@@ -194,22 +200,8 @@ enum ToolActivityStatus: CaseIterable {
     }
 }
 
-/// Display helpers that turn raw tool names and arguments into short readable labels.
+/// Source, icon, and argument hints for the tool timeline.
 enum ToolActivityPresentation {
-    /// `mcp__rxcode-ide__ide__get_projects` → "Get projects"; `list_issues` → "List issues".
-    static func title(for name: String) -> String {
-        if name.hasPrefix("ide__") { return name }
-        if name.lowercased() == "mcptoolcall" { return "MCP tool call" }
-        let base = name.components(separatedBy: "__").last(where: { !$0.isEmpty }) ?? name
-        let words = base
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
-            .split(separator: " ")
-            .joined(separator: " ")
-        guard let first = words.first else { return name }
-        return first.uppercased() + words.dropFirst()
-    }
-
     /// MCP server name for namespaced tools, e.g. `mcp__github__search` → "github".
     static func source(for name: String) -> String? {
         let parts = name.components(separatedBy: "__").filter { !$0.isEmpty }
@@ -238,9 +230,16 @@ enum ToolActivityPresentation {
     }
 
     /// One-line hint of what the call targeted, taken from its most descriptive argument.
-    static func preview(for input: [String: JSONValue]) -> String? {
-        let filtered = input.filter { key, _ in
-            key != ToolCall.detectedFileChangesInputKey && key != ToolCall.acpKindInputKey
+    static func preview(for tool: ToolCall) -> String? {
+        let input = tool.displayInput
+        let filtered: [String: JSONValue]
+        if tool.actionNameIdentifier != tool.name {
+            // Older sessions stored MCP routing metadata alongside the arguments.
+            let metadata = ["server", "serverName", "server_name", "tool", "toolName", "tool_name", "name"]
+            filtered = input["arguments"]?.objectValue ?? input["params"]?["arguments"]?.objectValue
+                ?? input.filter { !metadata.contains($0.key) }
+        } else {
+            filtered = input
         }
         if let shellCmd = ToolCall(id: "", name: "", input: filtered).shellCommandString {
             let trimmed = shellCmd.split(whereSeparator: \.isNewline).first.map(String.init)?
@@ -313,11 +312,11 @@ private struct ToolActivityStepRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(ToolActivityPresentation.title(for: tool.displayedToolName))
+                    ToolActionLabel(tool)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    if let source = ToolActivityPresentation.source(for: tool.name) {
+                    if let source = ToolActivityPresentation.source(for: tool.actionNameIdentifier) {
                         Text(source)
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(.secondary)
@@ -343,7 +342,7 @@ private struct ToolActivityStepRow: View {
                         .background(.fill.tertiary, in: Capsule())
                     }
                 }
-                if let preview = ToolActivityPresentation.preview(for: tool.input) {
+                if let preview = ToolActivityPresentation.preview(for: tool) {
                     Text(preview)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
@@ -360,7 +359,7 @@ private struct ToolActivityStepRow: View {
 
             Image(systemName: "info.circle")
                 .font(.footnote)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(ClaudeTheme.tertiaryLabel)
                 .padding(.top, 13)
         }
         .frame(minHeight: 44)
@@ -393,12 +392,13 @@ struct ToolActivityDetailView: View {
                 HStack(spacing: 12) {
                     ToolActivityBadge(status: status, systemImage: ToolActivityPresentation.systemImage(for: tool.name), size: 40)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(ToolActivityPresentation.title(for: tool.displayedToolName)).font(.headline)
-                        Text(tool.displayedToolName)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                        ToolActionLabel(tool).font(.headline)
+                        if let source = ToolActivityPresentation.source(for: tool.actionNameIdentifier) {
+                            Text(source)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
                     Spacer(minLength: 0)
                     Text(status.label)
@@ -448,7 +448,7 @@ struct ToolActivityDetailView: View {
                 }
 
                 if pages.count > 1 && !displayInput.isEmpty {
-                    Divider()
+                    ClaudeThemeDivider()
                     HStack {
                         Button { pageIndex = max(0, currentPage - 1) } label: {
                             Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)

@@ -46,7 +46,11 @@ struct SidebarRepositoryView: View {
                     .truncationMode(.middle)
                 if case .ready(let tree) = repository.path == path ? repository.state : .loading {
                     Button {
-                        openWindow(id: "git-window", value: GitWindowValue(path: tree.root, workspaceID: appState.activeWorkspace.id))
+                        openWindow(id: "git-window", value: GitWindowValue(
+                            path: path ?? tree.root,
+                            workspaceID: appState.activeWorkspace.id,
+                            projectID: project.id
+                        ))
                     } label: {
                         Image(systemName: "point.3.connected.trianglepath.dotted")
                             .font(.system(size: ClaudeTheme.size(11)))

@@ -1,4 +1,8 @@
 extension IDEToolRegistry {
+    public static let codingPlanBriefingInstructions = """
+    For workspace or project briefings, use ide__list_coding_plans to find plan activity in the requested scope and period, including plans with no assistant chat replies. Use ide__list_coding_plan_versions and ide__get_coding_plan_version when you need the planned features. Identify each relevant plan once by title and ID in the user's requested sections. Report its planning status separately from its implementation status and cite the linked evidence. A ready or approved plan describes planned work.
+    """
+
     static let briefingTools: [IDETool] = [
         IDETool(
             name: "ide__project_briefings",
@@ -59,7 +63,7 @@ extension IDEToolRegistry {
         ),
         IDETool(
             name: "ide__briefing_create",
-            description: "Create a document briefing: a locally stored report written in Markdown or HTML, with its own folder for images, videos, and files. It starts as a draft hidden from the user's briefing timeline; add files with ide__briefing_add_file, then call ide__briefing_publish. Reference stored files from the content with relative paths such as `images/chart.png`. The title is displayed above the content, so do not repeat it as a heading in the content. Only create briefings when the user asks for a report or briefing.",
+            description: "Create a document briefing: a locally stored report written in Markdown or HTML, with its own folder for images, videos, and files. It starts as a draft hidden from the user's briefing timeline; add files with ide__briefing_add_file, then call ide__briefing_publish. Reference stored files from the content with relative paths such as `images/chart.png`. The title is displayed above the content, so do not repeat it as a heading in the content. Only create briefings when the user asks for a report or briefing. " + codingPlanBriefingInstructions,
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),

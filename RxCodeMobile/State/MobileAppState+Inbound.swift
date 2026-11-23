@@ -128,6 +128,7 @@ extension MobileAppState {
             apply(\.projects, snap.projects, "projects")
             apply(\.sessions, snap.sessions, "sessions")
             apply(\.branchBriefings, snap.branchBriefings ?? [], "branchBriefings")
+            apply(\.briefingPlans, snap.briefingPlans ?? [], "briefingPlans")
             apply(\.briefingDocuments, snap.briefingDocuments ?? [], "briefingDocuments")
             apply(\.usageDashboard, snap.usageDashboard ?? UsageDashboard(), "usageDashboard")
             apply(\.threadSummaries, snap.threadSummaries ?? [], "threadSummaries")
@@ -558,6 +559,7 @@ extension MobileAppState {
             archiveRetentionDays: update.archiveRetentionDays ?? current.archiveRetentionDays,
             autoPreviewSettings: update.autoPreviewSettings ?? current.autoPreviewSettings,
             availableEfforts: current.availableEfforts,
+            reasoningLevelsByModel: current.reasoningLevelsByModel,
             availableModels: current.availableModels,
             modelSections: current.modelSections,
             availableSummarizationProviders: current.availableSummarizationProviders,

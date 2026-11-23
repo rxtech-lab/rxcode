@@ -25,7 +25,7 @@ struct LocalAgentSettingsRow: View {
                         .font(.system(size: ClaudeTheme.size(10), weight: .medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(ClaudeTheme.surfacePrimary)
                         .clipShape(Capsule())
                         .foregroundStyle(.secondary)
                     LocalServerStatusBadge(status: store.serverStatus)
@@ -47,11 +47,11 @@ struct LocalAgentSettingsRow: View {
             .controlSize(.small)
         }
         .padding(10)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1),
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1),
         )
         .sheet(isPresented: $showModels) {
             LocalModelsSheet()

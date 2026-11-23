@@ -4,6 +4,29 @@ import RxCodeCore
 
 @MainActor
 final class DesktopWidgetNavigationTests: XCTestCase {
+    func testWidgetThreadsLookUpEachRemovedProjectOnce() {
+        let current = Project(name: "Current", path: "/current")
+        let global = Project(id: Project.globalChatID, name: "Chat", path: "/chat")
+        let removed = Project(name: "Removed", path: "/removed")
+        let unknown = UUID()
+        let owners = [current.id, global.id, removed.id, unknown, removed.id, unknown]
+        var summaries = owners.enumerated().map { ChatSession(id: String($0.offset), projectId: $0.element).summary }
+        var archived = ChatSession(id: "archived", projectId: UUID()).summary
+        archived.isArchived = true
+        summaries.append(archived)
+        let input = DesktopWidgetWorkspace(projects: [current], boards: [:], globalChat: global,
+                                           summaries: summaries, streaming: ["2"])
+        var queries: [UUID: Int] = [:]
+        let threads = input.threads { id in
+            queries[id, default: 0] += 1
+            return id == removed.id ? removed : nil
+        }
+        XCTAssertEqual(queries, [removed.id: 1, unknown: 1])
+        XCTAssertEqual(threads.map(\.id), ["0", "1", "2", "4"])
+        XCTAssertEqual(threads.map(\.projectName), ["Current", "Chat", "Removed", "Removed"])
+        XCTAssertEqual(threads.filter(\.isOngoing).map(\.id), ["2"])
+    }
+
     func testTaskLinkNavigatesInSuppliedWindow() {
         let state = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
         let project = Project(name: "Widget project", path: "/tmp/widget-project", gitHubRepo: nil)

@@ -18,17 +18,35 @@ final class CacheStorageTests: XCTestCase {
         let worktree = ChatSession(id: "worktree", projectId: project.id, worktreeBranch: "Feature").summary
         let review = ChatSession(id: "review", projectId: project.id, parentThreadId: worktree.id).summary
         let inferred = ChatSession(id: "inferred", projectId: project.id).summary
-        for thread in [checkout, worktree, review, inferred] { state.threadStore.upsert(thread) }
+        let mergedAt = Date()
+        let afterMerge = mergedAt.addingTimeInterval(1)
+        let reused = ChatSession(id: "reused", projectId: project.id, createdAt: afterMerge).summary
+        let newWorktree = ChatSession(id: "new-worktree", projectId: project.id, createdAt: afterMerge, worktreeBranch: "Feature").summary
+        let newReview = ChatSession(id: "new-review", projectId: project.id, createdAt: afterMerge, parentThreadId: worktree.id).summary
+        let newThreads = [reused, newWorktree, newReview]
+        for thread in [checkout, worktree, review, inferred] + newThreads { state.threadStore.upsert(thread) }
         state.threadStore.setCheckoutBranch(sessionId: checkout.id, branch: "Feature")
+        state.threadStore.setCheckoutBranch(sessionId: reused.id, branch: "Feature")
 
-        let status = ProjectCIStatus(
-            owner: "owner", repo: "repo", branch: "Feature", found: true, overallState: .failure,
-            lastUpdated: nil, headSha: nil, prNumber: 42, prState: "merged", prUrl: nil, workflows: [], failing: []
-        )
+        func status(_ number: Int, _ state: PRState) -> ProjectCIStatus {
+            ProjectCIStatus(
+                owner: "owner", repo: "repo", branch: "Feature", found: true, overallState: .failure,
+                lastUpdated: nil, headSha: nil, prNumber: number, prState: state.rawValue, prUrl: nil, workflows: [], failing: []
+            )
+        }
+        func merge(_ number: Int, at date: Date) -> ThreadPullRequestRevision {
+            ThreadPullRequestRevision(
+                repositoryFullName: "Owner/Repo", number: number, state: "merged", htmlUrl: nil,
+                baseSha: nil, headSha: nil, updatedAt: FlexibleTimestamp(date: date), headRef: "Feature"
+            )
+        }
         let match = try XCTUnwrap(ThreadPullRequest(repository: "Owner/Repo", number: 43, state: .merged, reportedURL: nil))
-        let cached = BranchStatusSnapshot(
-            accountID: "returning-user", byBranch: ["owner/repo#Feature": status], inferredBySession: [inferred.id: match]
-        )
+        let key = "owner/repo#Feature"
+        let legacy = BranchStatusSnapshot(accountID: "returning-user", byBranch: [key: status(42, .merged)], inferredBySession: [inferred.id: match])
+        var cached = legacy
+        var history = ThreadPullRequestHistory(repositories: ["owner/repo"], earliestThread: checkout.createdAt)
+        history.record([merge(42, at: mergedAt)])
+        cached.threadHistory = history
         try await CacheStorageService.shared.saveBranchStatus(cached, workspaceID: workspace.id)
         state.workspaceDefaults.set("another-user", for: AppState.branchStatusAccountKey)
         state.restoreBranchStatus(cached)
@@ -46,6 +64,7 @@ final class CacheStorageTests: XCTestCase {
             XCTAssertEqual(link?.state, .merged)
         }
         XCTAssertEqual(state.pullRequest(forThread: inferred, in: project), match)
+        for thread in newThreads { XCTAssertNil(state.pullRequest(forThread: thread, in: project)) }
         XCTAssertNil(state.ciStatus(forProjectId: project.id, branch: "feature"))
         XCTAssertFalse(state.anyCIFailing, "Only a live CI result should drive project failure handling")
 
@@ -58,6 +77,26 @@ final class CacheStorageTests: XCTestCase {
         attachment.name = "Briefing merge badge before the first poll"
         attachment.lifetime = .keepAlways
         add(attachment)
+
+        // A snapshot written before PR history was cached has only a branch name.
+        state.branchStatus = try JSONDecoder().decode(BranchStatusSnapshot.self, from: JSONEncoder().encode(legacy))
+        XCTAssertNil(state.pullRequest(forThread: reused, in: project))
+        XCTAssertEqual(state.pullRequest(forThread: inferred, in: project), match)
+
+        // A subsequent open PR belongs to the new threads. Old rows still link to #42.
+        state.branchStatus = cached
+        state.branchStatus.byBranch[key] = status(44, .open)
+        XCTAssertEqual(state.pullRequest(forThread: checkout, in: project)?.number, 42)
+        for thread in newThreads { XCTAssertEqual(state.pullRequest(forThread: thread, in: project)?.number, 44) }
+
+        let secondMerge = afterMerge.addingTimeInterval(60)
+        history.record([merge(44, at: secondMerge), merge(42, at: secondMerge)])
+        state.branchStatus.threadHistory = history
+        state.branchStatus.byBranch[key] = status(44, .merged)
+        XCTAssertEqual(state.pullRequest(forThread: checkout, in: project)?.number, 42)
+        XCTAssertEqual(state.pullRequest(forThread: reused, in: project)?.number, 44)
+        let third = ChatSession(id: "third", projectId: project.id, createdAt: secondMerge.addingTimeInterval(1), worktreeBranch: "Feature").summary
+        XCTAssertNil(state.pullRequest(forThread: third, in: project))
 
         var relinkedProject = project
         relinkedProject.gitHubRepo = "Owner/Other"

@@ -36,7 +36,7 @@ struct SecretsEnvironmentDetailView: View {
                         if let size = file.size {
                             Text("\(size) B").foregroundStyle(.secondary).font(.caption)
                         }
-                        Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
+                        Image(systemName: "chevron.right").foregroundStyle(ClaudeTheme.textTertiary).font(.caption)
                     }
                     .contentShape(Rectangle())
                 }

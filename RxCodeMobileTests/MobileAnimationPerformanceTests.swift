@@ -11,6 +11,30 @@ final class MobileAnimationPerformanceTests: XCTestCase {
                             summary: "Summary", updatedAt: Date(timeIntervalSince1970: time))
     }
 
+    func testPlanOnlyDayGroupsByLastActivityAndUpdatesCachedTimeline() throws {
+        let state = MobileAppState()
+        let project = Project(name: "Plans", path: "/tmp/plans")
+        state.projects = [project]
+        let original = Date(timeIntervalSince1970: 3600)
+        let revised = original.addingTimeInterval(2 * 86_400)
+        let plan = CodingPlanActivity(
+            id: UUID(), threadID: "planning", projectID: project.id, title: "Extension support", goal: "",
+            branch: "main", createdAt: original, updatedAt: revised, planningStatus: "ready",
+            implementationStatus: "unknown", implementationEvidence: "", implementationThreadID: nil,
+            currentVersionID: UUID(), currentVersionTitle: "Final design", approvedVersionID: nil,
+            versionCount: 3, featureExcerpt: "Discover extensions"
+        )
+        XCTAssertTrue(state.briefingGroups.isEmpty)
+        state.briefingPlans = [plan]
+        let group = try XCTUnwrap(state.briefingGroups.first)
+        XCTAssertEqual(group.day, Calendar.current.startOfDay(for: revised))
+        XCTAssertEqual(group.plans, [plan])
+        XCTAssertTrue(group.threads.isEmpty)
+        XCTAssertNil(group.briefing)
+        state.briefingPlans = []
+        XCTAssertTrue(state.briefingGroups.isEmpty)
+    }
+
     func testGroupingKeepsLatestBriefingAndEveryThreadInDateOrder() throws {
         let project = UUID()
         let other = UUID()

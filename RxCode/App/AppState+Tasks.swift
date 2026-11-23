@@ -3,6 +3,31 @@ import RxAuthSwift
 import os
 import RxCodeCore
 
+/// Positions refer to the current board order, preserving the first match when
+/// multiple tasks share a source chat. Activity counts deduplicate renamed runs.
+struct ProjectTaskSessionIndex {
+    var linked: [String: Int] = [:]
+    var runs: [String: Int] = [:]
+    var activeRunIDs: Set<String> = []
+    var activeWithoutRun = 0
+
+    init(board: TaskBoard, resolve: (String) -> String) {
+        for (position, task) in board.tasks.enumerated() {
+            if let run = task.sessionKey.map(resolve) {
+                if runs[run] == nil { runs[run] = position }
+                if linked[run] == nil { linked[run] = position }
+            }
+            if let source = task.sourceSessionKey.map(resolve), linked[source] == nil {
+                linked[source] = position
+            }
+        }
+        for task in board.inProgressTasks {
+            if let key = task.sessionKey { activeRunIDs.insert(resolve(key)) }
+            else { activeWithoutRun += 1 }
+        }
+    }
+}
+
 /// Project task-board operations: CRUD over `TaskBoard`, column moves, and
 /// dispatching a task to its assigned agent.
 ///
@@ -99,7 +124,7 @@ extension AppState {
             board.tasks[idx].isQueued = false
         }
         let childrenToDispatch = fromCloud ? [] : board.advanceChildren(of: readyParentIDs(for: board, in: projectId))
-        let previousReady = taskBoards[projectId]?.readyParentIDs() ?? []
+        let previousReady = fromCloud ? [] : (taskBoards[projectId]?.readyParentIDs() ?? [])
         taskBoards[projectId] = board
         scheduleMobileTaskBoardBroadcast(for: projectId)
         if !fromCloud {
@@ -307,9 +332,10 @@ extension AppState {
     /// adding or moving a child task bubbles the story up. With a keyword, a
     /// story matches on its own text or on any child task's. Only stories the
     /// project's default view keeps are listed.
-    func recentStories(for projectId: UUID, keyword: String = "") -> [ProjectStory] {
+    func recentStories(for projectId: UUID, keyword: String = "", rollups: [UUID: StoryRollup]? = nil) -> [ProjectStory] {
         let board = taskBoard(for: projectId)
-        let viewStories = Set(board.stories(matching: board.defaultView).map(\.id))
+        let view = board.defaultView
+        let statuses = view.statuses.isEmpty ? [:] : (rollups ?? board.storyRollups())
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         var lastTaskActivity: [UUID: Date] = [:]
         var matchingTaskStories: Set<UUID> = []
@@ -321,7 +347,7 @@ extension AppState {
             }
         }
         let matching = board.stories.filter { story in
-            guard viewStories.contains(story.id) else { return false }
+            guard view.matches(story, rolledUpStatus: statuses[story.id]?.status ?? board.firstColumn.id) else { return false }
             return trimmed.isEmpty
                 || story.matches(keyword: trimmed)
                 || matchingTaskStories.contains(story.id)
@@ -651,11 +677,18 @@ extension AppState {
     /// that has since been replaced by the runtime's real session id.
     func linkedTask(forSessionId sessionId: String, projectId: UUID) -> ProjectTask? {
         let resolved = resolveCurrentSessionId(sessionId)
-        return taskBoard(for: projectId).tasks.first {
-            return [$0.sessionKey, $0.sourceSessionKey]
-                .compactMap { $0 }
-                .contains { resolveCurrentSessionId($0) == resolved }
-        }
+        guard let position = taskSessionIndex(for: projectId).linked[resolved] else { return nil }
+        return taskBoards[projectId]?.tasks[position]
+    }
+
+    func taskSessionIndex(for projectId: UUID) -> ProjectTaskSessionIndex {
+        // Views must observe both inputs even if another view populated the cache.
+        let board = taskBoard(for: projectId)
+        _ = sessionIdRedirect
+        if let index = taskSessionIndexes[projectId] { return index }
+        let index = ProjectTaskSessionIndex(board: board, resolve: resolveCurrentSessionId)
+        taskSessionIndexes[projectId] = index
+        return index
     }
 
     /// Creates one task from the readable conversation in an unlinked chat.

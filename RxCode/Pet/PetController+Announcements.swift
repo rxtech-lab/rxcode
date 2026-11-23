@@ -86,7 +86,7 @@ extension PetController {
         petState.mood = .focused
 
         let generation = muteGeneration
-        let report = await PetDailyReportService.generate(for: appState)
+        let report = await PetDailyReportService.generate(for: appState, companion: self)
         latestDailyReport = report
         isGeneratingDailyReport = false
         actionStatusOverlayMessage = nil

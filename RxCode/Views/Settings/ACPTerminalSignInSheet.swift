@@ -21,7 +21,7 @@ struct ACPTerminalSignInSheet: View {
                     .keyboardShortcut(.cancelAction)
             }
             .padding()
-            Divider()
+            ClaudeThemeDivider()
             EmbeddedTerminalView(
                 executable: state.executable,
                 arguments: state.arguments,

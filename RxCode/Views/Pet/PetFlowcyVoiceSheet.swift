@@ -1,3 +1,4 @@
+import RxCodeCore
 import SwiftUI
 
 struct PetFlowcyVoiceSheet: View {
@@ -104,7 +105,7 @@ struct PetFlowcyVoiceSheet: View {
                 }
                 .disabled(loadingModels)
                 .padding()
-                Divider()
+                ClaudeThemeDivider()
             }
             Group {
                 if let loadError {

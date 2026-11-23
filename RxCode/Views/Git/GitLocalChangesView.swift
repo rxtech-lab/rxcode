@@ -70,7 +70,11 @@ struct GitLocalChangesView: View {
                     // Give the split a stable size as the placeholder and file diffs change.
                     GeometryReader { _ in
                         if let folder = selectedFolder(lists, draft: draft) {
-                            GitFolderContents(folder: folder.path, tree: folder.tree) { selection = [folder.prefix + $0] }
+                            GitFolderContents(
+                                folder: folder.path,
+                                tree: folder.tree,
+                                ignoreFile: folder.prefix == "c:" ? nil : { editGitIgnore(paths: [$0]) }
+                            ) { selection = [folder.prefix + $0] }
                         } else if selection.count == 1, let draft, let file = originalFiles.first(where: { selection.contains(Self.tag($0)) }) {
                             GitCommitFileDiffView(file: file, commit: draft.commit, root: tree.root)
                                 .id("\(draft.commit.id):\(file.path)")
@@ -83,7 +87,7 @@ struct GitLocalChangesView: View {
                     .frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            Divider()
+            ClaudeThemeDivider()
             HStack(spacing: 8) {
                 if !all.isEmpty {
                     Button("Discard…") { store.confirmation = .discard(discardable) }
@@ -178,7 +182,7 @@ struct GitLocalChangesView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(ClaudeTheme.surfacePrimary)
-            Divider()
+            ClaudeThemeDivider()
             List(selection: Binding(get: { selection.intersection(tags) }, set: { newValue in
                 if !newValue.isEmpty || !selection.isDisjoint(with: tags) { selection = newValue }
             })) {
@@ -215,6 +219,10 @@ struct GitLocalChangesView: View {
                     if !staged {
                         Button("Discard Changes…", role: .destructive) { store.confirmation = .discard(targets) }
                     }
+                    let paths = selectedTags.filter { $0.hasPrefix(prefix) }
+                        .map { String($0.dropFirst(prefix.count)) }
+                    Divider()
+                    Button("Add to .gitignore…") { editGitIgnore(paths: paths) }
                 }
             } primaryAction: { selectedTags in
                 update(changes.selectedFiles(in: selectedTags, prefix: prefix))
@@ -223,6 +231,10 @@ struct GitLocalChangesView: View {
         .transformAnchorPreference(key: GitTransferAnchors.self, value: .bounds) { anchors, bounds in
             anchors[.pane(staged: staged)] = bounds
         }
+    }
+
+    private func editGitIgnore(paths: [String]) {
+        store.sheet = .editGitIgnore(patterns: paths.sorted().compactMap(GitIgnoreFile.literalPattern(for:)))
     }
 
     private func move(_ files: [GitChangeFile], toStaged: Bool, tree: GitWorkingTree) {

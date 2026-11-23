@@ -437,9 +437,38 @@ final class ACPServiceSuggestionTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
+        let spec = try modelSelectionClient(in: directory)
+        let response = await ACPService().generatePlainResponse(
+            prompt: "Summarize this task", model: "chosen-model", spec: spec, cwd: directory.path
+        )
+        XCTAssertEqual(response, "chosen-model: response")
+    }
+
+    @MainActor
+    func testCommitMessageUsesSelectedACPModelAndCheckout() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let state = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+        let client = try modelSelectionClient(in: directory)
+        state.acpClients = [client]
+        let model = try XCTUnwrap(state.codingModelSections.flatMap(\.models).first { $0.id == "\(client.id)::chosen-model" })
+
+        let message = try await state.generateCommitMessage(
+            diff: "+added line", stat: "example.txt | 1 +", fileSummary: "M example.txt", model: model, cwd: directory.path
+        )
+
+        XCTAssertEqual(message, "chosen-model: response")
+        let prompt = try String(contentsOf: directory.appending(path: "received-prompt"), encoding: .utf8)
+        XCTAssertTrue(prompt.contains("M example.txt"))
+        XCTAssertTrue(prompt.contains("+added line"))
+    }
+
+    private func modelSelectionClient(in directory: URL) throws -> ACPClientSpec {
         let script = directory.appendingPathComponent("mock_acp.py")
         try """
         import json, sys
+        from pathlib import Path
 
         def emit(value):
             print(json.dumps(value), flush=True)
@@ -452,6 +481,7 @@ final class ACPServiceSuggestionTests: XCTestCase {
             if method == "initialize":
                 emit({"jsonrpc": "2.0", "id": request_id, "result": {}})
             elif method == "session/new":
+                assert Path(request["params"]["cwd"]).resolve() == Path(__file__).resolve().parent
                 emit({"jsonrpc": "2.0", "id": request_id, "result": {
                     "sessionId": "mock-suggestion", "configOptions": [{
                         "id": "model", "category": "model", "type": "select",
@@ -465,6 +495,7 @@ final class ACPServiceSuggestionTests: XCTestCase {
                 model = request["params"]["value"]
                 emit({"jsonrpc": "2.0", "id": request_id, "result": {}})
             elif method == "session/prompt":
+                Path(__file__).with_name("received-prompt").write_text(request["params"]["prompt"][0]["text"])
                 emit({"jsonrpc": "2.0", "method": "session/update", "params": {
                     "update": {"sessionUpdate": "agent_message_chunk", "content": {
                         "type": "text", "text": model + ": response"
@@ -473,18 +504,11 @@ final class ACPServiceSuggestionTests: XCTestCase {
                 emit({"jsonrpc": "2.0", "id": request_id, "result": {"stopReason": "end_turn"}})
         """.write(to: script, atomically: true, encoding: .utf8)
 
-        let spec = ACPClientSpec(
+        return ACPClientSpec(
             displayName: "Mock ACP",
-            launch: .binary(path: "/usr/bin/python3", args: ["-u", script.path], env: [:])
+            launch: .binary(path: "/usr/bin/python3", args: ["-u", script.path], env: [:]),
+            models: ["default-model", "chosen-model"]
         )
-        let service = ACPService()
-        let response = await service.generatePlainResponse(
-            prompt: "Summarize this task",
-            model: "chosen-model",
-            spec: spec,
-            cwd: directory.path
-        )
-        XCTAssertEqual(response, "chosen-model: response")
     }
 
     func testAntigravityCredentialParserSupportsACPAndKeyringCLIFormats() throws {

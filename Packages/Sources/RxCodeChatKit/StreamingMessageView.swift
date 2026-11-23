@@ -174,23 +174,26 @@ private struct InlineElapsedTimeView: View {
 
 /// Three bouncing dots — the entire "generating response" indicator.
 /// Replaces the previous card with "Thinking..." / "Generating response..." text.
-struct AnimatedDotsView: View {
+public struct AnimatedDotsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: Int = 0
     private let timer = Timer.publish(every: 0.22, on: .main, in: .common).autoconnect()
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         HStack(spacing: 4) {
             ForEach(0..<3, id: \.self) { i in
                 Circle()
                     .fill(ClaudeTheme.textTertiary)
                     .frame(width: 6, height: 6)
-                    .opacity(phase == i ? 1.0 : 0.35)
-                    .scaleEffect(phase == i ? 1.0 : 0.8)
-                    .animation(.spring(duration: 0.3, bounce: 0.2), value: phase)
+                    .opacity(reduceMotion || phase == i ? 1.0 : 0.35)
+                    .scaleEffect(reduceMotion || phase == i ? 1.0 : 0.8)
+                    .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.2), value: phase)
             }
         }
         .onReceive(timer) { _ in
-            phase = (phase + 1) % 3
+            if !reduceMotion { phase = (phase + 1) % 3 }
         }
     }
 }

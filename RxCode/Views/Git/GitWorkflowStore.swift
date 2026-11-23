@@ -57,10 +57,12 @@ enum GitSheet: Identifiable {
     case push(GitPushSource)
     case createBranch(startPoint: String, label: String)
     case renameBranch(String)
+    case deleteBranch(GitLocalBranch)
     case createTag(GitCommit)
     case reword(GitCommit)
     case interactiveRebase(base: GitCommit, steps: [GitRebaseStep])
     case stash
+    case editGitIgnore(patterns: [String])
     case addRemote
     case searchTags
     case createPullRequest(GitPullRequestTarget)
@@ -73,10 +75,12 @@ enum GitSheet: Identifiable {
         case .push(.tag(let tag)): "push-tag-\(tag.name)"
         case .createBranch(let start, _): "branch-\(start)"
         case .renameBranch(let name): "rename-\(name)"
+        case .deleteBranch(let branch): "delete-branch-\(branch.name)"
         case .createTag(let commit): "tag-\(commit.id)"
         case .reword(let commit): "reword-\(commit.id)"
         case .interactiveRebase(let base, _): "rebase-\(base.id)"
         case .stash: "stash"
+        case .editGitIgnore: "gitignore"
         case .addRemote: "remote"
         case .searchTags: "search-tags"
         case .createPullRequest(let target): "pull-request-\(target.repository)-\(target.branch)"
@@ -87,7 +91,6 @@ enum GitSheet: Identifiable {
 /// Destructive actions that need explicit confirmation.
 enum GitConfirmation: Identifiable {
     case reset(GitCommit, GitWorkflow.ResetMode)
-    case deleteBranch(String)
     case deleteRemoteBranch(GitRemoteBranch)
     case deleteTag(String)
     case dropStash(GitStash)
@@ -97,7 +100,6 @@ enum GitConfirmation: Identifiable {
     var id: String {
         switch self {
         case .reset(let commit, let mode): "reset-\(mode.rawValue)-\(commit.id)"
-        case .deleteBranch(let name): "delete-\(name)"
         case .deleteRemoteBranch(let branch): "delete-remote-\(branch.id)"
         case .deleteTag(let name): "delete-tag-\(name)"
         case .dropStash(let stash): "drop-\(stash.id)"
@@ -157,6 +159,7 @@ final class GitWorkflowStore {
     private(set) var pullRequestStatus: (checkout: GitHubCheckout, presence: BranchPullRequestPresence?)?
     @ObservationIgnored private var snapshotToken = UUID()
     @ObservationIgnored private var historyToken = UUID()
+    @ObservationIgnored private var fetchTask: Task<String?, Never>?
 
     init(root: String) {
         self.root = root
@@ -198,8 +201,48 @@ final class GitWorkflowStore {
         snapshot.remotes.contains("origin") ? "origin" : snapshot.remotes.first
     }
 
+    func checkout(_ item: GitSidebarItem) {
+        switch item {
+        case .branch(let name):
+            guard snapshot.localBranches.contains(where: { $0.name == name && !$0.isCurrent }) else { return }
+            perform("Switching branch…") { await GitWorkflow.checkout(name, at: self.root) }
+        case .remoteBranch(let ref):
+            guard let remote = snapshot.remoteBranches.first(where: { $0.refName == ref }) else { return }
+            perform("Switching branch…") {
+                await GitWorkflow.checkout(remote: remote, localBranches: self.snapshot.localBranches, at: self.root)
+            }
+        default:
+            break
+        }
+    }
+
     func isOnCurrentBranch(_ commit: GitCommit) -> Bool {
         headAncestors.contains(commit.id)
+    }
+
+    func fetchRemotes(inBackground: Bool = false) async -> String? {
+        if let fetchTask { return await fetchTask.value }
+        let task = Task { [root] in await GitWorkflow.fetch(at: root, inBackground: inBackground) }
+        fetchTask = task
+        defer { fetchTask = nil }
+        return await task.value
+    }
+
+    func fetchRemotesPeriodically(every interval: Duration = .seconds(60)) async {
+        guard !snapshot.remotes.isEmpty else { return }
+        while !Task.isCancelled {
+            if operation == nil, sheet == nil, confirmation == nil {
+                let previous = snapshot
+                _ = await fetchRemotes(inBackground: true)
+                guard !Task.isCancelled else { return }
+                // A multi-remote fetch can update some refs even when another remote fails.
+                await reloadSnapshot()
+                if snapshot.remoteBranches != previous.remoteBranches || snapshot.tags != previous.tags {
+                    await reloadHistory()
+                }
+            }
+            do { try await Task.sleep(for: interval) } catch { return }
+        }
     }
 
     func reload() async {
@@ -218,6 +261,13 @@ final class GitWorkflowStore {
         if snapshot != newSnapshot {
             snapshot = newSnapshot
             headAncestors = ancestors(of: newSnapshot.headCommit, in: commits)
+            switch selection {
+            case .branch(let name) where !newSnapshot.localBranches.contains(where: { $0.name == name }),
+                 .remoteBranch(let name) where !newSnapshot.remoteBranches.contains(where: { $0.refName == name }):
+                selection = .allCommits
+            default:
+                break
+            }
         }
         if gitHubCheckout != newGitHubCheckout { gitHubCheckout = newGitHubCheckout }
     }

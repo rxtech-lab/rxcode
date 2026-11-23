@@ -1,14 +1,14 @@
 import RxCodeCore
 import SwiftUI
 
-private struct ChooseWindowPreviewKey: FocusedValueKey {
-    typealias Value = () -> Void
+private struct WindowPreviewCaptureKey: FocusedValueKey {
+    typealias Value = NativeWindowPreviewCapture
 }
 
 extension FocusedValues {
-    var chooseWindowPreview: (() -> Void)? {
-        get { self[ChooseWindowPreviewKey.self] }
-        set { self[ChooseWindowPreviewKey.self] = newValue }
+    var windowPreviewCapture: NativeWindowPreviewCapture? {
+        get { self[WindowPreviewCaptureKey.self] }
+        set { self[WindowPreviewCaptureKey.self] = newValue }
     }
 }
 
@@ -57,7 +57,7 @@ struct ComputerUseMonitorOverlay: View {
                 onSelect: { pinnedItemID = $0 }
             )
         }
-        .focusedSceneValue(\.chooseWindowPreview, chooseWindowAction)
+        .focusedSceneValue(\.windowPreviewCapture, capture.window == nil && !capture.isChoosingWindow ? capture : nil)
         .onChange(of: sessionKey) {
             windowState.isComputerUsePreviewMinimized = false
             pinnedItemID = nil
@@ -108,11 +108,6 @@ struct ComputerUseMonitorOverlay: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
             windowState.isComputerUsePreviewMinimized = true
         }
-    }
-
-    private var chooseWindowAction: (() -> Void)? {
-        guard capture.window == nil, !capture.isChoosingWindow else { return nil }
-        return { capture.chooseWindow() }
     }
 
     private var showsCaptureError: Binding<Bool> {

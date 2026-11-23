@@ -200,7 +200,7 @@ struct AgentSettingsTab: View {
                         .font(.system(size: ClaudeTheme.size(10), weight: .medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(ClaudeTheme.surfacePrimary)
                         .clipShape(Capsule())
                         .foregroundStyle(.secondary)
                     if isSignedIn {
@@ -234,11 +234,11 @@ struct AgentSettingsTab: View {
             managementMenu(client)
         }
         .padding(10)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1),
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1),
         )
     }
 
@@ -332,11 +332,11 @@ struct AgentSettingsTab: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1),
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1),
             )
 
             Text(registrySearch.isEmpty
@@ -396,7 +396,7 @@ struct AgentSettingsTab: View {
                     .lineLimit(3)
                 Text(distributionSummary(agent.distribution))
                     .font(.system(size: ClaudeTheme.size(10), design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             }
 
             if alreadyInstalled {
@@ -418,11 +418,11 @@ struct AgentSettingsTab: View {
             }
         }
         .padding(10)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1),
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1),
         )
     }
 

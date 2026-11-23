@@ -58,6 +58,20 @@ nonisolated struct ThreadStoreReader: Sendable {
         self.container = container
     }
 
+    func unfinishedMessages(sessionID: String) async -> [ChatMessage]? {
+        await read { context in
+            var query = FetchDescriptor<ChatThread>(predicate: #Predicate { $0.id == sessionID })
+            query.fetchLimit = 1
+            guard let row = try? context.fetch(query).first, row.hasUnfinishedTurn == true,
+                  let data = row.unfinishedTranscript,
+                  var messages = try? JSONDecoder().decode([ChatMessage].self, from: data) else { return nil }
+            for index in messages.indices where messages[index].role == .assistant {
+                messages[index].markStreamInterrupted()
+            }
+            return messages
+        }
+    }
+
     /// One background pass for every index the sidebar reads at launch.
     func loadStartupSnapshot() async -> ThreadStartupSnapshot {
         await read { context in

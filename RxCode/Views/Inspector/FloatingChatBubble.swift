@@ -79,7 +79,7 @@ struct FloatingChatBubble: View {
     private func expandedCard(in availableSize: CGSize) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             header(in: availableSize)
-            Divider()
+            ClaudeThemeDivider()
             replyContent
             VStack(spacing: 8) {
                 AgentConfirmationBanner()

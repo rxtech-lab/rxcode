@@ -7,29 +7,41 @@ import RxCodeCore
 extension InputBarView {
     @ViewBuilder
     var inputTextField: some View {
-        IMETextView(
+        let editor = IMETextView(
             text: Bindable(windowState).inputText,
             isFocused: $isInputFocused,
             hasMarkedText: $inputHasMarkedText,
             focusTrigger: inputFocusTrigger,
             font: .systemFont(ofSize: ClaudeTheme.size(14)),
             textColor: NSColor(ClaudeTheme.textPrimary),
+            chipColor: NSColor(ClaudeTheme.accent),
             placeholder: composerPlaceholder,
             onReturn: handleReturnKey,
             onUpArrow: { handleUpArrow() == .handled },
             onDownArrow: { handleDownArrow() == .handled },
             onTab: { handleTab() == .handled },
-            onShiftTab: { Task { await chatBridge.togglePlanMode() } },
             onEscape: handleEscapeKey,
             onPasteCommandV: handlePaste,
-            onImageChipTap: handleImageChipTap
+            onTextViewReady: { [inputEditor] in inputEditor.textView = $0 }
         )
+        AttachmentTextField(editor: editor, attachments: windowState.attachments, editorHeight: clampedInputHeight,
+                            showsFilePicker: false, onAdd: { attachment, source in
+            if source == .paste {
+                let enabled = attachment.type == .image ? chatBridge.autoPreviewSettings.image : chatBridge.autoPreviewSettings.filePath
+                if !enabled {
+                    if !attachment.path.isEmpty { insertAtCursor(attachment.path) }
+                    return nil
+                }
+            }
+            addComposerAttachment(attachment)
+            return nil
+        }, onRemove: { windowState.removeAttachment($0.id) })
         .id(textFieldLayoutID)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chat-input")
         .onChange(of: windowState.inputText) { oldValue, newValue in
             handleInputTextChange(oldValue: oldValue, newValue: newValue)
         }
-        .frame(height: clampedInputHeight)
         .background(InputHeightMeasurer(text: windowState.inputText, measuredHeight: $measuredInputHeight))
     }
 
@@ -136,28 +148,10 @@ extension InputBarView {
     private func handlePaste() -> Bool {
         let pb = NSPasteboard.general
 
-        if let attachment = imageAttachmentFromPasteboard(pb) {
-            if chatBridge.autoPreviewSettings.image {
-                windowState.addAttachment(attachment)
-            }
-            return true
-        }
-
-        if let url = (pb.readObjects(forClasses: [NSURL.self]) as? [URL])?.first(where: \.isFileURL) {
-            let isImage = AttachmentFactory.imageExtensions.contains(url.pathExtension.lowercased())
-            let allowed = isImage ? chatBridge.autoPreviewSettings.image : chatBridge.autoPreviewSettings.filePath
-            if allowed, let attachment = AttachmentFactory.fromFileURL(url) {
-                windowState.addAttachment(attachment)
-            } else {
-                insertAtCursor(url.path)
-            }
-            return true
-        }
-
         guard let text = pb.string(forType: .string), !text.isEmpty else { return true }
 
         if let attachment = attachmentFromPastedText(text) {
-            windowState.addAttachment(attachment)
+            addComposerAttachment(attachment)
             return true
         }
 
@@ -243,33 +237,26 @@ extension InputBarView {
         return nil
     }
 
-    private func insertAtCursor(_ text: String) {
-        let current = windowState.inputText
-        if let editor = NSApp.keyWindow?.firstResponder as? NSText {
-            let range = editor.selectedRange
-            if range.location != NSNotFound {
-                windowState.inputText = (current as NSString).replacingCharacters(in: range, with: text)
-                resetIMEState()
-                return
-            }
+    func addComposerAttachment(_ attachment: Attachment) {
+        guard let editor = inputEditor.textView else {
+            windowState.addAttachment(attachment)
+            return
         }
-        windowState.inputText = current + text
-        resetIMEState()
+        windowState.attachments.append(attachment)
+        guard attachment.type == .image, var token = windowState.imageDisplayToken(for: attachment.id) else { return }
+        let text = editor.string
+        let selection = Range(editor.selectedRange(), in: text) ?? text.endIndex..<text.endIndex
+        if let previous = text[..<selection.lowerBound].last, !previous.isWhitespace { token = " " + token }
+        if text[selection.upperBound...].first?.isWhitespace != true { token += " " }
+        insertAtCursor(token)
     }
 
-    private func imageAttachmentFromPasteboard(_ pb: NSPasteboard) -> Attachment? {
-        for type in [NSPasteboard.PasteboardType.png, .tiff] {
-            if let data = pb.data(forType: type) {
-                return Attachment(type: .image, name: "clipboard-\(UUID().uuidString.prefix(8)).png", imageData: data)
-            }
+    private func insertAtCursor(_ text: String) {
+        if let editor = inputEditor.textView {
+            editor.insertText(text, replacementRange: editor.selectedRange())
+        } else {
+            windowState.inputText += text
         }
-        if let image = NSImage(pasteboard: pb),
-           let tiffData = image.tiffRepresentation,
-           let bitmapRep = NSBitmapImageRep(data: tiffData),
-           let pngData = bitmapRep.representation(using: .png, properties: [:]) {
-            return Attachment(type: .image, name: "clipboard-\(UUID().uuidString.prefix(8)).png", imageData: pngData)
-        }
-        return nil
     }
 
     // Recreate the text field to clear NSTextView state (e.g. after sending) and reassert focus.

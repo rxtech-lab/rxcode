@@ -121,14 +121,28 @@ final class AutopilotService {
     }
 
     #if os(macOS)
-    func recentPullRequestRevisions() async throws -> [ThreadPullRequestRevision] {
+    func pullRequestRevisions(since cutoff: Date) async throws -> [ThreadPullRequestRevision] {
         struct Page: Decodable {
+            struct Pagination: Decodable {
+                let nextCursor: String?
+            }
             let items: [ThreadPullRequestRevision]
+            let pagination: Pagination?
         }
-        let url = baseURL.appendingPathComponent("/api/v1/pull-requests")
-            .appending(queryItems: [URLQueryItem(name: "pageSize", value: "100")])
-        let page: Page = try await get(url: url)
-        return page.items
+        let endpoint = baseURL.appendingPathComponent("/api/v1/pull-requests")
+        var revisions: [ThreadPullRequestRevision] = []
+        var cursor: String?
+        repeat {
+            try Task.checkCancellation()
+            var query = [URLQueryItem(name: "pageSize", value: "100")]
+            if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: Page = try await get(url: endpoint.appending(queryItems: query))
+            revisions.append(contentsOf: page.items)
+            guard let oldest = page.items.last?.updatedAt.date, oldest > cutoff else { break }
+            if let next = page.pagination?.nextCursor, next == cursor { throw ServiceError.invalidResponse }
+            cursor = page.pagination?.nextCursor
+        } while cursor != nil
+        return revisions
     }
     #endif
 

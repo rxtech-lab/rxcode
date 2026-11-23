@@ -66,7 +66,7 @@ struct TaskStoriesPanel: View {
         .background(ClaudeTheme.surfacePrimary.opacity(0.6))
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(ClaudeTheme.borderSubtle)
+                .fill(ClaudeTheme.divider)
                 .frame(width: 1)
         }
         .taskBoardAnimation(value: isExpanded)

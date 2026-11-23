@@ -10,7 +10,7 @@ nonisolated struct PetToolActivity: Equatable, Sendable {
 
     struct Call: Identifiable, Equatable, Sendable {
         let id: String
-        let name: String
+        var name: String
         var status: Status = .running
         var finishedAt: Date?
     }
@@ -38,6 +38,11 @@ nonisolated struct PetToolActivity: Equatable, Sendable {
 
     mutating func hideCalls() {
         calls.removeAll()
+    }
+
+    mutating func updateLabel(_ label: String, for id: String) {
+        guard let index = calls.firstIndex(where: { $0.id == id }) else { return }
+        calls[index].name = label
     }
 
     var nextExpiration: Date? {
@@ -106,7 +111,18 @@ extension PetController {
     func handlePetToolEvent(_ event: AgentEvent?) {
         switch event {
         case .toolCallStarted(let id, let name):
-            toolActivity.start(id: id, name: PetCodexRealtimeConnectionFriendlyTool.describe(name))
+            // Realtime command and file events already describe the action.
+            let knownLabel = ToolActionName.systemLabel(for: name)
+                ?? (name.contains(where: \.isWhitespace) ? name : nil)
+            toolActivity.start(id: id, name: knownLabel ?? ToolActionName.fallbackLabel(for: name))
+            if knownLabel == nil {
+                Task { [weak self] in
+                    guard let label = await ToolNameHumanizer.shared.label(for: name), let self else { return }
+                    self.toolActivity.updateLabel(label, for: id)
+                    self.activeToolDescription = self.toolActivity.calls.last(where: { $0.status == .running })?.name
+                    self.refreshPetState()
+                }
+            }
         case .toolCallResult(let id, _, let isError):
             toolActivity.finish(id: id, isError: isError)
         case .turnEnded:

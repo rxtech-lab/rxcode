@@ -58,7 +58,7 @@ struct PetVoiceCatalogView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
 
-            Divider()
+            ClaudeThemeDivider()
 
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -200,7 +200,7 @@ struct PetVoiceCatalogView: View {
             }
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(ClaudeTheme.textTertiary)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

@@ -318,7 +318,7 @@ struct PetInteractionTests {
         player.isPlaying = false
         let checks = Mutex(0)
         let music = PetMusic(controller: controller, player: player,
-            currentAuthorizationStatus: { .authorized }, requestAuthorization: {
+            notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized }, requestAuthorization: {
                 Issue.record("Startup must not request authorization"); return false
             }, checkConnection: { checks.withLock { $0 += 1 }; return true })
         await music.refreshConnection()
@@ -337,7 +337,7 @@ struct PetInteractionTests {
         let controller = PetController()
         let checks = Mutex(0)
         let music = PetMusic(controller: controller, player: TestPetMusicPlayer(),
-            currentAuthorizationStatus: { .authorized }, requestAuthorization: {
+            notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized }, requestAuthorization: {
                 Issue.record("Refresh must not prompt"); return false
             }, checkConnection: {
                 let attempt = checks.withLock { $0 += 1; return $0 }
@@ -362,7 +362,7 @@ struct PetInteractionTests {
         let controller = PetController()
         let authorization = Mutex<MusicAuthorization.Status>(.authorized)
         let music = PetMusic(controller: controller, player: TestPetMusicPlayer(),
-            currentAuthorizationStatus: { authorization.withLock { $0 } },
+            notificationCenter: NotificationCenter(), currentAuthorizationStatus: { authorization.withLock { $0 } },
             requestAuthorization: { Issue.record("Must not prompt"); return false },
             checkConnection: { try? await Task.sleep(for: .milliseconds(40)); return true })
         let pending = Task { await music.refreshConnection() }
@@ -380,7 +380,8 @@ struct PetInteractionTests {
         let controller = PetController()
         controller.configuration.isEnabled = false
         let player = TestPetMusicPlayer()
-        let music = PetMusic(controller: controller, player: player, currentAuthorizationStatus: { .authorized },
+        let music = PetMusic(controller: controller, player: player,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized },
                              requestAuthorization: { true }, checkConnection: { false })
         let result = try await music.handle(.object(["action": .string("connect")]))
         #expect(music.authorizationStatus == .authorized)
@@ -399,7 +400,8 @@ struct PetInteractionTests {
     func failedMusicConnection() async {
         let controller = PetController()
         let player = TestPetMusicPlayer()
-        let music = PetMusic(controller: controller, player: player, currentAuthorizationStatus: { .authorized },
+        let music = PetMusic(controller: controller, player: player,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized },
                              requestAuthorization: { true }, checkConnection: {
             throw URLError(.userAuthenticationRequired)
         })
@@ -419,7 +421,8 @@ struct PetInteractionTests {
     @MainActor
     func deniedMusicLinking() async {
         let controller = PetController()
-        let music = PetMusic(controller: controller, player: TestPetMusicPlayer(), currentAuthorizationStatus: { .denied },
+        let music = PetMusic(controller: controller, player: TestPetMusicPlayer(),
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .denied },
                              requestAuthorization: { false }, checkConnection: {
             Issue.record("Account check should not run without authorization")
             return true
@@ -447,7 +450,8 @@ struct PetInteractionTests {
     func musicOwnership() async throws {
         let controller = PetController()
         let player = TestPetMusicPlayer()
-        let music = PetMusic(controller: controller, player: player, currentAuthorizationStatus: { .authorized })
+        let music = PetMusic(controller: controller, player: player,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized })
         _ = await music.off()
         #expect(player.stopCount == 0)
         #expect(player.isPlaying)
@@ -469,7 +473,8 @@ struct PetInteractionTests {
         let controller = PetController()
         controller.configuration.isEnabled = true
         let player = TestPetMusicPlayer()
-        let music = PetMusic(controller: controller, player: player, currentAuthorizationStatus: { .authorized }, requestAuthorization: { true })
+        let music = PetMusic(controller: controller, player: player,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized }, requestAuthorization: { true })
         music.ownsQueue = true
         let (started, signal) = AsyncStream<Void>.makeStream()
         player.onPlay = { signal.yield(()); signal.finish() }
@@ -486,7 +491,8 @@ struct PetInteractionTests {
     func musicExternalUpdates() {
         let controller = PetController()
         let player = TestPetMusicPlayer()
-        let music = PetMusic(controller: controller, player: player, currentAuthorizationStatus: { .authorized })
+        let music = PetMusic(controller: controller, player: player,
+                             notificationCenter: NotificationCenter(), currentAuthorizationStatus: { .authorized })
         player.title = "Changed by system controls"
         player.isPlaying = false
         player.change?()

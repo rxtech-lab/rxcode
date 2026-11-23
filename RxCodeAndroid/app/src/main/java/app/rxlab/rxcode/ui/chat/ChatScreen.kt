@@ -1,5 +1,6 @@
 package app.rxlab.rxcode.ui.chat
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -77,6 +78,7 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -476,20 +478,28 @@ fun ChatScreen(
             onDismiss = { viewModel.respondToPermission(allow = false, denyReason = "Dismissed") },
         )
     }
-    state.pendingConfirmations.firstOrNull { it.sessionID == resolvedId }?.let { confirmation ->
+    state.pendingConfirmations.firstOrNull { state.resolveSessionId(it.sessionID) == resolvedId }?.let { confirmation ->
         val confirmationHaptics = rememberHaptics()
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        fun respond(confirmed: Boolean) {
+            confirmationHaptics.play(
+                if (confirmed && confirmation.isDestructive) HapticEvent.HeavyImpact else HapticEvent.LightTap
+            )
+            scope.launch {
+                if (!viewModel.respondToConfirmation(confirmation.id, confirmed)) {
+                    confirmationHaptics.play(HapticEvent.HeavyImpact)
+                    Toast.makeText(context, "Couldn’t send your decision to your Mac. Try again.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = {},
             title = { Text(confirmation.title) },
             text = confirmation.message?.let { message -> { Text(message) } },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        confirmationHaptics.play(
-                            if (confirmation.isDestructive) HapticEvent.HeavyImpact else HapticEvent.LightTap
-                        )
-                        viewModel.respondToConfirmation(confirmation.id, confirmed = true)
-                    },
+                    onClick = { respond(true) },
                     colors = if (confirmation.isDestructive) {
                         ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     } else {
@@ -498,10 +508,7 @@ fun ChatScreen(
                 ) { Text(confirmation.confirmLabel) }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    confirmationHaptics.play(HapticEvent.LightTap)
-                    viewModel.respondToConfirmation(confirmation.id, confirmed = false)
-                }) { Text(confirmation.cancelLabel) }
+                TextButton(onClick = { respond(false) }) { Text(confirmation.cancelLabel) }
             },
         )
     }

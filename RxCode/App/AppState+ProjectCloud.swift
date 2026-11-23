@@ -432,8 +432,9 @@ extension AppState {
         }
 
         guard isCloudLinked(projectId, to: cloudId) else { return }
-        editCloudBoard(projectId, cloudId: cloudId, sync: sync)
-        setTaskBoard(taskBoard(for: projectId), for: projectId, fromCloud: true)
+        var board = taskBoard(for: projectId)
+        board.cloudSync = sync
+        setTaskBoard(board, for: projectId, fromCloud: true)
         startRemotelyMovedTasks(remoteStarts)
     }
 
@@ -549,6 +550,7 @@ extension AppState {
                 localIsNewer: local.updatedAt > (remote.updatedAt ?? .distantPast)
             ) {
             case .inSync:
+                guard link.base != remote.fields else { continue }
                 sync.stories[localId]?.base = remote.fields
                 editCloudBoard(projectId, cloudId: cloudId, sync: sync)
             case .push:
@@ -602,9 +604,20 @@ extension AppState {
         let linkedRemote = Set(sync.tasks.values.map(\.remoteId))
         let remoteById = Dictionary(remoteTasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
+        let positions = Dictionary(taskBoard(for: projectId).tasks.enumerated().map { ($0.element.id, $0.offset) },
+                                   uniquingKeysWith: { first, _ in first })
+        // Network awaits can reorder or replace the board. Validate the position
+        // against the current tasks and fall back to a search after a move.
+        func currentTask(_ id: UUID) -> ProjectTask? {
+            let tasks = taskBoard(for: projectId).tasks
+            if let position = positions[id], tasks.indices.contains(position), tasks[position].id == id {
+                return tasks[position]
+            }
+            return tasks.first { $0.id == id }
+        }
+
         // Deletions on either side.
         for (localId, link) in sync.tasks {
-            let exists = taskBoard(for: projectId).tasks.contains { $0.id == localId }
             if remoteById[link.remoteId] == nil {
                 sync.tasks[localId] = nil
                 editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
@@ -614,7 +627,7 @@ extension AppState {
                     }
                 }
                 clearParentLinks(to: [localId], outside: projectId)
-            } else if !exists {
+            } else if currentTask(localId) == nil {
                 try await projectCloud.deleteTask(projectId: cloudId, taskId: link.remoteId)
                 sync.tasks[localId] = nil
                 editCloudBoard(projectId, cloudId: cloudId, sync: sync)
@@ -662,7 +675,7 @@ extension AppState {
             }
             if ready.isEmpty { ready = pending }  // A cycle: send without the link.
             for task in ready {
-                guard let current = taskBoard(for: projectId).tasks.first(where: { $0.id == task.id }) else { continue }
+                guard let current = currentTask(task.id) else { continue }
                 let fields = taskBoard(for: projectId).cloudFields(for: current, sync: sync)
                 let created = try await projectCloud.createTask(projectId: cloudId, fields: fields)
                 sync.tasks[task.id] = CloudItemLink(remoteId: created.id, base: created.fields)
@@ -681,7 +694,7 @@ extension AppState {
         // end of a column, so fresh uploads come back through here with their
         // local sort order.
         for (localId, link) in sync.tasks where pulledIds[localId] == nil {
-            guard let local = taskBoard(for: projectId).tasks.first(where: { $0.id == localId }) else { continue }
+            guard let local = currentTask(localId) else { continue }
             guard let remote = remoteById[link.remoteId] else {
                 // Uploaded this run: compare with what the server stored.
                 let localFields = taskBoard(for: projectId).cloudFields(for: local, sync: sync)
@@ -705,6 +718,7 @@ extension AppState {
             )
             switch decision {
             case .inSync:
+                guard link.base != remote.fields else { continue }
                 sync.tasks[localId]?.base = remote.fields
                 editCloudBoard(projectId, cloudId: cloudId, sync: sync)
             case .push:

@@ -109,12 +109,8 @@ actor FoundationModelSummarizationService {
     }
 
     func generateBranchBriefing(
-        threadSummaries: [(title: String, summary: String)]
+        prompt: String
     ) async -> String? {
-        guard !threadSummaries.isEmpty else { return nil }
-        // Share the exact prompt used by the other providers so the categorized
-        // briefing format stays consistent regardless of backend.
-        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: threadSummaries)
         let raw = await respond(
             instructions: "You maintain concise local project summaries.",
             prompt: prompt
@@ -123,32 +119,7 @@ actor FoundationModelSummarizationService {
     }
 
     func generateCommitMessage(diff: String, fileSummary: String) async -> String? {
-        // Caller (AppState) has already applied a much tighter budget for the
-        // on-device model. This prefix is a hard safety cap.
-        let trimmedDiff = String(diff.prefix(4_000))
-        let prompt = """
-        Write a Git commit message for the staged changes below in the Conventional Commits format.
-
-        Format rules (MUST follow exactly):
-        - First line: `<type>(<optional-scope>): <description>` — subject must be under 72 characters, lowercase imperative mood, no trailing period.
-        - `<type>` MUST be one of: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
-        - After the subject, an optional blank line followed by 1-3 short bullet points explaining the WHY (each starting with "- ").
-        - Do NOT use markdown headings (no `#`, `##`).
-        - Do NOT wrap the message in quotes or code fences.
-        - Do NOT prefix with anything else; the very first characters must be the type.
-
-        Example output:
-        feat(git): add commit message generator
-
-        - reuse summarization providers for on-device generation
-        - support staged diff context
-
-        Staged files:
-        \(fileSummary)
-
-        Staged diff:
-        \(trimmedDiff)
-        """
+        let prompt = OpenAISummarizationService.commitMessagePrompt(diff: String(diff.prefix(4_000)), fileSummary: fileSummary)
         let raw = await respond(
             instructions: "You write Conventional Commits commit messages. Output only the message, never explanations or markdown headings.",
             prompt: prompt

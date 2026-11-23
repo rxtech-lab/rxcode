@@ -240,6 +240,16 @@
         }
       }
     },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
     "%lld shortcuts" : {
       "localizations" : {
         "en" : {
@@ -670,6 +680,7 @@
       }
     },
     "Add — attach file or toggle plan mode" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1236,6 +1247,9 @@
     "Choose among %lld options" : {
 
     },
+    "Choose Plan Mode in the Add menu to draft and review an implementation plan." : {
+
+    },
     "Clear" : {
 
     },
@@ -1301,9 +1315,6 @@
           }
         }
       }
-    },
-    "Close preview" : {
-
     },
     "Code review will start in %lld %@" : {
       "localizations" : {
@@ -1983,6 +1994,7 @@
       }
     },
     "Create new file" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2007,24 +2019,24 @@
     "Create Value" : {
 
     },
-    "Currently at %lld%%" : {
+    "Currently at %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Currently at %lld%%"
+            "value" : "Currently at %@"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "현재 %lld%%"
+            "value" : "현재 %@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "当前为 %lld%%"
+            "value" : "当前为 %@"
           }
         }
       }
@@ -2512,6 +2524,7 @@
       }
     },
     "Edit file" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2556,6 +2569,7 @@
       }
     },
     "Edit multiple locations" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2578,6 +2592,7 @@
       }
     },
     "Edit notebook" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2989,6 +3004,7 @@
       }
     },
     "Find files" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3011,9 +3027,6 @@
       }
     },
     "First Page" : {
-
-    },
-    "Fit" : {
 
     },
     "Frame rate: %lld fps" : {
@@ -3202,6 +3215,7 @@
 
     },
     "Image unavailable" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -3510,6 +3524,7 @@
       }
     },
     "Interactive terminal" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3657,6 +3672,9 @@
           }
         }
       }
+    },
+    "Jump between your messages" : {
+
     },
     "Language and Length" : {
 
@@ -3986,6 +4004,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "消息"
+          }
+        }
+      }
+    },
+    "Message %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Message %1$lld of %2$lld"
           }
         }
       }
@@ -4613,6 +4641,7 @@
       }
     },
     "Plan mode" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4635,6 +4664,7 @@
       }
     },
     "Plan mode is on — Add menu" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4649,6 +4679,9 @@
           }
         }
       }
+    },
+    "Plan Mode…" : {
+
     },
     "Plan ready" : {
       "localizations" : {
@@ -4804,6 +4837,7 @@
 
     },
     "Read file" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5213,6 +5247,12 @@
     "Result" : {
 
     },
+    "Resume" : {
+
+    },
+    "Resume the interrupted conversation" : {
+
+    },
     "Reuse prompt" : {
 
     },
@@ -5353,6 +5393,7 @@
       }
     },
     "Run command" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5500,6 +5541,7 @@
       }
     },
     "Search in code" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5930,6 +5972,9 @@
         }
       }
     },
+    "Show change details" : {
+
+    },
     "Show help" : {
       "localizations" : {
         "en" : {
@@ -6031,6 +6076,7 @@
       }
     },
     "Skill" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6199,6 +6245,7 @@
       }
     },
     "Subagent" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6585,6 +6632,9 @@
     "Tool Call" : {
 
     },
+    "Tool calls" : {
+
+    },
     "Tool Calls" : {
 
     },
@@ -6861,6 +6911,7 @@
 
     },
     "Use the Add menu or Shift-Tab to ask the agent for a read-only plan before edits begin." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7171,13 +7222,10 @@
         }
       }
     },
+    "Your messages" : {
+
+    },
     "Your next prompt continues from the newest image. To branch, right-click another image and choose Continue from This Image." : {
-
-    },
-    "Zoom in" : {
-
-    },
-    "Zoom out" : {
 
     }
   },

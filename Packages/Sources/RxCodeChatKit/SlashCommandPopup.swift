@@ -45,8 +45,7 @@ struct SlashCommandPopup: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
 
-                Divider()
-                    .foregroundStyle(ClaudeTheme.borderSubtle)
+                ClaudeThemeDivider()
 
                 ScrollViewReader { proxy in
                     ScrollView {

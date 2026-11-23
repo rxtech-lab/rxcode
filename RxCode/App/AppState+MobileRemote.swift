@@ -439,6 +439,16 @@ extension AppState {
         }
 
         await hydrateSessionIfNeeded(summary: summary, project: project)
+        if message.resumeInterruptedTurn == true {
+            let window = WindowState()
+            window.selectedProject = project
+            window.currentSessionId = sessionID
+            window.sessionPermissionMode = summary.permissionMode
+            window.sessionPlanMode = sessionStates[sessionID]?.planMode ?? false
+            await resumeInterruptedTurn(in: window)
+            await sendMobileSnapshot(toHex: fromHex, activeSessionID: window.currentSessionId)
+            return
+        }
         updateMobilePlaceholderTitleIfNeeded(sessionID: sessionID, firstUserMessage: text)
 
         // If a turn is already streaming, the mobile message goes into the

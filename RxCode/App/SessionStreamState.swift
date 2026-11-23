@@ -25,6 +25,10 @@ struct SessionStreamState {
     var isThinking = false
     var needsNewMessage = false // After receiving .user(tool result), the next block starts a new ChatMessage
     var activeStreamId: UUID?
+    /// Retained after streaming stops so a late save cannot settle a newer turn.
+    var latestTurnID: UUID?
+    var checkpointRevision = 0
+    var checkpointTask: Task<Void, Never>?
     var streamingStartDate: Date?
     var streamTask: Task<Void, Never>?
     var hasUncheckedCompletion = false

@@ -145,9 +145,29 @@ data class MobileBranchBriefing(
     val briefing: String,
     @Serializable(with = SwiftDateSerializer::class) val updatedAt: Instant,
     @Serializable(with = SwiftDateSerializer::class) val createdAt: Instant? = null,
+    @Serializable(with = SwiftDateSerializer::class) val day: Instant? = null,
 ) {
-    val id: String get() = "$projectId::$branch"
+    val id: String get() = listOfNotNull(projectId, branch, day).joinToString("::")
 }
+
+@Serializable
+data class CodingPlanActivity(
+    @Serializable(with = UuidSerializer::class) val id: UUID,
+    val threadID: String,
+    @Serializable(with = UuidSerializer::class) val projectID: UUID,
+    val title: String,
+    val branch: String? = null,
+    @Serializable(with = SwiftDateSerializer::class) val updatedAt: Instant,
+    val planningStatus: String,
+    val implementationStatus: String,
+    val implementationEvidence: String,
+    @Serializable(with = UuidSerializer::class) val currentVersionID: UUID? = null,
+    val currentVersionTitle: String? = null,
+    @Serializable(with = UuidSerializer::class) val approvedVersionID: UUID? = null,
+    val approvedVersionTitle: String? = null,
+    val versionCount: Int,
+    val featureExcerpt: String,
+)
 
 @Serializable
 data class MobileBriefingDocument(
@@ -174,6 +194,7 @@ data class MobileThreadSummary(
     val title: String,
     val summary: String,
     @Serializable(with = SwiftDateSerializer::class) val updatedAt: Instant,
+    @Serializable(with = SwiftDateSerializer::class) val createdAt: Instant? = null,
 ) {
     val id: String get() = sessionId
 }

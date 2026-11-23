@@ -64,6 +64,7 @@ extension AppState {
         }
         openAISummarizationModel = workspaceDefaults.string(for: "openAISummarizationModel") ?? ""
         pullRequestModelKey = workspaceDefaults.string(for: "pullRequestModelKey") ?? ""
+        commitMessageModelKey = workspaceDefaults.string(for: "commitMessageModelKey") ?? ""
 
         memoryEnabled = workspaceDefaults.bool(for: "memoryEnabled", default: true)
         memoryAutoCreateEnabled = workspaceDefaults.bool(for: "memoryAutoCreateEnabled", default: true)

@@ -39,7 +39,7 @@ public struct SlashCommandManagerView: View {
             } else {
                 header
             }
-            Divider()
+            ClaudeThemeDivider()
             searchBar
 
             if filteredCommands.isEmpty {
@@ -479,7 +479,7 @@ struct SlashCommandEditView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Form
             ScrollView {
@@ -584,7 +584,7 @@ struct SlashCommandEditView: View {
                 .padding(20)
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Bottom buttons
             HStack {

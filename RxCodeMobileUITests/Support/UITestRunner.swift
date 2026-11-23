@@ -1,3 +1,4 @@
+import RxCodeSync
 import UIKit
 import XCTest
 
@@ -34,6 +35,8 @@ enum UITestRunner {
     static func launch(
         _ idiom: Idiom,
         on testCase: XCTestCase,
+        settings: MobileSettingsSnapshot? = nil,
+        includePlan: Bool = false,
         additionalLaunchArguments: [String] = []
     ) throws -> MockAppSession {
         testCase.continueAfterFailure = false
@@ -48,7 +51,10 @@ enum UITestRunner {
             break
         }
 
-        let server = MockRelayServer(fixtures: .standard(includeToolActivity: additionalLaunchArguments.contains("-uitest-tool-activity")))
+        let server = MockRelayServer(
+            fixtures: .standard(includeToolActivity: additionalLaunchArguments.contains("-uitest-tool-activity"), includePlan: includePlan),
+            settings: settings
+        )
         try server.start()
         // Stop the server at teardown. `MockRelayServer` is Sendable; the app is
         // re-terminated automatically by the next `XCUIApplication.launch()`.

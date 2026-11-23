@@ -385,6 +385,9 @@ extension AppState {
         flushPendingUpdates(for: key, forceText: true)
         stopFlushTimer(for: key)
 
+        if streamToCancel != nil {
+            settleTurn(sessionID: key, interrupted: false, preservePartialTranscript: true)
+        }
         updateState(key) { state in
             state.isStreaming = false
             state.isThinking = false
@@ -425,9 +428,11 @@ extension AppState {
         window.errorMessage = nil
 
         // A backend can already have withdrawn its approval when its stream task was cancelled.
-        let displayedPermissionIds = mobilePendingRequests.values.filter { $0.sessionId == key }.map(\.id)
-        let cancelledPermissionIds = await permission.cancelPending(sessionId: key)
-        clearAutoResolvedPermissions(displayedPermissionIds + cancelledPermissionIds)
+        let resolvedID = resolveCurrentSessionId(key)
+        let sessionIDs = Set(sessionIdRedirect.keys.filter { resolveCurrentSessionId($0) == resolvedID }).union([resolvedID])
+        let displayed = mobilePendingRequests.values.filter { $0.sessionId.map(sessionIDs.contains) == true }
+        let cancelled = await permission.cancelPending(sessionIDs: sessionIDs)
+        clearResolvedPermissionRequests(displayed + cancelled)
 
         if let streamToCancel {
             let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
@@ -490,14 +495,10 @@ extension AppState {
 
     // MARK: - Permission Response
 
-    func respondToPermission(_ request: PermissionRequest, decision: PermissionDecision, in window: WindowState) async {
-        let autoResolvedIds = await permission.respond(toolUseId: request.id, decision: decision)
-        window.pendingPermissions.removeAll { $0.id == request.id }
-        mobilePendingRequests.removeValue(forKey: request.id)
-        if let sessionId = request.sessionId {
-            broadcastMobileSessionStatus(sessionID: sessionId)
-        }
-        clearAutoResolvedPermissions(autoResolvedIds + [request.id])
+    func respondToPermission(_ request: PermissionRequest, decision: PermissionDecision, in window: WindowState? = nil) async {
+        let resolved = await permission.respond(to: request, decision: decision)
+        clearResolvedPermissionRequests(resolved.isEmpty ? [request] : resolved)
+        guard !resolved.isEmpty else { return }
 
         // Fan the resolved decision out to hooks. Dispatching here (rather than at
         // each UI button) means desktop and mobile responses both fire exactly once.
@@ -505,7 +506,7 @@ extension AppState {
             toolUseId: request.id,
             toolName: request.toolName,
             sessionId: request.sessionId,
-            projectId: window.selectedProject?.id,
+            projectId: request.sessionId.flatMap(projectID(forPromptSession:)) ?? window?.selectedProject?.id,
             decision: Self.permissionDecisionLabel(decision)
         )
         if Self.permissionDecisionIsApproval(decision) {
@@ -513,6 +514,12 @@ extension AppState {
         } else {
             await hookManager.dispatchPermissionDenied(payload)
         }
+    }
+
+    /// A retry can reuse a tool ID while a decision crosses the actor boundary.
+    private func clearResolvedPermissionRequests(_ requests: [PermissionRequest]) {
+        let matching = requests.filter { mobilePendingRequests[$0.id]?.promptID == $0.promptID }
+        clearAutoResolvedPermissions(matching.map(\.id))
     }
 
     /// Remove requests the PermissionServer resolved as a side effect of a broad grant
@@ -527,14 +534,16 @@ extension AppState {
                 window.presentedPermissionId = nil
             }
         }
-        var sessionIds = Set<String>()
-        for id in ids {
-            if let sessionId = mobilePendingRequests.removeValue(forKey: id)?.sessionId {
-                sessionIds.insert(sessionId)
-            }
-        }
+        let removed = idSet.compactMap { mobilePendingRequests.removeValue(forKey: $0) }
+        let sessionIds = Set(removed.compactMap { $0.sessionId.map(resolveCurrentSessionId) })
         for sessionId in sessionIds {
             broadcastMobileSessionStatus(sessionID: sessionId)
+        }
+        if removed.contains(where: { ComputerUsePresentation.recognizes($0.toolName) }) {
+            broadcastMobileConfirmationQueue()
+        }
+        if removed.contains(where: { $0.toolName == "AskUserQuestion" }) {
+            broadcastMobileQuestionQueue()
         }
     }
 

@@ -166,7 +166,7 @@ struct AddSecretSheet: View {
                 Text("Filename").foregroundStyle(.secondary)
                 TextField(".env", text: $manualFilename).textFieldStyle(.roundedBorder)
             }
-            Divider()
+            ClaudeThemeDivider()
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach($manualRows) { $row in

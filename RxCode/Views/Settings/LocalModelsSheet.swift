@@ -171,7 +171,7 @@ struct LocalModelsSheet: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
-                Divider()
+                ClaudeThemeDivider()
                 hardwareFooter
             }
             .background(.bar)

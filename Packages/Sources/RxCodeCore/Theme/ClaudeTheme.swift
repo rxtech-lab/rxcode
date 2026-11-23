@@ -32,6 +32,15 @@ public enum ClaudeTheme {
     public static var textTertiary: Color  { foreground(ThemeStore.shared.colors.textTertiary) }
     public static var textOnAccent: Color  { ThemeStore.shared.colors.textOnAccent }
 
+    /// Tertiary labels in shared views use native hierarchy on mobile.
+    public static var tertiaryLabel: some ShapeStyle {
+#if os(macOS)
+        textTertiary
+#else
+        HierarchicalShapeStyle.tertiary
+#endif
+    }
+
     public static func foreground(_ color: Color) -> Color {
         ThemeStore.shared.colors.foreground(color)
     }
@@ -47,6 +56,7 @@ public enum ClaudeTheme {
     // MARK: - Borders
     public static var border: Color       { ThemeStore.shared.colors.border }
     public static var borderSubtle: Color { ThemeStore.shared.colors.borderSubtle }
+    public static var divider: Color      { border.opacity(0.6) }
 
     // MARK: - Code Blocks
     public static var codeBackground: Color       { ThemeStore.shared.colors.codeBackground }
@@ -162,7 +172,13 @@ extension Color {
 private struct AppThemeForeground: ViewModifier {
     func body(content: Content) -> some View {
         content
+#if os(macOS)
+            // Grouped forms and sheet footers draw separators with the tertiary foreground.
+            // Labels that need tertiary ink use textTertiary directly.
+            .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.divider)
+#else
             .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
+#endif
             .tint(ClaudeTheme.accent)
     }
 }
@@ -300,8 +316,9 @@ public struct ClaudeThemeDivider: View {
     public init() {}
 
     public var body: some View {
-        Rectangle()
-            .fill(ClaudeTheme.border)
-            .frame(height: 1)
+        Divider()
+            .hidden()
+            .overlay(ClaudeTheme.divider)
+            .allowsHitTesting(false)
     }
 }

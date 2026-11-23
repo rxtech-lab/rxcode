@@ -20,6 +20,12 @@ struct MCPToolCallTests {
         }
     }
 
+    @Test("Chat providers can discover the IDE checklist tool", arguments: [AgentProvider.claudeCode, .codex, .acp, .localAgent])
+    func chatProvidersExposeIDETodos(provider: AgentProvider) {
+        let tools = IDEToolRegistry.tools(for: provider.staticCapabilities, provider: provider)
+        #expect(tools.contains { $0.name == "ide__set_todos" })
+    }
+
     @Test("Generic Codex MCP tool calls are categorized as MCP")
     func genericCodexMCPToolCallCategory() {
         #expect(ToolCategory(toolName: "mcpToolCall") == .mcp)

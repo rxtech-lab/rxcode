@@ -136,7 +136,7 @@ struct InspectorContentView: View {
         .background(ClaudeTheme.codeBackground)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(ClaudeTheme.borderSubtle.opacity(0.5))
+                .fill(ClaudeTheme.divider)
                 .frame(height: 0.5)
         }
         .onChange(of: session.terminals.map(\.id)) { _, ids in

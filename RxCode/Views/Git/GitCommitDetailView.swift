@@ -37,7 +37,7 @@ struct GitCommitDetailView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(ClaudeTheme.surfacePrimary)
-            Divider()
+            ClaudeThemeDivider()
             switch tab {
             case .commit:
                 ScrollView { summary }
@@ -55,7 +55,7 @@ struct GitCommitDetailView: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 5) {
-                ForEach(commit.refs, id: \.self) { GitRefBadge(ref: $0) }
+                GitRefBadges(refs: commit.refs, snapshot: store.snapshot, onCheckout: store.checkout)
             }
             Text(commit.subject)
                 .font(.system(size: ClaudeTheme.size(14), weight: .semibold))
@@ -124,7 +124,7 @@ private struct GitCommitChangesView: View {
                     .listStyle(.inset)
                     .frame(width: GitCommitDetailLayout.fileListWidth)
                     .frame(maxHeight: .infinity)
-                    Divider()
+                    ClaudeThemeDivider()
 
                     Group {
                         if let selectedFile {
@@ -210,7 +210,7 @@ private struct GitCommitFileTreeView: View {
                         .listStyle(.inset)
                         .frame(width: GitCommitDetailLayout.fileListWidth)
                         .frame(maxHeight: .infinity)
-                        Divider()
+                        ClaudeThemeDivider()
                         Group {
                             if let path = selectedPath {
                                 if tree.folders.contains(path) {
@@ -290,7 +290,7 @@ private struct GitFilePaneHeader: View {
                 .padding(.vertical, 7)
                 .background(ClaudeTheme.surfacePrimary)
                 .help(path)
-            Divider()
+            ClaudeThemeDivider()
         }
     }
 }

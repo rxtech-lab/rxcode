@@ -119,6 +119,7 @@ extension AppState {
         if let currentId = window.currentSessionId,
            let currentProject = window.selectedProject,
            let state = sessionStates[currentId],
+           state.latestTurnID == nil,
            !state.messages.isEmpty
         {
             let title = allSessionSummaries.first(where: { $0.id == currentId })?.title ?? "Session"
@@ -153,7 +154,7 @@ extension AppState {
         withAnimation(nil) {
             window.showingBriefing = false
             window.selectedProject = project
-            sessionStates = sessionStates.filter { $0.value.isStreaming || $0.value.hasUncheckedCompletion }
+            sessionStates = sessionStates.filter { $0.value.isStreaming || $0.value.latestTurnID != nil || $0.value.hasUncheckedCompletion }
             resetToNewChat(in: window)
         }
 
@@ -218,7 +219,7 @@ extension AppState {
             // provider's own native session id, so record and persist that so a
             // later provider switch can tell which provider owns the thread id.
             var seededProviderIds = threadStore.providerSessionIds(forLocalId: session.id)
-            if seededProviderIds.isEmpty {
+            if seededProviderIds.isEmpty, !session.id.hasPrefix("pending-") {
                 seededProviderIds[session.agentProvider.rawValue] = session.id
                 threadStore.setProviderSessionId(
                     localId: session.id,
@@ -228,6 +229,7 @@ extension AppState {
             }
             state.providerSessionIds = seededProviderIds
             if let msgs = loadedMessages {
+                restoreLegacyTurnOutcome(msgs, sessionID: session.id)
                 state.messages = messagesWithPersistedHookCard(cleanLoadedMessages(msgs), sessionId: session.id)
                 state.planDecisionSummaries = threadStore.loadPlanDecisions(sessionId: session.id)
                 sessionStates[session.id] = state
@@ -289,6 +291,7 @@ extension AppState {
     func releaseOutgoingSession(_ outgoingId: String?, excluding newId: String? = nil, in window: WindowState) {
         guard let outgoingId,
               outgoingId != newId,
+              sessionStates[outgoingId]?.latestTurnID == nil,
               !(sessionStates[outgoingId]?.isStreaming ?? false) else { return }
         let outgoingMessages = sessionStates[outgoingId]?.messages ?? []
         Task { [weak self] in

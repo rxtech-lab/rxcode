@@ -5,7 +5,7 @@ import RxCodeCore
 extension AppState {
     func handleStreamResult(
         _ resultEvent: ResultEvent, sessionKey initialSessionKey: String, streamId: UUID,
-        agentProvider: AgentProvider, projectId: UUID, cwd: String, eventCount: Int, in window: WindowState
+        agentProvider: AgentProvider, projectId: UUID, cwd: String, eventCount: Int, reportedError: String? = nil, in window: WindowState
     ) async -> String {
         var sessionKey = initialSessionKey
         // Recent Claude Code runs long tasks (background shells, subagents) as
@@ -56,6 +56,8 @@ extension AppState {
         // any subagent children that survived the parent CLI get reaped.
         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
 
+        guard stateForSession(sessionKey).activeStreamId == streamId else { return sessionKey }
+
         // Only the provider that owns the thread id may re-home the
         // thread. A switched provider's differing native id is recorded
         // (below) but must not rename the thread.
@@ -64,55 +66,8 @@ extension AppState {
         // A turn that failed before the agent opened a session
         // reports an empty id; keep the thread on its current key.
         if !resultEvent.sessionId.isEmpty, sessionKey != resultEvent.sessionId && resultOwnsThreadId {
-            let previousSessionKey = sessionKey
-            let wasForeground = (window.currentSessionId ?? window.newSessionKey) == previousSessionKey
-            if let state = sessionStates.removeValue(forKey: previousSessionKey) {
-                sessionStates[resultEvent.sessionId] = state
-            }
-            renameDraftState(from: previousSessionKey, to: resultEvent.sessionId, in: window)
-            applySessionIdRedirect(from: previousSessionKey, to: resultEvent.sessionId)
-            shellTrackerRenameSession(from: previousSessionKey, to: resultEvent.sessionId, cwd: cwd)
+            promoteStreamingThread(from: sessionKey, to: resultEvent.sessionId, cwd: cwd, in: window)
             sessionKey = resultEvent.sessionId
-            if wasForeground {
-                window.currentSessionId = resultEvent.sessionId
-            }
-
-            let expectedPlaceholder = "pending-\(streamId.uuidString)"
-            if window.pendingPlaceholderIds.contains(expectedPlaceholder) {
-                if let idx = allSessionSummaries.firstIndex(where: { $0.id == expectedPlaceholder }) {
-                    let old = allSessionSummaries[idx]
-                    let replacement = ChatSession(
-                        id: resultEvent.sessionId,
-                        projectId: old.projectId,
-                        title: old.title,
-                        messages: [],
-                        createdAt: old.createdAt,
-                        updatedAt: old.createdAt,
-                        isPinned: old.isPinned,
-                        agentProvider: old.agentProvider,
-                        model: old.model,
-                        effort: old.effort,
-                        permissionMode: old.permissionMode,
-                        origin: old.origin,
-                        worktreePath: old.worktreePath,
-                        worktreeBranch: old.worktreeBranch,
-                        isArchived: old.isArchived,
-                        archivedAt: old.archivedAt
-                    )
-                    allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == resultEvent.sessionId }
-                    allSessionSummaries.insert(replacement.summary, at: 0)
-                    threadStore.renameId(from: expectedPlaceholder, to: resultEvent.sessionId)
-                    renameThreadFileEdits(from: expectedPlaceholder, to: resultEvent.sessionId)
-                    threadStore.upsert(replacement.summary, cliSessionId: resultEvent.sessionId)
-                } else {
-                    allSessionSummaries.removeAll { $0.id == expectedPlaceholder }
-                    threadStore.delete(id: expectedPlaceholder)
-                    removeThreadFileEditsFromIndex([expectedPlaceholder])
-                }
-                window.removePendingPlaceholder(expectedPlaceholder)
-            }
-
-            broadcastMobileSessionRedirect(from: previousSessionKey, to: resultEvent.sessionId)
         }
 
         // Record this provider's native session id (owner: on the
@@ -129,7 +84,19 @@ extension AppState {
         // to defer until the queue has fully drained.
         let hasQueuedFollowups = !threadStore.loadQueue(sessionKey: sessionKey).isEmpty
 
-        finalizeStreamSession(for: sessionKey, trackUnreadCompletion: !resultEvent.isError) { state in
+        var failureText: String?
+        if resultEvent.isError {
+            let errText = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
+                ?? reportedError ?? "\(agentProvider.displayNameText) returned an error."
+            guard stateForSession(sessionKey).activeStreamId == streamId else { return sessionKey }
+            flushPendingUpdates(for: sessionKey, forceText: true)
+            failureText = stateForSession(sessionKey).messages.suffix(2).map(\.content).joined(separator: "\n") + "\n" + errText
+            updateState(sessionKey) { $0.messages.append(ChatMessage(role: .assistant, content: errText, isError: true)) }
+            await checkpointTurn(sessionID: sessionKey, streamID: streamId)
+            guard stateForSession(sessionKey).activeStreamId == streamId else { return sessionKey }
+        }
+
+        finalizeStreamSession(for: sessionKey, trackUnreadCompletion: !resultEvent.isError, interrupted: resultEvent.isError) { state in
             if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
             if let duration = resultEvent.durationMs { state.durationMs += duration }
             if let turns = resultEvent.totalTurns { state.turns += turns }
@@ -180,16 +147,7 @@ extension AppState {
             }
         }
 
-        if isFg {
-            window.currentSessionId = sessionKey
-        }
-        if resultEvent.isError {
-            let errText = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
-                ?? "\(agentProvider.displayNameText) returned an error."
-            let failureText = stateForSession(sessionKey).messages.suffix(2).map(\.content).joined(separator: "\n") + "\n" + errText
-            updateState(sessionKey) { state in
-                state.messages.append(ChatMessage(role: .assistant, content: errText, isError: true))
-            }
+        if let failureText, stateForSession(sessionKey).latestTurnID == streamId {
             scheduleUsageLimitResume(error: failureText, sessionKey: sessionKey, provider: agentProvider, projectId: projectId)
         }
 
@@ -199,7 +157,7 @@ extension AppState {
             messages: stateForSession(sessionKey).messages
         )
 
-        if agentProvider == .claudeCode {
+        if agentProvider == .claudeCode, !resultEvent.isError {
             reconcileFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
         }
 

@@ -55,17 +55,17 @@ struct RunProfileToolbarGroup: View {
                 .padding(.leading, 4)
 
             if shouldShowDestinationPicker {
-                Divider().frame(height: 14)
+                ClaudeThemeDivider().frame(height: 14)
                 destinationPicker
             }
 
             if !isSelectedProfileRunning {
-                Divider().frame(height: 14)
+                ClaudeThemeDivider().frame(height: 14)
                 runButton
             }
 
             if !activeTasks.isEmpty {
-                Divider().frame(height: 14)
+                ClaudeThemeDivider().frame(height: 14)
                 stopButton
             }
         }

@@ -5,10 +5,12 @@ import app.rxlab.rxcode.proto.ChatMessage
 import app.rxlab.rxcode.proto.DocsSearchHit
 import app.rxlab.rxcode.proto.MobileACPClient
 import app.rxlab.rxcode.proto.MobileACPRegistryAgent
+import app.rxlab.rxcode.proto.CodingPlanActivity
 import app.rxlab.rxcode.proto.MobileBranchBriefing
 import app.rxlab.rxcode.proto.MobileBriefingDocument
 import app.rxlab.rxcode.proto.BriefingContentResultPayload
 import app.rxlab.rxcode.proto.MobileMCPServer
+import app.rxlab.rxcode.proto.MobileModelSettings
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
 import app.rxlab.rxcode.proto.MobileSkillPlugin
 import app.rxlab.rxcode.proto.MobileSkillSource
@@ -43,6 +45,7 @@ data class MobileState(
     val pairing: PairingStatus = PairingStatus.Idle,
 
     val projects: List<Project> = emptyList(),
+    val modelSettings: MobileModelSettings? = null,
     val sessions: List<SessionSummary> = emptyList(),
     val activeSessionID: String? = null,
     val messagesBySession: Map<String, List<ChatMessage>> = emptyMap(),
@@ -54,6 +57,7 @@ data class MobileState(
 
     /** Per-branch briefings keyed by `"<projectId>::<branch>"`. */
     val branchBriefings: List<MobileBranchBriefing> = emptyList(),
+    val briefingPlans: List<CodingPlanActivity> = emptyList(),
     val briefingDocuments: List<MobileBriefingDocument> = emptyList(),
     val usageDashboard: UsageDashboard = UsageDashboard(),
     val briefingContentResult: BriefingContentResultPayload? = null,

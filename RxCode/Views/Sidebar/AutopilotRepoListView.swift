@@ -125,7 +125,7 @@ struct AutopilotRepoListView: View {
 
                 Text(repo.fullName)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
                     .lineLimit(1)
             }
 

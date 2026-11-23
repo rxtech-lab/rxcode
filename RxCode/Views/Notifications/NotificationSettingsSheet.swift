@@ -228,7 +228,7 @@ private struct TrustedEmailsView: View {
                     VStack(spacing: 6) {
                         Image(systemName: "tray")
                             .font(.system(size: 24))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                         Text("No trusted emails yet")
                             .font(.callout.weight(.medium))
                         Text("Add a teammate's or work address to send notifications there.")

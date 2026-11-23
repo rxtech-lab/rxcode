@@ -42,7 +42,7 @@ public struct SessionSidebarRow: View {
 
                         Text("·")
                             .font(.system(size: ClaudeTheme.size(10)))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(ClaudeTheme.tertiaryLabel)
                     }
 
                     Text(Self.compactElapsed(since: updatedAt))
@@ -62,7 +62,7 @@ public struct SessionSidebarRow: View {
             if isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: ClaudeTheme.size(9)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.tertiaryLabel)
             }
         }
         .padding(.vertical, 2)

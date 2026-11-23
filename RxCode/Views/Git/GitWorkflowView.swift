@@ -76,7 +76,7 @@ private struct GitProjectPicker: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             picker
-                .fixedSize()
+                .toolbarTitleWidth()
         }
         if !branch.isEmpty {
             ToolbarItem(placement: .navigation) {
@@ -84,9 +84,8 @@ private struct GitProjectPicker: ToolbarContent {
                     .labelStyle(.titleAndIcon)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
                     .truncationMode(.middle)
-                    .frame(maxWidth: 240, alignment: .leading)
+                    .toolbarTitleWidth()
                     .padding(.horizontal, 4)
                     .help(branch)
                     .accessibilityIdentifier("git-current-branch")
@@ -111,13 +110,22 @@ private struct GitProjectPicker: ToolbarContent {
             options.append(selected)
         }
 
-        return Picker("Project", selection: Binding(get: { selected }, set: { checkout = $0 })) {
-            ForEach(options, id: \.self) { option in
-                Text(title(for: option, projects: projects)).tag(option)
+        let selectedTitle = title(for: selected, projects: projects)
+        return Menu {
+            Picker("Project", selection: Binding(get: { selected }, set: { checkout = $0 })) {
+                ForEach(options, id: \.self) { option in
+                    Text(title(for: option, projects: projects)).tag(option)
+                }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Text(selectedTitle)
+                .truncationMode(.middle)
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
+        .help(selectedTitle)
+        .accessibilityLabel("Project")
+        .accessibilityValue(selectedTitle)
         .accessibilityIdentifier("git-project-picker")
     }
 

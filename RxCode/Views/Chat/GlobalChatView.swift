@@ -5,10 +5,14 @@ import SwiftUI
 struct GlobalChatView: View {
     @Environment(WindowState.self) private var windowState
     @SceneStorage("globalChatSidebarVisible") private var showsSidebar = true
+    @State private var showsPlan = false
+    @State private var showsPlanSidebar = false
+
+    private var sidebarVisible: Bool { showsPlan ? showsPlanSidebar : showsSidebar }
 
     var body: some View {
         HStack(spacing: 0) {
-            if showsSidebar {
+            if sidebarVisible {
                 GlobalChatSidebar()
                     .frame(width: 260)
                     .transition(.move(edge: .leading))
@@ -21,16 +25,18 @@ struct GlobalChatView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { showsSidebar.toggle() }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            if showsPlan { showsPlanSidebar.toggle() } else { showsSidebar.toggle() }
+                        }
                     } label: {
                         Image(systemName: "sidebar.left")
                             .font(.system(size: ClaudeTheme.size(14)))
                             .foregroundStyle(ClaudeTheme.textSecondary)
                     }
-                    .help(showsSidebar ? "Hide chat sidebar" : "Show chat sidebar")
+                    .help(sidebarVisible ? "Hide chat sidebar" : "Show chat sidebar")
                     .accessibilityIdentifier("global-chat-sidebar-toggle")
 
-                    if !showsSidebar {
+                    if !sidebarVisible {
                         GlobalNewChatButton()
                     }
 
@@ -43,6 +49,7 @@ struct GlobalChatView: View {
                     }
 
                     Spacer()
+                    ChatCreationMenu()
                 }
                 .buttonStyle(.borderless)
                 .padding(.horizontal, 12)
@@ -73,6 +80,11 @@ struct GlobalChatView: View {
             .background(ClaudeTheme.background)
         }
         .clipped()
+        .onPreferenceChange(CodingPlanVisibleKey.self) { visible in
+            showsPlan = visible
+            if !visible { showsPlanSidebar = false }
+        }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("global-chat-view")
     }
 }
@@ -124,6 +136,7 @@ private struct GlobalChatSidebar: View {
             // Drop the `.sidebar` list's translucent material so the panel
             // matches the theme instead of showing the desktop through it.
             .scrollContentBackground(.hidden)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("global-chat-history")
         }
         .frame(maxHeight: .infinity)

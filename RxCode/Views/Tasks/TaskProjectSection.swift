@@ -47,9 +47,11 @@ struct TaskProjectSection: View {
         self._cardFilterData = AppStorage(wrappedValue: Data(), "taskOverviewFilter.\(project.id.uuidString)")
     }
 
+    private static let emptyFilter = TaskSavedView(name: String(localized: "Overview"))
+
     private var cardFilter: TaskSavedView {
-        (try? JSONDecoder().decode(TaskSavedView.self, from: cardFilterData))
-            ?? TaskSavedView(name: String(localized: "Overview"))
+        guard !cardFilterData.isEmpty else { return Self.emptyFilter }
+        return (try? JSONDecoder().decode(TaskSavedView.self, from: cardFilterData)) ?? Self.emptyFilter
     }
 
     private var cardFilterBinding: Binding<TaskSavedView> {
@@ -59,22 +61,25 @@ struct TaskProjectSection: View {
         )
     }
 
-    private var availableStories: [ProjectStory] {
-        appState.recentStories(for: project.id)
+    private struct PreviewStory: Identifiable {
+        let story: ProjectStory
+        let rollup: StoryRollup
+        var id: UUID { story.id }
     }
 
-    private var filteredStories: [ProjectStory] {
+    private func filteredStories(on board: TaskBoard, filter: TaskSavedView) -> [PreviewStory] {
         let start = DispatchTime.now().uptimeNanoseconds
         defer { performance.record("filter-sort", since: start) }
-        let filter = cardFilter
+        guard !board.stories.isEmpty else { return [] }
+        let rollups = board.storyRollups()
         let scriptSelection = scriptFilterSelection
-        return appState.recentStories(for: project.id, keyword: keyword).filter { story in
-            filter.matches(story, rolledUpStatus: board.rolledUpStatus(for: story))
-                && (scriptSelection?.storyIds.contains(story.id) ?? true)
+        return appState.recentStories(for: project.id, keyword: keyword, rollups: rollups).compactMap { story in
+            guard let rollup = rollups[story.id],
+                  filter.matches(story, rolledUpStatus: rollup.status),
+                  scriptSelection?.storyIds.contains(story.id) ?? true else { return nil }
+            return PreviewStory(story: story, rollup: rollup)
         }
     }
-
-    private var hasActiveFilter: Bool { !cardFilter.isEmpty || cardFilter.hasFilterScript }
 
     var body: some View {
         #if DEBUG
@@ -109,7 +114,9 @@ struct TaskProjectSection: View {
 
     @ViewBuilder
     private var storyContent: some View {
-        let stories = filteredStories
+        let filter = cardFilter
+        let hasActiveFilter = !filter.isEmpty || filter.hasFilterScript
+        let stories = filteredStories(on: board, filter: filter)
         if stories.isEmpty {
             emptyState
         } else {
@@ -121,12 +128,13 @@ struct TaskProjectSection: View {
         }
     }
 
-    private func storyScroll(_ stories: [ProjectStory]) -> some View {
+    private func storyScroll(_ stories: [PreviewStory]) -> some View {
         ScrollView {
             GlassEffectContainer(spacing: 10) {
                 LazyVStack(spacing: 10) {
-                    ForEach(stories) { story in
-                        StoryGlassCard(story: story, board: board) {
+                    ForEach(stories) { preview in
+                        let story = preview.story
+                        StoryGlassCard(story: story, board: board, rollup: preview.rollup) {
                             storySheet = story
                         }
                         .contextMenu {
@@ -140,7 +148,7 @@ struct TaskProjectSection: View {
                         .transition(TaskBoardMotion.card)
                     }
                 }
-                .taskBoardAnimation(value: storySignature(stories, board: board))
+                .taskBoardAnimation(value: storySignature(stories))
                 .padding(.horizontal, 12)
                 .padding(.bottom, 12)
                 .padding(.top, 2)
@@ -219,7 +227,6 @@ struct TaskProjectSection: View {
 
                 TaskOverviewStoryFilter(
                     projectId: project.id,
-                    stories: availableStories,
                     board: board,
                     filter: cardFilterBinding,
                     isEvaluatingScript: isEvaluatingScriptFilter,
@@ -315,7 +322,7 @@ struct TaskProjectSection: View {
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
                 .layoutPriority(1)
-            AttentionBadge(attention: appState.projectAttention(projectId: project.id, in: windowState))
+            ProjectAttentionBadge(projectId: project.id)
             Image(systemName: "chevron.right")
                 .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textTertiary)
@@ -371,12 +378,12 @@ struct TaskProjectSection: View {
     }
 
     /// Order plus the rolled-up status and progress each story card shows.
-    private func storySignature(_ stories: [ProjectStory], board: TaskBoard) -> [String] {
+    private func storySignature(_ stories: [PreviewStory]) -> [String] {
         let start = DispatchTime.now().uptimeNanoseconds
         defer { performance.record("story-signature", since: start) }
         return stories.map { story in
-            let progress = board.progress(for: story)
-            return "\(story.id):\(board.rolledUpStatus(for: story).rawValue):\(progress.done)/\(progress.total)"
+            let progress = story.rollup.progress
+            return "\(story.id):\(story.rollup.status.rawValue):\(progress.done)/\(progress.total)"
         }
     }
 

@@ -44,6 +44,16 @@ final class MarkdownDescriptionEditorTests: XCTestCase {
         XCTAssertEqual(reference, "![my shot.png](file:///tmp/my%20folder/my%20shot.png)")
     }
 
+    func testParenthesizedImagePathSurvivesChipRoundTrip() {
+        let path = "/tmp/Screen Shot (1).png"
+        let image = Attachment(type: .image, name: "Screen Shot (1).png", path: path)
+        let reference = MarkdownDescriptionEditor.markdownReference(for: image)
+        var chips = DescriptionImageChips()
+        XCTAssertEqual(chips.display(for: reference), "[Image1]")
+        XCTAssertEqual(chips.url(forChip: 1)?.path, path)
+        XCTAssertEqual(chips.markdown(for: "[Image1]"), reference)
+    }
+
     /// Brackets in a filename would otherwise close the link label early.
     func testBracketsInNameAreEscaped() {
         let attachment = Attachment(

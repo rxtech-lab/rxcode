@@ -19,7 +19,6 @@ extension InputBarView {
             onUpArrow: { handleUpArrow() == .handled },
             onDownArrow: { handleDownArrow() == .handled },
             onTab: { handleTab() == .handled },
-            onShiftTab: { Task { await chatBridge.togglePlanMode() } },
             onEscape: handleEscapeKey,
             onPasteCommandV: handlePaste,
             onImageChipTap: handleImageChipTap

@@ -79,6 +79,7 @@ extension AppState {
         registerMode: PermissionMode,
         projectId: UUID,
         includeIDEMCP: Bool,
+        includePriorContext: Bool = true,
         streamStart: Date
     ) async -> StreamPreflight {
         if projectId == Project.globalChatID {
@@ -144,7 +145,7 @@ extension AppState {
         // `memoryEnabled` / `memoryInjectEnabled` / `memoryMaxContextItems`
         // directly. The local `let` capture solves both isolation and the
         // "captured var" warning for `sessionKey`.
-        let memoryActive = memoryEnabled && memoryInjectEnabled
+        let memoryActive = includePriorContext && memoryEnabled && memoryInjectEnabled
         let memoryLimit = memoryMaxContextItems
         let memoryMode = memoryRetrievalMode
         let memoryMinScore = memoryInjectionScoreThreshold
@@ -212,7 +213,7 @@ extension AppState {
             "ideMCP",
             detail: "enabled=\(shouldIncludeIDEMCP) port=\(idePort.map(String.init) ?? "<nil>")"
         )
-        let briefingContext = projectBriefingSystemPrompt(projectId: projectId, canFetchDetails: bridge != nil)
+        let briefingContext = includePriorContext ? projectBriefingSystemPrompt(projectId: projectId, canFetchDetails: bridge != nil) : ""
         logPreflight("projectBriefing", detail: "contextChars=\(briefingContext.count)")
         let skillContext = bridge != nil ? await skillContextAsync : ""
         logPreflight("skillContext", detail: "chars=\(skillContext.count)")
@@ -231,7 +232,7 @@ extension AppState {
         // visible chat views. Keep them out of this preflight path: awaiting
         // network-backed banner checks here delays the first backend event.
         var hookStartContext = ""
-        if cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
+        if includePriorContext, cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
             hookStartContext = await hookManager.dispatchSessionStart(
                 SessionStartPayload(project: project, sessionKey: sessionKey)
             ).combinedOutput

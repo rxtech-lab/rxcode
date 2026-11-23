@@ -1,5 +1,6 @@
 import Foundation
 import RxCodeCore
+import SwiftData
 import WidgetKit
 
 extension AppState {
@@ -11,25 +12,21 @@ extension AppState {
             guard let self else { return }
             self.desktopWidgetUpdateTask = nil
             guard self.desktopWidgetsActive else { return }
-            let snapshot = DesktopWidgetSnapshot(
-                workspaceID: self.activeWorkspace.id,
-                workspaceName: self.activeWorkspace.name,
-                projects: self.projects.map { WidgetProject(id: $0.id, name: $0.name, board: self.taskBoard(for: $0.id)) },
-                agents: [
-                    WidgetAgentUsage(id: "claude", name: "Claude Code", usage: self.latestRateLimitUsage, measuredAt: self.desktopClaudeUsageDate),
-                    WidgetAgentUsage(id: "codex", name: "Codex", usage: self.latestCodexRateLimitUsage, measuredAt: self.desktopCodexUsageDate)
-                ] + self.acpClients.filter(\.enabled).map {
-                    WidgetAgentUsage(id: "acp:\($0.id)", name: $0.displayName, usage: nil, supportsLimits: false)
-                },
-                threads: self.allSessionSummaries.filter { !$0.isArchived }.compactMap { summary in
-                    guard let project = self.sessionProject(id: summary.projectId) else { return nil }
-                    return WidgetThread(id: summary.id, projectID: project.id, projectName: project.name,
-                        title: summary.title, isOngoing: self.sessionActivity[summary.id]?.isStreaming ?? false,
-                        updatedAt: summary.updatedAt)
-                },
-                usageDashboard: self.usageDashboard
+            let agents = [
+                WidgetAgentUsage(id: "claude", name: "Claude Code", usage: self.latestRateLimitUsage, measuredAt: self.desktopClaudeUsageDate),
+                WidgetAgentUsage(id: "codex", name: "Codex", usage: self.latestCodexRateLimitUsage, measuredAt: self.desktopCodexUsageDate)
+            ] + self.acpClients.filter(\.enabled).map {
+                WidgetAgentUsage(id: "acp:\($0.id)", name: $0.displayName, usage: nil, supportsLimits: false)
+            }
+            let input = DesktopWidgetWorkspace(
+                projects: self.projects, boards: self.taskBoards, globalChat: self.globalChatProject,
+                summaries: self.allSessionSummaries,
+                streaming: Set(self.sessionActivity.compactMap { $0.value.isStreaming ? $0.key : nil })
             )
-            await DesktopWidgetPublisher.shared.publish(snapshot)
+            await DesktopWidgetPublisher.shared.publish(
+                workspaceID: self.activeWorkspace.id, name: self.activeWorkspace.name,
+                input: input, agents: agents, usage: self.usageDashboard, container: self.threadStore.container
+            )
         }
     }
 
@@ -56,9 +53,44 @@ extension AppState {
     }
 }
 
+/// Value snapshot of the workspace. The publisher projects rows using its own SwiftData context.
+nonisolated struct DesktopWidgetWorkspace {
+    let projects: [Project]
+    let boards: [UUID: TaskBoard]
+    let globalChat: Project
+    let summaries: [ChatSession.Summary]
+    let streaming: Set<String>
+
+    func threads(retainedProject: (UUID) -> Project?) -> [WidgetThread] {
+        var names = Dictionary(projects.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        names[globalChat.id] = globalChat.name
+        let visible = summaries.lazy.filter { !$0.isArchived }
+        for id in Set(visible.map(\.projectId)).subtracting(names.keys) {
+            names[id] = retainedProject(id)?.name
+        }
+        return visible.compactMap { summary in
+            guard let name = names[summary.projectId] else { return nil }
+            return WidgetThread(id: summary.id, projectID: summary.projectId, projectName: name,
+                                title: summary.title, isOngoing: streaming.contains(summary.id), updatedAt: summary.updatedAt)
+        }
+    }
+}
+
 private actor DesktopWidgetPublisher {
     static let shared = DesktopWidgetPublisher()
-    func publish(_ snapshot: DesktopWidgetSnapshot) {
+    func publish(
+        workspaceID: String, name: String, input: DesktopWidgetWorkspace, agents: [WidgetAgentUsage],
+        usage: UsageDashboard?, container: ModelContainer
+    ) {
+        // Most workspaces have no removed projects, so open a context only on demand.
+        lazy var context = ModelContext(container)
+        let snapshot = DesktopWidgetSnapshot(
+            workspaceID: workspaceID, workspaceName: name,
+            projects: input.projects.map { WidgetProject(id: $0.id, name: $0.name, board: input.boards[$0.id] ?? TaskBoard()) },
+            agents: agents,
+            threads: input.threads { ThreadStore.retainedProject(id: $0, in: context) },
+            usageDashboard: usage
+        )
         do {
             try DesktopWidgetStore.save(snapshot)
             for kind in ["RxCodeProjectTasks", "RxCodeOngoingTasks", "RxCodeAgentUsage", "RxCodeIntegrationUsage"] {

@@ -54,57 +54,86 @@ extension AppState {
     /// is coalesced onto a short timer.
     func sessionStatesDidChange() {
         var next = sessionActivity
+        var flagsChanged = false
+        var streamingChanged = false
         var needsTodoRefresh = false
+        var previews: [String: [ComputerUseMonitorWindow]] = [:]
         for (id, state) in sessionStates {
-            var activity = next[id] ?? SessionActivity()
-            activity.isStreaming = state.isStreaming
-            activity.hasUncheckedCompletion = state.hasUncheckedCompletion
-            next[id] = activity
+            if state.isStreaming, !state.computerUseWindows.isEmpty {
+                previews[id] = state.computerUseWindows
+            }
+            let previous = next[id]
+            if previous?.isStreaming != state.isStreaming || previous?.hasUncheckedCompletion != state.hasUncheckedCompletion {
+                var activity = previous ?? SessionActivity()
+                activity.isStreaming = state.isStreaming
+                activity.hasUncheckedCompletion = state.hasUncheckedCompletion
+                next[id] = activity
+                flagsChanged = true
+                if (previous?.isStreaming ?? false) != state.isStreaming { streamingChanged = true }
+            }
             if state.isStreaming || sessionActivityTodoFingerprints[id] != SessionActivity.TodoFingerprint(state) {
                 needsTodoRefresh = true
             }
         }
         if next.count != sessionStates.count {
-            next = next.filter { sessionStates[$0.key] != nil }
-            sessionActivityTodoFingerprints = sessionActivityTodoFingerprints.filter { sessionStates[$0.key] != nil }
+            for (id, activity) in next where sessionStates[id] == nil {
+                next.removeValue(forKey: id)
+                sessionActivityTodoFingerprints.removeValue(forKey: id)
+                if activity.isStreaming { streamingChanged = true }
+            }
+            flagsChanged = true
         }
-
-        // Assigning an equal value still fires observation — only publish real changes.
-        if next != sessionActivity {
-            let streamingChanged = next.filter { $0.value.isStreaming }.keys.sorted()
-                != sessionActivity.filter { $0.value.isStreaming }.keys.sorted()
-            sessionActivity = next
-            if streamingChanged { scheduleDesktopWidgetUpdate() }
-        }
+        if previews != computerUseWindowsBySession { computerUseWindowsBySession = previews }
+        if flagsChanged { sessionActivity = next }
+        if streamingChanged { scheduleDesktopWidgetUpdate() }
         if needsTodoRefresh {
             scheduleSessionActivityTodoRefresh()
         }
     }
 
     private func scheduleSessionActivityTodoRefresh() {
+        sessionActivityTodoRefreshRequested = true
         guard sessionActivityTodoRefreshTask == nil else { return }
         sessionActivityTodoRefreshTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(250))
-            guard let self else { return }
-            self.sessionActivityTodoRefreshTask = nil
-            self.refreshSessionActivityTodos()
+            repeat {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self else { return }
+                self.sessionActivityTodoRefreshRequested = false
+                await self.refreshSessionActivityTodos()
+            } while self?.sessionActivityTodoRefreshRequested == true
+            self?.sessionActivityTodoRefreshTask = nil
         }
     }
 
-    private func refreshSessionActivityTodos() {
-        var next = sessionActivity
+    /// Snapshot the message arrays, then replay task tools off the UI thread.
+    /// One worker owns publication, so an older scan cannot finish after a newer one.
+    private func refreshSessionActivityTodos() async {
+        var messages: [String: [ChatMessage]] = [:]
+        var fingerprints: [String: SessionActivity.TodoFingerprint] = [:]
         for (id, state) in sessionStates {
             let fingerprint = SessionActivity.TodoFingerprint(state)
             guard state.isStreaming || sessionActivityTodoFingerprints[id] != fingerprint else { continue }
+            messages[id] = state.messages
+            fingerprints[id] = fingerprint
+        }
+        guard !messages.isEmpty else { return }
+        let snapshots = await Self.extractActivityTodos(from: messages)
+        var next = sessionActivity
+        var changed = false
+        for (id, fingerprint) in fingerprints {
+            guard let state = sessionStates[id], SessionActivity.TodoFingerprint(state) == fingerprint else { continue }
             sessionActivityTodoFingerprints[id] = fingerprint
-            next[id, default: SessionActivity(
-                isStreaming: state.isStreaming,
-                hasUncheckedCompletion: state.hasUncheckedCompletion
-            )].liveTodos = TodoExtractor.latestSnapshot(in: state.messages)
+            if next[id]?.liveTodos != snapshots[id] {
+                next[id]?.liveTodos = snapshots[id]
+                changed = true
+            }
         }
-        if next != sessionActivity {
-            sessionActivity = next
-        }
+        if changed { sessionActivity = next }
+    }
+
+    @concurrent
+    private static func extractActivityTodos(from messages: [String: [ChatMessage]]) async -> [String: TodoListSnapshot] {
+        messages.compactMapValues { TodoExtractor.latestSnapshot(in: $0) }
     }
 
     /// Streaming flag for the window's current session, read from
@@ -148,8 +177,7 @@ extension AppState {
     }
 
     func computerUseMonitors(forSession id: String) -> [ComputerUseMonitorWindow] {
-        guard let state = sessionStates[id], state.isStreaming else { return [] }
-        return state.computerUseWindows
+        computerUseWindowsBySession[id] ?? []
     }
 
     /// Enabled custom menu rows for `projectId`/`surface`, served from a cache

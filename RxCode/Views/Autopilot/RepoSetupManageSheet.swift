@@ -127,7 +127,7 @@ private struct RepoSetupTemplateRow: View {
                             .clipShape(Capsule())
                     }
                     if !template.enabled {
-                        Text("Disabled").font(.caption2).foregroundStyle(.tertiary)
+                        Text("Disabled").font(.caption2).foregroundStyle(ClaudeTheme.textTertiary)
                     }
                 }
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)

@@ -31,7 +31,8 @@ final class InspectorSplitTests: XCTestCase {
                 + additionalProjects.map { ["id": UUID().uuidString, "name": $0.lastPathComponent, "path": $0.path] }
             try JSONEncoder().encode(projects).write(to: workspaceDirectory.appending(path: "projects.json"))
         }
-        app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UI_TESTING": "1"]
+        // These local window checks do not need background services or notification prompts.
+        app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UI_TESTING": "1", "RXCODE_UNIT_TESTING": "1"]
         app.launchArguments = [
             "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
             "-ApplePersistenceIgnoreState", "YES", "-workspace.\(workspace).rightInspectorLayout", "",
@@ -156,7 +157,7 @@ final class InspectorSplitTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let first = directory.appending(path: "First")
-        let second = directory.appending(path: "Second Project")
+        let second = directory.appending(path: "Second Project With a Long Name That Exceeds the Toolbar Width")
         let folder = directory.appending(path: "Plain Folder")
         for project in [first, second, folder] {
             try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
@@ -178,9 +179,16 @@ final class InspectorSplitTests: XCTestCase {
             }
         }
         try initializeRepository(at: first, branch: "first-branch")
-        try initializeRepository(at: second, branch: "second-branch")
+        let longBranch = "feature/second-project-with-a-long-branch-name-for-the-toolbar"
+        try initializeRepository(at: second, branch: longBranch)
 
         let app = try launchInspector(project: first, additionalProjects: [second, folder])
+        let toolbar = app.windows.firstMatch.toolbars.firstMatch
+        let title = toolbar.descendants(matching: .any)["toolbar-navigation-title"].firstMatch
+        let search = toolbar.buttons["toolbar-global-search"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(search.exists)
+        XCTAssertLessThan(title.frame.minX - search.frame.maxX, 30)
         let openGit = app.buttons["sidebar-git-window"]
         XCTAssertTrue(openGit.waitForExistence(timeout: 10))
         openGit.click()
@@ -190,8 +198,20 @@ final class InspectorSplitTests: XCTestCase {
         }
         let picker = element("git-project-picker")
         let firstBranch = element("git-branch-first-branch")
-        let secondBranch = element("git-branch-second-branch")
+        let secondBranch = element("git-branch-\(longBranch)")
         XCTAssertTrue(firstBranch.waitForExistence(timeout: 10))
+        let gitWindow = app.windows.containing(.any, identifier: "git-project-picker").firstMatch
+        if gitWindow.frame.width > 960 {
+            let edge = gitWindow.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+                .withOffset(CGVector(dx: -1, dy: 0))
+            edge.click(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: 960 - gitWindow.frame.width, dy: 0)))
+        }
+        XCTAssertLessThanOrEqual(gitWindow.frame.width, 980)
+        let branchTitle = element("git-current-branch")
+        XCTAssertTrue(branchTitle.waitForExistence(timeout: 5))
+        XCTAssertTrue(picker.exists)
+        let shortPickerWidth = picker.frame.width
+        let shortBranchWidth = branchTitle.frame.width
         let windowCount = app.windows.count
 
         func choose(_ project: String) {
@@ -201,8 +221,13 @@ final class InspectorSplitTests: XCTestCase {
             XCTAssertTrue(option.waitForExistence(timeout: 5))
             option.click()
         }
-        choose("Second Project")
+        choose(second.lastPathComponent)
         XCTAssertTrue(secondBranch.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(picker.frame.width, shortPickerWidth)
+        XCTAssertGreaterThan(branchTitle.frame.width, shortBranchWidth)
+        // Allow native toolbar control margins around the 240-point content cap.
+        XCTAssertLessThanOrEqual(picker.frame.width, 280)
+        XCTAssertLessThanOrEqual(branchTitle.frame.width, 260)
         XCTAssertFalse(firstBranch.exists)
         XCTAssertEqual(app.windows.count, windowCount)
 

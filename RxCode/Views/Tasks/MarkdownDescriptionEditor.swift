@@ -5,8 +5,7 @@ import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The description field for tasks and stories: a Markdown source editor with a
-/// preview toggle that accepts pasted and dropped images, files and text.
+/// A Markdown field shared by task descriptions and plan-mode requests and messages.
 ///
 /// Dropped and pasted content is written into the description as Markdown —
 /// `![name](file://…)` for an image, `[name](file://…)` for anything else — so
@@ -20,6 +19,11 @@ import UniformTypeIdentifiers
 /// display string in which each `![name](url)` is stood in for by its token;
 /// `DescriptionImageChips` maps between that and the stored Markdown.
 struct MarkdownDescriptionEditor: View {
+    enum Layout {
+        case form(showsFilePicker: Bool = false)
+        case composer(onSubmit: () -> Void)
+    }
+
     @Binding var text: String
     var attachments: Binding<[Attachment.DTO]>?
     var placeholder: String
@@ -28,6 +32,8 @@ struct MarkdownDescriptionEditor: View {
     /// Prefix for the accessibility identifiers, so two editors can be on
     /// screen at once and still be told apart.
     var identifierPrefix: String = "task-description"
+    var editorIdentifier: String?
+    var layout: Layout = .form()
 
     @State private var controller = MarkdownEditorController()
     @State private var isDropTargeted = false
@@ -37,14 +43,60 @@ struct MarkdownDescriptionEditor: View {
     @State private var isFocused = false
     @State private var hasMarkedText = false
     @State private var previewImage: Attachment?
+    @State private var choosingFiles = false
 
     /// Drops are accepted in preview mode too — the caret is unavailable there,
     /// so `insert` falls back to appending.
     private var acceptsContent: Bool { !isDisabled }
 
     var body: some View {
+        Group {
+            switch layout {
+            case .form(let showsFilePicker):
+                form(showsFilePicker: showsFilePicker)
+            case .composer:
+                HStack(alignment: .bottom, spacing: 4) {
+                    addFilesButton.labelStyle(.iconOnly)
+                    // The text view scrolls once the draft reaches five lines.
+                    Text(displayText.isEmpty || displayText.hasSuffix("\n") ? displayText + " " : displayText)
+                        .font(.system(size: font.pointSize))
+                        .lineLimit(1...5)
+                        .padding(.horizontal, 5)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .hidden()
+                        .overlay { editor }
+                }
+            }
+        }
+        .onDrop(of: AttachmentIntake.dropTypes, isTargeted: $isDropTargeted) { providers in
+            guard acceptsContent else { return false }
+            handleDrop(providers)
+            return true
+        }
+        .overlay { dropHint }
+        .sheet(item: $previewImage) { ImagePreviewSheet(attachment: $0) }
+        .onAppear {
+            controller.fallbackAppend = { [binding = editorText] snippet in binding.wrappedValue += snippet }
+        }
+        .onChange(of: text, initial: true) { _, newValue in
+            // An external reset starts a fresh draft with its own image tokens.
+            guard chips.markdown(for: displayText) != newValue else { return }
+            chips = DescriptionImageChips()
+            displayText = chips.display(for: newValue)
+        }
+    }
+
+    private var editorText: Binding<String> {
+        Binding(get: { displayText }, set: { value in
+            displayText = value
+            text = chips.markdown(for: value)
+        })
+    }
+
+    private func form(showsFilePicker: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            header
+            header(showsFilePicker: showsFilePicker)
             content
                 .frame(height: height)
                 .background(ClaudeTheme.inputBackground, in: shape)
@@ -54,12 +106,6 @@ struct MarkdownDescriptionEditor: View {
                         lineWidth: isDropTargeted ? 1.5 : 1
                     )
                 }
-                .onDrop(of: AttachmentIntake.dropTypes, isTargeted: $isDropTargeted) { providers in
-                    guard acceptsContent else { return false }
-                    handleDrop(providers)
-                    return true
-                }
-                .overlay { dropHint }
             if !isDisabled {
                 Text("Markdown. Paste or drop images and files to attach them.")
                     .font(.system(size: ClaudeTheme.size(11)))
@@ -67,33 +113,17 @@ struct MarkdownDescriptionEditor: View {
             }
         }
         .padding(.vertical, 2)
-        .sheet(item: $previewImage) { ImagePreviewSheet(attachment: $0) }
-        .onAppear {
-            displayText = chips.display(for: text)
-            controller.fallbackAppend = { [binding = $displayText] snippet in
-                binding.wrappedValue += snippet
-            }
-        }
-        .onChange(of: text) { _, newValue in
-            // Only an outside change (e.g. a reset) re-derives the chips; our own
-            // write-back already matches the display string.
-            guard chips.markdown(for: displayText) != newValue else { return }
-            displayText = chips.display(for: newValue)
-        }
-        .onChange(of: displayText) { _, newValue in
-            let markdown = chips.markdown(for: newValue)
-            if markdown != text { text = markdown }
-        }
     }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
     }
 
-    private var header: some View {
+    private func header(showsFilePicker: Bool) -> some View {
         HStack(spacing: 8) {
             Text("Description")
             Spacer()
+            if showsFilePicker { addFilesButton }
             Picker("Editor Mode", selection: $showsPreview) {
                 Image(systemName: "pencil").tag(false)
                 Image(systemName: "eye").tag(true)
@@ -103,6 +133,22 @@ struct MarkdownDescriptionEditor: View {
             .fixedSize()
             .help("Switch between the Markdown source and its preview")
             .accessibilityIdentifier("\(identifierPrefix)-mode")
+        }
+    }
+
+    private var addFilesButton: some View {
+        Button { choosingFiles = true } label: {
+            Label("Add Files…", systemImage: "paperclip")
+        }
+        .buttonStyle(.borderless)
+        .disabled(isDisabled)
+        .help("Add Files…")
+        .accessibilityIdentifier("\(identifierPrefix)-add-files")
+        .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard acceptsContent, case .success(let urls) = result else { return }
+            for url in urls {
+                if let attachment = AttachmentFactory.fromFileURL(url) { attach(attachment) }
+            }
         }
     }
 
@@ -122,30 +168,44 @@ struct MarkdownDescriptionEditor: View {
                 .padding(8)
             }
         } else {
-            IMETextView(
-                text: $displayText,
-                isFocused: $isFocused,
-                hasMarkedText: $hasMarkedText,
-                font: .monospacedSystemFont(ofSize: ClaudeTheme.size(12), weight: .regular),
-                textColor: NSColor(isDisabled ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary),
-                placeholder: placeholder,
-                onReturn: { [controller] in controller.insert("\n") },
-                onPasteCommandV: handlePaste,
-                onImageChipTap: openImage,
-                isEditable: !isDisabled,
-                accessibilityIdentifier: "\(identifierPrefix)-editor",
-                onTextViewReady: { [controller] textView in
-                    // NSTextView would swallow a dropped file into a path string;
-                    // unregistering lets the drag reach the SwiftUI drop target.
-                    textView.unregisterDraggedTypes()
-                    controller.textView = textView
-                },
-                chipThumbnail: { index in
-                    chips.url(forChip: index).flatMap(ChipThumbnailCache.shared.thumbnail(for:))
-                }
-            )
-            .padding(6)
+            editor.padding(6)
         }
+    }
+
+    private var font: NSFont {
+        switch layout {
+        case .form: .monospacedSystemFont(ofSize: ClaudeTheme.size(12), weight: .regular)
+        case .composer: .systemFont(ofSize: ClaudeTheme.size(13))
+        }
+    }
+
+    private var editor: some View {
+        IMETextView(
+            text: editorText,
+            isFocused: $isFocused,
+            hasMarkedText: $hasMarkedText,
+            font: font,
+            textColor: NSColor(isDisabled ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary),
+            placeholder: placeholder,
+            onReturn: {
+                switch layout {
+                case .form: controller.insert("\n")
+                case .composer(let onSubmit): onSubmit()
+                }
+            },
+            onPasteCommandV: handlePaste,
+            onImageChipTap: openImage,
+            isEditable: !isDisabled,
+            accessibilityIdentifier: editorIdentifier ?? "\(identifierPrefix)-editor",
+            onTextViewReady: { [controller] textView in
+                // Route dropped files to the SwiftUI drop target instead of inserting a bare path.
+                textView.unregisterDraggedTypes()
+                controller.textView = textView
+            },
+            chipThumbnail: { index in
+                chips.url(forChip: index).flatMap(ChipThumbnailCache.shared.thumbnail(for:))
+            }
+        )
     }
 
     @ViewBuilder
@@ -216,6 +276,8 @@ struct MarkdownDescriptionEditor: View {
         let destination = attachment.path.isEmpty
             ? attachment.name
             : URL(fileURLWithPath: attachment.path).absoluteString
+                .replacingOccurrences(of: "(", with: "%28")
+                .replacingOccurrences(of: ")", with: "%29")
         return "\(attachment.type == .image ? "!" : "")[\(label)](\(destination))"
     }
 }

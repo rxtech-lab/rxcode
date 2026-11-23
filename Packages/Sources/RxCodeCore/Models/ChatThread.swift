@@ -24,6 +24,11 @@ public final class ChatThread {
     /// (like `cliSessionId`) so summary upserts never wipe it.
     public var providerSessionIdsJSON: String? = nil
 
+    /// Versioned debate history, also carried by the approved implementation thread.
+    @Attribute(.externalStorage) public var codingPlanData: Data? = nil
+
+    public var implementationPlanID: UUID? = nil
+
     public var agentProviderRaw: String?
     public var originRaw: String?
     public var model: String?

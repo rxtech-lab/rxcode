@@ -51,6 +51,10 @@ final class ThreadStore {
     }
 
     func retainedProject(id: UUID) -> Project? {
+        Self.retainedProject(id: id, in: context)
+    }
+
+    nonisolated static func retainedProject(id: UUID, in context: ModelContext) -> Project? {
         var descriptor = FetchDescriptor<ChatThread>(predicate: #Predicate {
             $0.projectId == id && $0.retainedProjectPath != nil
         })
@@ -422,6 +426,8 @@ final class ThreadStore {
             if existingAtNew.providerSessionIdsJSON == nil {
                 existingAtNew.providerSessionIdsJSON = row.providerSessionIdsJSON
             }
+            existingAtNew.implementationPlanID = row.implementationPlanID ?? existingAtNew.implementationPlanID
+            existingAtNew.codingPlanData = row.codingPlanData ?? existingAtNew.codingPlanData
             existingAtNew.checkoutBranch = row.checkoutBranch ?? existingAtNew.checkoutBranch
             context.delete(row)
         } else {

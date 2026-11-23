@@ -20,6 +20,7 @@ extension AppState {
         hookSessionMode: PermissionMode? = nil,
         projectId: UUID,
         includeIDEMCP: Bool = true,
+        includePriorContext: Bool = true,
         history: [ChatMessage] = [],
         window: WindowState
     ) async {
@@ -56,6 +57,7 @@ extension AppState {
             registerMode: registerMode,
             projectId: projectId,
             includeIDEMCP: includeIDEMCP,
+            includePriorContext: includePriorContext,
             streamStart: streamStart
         )
 

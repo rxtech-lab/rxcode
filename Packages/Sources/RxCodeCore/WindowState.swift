@@ -375,6 +375,7 @@ public final class WindowState {
     /// Whether the global thread-search overlay is presented. Toggled by the
     /// toolbar magnifier button and the Cmd+K shortcut.
     public var showGlobalSearch = false
+    public var chatCreationIntent: ChatCreationIntent?
     public var showModelPicker = false
     public var showEffortPicker = false
     /// Per-session model override. When set, this model is used instead of the global default.
@@ -391,7 +392,7 @@ public final class WindowState {
     public var sessionPermissionMode: PermissionMode?
     /// Per-session plan-mode toggle. Orthogonal to `sessionPermissionMode` — when true,
     /// the CLI is launched with `--permission-mode plan` regardless of the dropdown selection.
-    /// Toggled by Shift+Tab and the Plan pill in the input bar.
+    /// Native backend plan mode used by task runs and mobile sessions.
     public var sessionPlanMode: Bool = false
     public var requestInputFocus = false
     public var isInitialized = false

@@ -23,7 +23,7 @@ public struct IMETextView: NSViewRepresentable {
     var onUpArrow: () -> Bool
     var onDownArrow: () -> Bool
     var onTab: () -> Bool
-    var onShiftTab: () -> Void
+    var onShiftTab: (() -> Void)?
     var onEscape: () -> Bool
     var onPasteCommandV: () -> Bool
     var onImageChipTap: ((Int) -> Void)? = nil
@@ -35,6 +35,8 @@ public struct IMETextView: NSViewRepresentable {
     /// Thumbnail for the `[ImageN]` chip with the given 1-based index. When it
     /// returns an image, the chip draws it in place of its leading bracket.
     var chipThumbnail: (@MainActor (Int) -> NSImage?)? = nil
+    /// Editors with file chips can supply their token grammar. The first capture is the chip's index.
+    var chipPattern: NSRegularExpression?
 
     public init(
         text: Binding<String>,
@@ -48,14 +50,15 @@ public struct IMETextView: NSViewRepresentable {
         onUpArrow: @escaping () -> Bool = { false },
         onDownArrow: @escaping () -> Bool = { false },
         onTab: @escaping () -> Bool = { false },
-        onShiftTab: @escaping () -> Void = {},
+        onShiftTab: (() -> Void)? = nil,
         onEscape: @escaping () -> Bool = { false },
         onPasteCommandV: @escaping () -> Bool = { false },
         onImageChipTap: ((Int) -> Void)? = nil,
         isEditable: Bool = true,
         accessibilityIdentifier: String = "chat-input-text-view",
         onTextViewReady: ((NSTextView) -> Void)? = nil,
-        chipThumbnail: (@MainActor (Int) -> NSImage?)? = nil
+        chipThumbnail: (@MainActor (Int) -> NSImage?)? = nil,
+        chipPattern: NSRegularExpression? = nil
     ) {
         self._text = text
         self._isFocused = isFocused
@@ -76,6 +79,7 @@ public struct IMETextView: NSViewRepresentable {
         self.accessibilityIdentifier = accessibilityIdentifier
         self.onTextViewReady = onTextViewReady
         self.chipThumbnail = chipThumbnail
+        self.chipPattern = chipPattern
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -180,7 +184,10 @@ public struct IMETextView: NSViewRepresentable {
         textView.onEscape = onEscape
         textView.onPasteCommandV = onPasteCommandV
         textView.onImageChipTap = onImageChipTap
-        (textView.layoutManager as? ChipLayoutManager)?.thumbnail = chipThumbnail
+        if let layout = textView.layoutManager as? ChipLayoutManager {
+            layout.thumbnail = chipThumbnail
+            layout.pattern = chipPattern ?? chipRegex
+        }
         textView.onMarkedTextChange = { active in
             if hasMarkedText != active {
                 hasMarkedText = active
@@ -224,22 +231,21 @@ nonisolated private let chipRegex: NSRegularExpression = {
     try! NSRegularExpression(pattern: #"\[Image(\d+)\]"#)
 }()
 
-nonisolated private func enumerateChipRanges(in text: String, _ body: (NSRange, Int) -> Void) {
-    let nsText = text as NSString
-    let fullRange = NSRange(location: 0, length: nsText.length)
-    chipRegex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
-        guard let m = match, m.numberOfRanges >= 2 else { return }
-        let numRange = m.range(at: 1)
-        guard let idx = Int(nsText.substring(with: numRange)) else { return }
-        body(m.range, idx)
-    }
-}
-
 // MARK: - Chip Layout Manager
 
 fileprivate final class ChipLayoutManager: NSLayoutManager, NSLayoutManagerDelegate, @unchecked Sendable {
     /// Set from the main actor; AppKit calls layout and drawing on the main thread.
     nonisolated(unsafe) var thumbnail: (@MainActor (Int) -> NSImage?)?
+    nonisolated(unsafe) var pattern = chipRegex
+
+    nonisolated func enumerateChipRanges(in text: String, _ body: (NSRange, Int) -> Void) {
+        let nsText = text as NSString
+        pattern.enumerateMatches(in: text, range: NSRange(location: 0, length: nsText.length)) { match, _, _ in
+            guard let match, match.numberOfRanges >= 2, match.range(at: 1).location != NSNotFound,
+                  let index = Int(nsText.substring(with: match.range(at: 1))) else { return }
+            body(match.range, index)
+        }
+    }
 
     nonisolated override init() {
         super.init()
@@ -392,7 +398,7 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
     var onUpArrow: () -> Bool = { false }
     var onDownArrow: () -> Bool = { false }
     var onTab: () -> Bool = { false }
-    var onShiftTab: () -> Void = {}
+    var onShiftTab: (() -> Void)?
     var onEscape: () -> Bool = { false }
     var onPasteCommandV: () -> Bool = { false }
     var onImageChipTap: ((Int) -> Void)?
@@ -404,7 +410,7 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
         onUpArrow = { false }
         onDownArrow = { false }
         onTab = { false }
-        onShiftTab = {}
+        onShiftTab = nil
         onEscape = { false }
         onPasteCommandV = { false }
         onImageChipTap = nil
@@ -465,9 +471,7 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
             insertShiftReturnNewline()
             return
         }
-        // Shift+Tab: NSTextView routes this to insertBacktab: which we intercept here so it
-        // can never disturb the input text, regardless of marked-text state.
-        if event.keyCode == 48, event.modifierFlags.contains(.shift) {
+        if event.keyCode == 48, event.modifierFlags.contains(.shift), let onShiftTab {
             onShiftTab()
             return
         }
@@ -524,12 +528,12 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
     override func resetCursorRects() {
         super.resetCursorRects()
         guard onImageChipTap != nil,
-              let layoutManager = layoutManager,
+              let layoutManager = layoutManager as? ChipLayoutManager,
               let container = textContainer,
               let storage = textStorage else { return }
 
         let origin = textContainerOrigin
-        enumerateChipRanges(in: storage.string) { charRange, _ in
+        layoutManager.enumerateChipRanges(in: storage.string) { charRange, _ in
             let glyphRange = layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
             layoutManager.enumerateEnclosingRects(
                 forGlyphRange: glyphRange,
@@ -543,7 +547,7 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
     }
 
     private func imageChipIndex(at locationInWindow: NSPoint) -> Int? {
-        guard let layoutManager = layoutManager,
+        guard let layoutManager = layoutManager as? ChipLayoutManager,
               let container = textContainer,
               let storage = textStorage else { return nil }
         let pointInView = convert(locationInWindow, from: nil)
@@ -567,7 +571,7 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
         let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
 
         var matched: Int?
-        enumerateChipRanges(in: storage.string) { charRange, idx in
+        layoutManager.enumerateChipRanges(in: storage.string) { charRange, idx in
             if NSLocationInRange(charIndex, charRange) {
                 matched = idx
             }
@@ -579,12 +583,12 @@ fileprivate final class _IMETextView: UndoIsolatedTextView {
     /// Background drawing is handled by ChipLayoutManager.drawBackground and refreshes
     /// automatically whenever the storage is edited.
     func refreshChipAppearance() {
-        guard let layoutManager = layoutManager, let storage = textStorage else { return }
+        guard let layoutManager = layoutManager as? ChipLayoutManager, let storage = textStorage else { return }
         let nsText = storage.string as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: fullRange)
         let chipTextColor = NSColor(ClaudeTheme.accent)
-        enumerateChipRanges(in: storage.string) { charRange, _ in
+        layoutManager.enumerateChipRanges(in: storage.string) { charRange, _ in
             layoutManager.addTemporaryAttribute(
                 .foregroundColor,
                 value: chipTextColor,

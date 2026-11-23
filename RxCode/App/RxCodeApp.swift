@@ -30,10 +30,8 @@ extension FocusedValues {
 @main
 struct RxCodeApp: App {
     @State private var workspaceManager: WorkspaceManager
-    @FocusedValue(\.startNewChat) private var startNewChat
-    @FocusedValue(\.showCacheStorage) private var showCacheStorage
-    @FocusedValue(\.chooseWindowPreview) private var chooseWindowPreview
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
+
     private let updateService = UpdateService.shared
 
     init() {
@@ -83,23 +81,7 @@ struct RxCodeApp: App {
         #endif
         .defaultLaunchBehavior(.presented)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("New Chat") {
-                    startNewChat?()
-                }
-                .keyboardShortcut("n", modifiers: .command)
-            }
-            CommandGroup(after: .appInfo) {
-                Button("Check for Updates...") {
-                    updateService.checkForUpdates()
-                }
-                Button("Clear Cached Data…") { showCacheStorage?() }
-                    .disabled(showCacheStorage == nil)
-            }
-            CommandGroup(after: .toolbar) {
-                Button("Preview a Window…") { chooseWindowPreview?() }
-                    .disabled(chooseWindowPreview == nil)
-            }
+            WindowActionCommands(updateService: updateService)
             CommandMenu("Theme") {
                 ForEach(AppTheme.allCases) { theme in
                     Button {
@@ -279,6 +261,34 @@ struct RxCodeApp: App {
     }
 }
 
+/// Focus changes update the menu commands without rebuilding the app's window scenes.
+private struct WindowActionCommands: Commands {
+    let updateService: UpdateService
+    @FocusedValue(\.startNewChat) private var startNewChat
+    @FocusedValue(\.showCacheStorage) private var showCacheStorage
+    @FocusedValue(\.windowPreviewCapture) private var windowPreviewCapture
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Chat") {
+                startNewChat?()
+            }
+            .keyboardShortcut("n", modifiers: .command)
+        }
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates...") {
+                updateService.checkForUpdates()
+            }
+            Button("Clear Cached Data…") { showCacheStorage?() }
+                .disabled(showCacheStorage == nil)
+        }
+        CommandGroup(after: .toolbar) {
+            Button("Preview a Window…") { windowPreviewCapture?.chooseWindow() }
+                .disabled(windowPreviewCapture == nil)
+        }
+    }
+}
+
 // MARK: - Main Window Root
 
 struct MainWindowRoot: View {
@@ -453,10 +463,24 @@ struct SettingsWindowRoot: View {
 
     var body: some View {
         SettingsView()
+            .background(SettingsWindowToolbar())
             .containerBackground(ClaudeTheme.background, for: .window)
             .environment(appState)
             .environment(windowState)
     }
+}
+
+/// SwiftUI's Settings scene installs a preferences-style toolbar on its NSWindow.
+private struct SettingsWindowToolbar: NSViewRepresentable {
+    final class Anchor: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.toolbarStyle = .unified
+        }
+    }
+
+    func makeNSView(context: Context) -> Anchor { Anchor() }
+    func updateNSView(_ view: Anchor, context: Context) {}
 }
 
 // MARK: - Automation Commands

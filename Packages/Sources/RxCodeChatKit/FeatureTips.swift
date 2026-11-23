@@ -8,7 +8,7 @@ enum ChatFeatureTips {
         }
 
         var message: Text? {
-            Text("Use the Add menu or Shift-Tab to ask the agent for a read-only plan before edits begin.")
+            Text("Choose Plan Mode in the Add menu to draft and review an implementation plan.")
         }
 
         var image: Image? {

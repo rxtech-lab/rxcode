@@ -60,7 +60,8 @@ actor CacheStorageService {
 
     func saveBranchStatus(_ snapshot: BranchStatusSnapshot, workspaceID: String) throws {
         let url = branchStatusURL(workspaceID: workspaceID)
-        guard snapshot.accountID != nil, !snapshot.byBranch.isEmpty || !snapshot.inferredBySession.isEmpty else {
+        guard snapshot.accountID != nil,
+              !snapshot.byBranch.isEmpty || !snapshot.inferredBySession.isEmpty || snapshot.threadHistory != nil else {
             if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) }
             return
         }

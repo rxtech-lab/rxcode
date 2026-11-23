@@ -315,7 +315,7 @@ struct MobileSettingsTab: View {
             .buttonStyle(.borderless)
         }
         .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder

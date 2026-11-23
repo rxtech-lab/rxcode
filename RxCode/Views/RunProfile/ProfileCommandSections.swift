@@ -149,7 +149,7 @@ struct ProfileCommandSections: View {
                             xcode.wrappedValue = c
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(ClaudeTheme.textTertiary)
                         }
                         .buttonStyle(.plain)
                         .help("Clear destination — pick again from the toolbar")

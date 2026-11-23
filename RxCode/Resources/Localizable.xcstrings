@@ -609,6 +609,9 @@
     "%@ is pushed but has no pull request. Create one with an agent-drafted title and description." : {
 
     },
+    "%@ is responding" : {
+
+    },
     "%@ isn't backed up to Flowcy" : {
       "localizations" : {
         "ko" : {
@@ -2027,6 +2030,9 @@
     "A forecast needs two completed days of activity and at least three isolated cost measurements for each active model. Partial days and overlapping task costs are excluded." : {
 
     },
+    "A fresh chat starts with this plan." : {
+
+    },
     "A workflow failed" : {
       "comment" : "CI failure notification body when the workflow name is unknown.",
       "localizations" : {
@@ -2519,6 +2525,9 @@
         }
       }
     },
+    "Add a workspace project to create a board item." : {
+
+    },
     "Add an Agent Client Protocol client" : {
       "localizations" : {
         "ko" : {
@@ -2553,6 +2562,9 @@
           }
         }
       }
+    },
+    "Add Comment" : {
+
     },
     "Add Comment…" : {
 
@@ -2936,6 +2948,9 @@
           }
         }
       }
+    },
+    "Add Reviewer…" : {
+
     },
     "Add Scheduled Task?" : {
       "localizations" : {
@@ -4162,6 +4177,9 @@
         }
       }
     },
+    "Ask Host" : {
+
+    },
     "Ask the agent about this run…" : {
 
     },
@@ -4734,6 +4752,9 @@
           }
         }
       }
+    },
+    "Awaiting the Draft" : {
+
     },
     "Back" : {
       "localizations" : {
@@ -5533,6 +5554,9 @@
           }
         }
       }
+    },
+    "Chat Unavailable" : {
+
     },
     "Chat with any agent" : {
 
@@ -6905,10 +6929,19 @@
         }
       }
     },
+    "Comment" : {
+
+    },
+    "Comment (optional)" : {
+
+    },
     "Comment on Preview" : {
 
     },
     "Comment on the visible preview" : {
+
+    },
+    "Comments" : {
 
     },
     "Commit" : {
@@ -7866,6 +7899,9 @@
     "Couldn't Build Voice Settings" : {
 
     },
+    "Couldn’t Complete Action" : {
+
+    },
     "Couldn't Create Pull Request" : {
       "localizations" : {
         "ko" : {
@@ -8002,6 +8038,9 @@
         }
       }
     },
+    "Create a plan, task, or story from this chat" : {
+
+    },
     "Create a project on this Mac or in the cloud" : {
       "localizations" : {
         "ko" : {
@@ -8089,6 +8128,9 @@
     "Create Branch Here…" : {
 
     },
+    "Create from Chat" : {
+
+    },
     "Create new branch…" : {
       "localizations" : {
         "ko" : {
@@ -8125,6 +8167,9 @@
 
     },
     "Create Pet Look" : {
+
+    },
+    "Create Plan from Chat…" : {
 
     },
     "Create PR" : {
@@ -8259,6 +8304,12 @@
         }
       }
     },
+    "Create Story from Chat" : {
+
+    },
+    "Create Story from Chat…" : {
+
+    },
     "Create Story with AI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8305,6 +8356,9 @@
         }
       }
     },
+    "Create Task from Chat" : {
+
+    },
     "Create Task from Chat with AI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8314,6 +8368,9 @@
           }
         }
       }
+    },
+    "Create Task from Chat…" : {
+
     },
     "Create Task with AI" : {
       "localizations" : {
@@ -8866,6 +8923,18 @@
           }
         }
       }
+    },
+    "Debate" : {
+
+    },
+    "Debate host" : {
+
+    },
+    "Debate Room" : {
+
+    },
+    "Debate room width" : {
+
     },
     "Debug" : {
       "localizations" : {
@@ -10903,6 +10972,9 @@
     "Edit Pet Look" : {
 
     },
+    "Edit Plan" : {
+
+    },
     "Edit Relay Server" : {
       "localizations" : {
         "ko" : {
@@ -12668,6 +12740,9 @@
     "Follow Codex" : {
 
     },
+    "Follow Live Plan" : {
+
+    },
     "Follow-up" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13975,6 +14050,24 @@
           }
         }
       }
+    },
+    "Implement version %lld" : {
+
+    },
+    "Implement…" : {
+
+    },
+    "Implementation" : {
+
+    },
+    "Implementation Chat" : {
+
+    },
+    "Implementation plan" : {
+
+    },
+    "Implementation Plan" : {
+
     },
     "Import" : {
 
@@ -16605,6 +16698,9 @@
     "Message the agent" : {
 
     },
+    "Message the debate…" : {
+
+    },
     "Messages" : {
       "localizations" : {
         "en" : {
@@ -17841,6 +17937,9 @@
         }
       }
     },
+    "No Chat Messages" : {
+
+    },
     "No chats yet" : {
       "localizations" : {
         "ko" : {
@@ -17879,6 +17978,9 @@
           }
         }
       }
+    },
+    "No comments yet." : {
+
     },
     "No commits yet" : {
 
@@ -19673,6 +19775,9 @@
         }
       }
     },
+    "Open %@ in the plan pane" : {
+
+    },
     "Open a new chat with this model selected" : {
 
     },
@@ -19738,6 +19843,9 @@
 
     },
     "Open Git Window" : {
+
+    },
+    "Open Implementation" : {
 
     },
     "Open in Default App" : {
@@ -20178,6 +20286,9 @@
     "Opens on GitHub" : {
 
     },
+    "Opens this version in the plan pane" : {
+
+    },
     "Optional" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20264,6 +20375,9 @@
           }
         }
       }
+    },
+    "Original text" : {
+
     },
     "Original: %@" : {
 
@@ -20968,6 +21082,9 @@
         }
       }
     },
+    "Plan Mode" : {
+
+    },
     "Plan recurring agent prompts for a project and manage them from one place." : {
       "localizations" : {
         "zh-Hans" : {
@@ -20977,6 +21094,15 @@
           }
         }
       }
+    },
+    "Plan versions" : {
+
+    },
+    "Planning request" : {
+
+    },
+    "Planning workspace" : {
+
     },
     "Plans without a separate 5-hour limit show only their 7-day line." : {
       "extractionState" : "stale",
@@ -21990,6 +22116,9 @@
     "Read your browsing activity" : {
 
     },
+    "Reading chat…" : {
+
+    },
     "Reading README…" : {
 
     },
@@ -22780,6 +22909,9 @@
     "Remove Remote…" : {
 
     },
+    "Remove Reviewer" : {
+
+    },
     "Remove saved credentials for this server?" : {
 
     },
@@ -23170,6 +23302,9 @@
     "Request (context only)" : {
 
     },
+    "Request Revision" : {
+
+    },
     "Required for requested window focus, clicks, scrolling and typing. Enable this copy of RxCode in System Settings. If authorization does not update, fully quit and reopen the same app. Screen Recording is a separate permission." : {
 
     },
@@ -23370,6 +23505,9 @@
         }
       }
     },
+    "Resume Debate" : {
+
+    },
     "Resume Download" : {
 
     },
@@ -23525,6 +23663,9 @@
         }
       }
     },
+    "Review instructions" : {
+
+    },
     "Review model" : {
       "localizations" : {
         "ko" : {
@@ -23596,6 +23737,12 @@
         }
       }
     },
+    "Reviewer %lld" : {
+
+    },
+    "Reviewers" : {
+
+    },
     "Revise" : {
       "localizations" : {
         "zh-Hans" : {
@@ -23606,7 +23753,16 @@
         }
       }
     },
+    "Revise Plan" : {
+
+    },
     "Revise with Prompt…" : {
+
+    },
+    "Revise…" : {
+
+    },
+    "Revision" : {
 
     },
     "Reword" : {
@@ -24187,6 +24343,12 @@
     "Save & Use" : {
 
     },
+    "Save Comment" : {
+
+    },
+    "Save Reviewer" : {
+
+    },
     "Save Server" : {
       "localizations" : {
         "ko" : {
@@ -24204,6 +24366,9 @@
       }
     },
     "Save the connection and refresh its usage to preview this card." : {
+
+    },
+    "Save Version" : {
 
     },
     "Saved" : {
@@ -25331,6 +25496,9 @@
     "Send a follow-up to this run's thread" : {
 
     },
+    "Send a message in this chat to create a draft from it." : {
+
+    },
     "Send a prompt with coding analytics enabled to record and rate this session." : {
 
     },
@@ -25462,6 +25630,9 @@
       }
     },
     "Send to Chat" : {
+
+    },
+    "Send to the next speaker" : {
 
     },
     "Sends a system notification while RxCode is in the background." : {
@@ -27187,6 +27358,9 @@
         }
       }
     },
+    "Source chat" : {
+
+    },
     "Source control" : {
 
     },
@@ -27283,6 +27457,12 @@
           }
         }
       }
+    },
+    "Start Debate" : {
+
+    },
+    "Start Implementation" : {
+
     },
     "Start New Chat" : {
       "localizations" : {
@@ -27486,6 +27666,9 @@
           }
         }
       }
+    },
+    "Stop Debate" : {
+
     },
     "Stop loading" : {
 
@@ -28780,6 +28963,12 @@
     "The pet only takes a single photo when you ask. It can photograph its display, another display, or a visible window. macOS may require reopening RxCode after access changes." : {
 
     },
+    "The planner drafts first. The host sets a review agenda, then resolves the reviewers’ feedback into a final plan." : {
+
+    },
+    "The planner’s response will appear here." : {
+
+    },
     "The preview uses the latest saved usage. Widget layouts adapt to the widget size." : {
 
     },
@@ -29334,6 +29523,9 @@
       }
     },
     "This month" : {
+
+    },
+    "This passage was added." : {
 
     },
     "This profile has no extensions." : {
@@ -30545,6 +30737,9 @@
         }
       }
     },
+    "Use planner as host" : {
+
+    },
     "Use Shared With to add this story to other projects" : {
       "localizations" : {
         "zh-Hans" : {
@@ -30819,6 +31014,9 @@
           }
         }
       }
+    },
+    "v%lld" : {
+
     },
     "v1.0.0" : {
 
@@ -31134,6 +31332,9 @@
     "View or generate today's workspace daily report" : {
 
     },
+    "View Plan" : {
+
+    },
     "View PR" : {
       "localizations" : {
         "ko" : {
@@ -31397,6 +31598,15 @@
           }
         }
       }
+    },
+    "What should the host change?" : {
+
+    },
+    "What should the plan cover?" : {
+
+    },
+    "What should this agent review?" : {
+
     },
     "What you type becomes the description; the agent writes the title." : {
       "localizations" : {

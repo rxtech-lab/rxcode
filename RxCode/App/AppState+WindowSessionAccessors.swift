@@ -102,8 +102,8 @@ extension AppState {
     /// Returns the set of session IDs currently streaming in the background of this window.
     func backgroundStreamingSessionIds(in window: WindowState) -> Set<String> {
         let currentKey = window.currentSessionId ?? window.newSessionKey
-        return Set(sessionStates.compactMap { key, state in
-            (state.isStreaming && key != currentKey) ? key : nil
+        return Set(sessionActivity.compactMap { key, activity in
+            (activity.isStreaming && key != currentKey) ? key : nil
         })
     }
 

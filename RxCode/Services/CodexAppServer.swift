@@ -209,6 +209,7 @@ actor CodexAppServer {
         model: String?,
         permissionMode: PermissionMode,
         planMode: Bool,
+        isEphemeral: Bool = false,
         mcpConfigOverrides: [String] = [],
         permissionServer: PermissionServer
     ) -> AsyncStream<StreamEvent> {
@@ -226,6 +227,7 @@ actor CodexAppServer {
                     model: model,
                     permissionMode: permissionMode,
                     planMode: planMode,
+                    isEphemeral: isEphemeral,
                     mcpConfigOverrides: mcpConfigOverrides,
                     permissionServer: permissionServer,
                     continuation: continuation
@@ -345,6 +347,7 @@ extension CodexAppServer: AgentBackend {
             model: request.model,
             permissionMode: request.permissionMode,
             planMode: request.planMode,
+            isEphemeral: request.isEphemeral,
             mcpConfigOverrides: request.mcpCodexOverrides + Self.effortOverrides(request.effort),
             permissionServer: permissionServer
         )

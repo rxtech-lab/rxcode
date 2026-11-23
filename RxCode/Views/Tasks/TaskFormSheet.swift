@@ -122,9 +122,17 @@ struct TaskFormSheet: View {
     /// nothing left to draft.
     var isComposing: Bool { !isExistingRecord && creationMode == .ai }
 
+    private var isReadOnly: Bool {
+        guard isExistingRecord else { return false }
+        switch payload {
+        case .task(let original, _): return !appState.canEditCard(original)
+        case .story(let original, _): return !appState.canEditCard(original)
+        }
+    }
+
     var canSave: Bool {
         let title = isStory ? story.title : task.title
-        return !isAutoFilling && !isGeneratingTitle && !isGeneratingDraft
+        return !isReadOnly && !isAutoFilling && !isGeneratingTitle && !isGeneratingDraft
             && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (!isStory || storyTaskDrafts.allSatisfy {
                 !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -272,44 +280,47 @@ struct TaskFormSheet: View {
                 profiles: field(\.assigneeProfiles, \.assigneeProfiles),
                 members: appState.cardAssigneeMembers(projectID: currentProjectId)
             )
-            .disabled(isExistingRecord && (isStory ? !appState.canEditCard(story) : !appState.canEditCard(task)))
         }
     }
 
     var detailsForm: some View {
         Form {
             detailsSection
+                .disabled(isReadOnly)
             if isStory {
                 storyTasksSection
             } else if isExistingRecord && !linkedChildren.isEmpty {
                 linkedTasksSection
             }
-            assigneesSection
-            classificationSection
-            scheduleSection
-            tagsSection
-            if !isStory {
-                if appState.projects.first(where: { $0.id == currentProjectId })?.isCloud == true {
-                    Section("Assigned Mac") {
-                        Picker("Laptop", selection: $task.assignedDeviceId) {
-                            Text("Unassigned").tag(String?.none)
-                            ForEach(cloudDevices) { Text($0.name).tag(Optional($0.id)) }
-                            if let id = task.assignedDeviceId, !cloudDevices.contains(where: { $0.id == id }) {
-                                Text("Previously assigned Mac").tag(Optional(id))
+            Group {
+                assigneesSection
+                classificationSection
+                scheduleSection
+                tagsSection
+                if !isStory {
+                    if appState.projects.first(where: { $0.id == currentProjectId })?.isCloud == true {
+                        Section("Assigned Mac") {
+                            Picker("Laptop", selection: $task.assignedDeviceId) {
+                                Text("Unassigned").tag(String?.none)
+                                ForEach(cloudDevices) { Text($0.name).tag(Optional($0.id)) }
+                                if let id = task.assignedDeviceId, !cloudDevices.contains(where: { $0.id == id }) {
+                                    Text("Previously assigned Mac").tag(Optional(id))
+                                }
                             }
+                            if let cloudDeviceError { Text(cloudDeviceError).foregroundStyle(ClaudeTheme.statusError) }
                         }
-                        if let cloudDeviceError { Text(cloudDeviceError).foregroundStyle(ClaudeTheme.statusError) }
+                        .task {
+                            do { cloudDevices = try await appState.projectCloud.listDevices() }
+                            catch { cloudDeviceError = error.localizedDescription }
+                        }
                     }
-                    .task {
-                        do { cloudDevices = try await appState.projectCloud.listDevices() }
-                        catch { cloudDeviceError = error.localizedDescription }
-                    }
+                    agentSection
+                    attachmentsSection
                 }
-                agentSection
-                attachmentsSection
             }
+            .disabled(isReadOnly)
         }
-        .formStyle(TaskEditorFormStyle())
+        .formStyle(.grouped)
         .sheet(item: $fieldsSheet) { field in
             TaskFieldsSheet(projectId: currentProjectId, initialField: field)
                 .environment(appState)
@@ -341,13 +352,14 @@ struct TaskFormSheet: View {
     // MARK: - Footer
 
     var headerTitle: String {
+        if isReadOnly { return isStory ? "Story Details" : "Task Details" }
         if isExistingRecord { return isStory ? "Edit Story" : "Edit Task" }
         return isStory ? "New Story" : "New Task"
     }
 
     var footer: some View {
         HStack {
-            if isExistingRecord {
+            if isExistingRecord && !isReadOnly {
                 Button("Delete", role: .destructive) {
                     pendingDeletion = isStory ? .story(story) : .task(task)
                 }
@@ -366,12 +378,14 @@ struct TaskFormSheet: View {
                 .accessibilityIdentifier("task-form-jump-to-project")
             }
             Spacer()
-            Button("Cancel") { requestExit(.cancel) }
+            Button(isReadOnly ? "Done" : "Cancel") { requestExit(.cancel) }
                 .keyboardShortcut(.cancelAction)
-            Button("Save") { requestExit(.save) }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canSave)
-                .keyboardShortcut(.defaultAction)
+            if !isReadOnly {
+                Button("Save") { requestExit(.save) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSave)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -423,6 +437,8 @@ struct TaskFormSheet: View {
                 // typing a space looked like it did nothing. Leading alignment
                 // shows it immediately.
                 .multilineTextAlignment(.leading)
+                .accessibilityLabel("Title")
+                .accessibilityIdentifier("task-form-title")
 
                 Button(action: generateTitle) {
                     if isGeneratingTitle {
@@ -438,13 +454,17 @@ struct TaskFormSheet: View {
                 .accessibilityIdentifier("task-form-generate-title")
             }
 
-            MarkdownDescriptionEditor(
-                text: isStory ? $story.details : $task.details,
-                // Stories keep no attachment list, so a file dropped on a story
-                // description is recorded as a Markdown link only.
-                attachments: isStory ? nil : $task.attachments,
-                placeholder: String(localized: "Add more detail for the agent")
-            )
+            if isReadOnly {
+                MarkdownContentView(text: currentDetails)
+            } else {
+                MarkdownDescriptionEditor(
+                    text: isStory ? $story.details : $task.details,
+                    // Stories keep no attachment list, so a file dropped on a story
+                    // description is recorded as a Markdown link only.
+                    attachments: isStory ? nil : $task.attachments,
+                    placeholder: String(localized: "Add more detail for the agent")
+                )
+            }
 
             Picker("Project", selection: projectBinding) {
                 ForEach(appState.projects) { project in
@@ -658,16 +678,5 @@ struct TaskFormSheet: View {
 
     var permissionBinding: Binding<PermissionMode?> {
         Binding(get: { task.agent.permissionMode }, set: { task.agent.permissionMode = $0 })
-    }
-}
-
-struct TaskEditorFormStyle: FormStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Form {
-            configuration.content.appThemeForeground()
-        }
-        .formStyle(.grouped)
-        // macOS draws grouped form separators with the form's tertiary foreground.
-        .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.border)
     }
 }

@@ -366,11 +366,11 @@ struct AutopilotSettingsTab: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
     }
 
@@ -436,11 +436,11 @@ struct AutopilotSettingsTab: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(ClaudeTheme.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 1)
             )
         }
     }
@@ -464,11 +464,11 @@ struct AutopilotSettingsTab: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
     }
 

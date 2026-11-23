@@ -170,7 +170,7 @@ struct MCPServerEditorSheet: View {
                     .frame(minHeight: 70)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                            .strokeBorder(ClaudeTheme.border, lineWidth: 1)
                     )
                     .onChange(of: argsText) { _, newValue in
                         spec.args = newValue

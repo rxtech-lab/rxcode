@@ -14,7 +14,7 @@ extension TaskFormSheet {
             case .review: reviewSections
             }
         }
-        .formStyle(TaskEditorFormStyle())
+        .formStyle(.grouped)
         .sheet(item: $editingStoryTaskDraft) { draft in
             StoryTaskDraftSheet(
                 draft: draft,

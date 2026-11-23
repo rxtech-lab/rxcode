@@ -138,7 +138,7 @@ struct ACPSignInSheet: View {
                             .font(.system(size: ClaudeTheme.size(10), weight: .medium))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
-                            .background(Color(NSColor.controlBackgroundColor))
+                            .background(ClaudeTheme.surfacePrimary)
                             .clipShape(Capsule())
                             .foregroundStyle(.secondary)
                     }
@@ -155,7 +155,7 @@ struct ACPSignInSheet: View {
             .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(isSelected ? Color.accentColor : Color(NSColor.separatorColor), lineWidth: 1)
+                    .strokeBorder(isSelected ? ClaudeTheme.accent : ClaudeTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

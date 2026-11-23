@@ -225,6 +225,7 @@ struct ProjectChatRow: View {
     }
 
     var body: some View {
+        let title = displayTitle
         HStack(spacing: 6) {
             if let disclosure = reviewDisclosure {
                 reviewDisclosureControl(disclosure)
@@ -241,7 +242,7 @@ struct ProjectChatRow: View {
             // The title takes every point the accessories don't use, so it only
             // truncates against what is actually on screen.
             HStack(spacing: 6) {
-                Text(displayTitle)
+                Text(title)
                     .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
                     .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                     .lineLimit(1)
@@ -282,7 +283,7 @@ struct ProjectChatRow: View {
             isHovered = hovering
         }
         .task(id: changeTotalsLoadID) { await loadChangeTotals() }
-        .help(taskCompletionChip.map { "\(displayTitle) — \($0.text)" } ?? displayTitle)
+        .help(taskCompletionChip.map { "\(title) — \($0.text)" } ?? title)
         .onTapGesture { onSelect() }
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
         .contextMenu { rowMenu }

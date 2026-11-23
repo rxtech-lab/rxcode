@@ -135,7 +135,7 @@ extension RunProfileDetailForm {
                 HStack {
                     Spacer()
                     Text("No environment variables defined")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                         .font(.system(size: 12))
                     Spacer()
                 }

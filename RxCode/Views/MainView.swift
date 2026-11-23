@@ -271,9 +271,13 @@ struct MainView: View {
                     Image(systemName: "magnifyingglass")
                 }
                 .help(String(localized: "Search Threads and Docs (⌘K)"))
+                .accessibilityIdentifier("toolbar-global-search")
                 .popoverTip(RxCodeTips.GlobalSearchTip(), arrowEdge: .top)
+            }
 
+            ToolbarItem(placement: .navigation) {
                 ThreadTitlePopoverButton(title: navigationTitleText)
+                    .accessibilityIdentifier("toolbar-navigation-title")
             }
         }
     }

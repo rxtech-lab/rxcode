@@ -12,6 +12,7 @@ nonisolated struct ThreadPullRequestRevision: Decodable, Sendable {
     let baseSha: String?
     let headSha: String?
     let updatedAt: FlexibleTimestamp
+    var headRef: String?
 }
 
 /// Finds PRs that contain a thread's edits when its recorded checkout has no PR.

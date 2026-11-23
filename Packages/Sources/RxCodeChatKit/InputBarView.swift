@@ -5,7 +5,12 @@ import RxCodeCore
 
 #if os(macOS)
 
+public extension EnvironmentValues {
+    @Entry var offersCodingPlan = false
+}
+
 struct InputBarView<Accessory: View, TopAccessory: View>: View {
+    @Environment(\.offersCodingPlan) private var offersCodingPlan
     @Environment(ChatBridge.self) private var environmentChatBridge: ChatBridge?
     @Environment(WindowState.self) private var environmentWindowState: WindowState?
     @State var isInputFocused: Bool = false
@@ -261,8 +266,13 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
             Divider()
 
-            Toggle(isOn: planModeBinding) {
-                Label("Plan mode", systemImage: "checklist")
+            if offersCodingPlan {
+                Button {
+                    windowState.chatCreationIntent = ChatCreationIntent(.plan, sessionID: windowState.currentSessionId, goal: windowState.inputText)
+                } label: {
+                    Label("Plan Mode…", systemImage: "list.bullet.rectangle")
+                }
+                .accessibilityIdentifier("composer-plan-mode")
             }
         } label: {
             Image(systemName: "plus")
@@ -274,7 +284,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(windowState.sessionPlanMode ? "Plan mode is on — Add menu" : "Add — attach file or toggle plan mode")
+        .help("Add")
         .accessibilityIdentifier("composer-add-menu")
         .popoverTip(ChatFeatureTips.PlanModeTip(), arrowEdge: .top)
         .fileImporter(
@@ -381,15 +391,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         case .decision: String(localized: "Ask a question to decide…", bundle: .module)
         case .chat: String(localized: "Type a message...", bundle: .module)
         }
-    }
-
-    /// Mirrors `windowState.sessionPlanMode` into a Binding so the Menu's `Toggle`
-    /// drives `chatBridge.togglePlanMode()` — the same path used by Shift+Tab.
-    private var planModeBinding: Binding<Bool> {
-        Binding(
-            get: { windowState.sessionPlanMode },
-            set: { _ in Task { await chatBridge.togglePlanMode() } }
-        )
     }
 
     // MARK: - Slash / At Queries

@@ -20,14 +20,18 @@ extension CodexAppServer {
         return params
     }
 
-    nonisolated func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool, ideInstructions: String?) -> [String: JSONValue] {
+    nonisolated func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool, ideInstructions: String?, isEphemeral: Bool = false) -> [String: JSONValue] {
         var params: [String: JSONValue] = ["cwd": .string(cwd)]
         if let threadId { params["threadId"] = .string(threadId) }
         params["approvalPolicy"] = .string(Self.codexApprovalPolicy(permissionMode: permissionMode, planMode: planMode))
         params["sandbox"] = .string(Self.codexSandboxMode(permissionMode: permissionMode, planMode: planMode))
+        if isEphemeral {
+            params["ephemeral"] = .bool(true)
+            params["approvalPolicy"] = .string("never")
+        }
         var instructions: [String] = []
         if let ideInstructions, !ideInstructions.isEmpty { instructions.append(ideInstructions) }
-        if planMode { instructions.append(Self.planModeInstructions) }
+        if planMode && !isEphemeral { instructions.append(Self.planModeInstructions) }
         if !instructions.isEmpty {
             params["developerInstructions"] = .string(instructions.joined(separator: "\n\n"))
         }

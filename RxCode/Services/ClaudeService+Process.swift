@@ -25,7 +25,8 @@ extension ClaudeCodeServer {
         hookSettingsPath: String? = nil,
         mcpConfigPath: String? = nil,
         extraSystemPrompt: String? = nil,
-        permissionMode: PermissionMode = .default
+        permissionMode: PermissionMode = .default,
+        isEphemeral: Bool = false
     ) -> AsyncStream<StreamEvent> {
         let stdin = Pipe()
         let stdout = Pipe()
@@ -57,6 +58,7 @@ extension ClaudeCodeServer {
                         mcpConfigPath: mcpConfigPath,
                         extraSystemPrompt: extraSystemPrompt,
                         permissionMode: permissionMode,
+                        isEphemeral: isEphemeral,
                         stdinPipe: stdin,
                         stdoutPipe: stdout,
                         stderrPipe: stderr,
@@ -358,6 +360,7 @@ extension ClaudeCodeServer {
         mcpConfigPath: String?,
         extraSystemPrompt: String? = nil,
         permissionMode: PermissionMode = .default,
+        isEphemeral: Bool = false,
         stdinPipe: Pipe,
         stdoutPipe: Pipe,
         stderrPipe: Pipe,
@@ -377,7 +380,8 @@ extension ClaudeCodeServer {
             hookSettingsPath: hookSettingsPath,
             mcpConfigPath: mcpConfigPath,
             extraSystemPrompt: extraSystemPrompt,
-            permissionMode: permissionMode
+            permissionMode: permissionMode,
+            isEphemeral: isEphemeral
         )
         let environment = await resolvedEnvironment()
 

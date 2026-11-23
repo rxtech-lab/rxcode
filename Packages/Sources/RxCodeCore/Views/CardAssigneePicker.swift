@@ -47,7 +47,7 @@ public struct CardAssigneePicker: View {
                     .truncationMode(.tail)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.tertiaryLabel)
             }
             .contentShape(Rectangle())
         }

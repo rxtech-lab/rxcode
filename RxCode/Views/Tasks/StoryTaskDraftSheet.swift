@@ -47,7 +47,7 @@ struct StoryTaskDraftSheet: View {
                     }
                 }
             }
-            .formStyle(TaskEditorFormStyle())
+            .formStyle(.grouped)
 
             HStack {
                 Spacer()

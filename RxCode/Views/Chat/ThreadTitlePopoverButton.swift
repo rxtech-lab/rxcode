@@ -39,7 +39,8 @@ struct ThreadTitlePopoverButton: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
-                .padding(.trailing)
+                .toolbarTitleWidth()
+                .padding(.trailing, 10)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -50,7 +51,9 @@ struct ThreadTitlePopoverButton: View {
         } else {
             Text(title)
                 .foregroundStyle(ClaudeTheme.textPrimary)
-                .padding(.trailing)
+                .toolbarTitleWidth()
+                .padding(.trailing, 10)
+                .help(title)
         }
     }
 }

@@ -325,17 +325,22 @@ struct ChatDetailModifiers: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content
+        CodingPlanChatSurface(chat: content)
             .onChange(of: controlActiveState == .key ? windowState.currentSessionId : nil, initial: true) { _, id in
                 appState.setViewedChat(id, for: chatViewID)
             }
             .onDisappear { appState.setViewedChat(nil, for: chatViewID) }
-            .environment(\.chatTranscriptEndActions, AnyView(CodingSessionRatingButton()))
+            .environment(\.chatTranscriptEndActions, AnyView(HStack(spacing: 8) {
+                CodingSessionRatingButton()
+                if windowState.generalRoute != .chat { ChatCreationMenu() }
+            }))
             .contentShape(Rectangle())
             .contextMenu {
                 if let sessionID = windowState.currentSessionId,
                    let summary = appState.allSessionSummaries.first(where: { $0.id == sessionID })
                     ?? appState.threadStore.fetch(id: sessionID)?.toSummary() {
+                    ChatCreationActions(sessionID: sessionID) { windowState.chatCreationIntent = $0 }
+                    Divider()
                     HookContextMenuItems(items: appState.threadContextMenuItems(for: summary))
                 }
             }

@@ -670,6 +670,7 @@
       }
     },
     "Add — attach file or toggle plan mode" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1234,6 +1235,9 @@
 
     },
     "Choose among %lld options" : {
+
+    },
+    "Choose Plan Mode in the Add menu to draft and review an implementation plan." : {
 
     },
     "Clear" : {
@@ -4613,6 +4617,7 @@
       }
     },
     "Plan mode" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4635,6 +4640,7 @@
       }
     },
     "Plan mode is on — Add menu" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4649,6 +4655,9 @@
           }
         }
       }
+    },
+    "Plan Mode…" : {
+
     },
     "Plan ready" : {
       "localizations" : {
@@ -5930,6 +5939,9 @@
         }
       }
     },
+    "Show change details" : {
+
+    },
     "Show help" : {
       "localizations" : {
         "en" : {
@@ -6861,6 +6873,7 @@
 
     },
     "Use the Add menu or Shift-Tab to ask the agent for a read-only plan before edits begin." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {

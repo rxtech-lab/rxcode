@@ -294,7 +294,7 @@ struct ACPClientEditorSheet: View {
                         .font(.system(size: ClaudeTheme.size(10), weight: .medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(ClaudeTheme.surfacePrimary)
                         .clipShape(Capsule())
                         .foregroundStyle(.secondary)
                 }
@@ -325,7 +325,7 @@ struct ACPClientEditorSheet: View {
                 }
                 Text("This agent didn't advertise a model selector. The model picker shows a single \"Default\" entry — the agent picks its own model at runtime. Click Fetch to retry.")
                     .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             } else {
                 if modelRows.count > 10 {
                     ScrollView(.vertical) {
@@ -340,7 +340,7 @@ struct ACPClientEditorSheet: View {
                 if client.modelConfigId != nil {
                     Text("This agent reports its models over ACP. RxCode refreshes the list every session start.")
                         .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
         }

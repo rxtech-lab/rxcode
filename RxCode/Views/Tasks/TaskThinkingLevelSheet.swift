@@ -37,6 +37,7 @@ struct TaskThinkingLevelSheet: View {
                         effort: $effort
                     )
                     .pickerStyle(.radioGroup)
+                    .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
                     .labelsHidden()
                 } header: {
                     Text(appState.modelDisplayLabel(selection.model, provider: selection.provider))

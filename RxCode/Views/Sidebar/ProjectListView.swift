@@ -150,7 +150,7 @@ struct ProjectListView: View {
                 if isSelected {
                     Image(systemName: "folder.fill").themedAccentInk()
                 } else {
-                    Image(systemName: "folder.fill").foregroundStyle(.tertiary)
+                    Image(systemName: "folder.fill").foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
 

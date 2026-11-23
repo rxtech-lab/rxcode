@@ -31,6 +31,9 @@ final class AppState: IDEToolHandling {
 
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
+    /// Shared across windows so each plan has at most one active debate.
+    @ObservationIgnored var codingPlanRooms: [UUID: CodingPlanRoom] = [:]
+
     /// Independent state for all active sessions. Key: sessionId
     /// `internal` (not private) — read access required from WindowState / extensions
     ///
@@ -46,10 +49,13 @@ final class AppState: IDEToolHandling {
     /// unchecked-completion flag, live todos). Only published when a value
     /// actually changes, so views reading it don't re-render per stream event.
     var sessionActivity: [String: SessionActivity] = [:]
+    /// Only sessions with a visible computer-use preview contribute to this projection.
+    var computerUseWindowsBySession: [String: [ComputerUseMonitorWindow]] = [:]
     /// Mounted chat views in a key window, keyed by view so a disappearing chat only removes itself.
     @ObservationIgnored var viewedChatSessions: [UUID: String] = [:]
 
     @ObservationIgnored var sessionActivityTodoFingerprints: [String: SessionActivity.TodoFingerprint] = [:]
+    @ObservationIgnored var sessionActivityTodoRefreshRequested = false
     @ObservationIgnored var sessionActivityTodoRefreshTask: Task<Void, Never>?
 
     /// Maps a stale session id (a `pending-...` placeholder, or a sid that was
@@ -57,7 +63,11 @@ final class AppState: IDEToolHandling {
     /// Lets long-running async tasks (LLM title generation) resolve the current
     /// id after the swap that happens mid-stream in `processStream`.
     var sessionIdRedirect: [String: String] = [:] {
-        didSet { attentionSessionIDsByProject = nil }
+        didSet {
+            attentionSessionIDsByProject = nil
+            cachedTaskLinkedSessions = nil
+            taskSessionIndexes.removeAll(keepingCapacity: true)
+        }
     }
 
     /// Callers waiting for `pending-<streamId>` to be replaced by the CLI's
@@ -107,10 +117,12 @@ final class AppState: IDEToolHandling {
     var allSessionSummaries: [ChatSession.Summary] = [] {
         didSet {
             attentionSessionIDsByProject = nil
+            cachedTaskLinkedSessions = nil
             scheduleDesktopWidgetUpdate()
         }
     }
 
+    @ObservationIgnored var cachedTaskLinkedSessions: TaskLinkedSessionIndex?
     @ObservationIgnored var attentionSessionIDsByProject: [UUID: Set<String>]?
 
     /// Invalidates visible file-change views after recorded edits change.
@@ -844,12 +856,17 @@ final class AppState: IDEToolHandling {
 
     // MARK: - Task Board
 
+    @ObservationIgnored var taskSessionIndexes: [UUID: ProjectTaskSessionIndex] = [:]
+
     /// One `TaskBoard` per project, loaded lazily. Keyed by `Project.id`, and a
     /// non-nil entry means "already read from disk" — same convention as
     /// `runProfilesByProject` below. The global board rendered by
     /// `TaskBoardView` is an aggregation of these.
     var taskBoards: [UUID: TaskBoard] = [:] {
-        didSet { scheduleDesktopWidgetUpdate() }
+        didSet {
+            taskSessionIndexes.removeAll(keepingCapacity: true)
+            scheduleDesktopWidgetUpdate()
+        }
     }
     var desktopWidgetNavigationURL: URL?
     @ObservationIgnored var desktopWidgetUpdateTask: Task<Void, Never>?

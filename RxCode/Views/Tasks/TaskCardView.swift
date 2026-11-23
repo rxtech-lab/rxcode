@@ -144,7 +144,7 @@ struct TaskCardView: View {
             storyTint: story?.tint,
             fixedHighlight: task.attentionReason != nil ? ClaudeTheme.statusWarning : nil
         ))
-        .onTapGesture { if appState.canEditCard(task) { onOpen() } }
+        .onTapGesture(perform: onOpen)
         .contextMenu {
             TaskContextMenuItems(task: task, onEdit: onOpen, onDelete: {
                 pendingDeletion = .task(task)

@@ -44,8 +44,10 @@ struct TaskRunView: View {
                 statusBar(task)
                 ClaudeThemeDivider()
                 content(task)
-                ClaudeThemeDivider()
-                composer(task)
+                if appState.canEditCard(task) {
+                    ClaudeThemeDivider()
+                    composer(task)
+                }
             }
         }
         .sheet(item: $previewImage) { ImagePreviewSheet(attachment: $0) }

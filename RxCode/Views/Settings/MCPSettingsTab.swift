@@ -126,7 +126,7 @@ struct MCPSettingsTab: View {
                     .foregroundStyle(.secondary)
                 Text(verbatim: displayPath(path))
                     .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -169,7 +169,7 @@ struct MCPSettingsTab: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                    .background(ClaudeTheme.surfacePrimary.opacity(0.5))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 VStack(spacing: 6) {
@@ -258,7 +258,7 @@ private struct MCPServerRow: View {
                         .truncationMode(.middle)
                     Text(scopeDescription)
                         .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 Spacer(minLength: 12)
 
@@ -316,11 +316,11 @@ private struct MCPServerRow: View {
             .padding(.vertical, 10)
 
         }
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(ClaudeTheme.surfacePrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 1)
         )
         .sheet(isPresented: $showDetails) {
             MCPServerDetailsSheet(server: server, probe: probe)
@@ -509,10 +509,10 @@ private struct MCPServerDetailsSheet: View {
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(16)
-                                    .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+                                    .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: 10))
                                     .overlay {
                                         RoundedRectangle(cornerRadius: 10)
-                                            .strokeBorder(Color(NSColor.separatorColor).opacity(0.5))
+                                            .strokeBorder(ClaudeTheme.border.opacity(0.5))
                                     }
                                 }
                                 .buttonStyle(.plain)

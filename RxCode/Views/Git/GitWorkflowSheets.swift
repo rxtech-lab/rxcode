@@ -100,6 +100,7 @@ struct GitPullSheet: View {
                 Text("Rebase").tag(GitWorkflow.PullStrategy.rebase)
             }
             .pickerStyle(.radioGroup)
+            .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
             .disabled(branch?.upstream == nil)
         }
     }

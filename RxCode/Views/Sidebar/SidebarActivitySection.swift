@@ -40,11 +40,13 @@ extension AppState {
         guard !statuses.isEmpty else { return [] }
 
         let projectsByID = Dictionary(uniqueKeysWithValues: sessionProjects.map { ($0.id, $0) })
-        return allSessionSummaries.compactMap { summary -> SidebarRun? in
+        let index = taskLinkedSessionIndex()
+        return statuses.keys.flatMap { index.summaries(forSessionID: $0) }.compactMap { summary -> SidebarRun? in
             guard let status = statuses[summary.id], let project = projectsByID[summary.projectId] else { return nil }
             let isCheck = summary.threadLabel == TaskCompletionCheckLabel.inProgress
             let ownerID = resolveCurrentSessionId((isCheck ? summary.parentThreadId : nil) ?? summary.id)
-            let task = taskBoards[project.id]?.tasks.first { $0.sessionKey.map(resolveCurrentSessionId) == ownerID }
+            let position = taskSessionIndex(for: project.id).runs[ownerID]
+            let task = position.flatMap { taskBoards[project.id]?.tasks[$0] }
             let title = ChatSession.stripAttachmentMarkers(from: task?.title ?? summary.title)
             return SidebarRun(
                 id: summary.id, project: project, title: title.isEmpty ? ChatSession.defaultTitle : title,

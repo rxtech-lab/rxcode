@@ -289,7 +289,8 @@ extension ACPService: AgentBackend {
             spec: spec,
             permissionMode: request.permissionMode,
             clientSessionKey: request.clientSessionKey,
-            mcpServers: request.acpMCPServers
+            mcpServers: request.acpMCPServers,
+            isEphemeral: request.isEphemeral
         )
     }
 }

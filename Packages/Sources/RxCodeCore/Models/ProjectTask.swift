@@ -118,13 +118,11 @@ public struct TaskItemType: Identifiable, Codable, Sendable, Hashable {
 
     /// The types a board starts with. Stable ids, so an item typed before the
     /// user customized anything keeps its type once the list is persisted.
-    public static var defaults: [TaskItemType] {
-        [
-            TaskItemType(id: UUID(uuidString: "00000000-0000-0000-0000-0000000071F1")!, name: String(localized: "Feature"), colorHex: "#3E63DD"),
-            TaskItemType(id: UUID(uuidString: "00000000-0000-0000-0000-0000000071F2")!, name: String(localized: "Bug"), colorHex: "#E5484D"),
-            TaskItemType(id: UUID(uuidString: "00000000-0000-0000-0000-0000000071F3")!, name: String(localized: "Chore"), colorHex: "#8B8D98"),
-        ]
-    }
+    public static let defaults: [TaskItemType] = [
+        TaskItemType(id: UUID(uuidString: "00000000-0000-0000-0000-0000000071F1")!, name: String(localized: "Feature"), colorHex: "#3E63DD"),
+        TaskItemType(id: UUID(uuidString: "00000000-0000-0000-0000-0000000071F2")!, name: String(localized: "Bug"), colorHex: "#E5484D"),
+        TaskItemType(id: UUID(uuidString: "00000000-0000-0000-0000-0000000071F3")!, name: String(localized: "Chore"), colorHex: "#8B8D98"),
+    ]
 }
 
 // MARK: - TaskLabel

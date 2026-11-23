@@ -1,3 +1,5 @@
+import Observation
+import os
 import XCTest
 import RxCodeCore
 import RxCodeSync
@@ -21,6 +23,48 @@ final class AppStateSnapshotTests: XCTestCase {
         persistence = nil
     }
 
+    func testPreviewObservesWindowChangesIndependentlyOfStreamTraffic() {
+        let session = "preview"
+        appState.sessionStates[session] = streamState(isStreaming: true)
+        let firstWindow = ComputerUseMonitorWindow(id: .native(appID: "test"), title: "First")
+        let appeared = expectation(description: "Window appeared")
+        withObservationTracking {
+            XCTAssertTrue(appState.computerUseMonitors(forSession: session).isEmpty)
+        } onChange: {
+            appeared.fulfill()
+        }
+        appState.sessionStates[session]?.computerUseWindows = [firstWindow]
+        XCTAssertEqual(XCTWaiter.wait(for: [appeared], timeout: 0), .completed)
+
+        let invalidations = OSAllocatedUnfairLock(initialState: 0)
+        withObservationTracking {
+            XCTAssertEqual(appState.computerUseMonitors(forSession: session), [firstWindow])
+        } onChange: {
+            invalidations.withLock { $0 += 1 }
+        }
+        for index in 0..<500 {
+            appState.sessionStates[session]?.textDeltaBuffer = String(index)
+        }
+        // An unrelated write must leave the one-shot observation armed.
+        XCTAssertEqual(invalidations.withLock { $0 }, 0)
+        let secondWindow = ComputerUseMonitorWindow(id: firstWindow.id, title: "Second")
+        appState.sessionStates[session]?.computerUseWindows = [secondWindow]
+        XCTAssertEqual(invalidations.withLock { $0 }, 1)
+        XCTAssertEqual(appState.computerUseMonitors(forSession: session), [secondWindow])
+    }
+
+    func testPreviewFollowsSessionReplacementAndCompletion() {
+        let preview = ComputerUseMonitorWindow(id: .native(appID: "test"), title: "Window")
+        var state = streamState(isStreaming: true)
+        state.computerUseWindows = [preview]
+        appState.sessionStates["pending"] = state
+        appState.sessionStates = ["resolved": state]
+        XCTAssertTrue(appState.computerUseMonitors(forSession: "pending").isEmpty)
+        XCTAssertEqual(appState.computerUseMonitors(forSession: "resolved"), [preview])
+        appState.sessionStates["resolved"]?.isStreaming = false
+        XCTAssertTrue(appState.computerUseMonitors(forSession: "resolved").isEmpty)
+    }
+
     func testProjectAttentionRefreshesAfterSessionRedirectAndRemoval() {
         let project = makeProject("Attention")
         let otherProject = makeProject("Other Project")
@@ -40,6 +84,42 @@ final class AppStateSnapshotTests: XCTestCase {
         appState.allSessionSummaries = [otherSummary]
         XCTAssertEqual(appState.projectAttention(projectId: project.id, in: window).runningThreads, 0)
         XCTAssertEqual(appState.projectAttention(projectId: otherProject.id, in: window).runningThreads, 1)
+    }
+
+    func testCachedTaskLinksFollowBoardOrderEditsRedirectsAndRemoval() {
+        let project = UUID()
+        var source = ProjectTask(projectId: project, title: "Source", sourceSessionKey: "shared")
+        let run = ProjectTask(projectId: project, title: "Run", sessionKey: "pending-run")
+        appState.taskBoards[project] = TaskBoard(tasks: [source, run])
+        XCTAssertEqual(appState.linkedTask(forSessionId: "shared", projectId: project)?.id, source.id)
+
+        appState.sessionIdRedirect["pending-run"] = "shared"
+        XCTAssertEqual(appState.linkedTask(forSessionId: "pending-run", projectId: project)?.id, source.id)
+        appState.taskBoards[project]?.tasks.swapAt(0, 1)
+        XCTAssertEqual(appState.linkedTask(forSessionId: "shared", projectId: project)?.id, run.id)
+        source.title = "Updated source"
+        appState.taskBoards[project]?.tasks = [source]
+        XCTAssertEqual(appState.linkedTask(forSessionId: "shared", projectId: project)?.title, source.title)
+        appState.taskBoards[project] = nil
+        XCTAssertNil(appState.linkedTask(forSessionId: "shared", projectId: project))
+    }
+
+    func testBackgroundTodoRefreshTracksReplacementsAndRemovals() async {
+        let todo = MessageBlock.toolCall(ToolCall(id: "todo", name: "TodoWrite", input: [
+            "todos": .array([.object(["content": .string("Build"), "status": .string("pending")])]),
+        ]))
+        var state = SessionStreamState()
+        state.messages = [ChatMessage(role: .assistant, blocks: [todo])]
+        appState.sessionStates["kept"] = state
+        appState.sessionStates["removed"] = state
+        appState.sessionStates["removed"] = nil
+        await appState.sessionActivityTodoRefreshTask?.value
+        XCTAssertEqual(appState.liveTodos(forSessionId: "kept")?.items.map(\.content), ["Build"])
+        XCTAssertNil(appState.sessionActivity["removed"])
+
+        appState.sessionStates["kept"]?.messages = []
+        await appState.sessionActivityTodoRefreshTask?.value
+        XCTAssertNil(appState.liveTodos(forSessionId: "kept"))
     }
 
     func testMobileSummariesUseTheNewestTodoListIncludingClears() async throws {

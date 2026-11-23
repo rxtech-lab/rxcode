@@ -97,6 +97,9 @@ extension AppState {
         let command = parts.first.map { String($0.dropFirst()) } ?? ""
 
         switch command {
+        case "plan":
+            window.chatCreationIntent = ChatCreationIntent(.plan, sessionID: window.currentSessionId, goal: parts.dropFirst().first.map(String.init) ?? "")
+            return true
         case "clear":
             startNewChat(in: window)
             return true
@@ -257,6 +260,7 @@ extension AppState {
         debugLogPrefix: String? = nil,
         includeIDEMCP: Bool = true,
         useProjectEffortForNewChat: Bool = false,
+        implementationPlan: CodingPlan? = nil,
         in sourceWindow: WindowState
     ) async -> UUID? {
         let resumeKey = sourceWindow.currentSessionId ?? sourceWindow.newSessionKey
@@ -424,8 +428,21 @@ extension AppState {
                 worktreePath: sessionStates[sessionKey]?.worktreePath,
                 worktreeBranch: sessionStates[sessionKey]?.worktreeBranch
             )
+            if let implementationPlan {
+                do {
+                    try threadStore.saveCodingPlan(implementationPlan, implementation: placeholder.summary)
+                    codingPlanRooms[implementationPlan.id]?.plan = implementationPlan
+                } catch {
+                    sessionStates.removeValue(forKey: sessionKey)
+                    window.removePendingPlaceholder(sessionKey)
+                    window.currentSessionId = nil
+                    codingPlanRooms[implementationPlan.id]?.plan.lastError = error.localizedDescription
+                    return nil
+                }
+            } else {
+                threadStore.upsert(placeholder.summary)
+            }
             allSessionSummaries.insert(placeholder.summary, at: 0)
-            threadStore.upsert(placeholder.summary)
         } else if let index = allSessionSummaries.firstIndex(where: { $0.id == sessionKey }) {
             // Bring resumed task chats back into the visible sidebar immediately,
             // before streaming defers summary updates until completion.
@@ -506,6 +523,7 @@ extension AppState {
                 clientID: acpSelection?.clientId ?? sessionStates[sessionKey]?.acpClientId, phase: .start)
         )
 
+        let includePriorContext = implementationPlan == nil
         let task = Task { [weak self, window] in
             guard let self else { return }
             await self.processStream(
@@ -522,6 +540,7 @@ extension AppState {
                 hookSessionMode: hookSessionMode,
                 projectId: project.id,
                 includeIDEMCP: includeIDEMCP,
+                includePriorContext: includePriorContext,
                 history: history,
                 window: window
             )

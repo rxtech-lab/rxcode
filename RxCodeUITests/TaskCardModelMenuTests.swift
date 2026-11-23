@@ -5,8 +5,10 @@ final class TaskCardModelMenuTests: XCTestCase {
     private let taskTitle = "Model Menu Task"
     private let details = "Original task details"
 
-    private func openTaskBoard() throws -> (XCUIApplication, String, URL) {
+    private func openTaskBoard(readOnly: Bool = false) throws -> (XCUIApplication, String, URL) {
         continueAfterFailure = false
+        let app = XCUIApplication()
+        try XCTSkipIf(app.state != .notRunning, "Run against a separate test build while RxCode is open.")
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("TaskCardModelMenu-\(UUID())")
         let project = root.appendingPathComponent("Repository")
         let support = root.appendingPathComponent("AppSupport")
@@ -20,12 +22,15 @@ final class TaskCardModelMenuTests: XCTestCase {
         let boardURL = taskBoards.appendingPathComponent("\(projectId).json")
         try JSONSerialization.data(withJSONObject: [["id": projectId, "name": projectName, "path": project.path]])
             .write(to: support.appendingPathComponent("projects.json"))
-        try JSONSerialization.data(withJSONObject: ["tasks": [[
+        var board: [String: Any] = ["tasks": [[
             "id": taskId, "projectId": projectId, "title": taskTitle, "details": details, "status": "backlog",
             "agent": ["provider": "claudeCode", "model": "sonnet", "planMode": true]
-        ]]]).write(to: boardURL)
+        ]]]
+        if readOnly {
+            board["cloudSync"] = ["role": "member", "currentUserId": "unassigned-member"]
+        }
+        try JSONSerialization.data(withJSONObject: board).write(to: boardURL)
 
-        let app = XCUIApplication()
         addTeardownBlock { @MainActor in
             app.terminate()
             try? FileManager.default.removeItem(at: root)
@@ -33,15 +38,16 @@ final class TaskCardModelMenuTests: XCTestCase {
         app.launchArguments = [
             "-onboardingCompleted", "YES", "-showMenuBarExtra", "NO",
             "-UseAgentSDK", "YES", "-selectedEffort", "auto",
+            "-ApplePersistenceIgnoreState", "YES", "-com.apple.TipKit.HideAllTips", "1",
             "-SUEnableAutomaticChecks", "NO",
             "-AppleLanguages", "(en)", "-AppleLocale", "en_US"
         ]
-        app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UI_TESTING": "1"]
+        app.launchEnvironment = ["RXCODE_APP_SUPPORT_DIR": support.path, "RXCODE_UNIT_TESTING": "1"]
         app.launch()
 
         let whatsNew = app.sheets.containing(.staticText, identifier: "New in RxCode").firstMatch
         if whatsNew.waitForExistence(timeout: 5) {
-            whatsNew.buttons["Close"].click()
+            whatsNew.buttons["xmark"].click()
         }
         app.activate()
         let projectsTab = app.buttons["general-route-tasks"]
@@ -55,6 +61,43 @@ final class TaskCardModelMenuTests: XCTestCase {
         app.menuItems["Open Project Board"].click()
         XCTAssertTrue(app.scrollViews["task-column-backlog"].waitForExistence(timeout: 10))
         return (app, taskId, boardURL)
+    }
+
+    func testClickingTaskTitleAndCardWhitespaceOpensTaskSheet() throws {
+        let (app, _, _) = try openTaskBoard()
+        let column = app.scrollViews["task-column-backlog"]
+        let title = column.staticTexts[taskTitle].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        let sheet = app.sheets.firstMatch
+
+        title.click()
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        XCTAssertEqual(sheet.textFields["task-form-title"].value as? String, taskTitle)
+        sheet.buttons["Cancel"].click()
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
+
+        // Click empty space on the same row, clear of the footer controls.
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+            .withOffset(CGVector(dx: column.frame.maxX - title.frame.minX - 28, dy: 0)).click()
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        XCTAssertEqual(sheet.textFields["task-form-title"].value as? String, taskTitle)
+        XCTAssertTrue(sheet.buttons["Save"].isEnabled)
+    }
+
+    func testClickingReadOnlyTaskOpensDetailsWithoutEditing() throws {
+        let (app, _, _) = try openTaskBoard(readOnly: true)
+        let title = app.scrollViews["task-column-backlog"].staticTexts[taskTitle].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        title.click()
+
+        let sheet = app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        XCTAssertEqual(sheet.textFields["task-form-title"].value as? String, taskTitle)
+        XCTAssertFalse(sheet.textFields["task-form-title"].isEnabled)
+        XCTAssertFalse(sheet.buttons["Save"].exists)
+        XCTAssertFalse(sheet.buttons["Delete"].exists)
+        sheet.buttons["Done"].click()
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
     }
 
     func testModelFooterOpensMenuAndAppliesSelection() throws {

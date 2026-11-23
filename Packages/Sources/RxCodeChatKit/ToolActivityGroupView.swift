@@ -68,7 +68,7 @@ public struct ToolActivityGroupView: View {
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.tertiaryLabel)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .padding(.horizontal, 12)
@@ -360,7 +360,7 @@ private struct ToolActivityStepRow: View {
 
             Image(systemName: "info.circle")
                 .font(.footnote)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(ClaudeTheme.tertiaryLabel)
                 .padding(.top, 13)
         }
         .frame(minHeight: 44)

@@ -321,6 +321,7 @@ struct PetSettingsView: View {
                 }
             }
             .pickerStyle(.radioGroup)
+            .foregroundStyle(ClaudeTheme.textPrimary, ClaudeTheme.textSecondary, ClaudeTheme.textTertiary)
         } header: {
             Text("Voice Mode")
         } footer: {

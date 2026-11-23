@@ -69,8 +69,8 @@ extension AppState {
     }
 
     func taskRunMessages(summary: ChatSession.Summary) async -> [ChatMessage] {
-        let live = sessionStates[summary.id]?.messages ?? []
         let persisted = await persistedMessages(summary: summary) ?? []
+        let live = sessionStates[summary.id]?.messages ?? []
         return live.count >= persisted.count ? live : persisted
     }
 
@@ -80,8 +80,8 @@ extension AppState {
     }
 
     func persistedMessages(summary: ChatSession.Summary) async -> [ChatMessage]? {
-        guard let project = projects.first(where: { $0.id == summary.projectId }) else { return nil }
-        return await persistence.loadFullSession(summary: summary, cwd: project.path)?.messages
+        guard let project = sessionProject(id: summary.projectId) else { return nil }
+        return await persistence.loadFullSession(summary: summary, cwd: summary.worktreePath ?? project.path)?.messages
     }
 
     /// The task sheet uses the same persisted, session-scoped queue as chat.

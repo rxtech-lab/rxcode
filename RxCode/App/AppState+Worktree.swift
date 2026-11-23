@@ -439,6 +439,7 @@ extension AppState {
     }
 
     func deleteSession(_ session: ChatSession, in window: WindowState) async {
+        discardCodingPlanRun(threadID: session.id)
         if window.currentSessionId == session.id {
             detachCurrentStream(in: window)
             startNewChat(in: window)
@@ -475,6 +476,7 @@ extension AppState {
             toDelete = toDelete.filter { $0.isArchived }
         }
         let ids = Set(toDelete.map(\.id))
+        for id in ids { discardCodingPlanRun(threadID: id) }
 
         // Only disrupt the current window's stream if its session is actually
         // being deleted — otherwise a project-scoped delete would clobber an

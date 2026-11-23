@@ -119,7 +119,8 @@ extension ClaudeCodeServer {
         hookSettingsPath: String?,
         mcpConfigPath: String?,
         extraSystemPrompt: String?,
-        permissionMode: PermissionMode
+        permissionMode: PermissionMode,
+        isEphemeral: Bool = false
     ) -> [String] {
         var args: [String] = [
             "-p",
@@ -139,7 +140,9 @@ extension ClaudeCodeServer {
             args += ["--permission-mode", permissionMode.rawValue]
         }
 
-        if !permissionMode.skipsHookPipeline {
+        if isEphemeral {
+            args += ["--no-session-persistence", "--tools", "Read,Glob,Grep", "--strict-mcp-config"]
+        } else if !permissionMode.skipsHookPipeline {
             // Pre-approve safe tools that don't need to go through hooks via --allowedTools.
             // This eliminates HTTP round-trips from internal agent mechanics like Read/Grep/Task,
             // since no approval UI is shown for these.

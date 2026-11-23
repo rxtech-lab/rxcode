@@ -31,7 +31,7 @@ struct SwiftConditionGeneratePopover: View {
             TextEditor(text: $requirement)
                 .font(.system(size: ClaudeTheme.size(12)))
                 .frame(height: 70)
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(ClaudeTheme.border))
                 .disabled(isGenerating)
 
             if let diagnostics {

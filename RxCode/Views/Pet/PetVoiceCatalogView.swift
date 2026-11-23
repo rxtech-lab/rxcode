@@ -200,7 +200,7 @@ struct PetVoiceCatalogView: View {
             }
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(ClaudeTheme.textTertiary)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

@@ -58,7 +58,7 @@ extension AppState {
     /// Toggles the boolean plan-mode flag for the active session. The CLI's permission mode
     /// is still computed from the dropdown when plan-mode is off; when on, `.plan` is forced
     /// for the CLI invocation regardless of dropdown selection (see `send(...)`).
-    /// Triggered by Shift+Tab in the input bar and by the Plan pill chip.
+    /// Used by the plan pill for an existing backend planning turn.
     func toggleSessionPlanMode(in window: WindowState) {
         let key = window.currentSessionId ?? window.newSessionKey
         let next = !(sessionStates[key]?.planMode ?? window.sessionPlanMode)

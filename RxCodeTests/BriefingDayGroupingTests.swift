@@ -47,6 +47,45 @@ final class BriefingDayGroupingTests: XCTestCase {
         }
     }
 
+    func testSavedPlanAppearsWithoutThreadSummaryAndFeedsBranchPromptOnce() async throws {
+        let state = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+        let project = Project(id: projectId, name: "Briefing project", path: "/tmp/briefing-test")
+        state.projects = [project]
+
+        let planner = AgentModel(provider: .codex, id: "planner", displayName: "Planner")
+        var plan = CodingPlan(id: UUID(), goal: "Support extension discovery", source: "",
+                              configuration: .init(planner: planner, reviewers: []))
+        plan.finish(.draft, text: "Explore app extensions.")
+        plan.finish(.reconcile, text: "Discover supported extensions in Settings.")
+        let session = ChatSession(id: plan.id.uuidString, projectId: projectId, title: plan.goal,
+                                  messages: [], worktreeBranch: "feature/plugins", threadLabel: "Plan")
+        state.threadStore.upsert(session.summary)
+        try state.threadStore.saveCodingPlan(plan)
+        await state.briefingPlansRefresh?.value
+
+        let saved = try XCTUnwrap(state.briefingPlans.first(where: { $0.id == plan.id }))
+        let groups = BriefingView.dayGroups(briefings: [], threads: [], plans: [saved])
+        let group = try XCTUnwrap(groups.first)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(group.branch, "feature/plugins")
+        XCTAssertEqual(group.day, calendar.startOfDay(for: saved.updatedAt))
+        XCTAssertNil(group.briefing)
+        XCTAssertEqual(group.plans.map(\.id), [plan.id])
+        XCTAssertEqual(saved.versionCount, 2)
+        XCTAssertEqual(saved.planningStatusLabel, "Ready")
+        XCTAssertEqual(saved.implementationStatusLabel, "Unimplemented")
+
+        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: [], plans: group.plans)
+        XCTAssertEqual(prompt.components(separatedBy: plan.id.uuidString).count, 2)
+        XCTAssertTrue(prompt.contains("Discover supported extensions in Settings."))
+        XCTAssertTrue(prompt.contains(saved.briefingDescription))
+        XCTAssertFalse(prompt.contains("Explore app extensions."))
+
+        state.threadStore.delete(id: session.id)
+        await state.briefingPlansRefresh?.value
+        XCTAssertFalse(state.briefingPlans.contains(where: { $0.id == plan.id }))
+    }
+
     func testLegacyBriefingDoesNotReplaceDayBriefing() {
         let today = calendar.startOfDay(for: .now).addingTimeInterval(3_600)
         let groups = BriefingView.dayGroups(

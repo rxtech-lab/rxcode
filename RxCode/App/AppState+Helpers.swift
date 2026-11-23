@@ -138,13 +138,13 @@ extension AppState {
     func hydrateSessionIfNeeded(summary: ChatSession.Summary, project: Project) async {
         if sessionStates[summary.id]?.messages.isEmpty != false,
            sessionStates[summary.id]?.isStreaming != true,
-           !summary.id.hasPrefix("pending-"),
-           let full = await persistence.loadFullSession(summary: summary, cwd: project.path) {
+           let full = await persistence.loadFullSession(summary: summary, cwd: summary.worktreePath ?? project.path) {
             updateState(summary.id) { state in
                 // A window or another sender can load this thread while disk I/O is pending.
                 guard state.messages.isEmpty, !state.isStreaming else { return }
                 state.messages = cleanLoadedMessages(full.messages)
             }
+            restoreLegacyTurnOutcome(full.messages, sessionID: summary.id)
         }
 
         updateState(summary.id) { state in
@@ -206,7 +206,7 @@ extension AppState {
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            let full = await self.persistence.loadFullSession(summary: summary, cwd: cwd)
+            let full = await self.persistence.loadFullSession(summary: summary, cwd: summary.worktreePath ?? cwd)
             let cleaned: [ChatMessage]
             if let full {
                 cleaned = await self.cleanLoadedMessages(full.messages)
@@ -233,6 +233,7 @@ extension AppState {
                     return
                 }
                 state.messages = self.messagesWithPersistedHookCard(cleaned, sessionId: sessionId)
+                self.restoreLegacyTurnOutcome(full.messages, sessionID: sessionId)
                 state.planDecisionSummaries = self.threadStore.loadPlanDecisions(sessionId: sessionId)
                 if state.model == nil { state.model = full.model }
                 state.effort = state.effort(fallingBackTo: full.effort)
@@ -292,11 +293,14 @@ extension AppState {
         if origin == .cliBacked, sessionAgentProvider != .claudeCode, !isLoadingFromDisk {
             origin = .legacyRxCode
         }
+        let turnID = sessionStates[sessionId]?.latestTurnID
+        let savingFinalTranscript = turnID != nil && sessionStates[sessionId]?.isStreaming == false
         let session = ChatSession(
             id: sessionId,
             projectId: projectId,
             title: title,
             messages: messages,
+            createdAt: summary?.createdAt ?? messages[0].timestamp,
             updatedAt: lastResponseDate(from: messages),
             isPinned: summary?.isPinned ?? false,
             agentProvider: sessionAgentProvider,
@@ -320,12 +324,15 @@ extension AppState {
             try await persistence.saveSession(session)
         } catch {
             logger.error("Failed to save session \(sessionId): \(error.localizedDescription)")
+            return
         }
 
         // Update allSessionSummaries — skipped while streaming (updated only once after completion)
+        guard sessionStates[sessionId]?.latestTurnID == turnID else { return }
         let isCurrentlyStreaming = sessionStates[sessionId]?.isStreaming ?? false
         if !isCurrentlyStreaming {
-            let summary = session.summary
+            var summary = session.summary
+            summary.hasUnfinishedTurn = allSessionSummaries.first(where: { $0.id == sessionId })?.hasUnfinishedTurn
             withAnimation(nil) {
                 while allSessionSummaries.filter({ $0.id == sessionId }).count > 1,
                       let lastIdx = allSessionSummaries.lastIndex(where: { $0.id == sessionId })
@@ -338,7 +345,8 @@ extension AppState {
                     allSessionSummaries.insert(summary, at: 0)
                 }
             }
-            threadStore.upsert(summary)
+            threadStore.upsert(summary, finalTranscriptSaved: savingFinalTranscript)
+            if savingFinalTranscript { sessionStates[sessionId]?.latestTurnID = nil }
 
             // Update the on-device semantic index. Skipped while streaming so
             // we only embed a thread once it has settled.
@@ -559,6 +567,7 @@ extension AppState {
             state.currentTurnOutputTokensUnkeyed = 0
         }
         resumeTaskForStreamingSession(sessionKey)
+        await beginTurnRecovery(sessionID: sessionKey, streamID: streamId)
 
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
         let model = sessionStates[sessionKey]?.model ?? projectSelection.model

@@ -145,6 +145,7 @@ extension CodexAppServer {
     briefings, and `ide__briefing_delete` only when the user asks. The \
     briefing title is shown above its content, so do not repeat the title as \
     a heading in the content.
+    \(IDEToolRegistry.codingPlanBriefingInstructions)
     Published briefings may be emailed to the user automatically after your \
     run. Call `ide__send_notification` only when the user or a \
     scheduled task's prompt asks to be notified or emailed (pass \

@@ -411,6 +411,35 @@ struct PetVoiceAndStateTests {
         #expect(activeReport.markdownBody.contains("Add Codex Realtime voice"))
     }
 
+    @MainActor
+    @Test("The pet reports a persisted ready plan once, including its planned feature")
+    func dailyReportIncludesReadyPlan() async throws {
+        let state = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+        state.threadStore = .inMemory()
+        let project = Project(name: "Reader", path: "/tmp")
+        state.projects = [project]
+        let planner = AgentModel(provider: .codex, id: "planner", displayName: "Planner")
+        var plan = CodingPlan(id: UUID(), goal: "Add reading lists", source: "",
+                              configuration: .init(planner: planner, reviewers: []))
+        plan.finish(.draft, text: "Draft design")
+        plan.finish(.reconcile, text: "## Features\nPin a reading list to the sidebar.")
+        let session = ChatSession(id: plan.id.uuidString, projectId: project.id, title: plan.goal, messages: [])
+        state.threadStore.upsert(session.summary)
+        try state.threadStore.saveCodingPlan(plan)
+
+        let snapshot = await PetDailyReportService.captureSnapshot(from: state, now: .now.addingTimeInterval(172_800))
+        let report = PetDailyReportService.formatDeterministicReport(from: snapshot)
+        #expect(snapshot.plans.count == 1)
+        #expect(report.completedTasksCount == 0)
+        #expect(report.markdownBody.contains("### Unimplemented (1)"))
+        #expect(report.markdownBody.contains("**[Reader] Add reading lists** — Ready"))
+        #expect(report.markdownBody.contains("Pin a reading list to the sidebar."))
+        #expect(report.markdownBody.contains("v2 · Host plan"))
+        #expect(report.markdownBody.contains(plan.id.uuidString))
+        #expect(report.spokenSummary.contains("unimplemented"))
+        #expect(!report.spokenSummary.contains("Everything is quiet"))
+    }
+
     @Test("Voice seeds survive persistence and legacy preferences retain their agent")
     func voiceSeedCompatibility() throws {
         var cfg = PetConfiguration()

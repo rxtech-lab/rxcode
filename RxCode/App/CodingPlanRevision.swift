@@ -1,6 +1,6 @@
 import Foundation
 
-extension CodingPlanReview.Edit {
+nonisolated extension CodingPlanReview.Edit {
     /// Full-plan revisions have no suggestion fences. Diff their words, keeping
     /// whitespace in the tokens so each hunk round-trips the exact Markdown.
     static func changes(from original: String, to revised: String, comment: String? = nil) -> [Self] {

@@ -24,12 +24,17 @@ extension BriefingView {
                 }
             }
 
+            if !group.plans.isEmpty {
+                ClaudeThemeDivider()
+                planList(Array(group.plans.prefix(Self.visibleThreadCount)))
+            }
+
             if !group.threadSummaries.isEmpty {
                 ClaudeThemeDivider()
                 threadList(Array(group.threadSummaries.prefix(Self.visibleThreadCount)), totalCount: group.threadSummaries.count)
             }
 
-            if group.threadSummaries.count > Self.visibleThreadCount {
+            if group.threadSummaries.count > Self.visibleThreadCount || group.plans.count > Self.visibleThreadCount {
                 BriefingShowMoreButton {
                     presentedBriefing = group
                 }
@@ -61,6 +66,9 @@ extension BriefingView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let briefing = group.briefing {
                         MarkdownContentView(text: GeneratedTextSanitizer.cleanMarkdownDocument(briefing.briefing))
+                    }
+                    if !group.plans.isEmpty {
+                        planList(group.plans)
                     }
                     if !group.threadSummaries.isEmpty {
                         if group.briefing != nil {
@@ -136,6 +144,32 @@ extension BriefingView {
         }
     }
 
+
+    private func planList(_ plans: [CodingPlanActivity]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Coding Plans")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            ForEach(plans) { plan in
+                Button {
+                    presentedBriefing = nil
+                    appState.selectSession(id: plan.threadID, in: windowState)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: plan.title)
+                            .font(.subheadline.weight(.medium))
+                        Text(verbatim: plan.briefingDescription)
+                            .font(.caption)
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open plan · \(plan.id.uuidString)")
+            }
+        }
+    }
 
     // MARK: - Thread list (compact rows)
 

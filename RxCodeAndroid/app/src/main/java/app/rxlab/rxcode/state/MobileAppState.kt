@@ -21,6 +21,8 @@ import app.rxlab.rxcode.proto.DeleteProjectRequestPayload
 import app.rxlab.rxcode.proto.FolderTreeRequestPayload
 import app.rxlab.rxcode.proto.LoadMoreMessagesRequestPayload
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
+import app.rxlab.rxcode.proto.MobileAgentModel
+import app.rxlab.rxcode.proto.MobileModelSettings
 import app.rxlab.rxcode.proto.NewSessionRequestPayload
 import app.rxlab.rxcode.proto.PairRequestPayload
 import app.rxlab.rxcode.proto.ConfirmationDecisionPayload
@@ -83,6 +85,7 @@ class MobileAppState @Inject constructor(
 ) : ViewModel() {
     private val _state = MutableStateFlow(MobileState(relayUrl = defaultRelayUrl()))
     val state: StateFlow<MobileState> = _state.asStateFlow()
+    private val modelPrefs = context.getSharedPreferences("thread_model", Context.MODE_PRIVATE)
 
     private var started = false
     private var pairingTimeout: Job? = null
@@ -185,6 +188,7 @@ class MobileAppState @Inject constructor(
                     pairedDesktops = paired,
                     activeDesktopId = activeCompositeId,
                     activeDesktopPubkey = activeHex,
+                    modelSettings = if (desktopChanged) null else it.modelSettings,
                     relayUrl = resolvedRelay,
                     hasReceivedInitialSnapshot = if (desktopChanged) false else it.hasReceivedInitialSnapshot,
                     usageDashboard = if (desktopChanged) app.rxlab.rxcode.proto.UsageDashboard() else it.usageDashboard,
@@ -454,6 +458,7 @@ class MobileAppState @Inject constructor(
             }
             current.copy(
                 projects = snap.data.projects,
+                modelSettings = snap.data.settings,
                 sessions = snap.data.sessions.sortedWith(SessionSort),
                 // The snapshot's activeSessionID is metadata that labels the
                 // carried activeSessionMessages — it must not be treated as a
@@ -483,6 +488,7 @@ class MobileAppState @Inject constructor(
                     current.loadingThreadMessageSessions
                 },
                 branchBriefings = snap.data.branchBriefings ?: current.branchBriefings,
+                briefingPlans = snap.data.briefingPlans.orEmpty(),
                 briefingDocuments = snap.data.briefingDocuments ?: emptyList(),
                 usageDashboard = snap.data.usageDashboard ?: app.rxlab.rxcode.proto.UsageDashboard(),
                 threadSummaries = snap.data.threadSummaries ?: current.threadSummaries,
@@ -691,11 +697,21 @@ class MobileAppState @Inject constructor(
         }
     }
 
+    fun threadModelSelection(settings: MobileModelSettings?): Pair<MobileAgentModel?, String?> =
+        settings?.selection(modelPrefs.getString("modelKey", null), modelPrefs.getString("effort", null))
+            ?: (null to null)
+
+    fun rememberThreadModel(model: MobileAgentModel, effort: String?) {
+        modelPrefs.edit().putString("modelKey", model.key).putString("effort", effort).apply()
+    }
+
     fun startNewSession(
         projectId: UUID,
         initialText: String? = null,
         planMode: Boolean = false,
         permissionMode: PermissionMode? = null,
+        model: MobileAgentModel? = null,
+        effort: String? = null,
     ): String {
         val draftId = draftSessionId(projectId)
         _state.update { it.copy(activeSessionID = draftId, messagesBySession = it.messagesBySession + (draftId to emptyList())) }
@@ -705,6 +721,9 @@ class MobileAppState @Inject constructor(
                     NewSessionRequestPayload(
                         projectID = projectId,
                         initialText = initialText,
+                        selectedAgentProvider = model?.provider,
+                        selectedModel = model?.id,
+                        selectedEffort = effort,
                         planMode = planMode.takeIf { it },
                         permissionMode = permissionMode,
                     )

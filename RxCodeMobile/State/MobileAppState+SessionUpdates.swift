@@ -246,6 +246,7 @@ extension MobileAppState {
             todos: current.todos,
             queuedMessages: current.queuedMessages,
             hasUncheckedCompletion: current.hasUncheckedCompletion,
+            isInterrupted: current.isInterrupted && !isStreaming,
             parentThreadId: current.parentThreadId,
             threadLabel: current.threadLabel,
             changedFileCount: current.changedFileCount

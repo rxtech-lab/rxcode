@@ -234,20 +234,50 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     public var result: String?
     public var isError: Bool
 
-    /// Preserve the action name when a backend wraps an MCP call or prefixes its server.
-    public var displayedToolName: String {
-        if let range = name.range(of: "ide__", options: .backwards), range.lowerBound == name.startIndex || name[..<range.lowerBound].hasSuffix("__") {
-            return String(name[range.lowerBound...])
-        }
+    /// Identifier used to look up a display label, including the server for external MCP tools.
+    public var actionNameIdentifier: String {
         let wrapper = name.lowercased()
-        if wrapper == "mcptoolcall" || wrapper == "mcp__rxcode-ide" || wrapper == "mcp__rxcode_ide" {
-            for value in [input["tool"], input["toolName"], input["tool_name"], input["name"], input["params"]?["name"], input["function"]?["name"]] {
-                if let raw = value?.stringValue ?? value?["name"]?.stringValue, !raw.isEmpty, raw.lowercased() != "mcptoolcall" {
-                    return raw
-                }
-            }
+        let bridgeServer = wrapper.hasPrefix("mcp__") ? String(wrapper.dropFirst(5)) : ""
+        guard wrapper == "mcptoolcall" || ToolActionName.ideServers.contains(bridgeServer) else { return name }
+        let fields = [input["tool"], input["toolName"], input["tool_name"], input["name"],
+                      input["params"]?["name"], input["function"]?["name"]]
+        for field in fields {
+            guard let raw = (field?.stringValue ?? field?["name"]?.stringValue)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !raw.isEmpty, raw.lowercased() != "mcptoolcall" else { continue }
+            if raw.hasPrefix("mcp__") { return raw }
+            let server = [input["server"], input["serverName"], input["server_name"]]
+                .compactMap { $0?.stringValue ?? $0?["name"]?.stringValue }
+                .first { !$0.isEmpty } ?? bridgeServer
+            if !server.isEmpty { return "mcp__\(server)__\(raw)" }
+            return raw.hasPrefix("ide__") ? raw : "mcp__\(raw)"
         }
         return name
+    }
+
+    /// Short identifier retained for callers that need the original IDE operation.
+    public var displayedToolName: String {
+        let identifier = actionNameIdentifier
+        if let operation = ToolActionName.ideOperation(for: identifier),
+           identifier.contains("ide__") {
+            return "ide__\(operation)"
+        }
+        return identifier
+    }
+
+    /// The name of a single new to-do is useful in activity rows when the call supplies it.
+    public var namedTodoActionLabel: String? {
+        guard let operation = ToolActionName.ideOperation(for: actionNameIdentifier),
+              ["add_todo", "add_todos", "todos"].contains(operation) else { return nil }
+        let arguments = input["arguments"]?.objectValue ?? input["params"]?["arguments"]?.objectValue ?? input
+        for field in ["title", "content", "name"] {
+            // An MCP wrapper can use its top-level "name" as the tool identifier.
+            if field == "name", arguments == input, actionNameIdentifier != name { continue }
+            guard let title = arguments[field]?.stringValue?.split(whereSeparator: \.isNewline)
+                .first?.trimmingCharacters(in: .whitespaces), !title.isEmpty else { continue }
+            return "Adding " + (title.count > 80 ? String(title.prefix(79)) + "…" : title)
+        }
+        return nil
     }
 
     public var isImageGeneration: Bool {

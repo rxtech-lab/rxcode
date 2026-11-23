@@ -15,6 +15,7 @@ public final class ChatBridge {
     /// The active thread's checkout, used to resolve relative edit paths in chat.
     public var workingDirectory: String?
     public var isStreaming: Bool = false
+    public var interruptedSessionID: String?
     public var isThinking: Bool = false
     /// True while persisted messages are being loaded from disk for the current session.
     /// MessageListView uses this to keep the ScrollView hidden until messages are present,
@@ -42,6 +43,13 @@ public final class ChatBridge {
     public var studioModelID: String?
     /// The selected model generates video instead of chatting.
     public var isVideoModel: Bool { studioKind == .video }
+    /// Shared with the menu bar and every chat window. The active chat selects the provider.
+    public var accountRateLimits: AccountRateLimits?
+    /// Standalone ChatKit hosts can supply just a fetch handler.
+    @ObservationIgnored private lazy var standaloneRateLimits = AccountRateLimits()
+    public var rateLimitUsage: RateLimitUsage? {
+        (accountRateLimits ?? standaloneRateLimits)[agentProvider]?.usage
+    }
     /// Usage-limit advice for the selected provider and model, e.g. "only ~2
     /// more tasks fit in the 5-hour limit"; nil when limits need no attention.
     public var rateLimitAdvice: RateLimitAdvice?
@@ -71,6 +79,7 @@ public final class ChatBridge {
     public var computerUseDecisionHandler: ((PermissionRequest, PermissionDecision) async -> Void)?
     public var sendHandler: (() async -> Void)?
     public var cancelStreamingHandler: (() async -> Void)?
+    public var resumeInterruptedTurnHandler: ((String) async -> Void)?
     public var sendSlashCommandHandler: ((String) async -> Void)?
     public var runTerminalCommandHandler: ((String) async -> Void)?
     public var editAndResendHandler: ((UUID, String) async -> Void)?
@@ -124,7 +133,13 @@ public final class ChatBridge {
     }
 
     public func fetchRateLimit() async -> RateLimitUsage? {
-        await fetchRateLimitHandler?(agentProvider)
+        let provider = agentProvider
+        guard let fetchRateLimitHandler else { return rateLimitUsage }
+        if let accountRateLimits {
+            return await fetchRateLimitHandler(provider) ?? accountRateLimits[provider]?.usage
+        }
+        let usage = await standaloneRateLimits.refresh(for: provider) { await fetchRateLimitHandler(provider) }
+        return usage ?? standaloneRateLimits[provider]?.usage
     }
 
     public func refreshACPUsage(force: Bool = false) async {

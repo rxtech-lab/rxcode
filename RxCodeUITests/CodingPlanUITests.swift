@@ -50,6 +50,8 @@ final class CodingPlanUITests: XCTestCase {
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
         let requirements = repo.appendingPathComponent("Plan requirements.md")
         try "Support reopening.".write(to: requirements, atomically: true, encoding: .utf8)
+        let chatNotes = repo.appendingPathComponent("Chat notes.md")
+        try "Preserve draft files.".write(to: chatNotes, atomically: true, encoding: .utf8)
         let finishDraft = root.appendingPathComponent("finish-draft")
         let projectID = UUID().uuidString
         let config: [[String: Any]] = [[
@@ -86,6 +88,23 @@ final class CodingPlanUITests: XCTestCase {
         let start = app.buttons["coding-plan-start"]
         XCTAssertTrue(start.waitForExistence(timeout: 10))
         XCTAssertFalse(start.isEnabled)
+        app.buttons["Cancel"].click()
+        let chatInput = app.textViews["chat-input-text-view"].firstMatch
+        XCTAssertTrue(chatInput.waitForExistence(timeout: 5))
+        chatInput.click()
+        paste(chatNotes as NSURL)
+        let chatFile = app.buttons["attachment-preview-Chat notes.md"].firstMatch
+        XCTAssertTrue(chatFile.waitForExistence(timeout: 5))
+        chatFile.click()
+        let closeNotes = app.sheets.buttons["Close"].firstMatch
+        XCTAssertTrue(closeNotes.waitForExistence(timeout: 5))
+        XCTAssertTrue(text("Preserve draft files.", in: app).waitForExistence(timeout: 5))
+        closeNotes.click()
+        addMenu.click()
+        control("composer-plan-mode").click()
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(start.isEnabled)
+        XCTAssertTrue(app.sheets.buttons["attachment-preview-Chat notes.md"].firstMatch.exists)
         let goal = app.descendants(matching: .any).matching(identifier: "coding-plan-goal").firstMatch
         control("coding-plan-goal-add-files").click()
         let open = app.buttons["Open"].firstMatch
@@ -94,12 +113,22 @@ final class CodingPlanUITests: XCTestCase {
         enterText(requirements.path)
         app.typeKey(.return, modifierFlags: [])
         open.click()
-        let hasFile = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Plan%20requirements.md"), object: goal)
+        let hasFile = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "[File: Plan requirements.md]"), object: goal)
         XCTAssertEqual(XCTWaiter.wait(for: [hasFile], timeout: 5), .completed)
         XCTAssertTrue(start.isEnabled)
+        let filePreview = app.buttons["attachment-preview-Plan requirements.md"]
+        XCTAssertTrue(filePreview.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(filePreview.frame.maxY, goal.frame.minY)
+        filePreview.click()
+        let closeFile = app.sheets.buttons["Close"].firstMatch
+        XCTAssertTrue(closeFile.waitForExistence(timeout: 5))
+        XCTAssertTrue(text("Support reopening.", in: app).waitForExistence(timeout: 5))
+        closeFile.click()
         goal.click()
         app.typeKey(.downArrow, modifierFlags: .command)
         enterText("Persist the workspace settings.")
+        let setupForm = app.sheets.scrollViews.firstMatch
+        setupForm.scroll(byDeltaX: 0, deltaY: -360)
         let picker = control("coding-plan-planner")
         XCTAssertTrue(picker.exists)
         picker.click()
@@ -109,6 +138,7 @@ final class CodingPlanUITests: XCTestCase {
         control("coding-plan-reviewer-model").click()
         app.menuItems["fixture-model"].firstMatch.click()
         app.buttons["Save Reviewer"].click()
+        setupForm.scroll(byDeltaX: 0, deltaY: -240)
         app.buttons["coding-plan-add-reviewer"].click()
         let instructions = app.descendants(matching: .any).matching(identifier: "coding-plan-review-prompt").firstMatch
         instructions.click()
@@ -128,7 +158,8 @@ final class CodingPlanUITests: XCTestCase {
         XCTAssertTrue(debate.buttons["tool-activity-read-brief"].firstMatch.waitForExistence(timeout: 5))
         toolActivity.click()
         let draftPrompt = try String(contentsOf: root.appendingPathComponent("draft-prompt"), encoding: .utf8)
-        XCTAssertTrue(draftPrompt.contains(requirements.absoluteString), draftPrompt)
+        XCTAssertTrue(draftPrompt.contains(chatNotes.absoluteString) || draftPrompt.contains(chatNotes.resolvingSymlinksInPath().absoluteString), draftPrompt)
+        XCTAssertTrue(draftPrompt.contains(requirements.absoluteString) || draftPrompt.contains(requirements.resolvingSymlinksInPath().absoluteString), draftPrompt)
         let liveScreenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
         liveScreenshot.name = "Streaming planner with a live plan chip"
         liveScreenshot.lifetime = .keepAlways
@@ -151,10 +182,21 @@ final class CodingPlanUITests: XCTestCase {
         XCTAssertGreaterThan(messageList.frame.maxY - restingSend.maxY, 12)
         XCTAssertFalse(send.isEnabled)
         enterMultilineDraft("Keep a local backup.\nVerify recovery.\nTest reopening.")
-        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII="))
+        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPQr/8EAAKBAaEd3mrZAAAAAElFTkSuQmCC"))
         let image = NSPasteboardItem()
         image.setData(png, forType: .png)
         paste(image, in: composer, matching: NSPredicate(format: "value CONTAINS %@", "[Image1]"))
+        let pastedPreview = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "attachment-preview-pasted-")).firstMatch
+        XCTAssertTrue(pastedPreview.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(pastedPreview.frame.maxY, composer.frame.minY)
+        let attachmentDraft = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        attachmentDraft.name = "Debate draft with a pasted image"
+        attachmentDraft.lifetime = .keepAlways
+        add(attachmentDraft)
+        pastedPreview.click()
+        XCTAssertTrue(app.sheets.staticTexts["100%"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Image unavailable"].exists)
+        app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(send.isEnabled)
         send.click()
         XCTAssertTrue(text("Keep a local backup.", in: debate).waitForExistence(timeout: 5))
@@ -263,6 +305,11 @@ final class CodingPlanUITests: XCTestCase {
         XCTAssertFalse(composer.exists)
         app.buttons["Implementation Chat"].click()
 
+        let usageFooter = control("thread-usage-footer")
+        XCTAssertTrue(usageFooter.waitForExistence(timeout: 10))
+        let usageText = usageFooter.label + (usageFooter.value as? String ?? "")
+        XCTAssertTrue(usageText.contains("5h — · 7d —"), usageFooter.debugDescription)
+
         let create = control("create-from-chat")
         for (action, title) in [("Create Task from Chat…", "Test task"), ("Create Story from Chat…", "Test story")] {
             create.click()
@@ -273,6 +320,16 @@ final class CodingPlanUITests: XCTestCase {
             let field = app.textFields["task-form-title"]
             XCTAssertTrue(field.waitForExistence(timeout: 12))
             XCTAssertEqual(field.value as? String, title)
+            if title == "Test task" {
+                let description = app.textViews["task-description-editor"].firstMatch
+                description.click()
+                paste(requirements as NSURL, in: description, matching: NSPredicate(format: "value CONTAINS %@", "[File: Plan requirements.md]"))
+                let taskFile = app.sheets.buttons["attachment-preview-Plan requirements.md"].firstMatch
+                XCTAssertTrue(taskFile.waitForExistence(timeout: 5))
+                taskFile.click()
+                XCTAssertTrue(app.sheets.buttons["Close"].firstMatch.waitForExistence(timeout: 5))
+                app.sheets.buttons["Close"].firstMatch.click()
+            }
             app.buttons["Save"].click()
             XCTAssertTrue(field.waitForNonExistence(timeout: 5))
         }

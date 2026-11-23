@@ -6,7 +6,7 @@ import RxCodeSync
 import TipKit
 
 /// Modal sheet for composing a new thread. Captures the prompt + config knobs
-/// (branch, model, permission mode), fires `requestNewSession` on submit, then
+/// (branch, model, thinking level, permission mode), fires `requestNewSession` on submit, then
 /// watches the session list for the freshly-created summary and dismisses,
 /// handing the new session ID back to the caller so it can navigate.
 private let newThreadLogger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "NewThread")
@@ -30,14 +30,14 @@ struct NewThreadSheet: View {
     @State private var submitWatchdog: Task<Void, Never>?
     @State private var submitError: String?
 
-    // Per-thread agent config. Seeded once from the desktop's current settings,
-    // then applied only to the thread this sheet creates (no longer mutates the
-    // desktop's global defaults).
+    // Restore model choices on this device and seed the remaining settings from the Mac.
     @State private var planModeEnabled = false
     @State private var selectedProvider: AgentProvider?
     @State private var selectedModelID: String?
+    @State private var selectedEffort: String?
     @State private var selectedPermissionMode: PermissionMode = .default
-    @State private var didSeedConfig = false
+    @State private var didSeedPermissionMode = false
+    @State private var hasPickedModelSettings = false
 
     private var projectName: String {
         state.projects.first(where: { $0.id == projectID })?.name ?? String(localized: "this project")
@@ -54,11 +54,14 @@ struct NewThreadSheet: View {
                         preferredBranch: preferredBranch,
                         selectedProvider: $selectedProvider,
                         selectedModelID: $selectedModelID,
+                        selectedEffort: $selectedEffort,
                         selectedPermissionMode: $selectedPermissionMode,
                         planModeEnabled: $planModeEnabled,
+                        onPickModelSettings: { hasPickedModelSettings = true },
                         onPresentSettings: { focusDismissalGeneration += 1 }
                     )
                     .environmentObject(state)
+                    .disabled(isSubmitting)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -142,14 +145,22 @@ struct NewThreadSheet: View {
 
     // MARK: - Actions
 
-    /// Copy the desktop's current agent config into local state once it is
-    /// available. Runs on appear and again if the snapshot arrives afterwards.
     private func seedConfigIfNeeded() {
-        guard !didSeedConfig, let settings = state.desktopSettings else { return }
-        didSeedConfig = true
-        selectedProvider = settings.selectedAgentProvider
-        selectedModelID = settings.selectedModel
-        selectedPermissionMode = settings.permissionMode
+        guard let settings = state.desktopSettings else { return }
+        if !didSeedPermissionMode {
+            didSeedPermissionMode = true
+            selectedPermissionMode = settings.permissionMode
+        }
+        guard !hasPickedModelSettings else { return }
+        if let saved = MobileModelPreferences.selection(in: settings) {
+            selectedProvider = saved.provider
+            selectedModelID = saved.model
+            selectedEffort = saved.effort
+        } else {
+            selectedProvider = settings.selectedAgentProvider
+            selectedModelID = settings.selectedModel
+            selectedEffort = nil
+        }
     }
 
     private func submit(_ body: String) {
@@ -168,11 +179,14 @@ struct NewThreadSheet: View {
             // and the thread lands on the project root instead of the
             // selected branch's worktree.
             await state.waitForPendingBranchOps()
+            let levels = state.desktopSettings?.reasoningLevels(for: selectedProvider, model: selectedModelID) ?? []
+            let effort = levels.first { $0.id == selectedEffort }?.id
             let sent = await state.requestNewSession(
                 projectID: projectID,
                 initialText: body,
                 agentProvider: selectedProvider,
                 model: selectedModelID,
+                effort: effort,
                 permissionMode: selectedPermissionMode,
                 planMode: planModeEnabled
             )

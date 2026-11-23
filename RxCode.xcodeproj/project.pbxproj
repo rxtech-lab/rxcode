@@ -11,6 +11,8 @@
 		0FA17996BACE436FBB3E324A /* PetVoiceUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1D1CF0EDE34AD69E39EE41 /* PetVoiceUpdateTests.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
+		101010122FCB100000000002 /* AgentPromptDispatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010122FCB100000000001 /* AgentPromptDispatchTests.swift */; };
+		155EB86C89D944249176E662 /* GitRefBadgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155EB86C89D944249176E661 /* GitRefBadgeTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
 		36596E0C1F1F03A76E8EAC44 /* TaskRunQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */; };
 		4DB3FD78155F4469BBFB353C /* MCPAppConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535C9B55985741FE9A80AF27 /* MCPAppConnectionTests.swift */; };
@@ -245,6 +247,8 @@
 		082D838B04830BED06204608 /* AppStateTests+ProjectSessions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "AppStateTests+ProjectSessions.swift"; sourceTree = "<group>"; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
+		101010122FCB100000000001 /* AgentPromptDispatchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentPromptDispatchTests.swift; sourceTree = "<group>"; };
+		155EB86C89D944249176E661 /* GitRefBadgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRefBadgeTests.swift; sourceTree = "<group>"; };
 		156FC5ED42A7E52FDE23F140 /* PetRealtimeTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetRealtimeTransportTests.swift; sourceTree = "<group>"; };
 		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
 		308F126F79C712472865BC80 /* TaskBoardHookTests+TaskTools.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "TaskBoardHookTests+TaskTools.swift"; sourceTree = "<group>"; };
@@ -576,6 +580,7 @@
 				E92A867810EB489390421B01 /* GlobalChatTests.swift */,
 				F190AE02DEB74040ABC41201 /* CodingPlanTests.swift */,
 				B73218100000000000000001 /* WorkspaceSidebarTests.swift */,
+				155EB86C89D944249176E661 /* GitRefBadgeTests.swift */,
 				C4F7C00C0000000000000001 /* ChromeCookieImporterTests.swift */,
 				B73218100000000000000003 /* WorkspaceBrowserTests.swift */,
 				B73218100000000000000009 /* PreviewCommentTests.swift */,
@@ -598,6 +603,7 @@
 				DFAAC0023071000100A1E94D /* PetScreenCaptureTests.swift */,
 				DFAAC0043071000100A1E94D /* PetVoicePresetsTests.swift */,
 				101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */,
+				101010122FCB100000000001 /* AgentPromptDispatchTests.swift */,
 				AD3DA07D5F884B7A9F233FD1 /* AgentConfirmationAttentionTests.swift */,
 				4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */,
 				7A5C0001000000000000A001 /* MockAgentBackend.swift */,
@@ -1210,6 +1216,7 @@
 				E92A867810EB489390421B02 /* GlobalChatTests.swift in Sources */,
 				F190AE02DEB74040ABC41202 /* CodingPlanTests.swift in Sources */,
 				B73218100000000000000002 /* WorkspaceSidebarTests.swift in Sources */,
+				155EB86C89D944249176E662 /* GitRefBadgeTests.swift in Sources */,
 				C4F7C00C0000000000000002 /* ChromeCookieImporterTests.swift in Sources */,
 				B73218100000000000000004 /* WorkspaceBrowserTests.swift in Sources */,
 				B7321810000000000000000A /* PreviewCommentTests.swift in Sources */,
@@ -1232,6 +1239,7 @@
 				DFAAC0013071000100A1E94D /* PetScreenCaptureTests.swift in Sources */,
 				DFAAC0033071000100A1E94D /* PetVoicePresetsTests.swift in Sources */,
 				101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */,
+				101010122FCB100000000002 /* AgentPromptDispatchTests.swift in Sources */,
 				C93BD2F51A0D4DCA8209E491 /* AgentConfirmationAttentionTests.swift in Sources */,
 				33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */,
 				7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */,

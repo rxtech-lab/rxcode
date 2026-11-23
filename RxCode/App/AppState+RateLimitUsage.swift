@@ -6,14 +6,7 @@ import RxCodeCore
 
 extension AppState {
     func cachedRateLimitUsage(for provider: AgentProvider) -> RateLimitUsage? {
-        switch provider {
-        case .claudeCode:
-            return latestRateLimitUsage
-        case .codex:
-            return latestCodexRateLimitUsage
-        case .acp, .localAgent, .flowcy:
-            return nil
-        }
+        core.accountRateLimits[provider]?.usage
     }
 
     func rateLimitUsage(for provider: AgentProvider, forceRefresh: Bool = false) async -> RateLimitUsage? {
@@ -25,46 +18,33 @@ extension AppState {
             return await task.value ?? cachedRateLimitUsage(for: provider)
         }
 
-        let task = Task<RateLimitUsage?, Never> { [weak self] in
-            guard let self else { return nil }
-            switch provider {
-            case .claudeCode:
-                return await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
-            case .codex:
-                guard self.codexInstalled else { return nil }
-                return await self.codex.fetchRateLimits(forceRefresh: forceRefresh)
-            case .acp, .localAgent, .flowcy:
-                return nil
-            }
+        let fetch: @MainActor () async -> RateLimitUsage?
+        switch provider {
+        case .claudeCode:
+            fetch = { await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh) }
+        case .codex:
+            guard codexInstalled else { return cachedRateLimitUsage(for: provider) }
+            fetch = { [codex] in await codex.fetchRateLimits() }
+        case .acp, .localAgent, .flowcy:
+            return nil
+        }
+
+        // Coalesce history and widget updates within this workspace as well as the provider request across workspaces.
+        let task = Task { [core] in
+            await core.accountRateLimits.refresh(for: provider, fetch: fetch)
         }
         rateLimitUsageRefreshTasks[provider] = task
 
         let usage = await task.value
         rateLimitUsageRefreshTasks[provider] = nil
 
-        if let usage {
-            storeRateLimitUsage(usage, for: provider)
-            return usage
-        }
-        return cachedRateLimitUsage(for: provider)
-    }
-
-    func storeRateLimitUsage(_ usage: RateLimitUsage, for provider: AgentProvider) {
-        switch provider {
-        case .claudeCode:
-            latestRateLimitUsage = usage
-            desktopClaudeUsageDate = .now
-        case .codex:
-            latestCodexRateLimitUsage = usage
-            desktopCodexUsageDate = .now
-        case .acp, .localAgent, .flowcy:
-            break
-        }
+        guard let usage else { return cachedRateLimitUsage(for: provider) }
         recordRateLimitSample(usage, for: provider)
         refreshLocalUsagePlugins()
         scheduleDesktopWidgetUpdate()
         // Refresh the mobile home-screen widget's usage figures.
         MobileSyncService.shared.pushWidgetUpdate()
+        return usage
     }
 
     /// Force-refresh the shared Claude rate-limit usage.

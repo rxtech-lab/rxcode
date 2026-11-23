@@ -32,6 +32,9 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
     public let archiveRetentionDays: Int
     public let autoPreviewSettings: AttachmentAutoPreviewSettings
     public let availableEfforts: [String]
+    /// Backend-reported thinking levels for each provider-qualified AgentModel.key.
+    /// Older desktops only supplied the global union in availableEfforts.
+    public let reasoningLevelsByModel: [String: [ReasoningLevel]]?
     /// All agent models discovered on the desktop, flattened across providers
     /// and ACP clients. Lets mobile show a model picker without re-deriving the
     /// list itself. Optional for backward compatibility with older desktops.
@@ -67,6 +70,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         archiveRetentionDays: Int,
         autoPreviewSettings: AttachmentAutoPreviewSettings,
         availableEfforts: [String],
+        reasoningLevelsByModel: [String: [ReasoningLevel]]? = nil,
         availableModels: [AgentModel]? = nil,
         modelSections: [AgentModelSection]? = nil,
         availableSummarizationProviders: [SummarizationProviderOption]? = nil,
@@ -87,6 +91,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         self.archiveRetentionDays = archiveRetentionDays
         self.autoPreviewSettings = autoPreviewSettings
         self.availableEfforts = availableEfforts
+        self.reasoningLevelsByModel = reasoningLevelsByModel
         self.availableModels = availableModels
         self.modelSections = modelSections
         self.availableSummarizationProviders = availableSummarizationProviders
@@ -98,7 +103,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         case permissionMode, summarizationProvider, summarizationProviderDisplayName
         case openAISummarizationEndpoint, openAISummarizationModel
         case notificationsEnabled, focusMode, autoArchiveEnabled, archiveRetentionDays
-        case autoPreviewSettings, availableEfforts, availableModels, modelSections
+        case autoPreviewSettings, availableEfforts, reasoningLevelsByModel, availableModels, modelSections
         case availableSummarizationProviders, openAISummarizationModels
     }
 
@@ -119,6 +124,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         archiveRetentionDays = try c.decode(Int.self, forKey: .archiveRetentionDays)
         autoPreviewSettings = try c.decode(AttachmentAutoPreviewSettings.self, forKey: .autoPreviewSettings)
         availableEfforts = try c.decode([String].self, forKey: .availableEfforts)
+        reasoningLevelsByModel = try c.decodeIfPresent([String: [ReasoningLevel]].self, forKey: .reasoningLevelsByModel)
         availableModels = try c.decodeIfPresent([AgentModel].self, forKey: .availableModels)
         modelSections = try c.decodeIfPresent([AgentModelSection].self, forKey: .modelSections)
         availableSummarizationProviders = try c.decodeIfPresent(

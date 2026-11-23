@@ -24,7 +24,6 @@ struct TaskRunView: View {
     @State private var composerController = MarkdownEditorController()
     @State private var isComposerFocused = false
     @State private var composerHasMarkedText = false
-    @State private var previewImage: Attachment?
     @State private var transcriptHeight: CGFloat = 0
     @State private var latestTurnHeight: CGFloat = 0
     @State private var measuredTurnID: Int?
@@ -50,8 +49,8 @@ struct TaskRunView: View {
                 }
             }
         }
-        .sheet(item: $previewImage) { ImagePreviewSheet(attachment: $0) }
         // Reload when a run starts or ends, or the task changes column.
+        .rxCodeAttachmentPreviews()
         .task(id: "\(task?.status.rawValue ?? "")|\(isAgentRunning)|\(task?.sessionKey ?? "")") {
             await reload()
             refreshQueue()
@@ -216,15 +215,6 @@ struct TaskRunView: View {
                 queuedMessagePreviews(for: task)
             }
 
-            // Images are chips inside the text; the row holds everything else.
-            if followUpAttachments.contains(where: { $0.type != .image }) {
-                FlowLayout(spacing: 6) {
-                    ForEach(followUpAttachments.filter { $0.type != .image }) { attachment in
-                        attachmentChip(attachment, isRemovable: canCompose)
-                    }
-                }
-            }
-
             HStack(alignment: .bottom, spacing: 8) {
                 followUpField(task, isEditable: canCompose) {
                     guard canSend else { return false }
@@ -284,72 +274,19 @@ struct TaskRunView: View {
         isEditable: Bool,
         onReturn: @escaping () -> Bool
     ) -> some View {
-        let fontSize = ClaudeTheme.size(13)
-        return Text(followUp.isEmpty || followUp.hasSuffix("\n") ? followUp + " " : followUp)
-            .font(.system(size: fontSize))
-            .lineLimit(1...5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .hidden()
-            .overlay {
-                IMETextView(
-                    text: $followUp,
-                    isFocused: $isComposerFocused,
-                    hasMarkedText: $composerHasMarkedText,
-                    font: .systemFont(ofSize: fontSize),
-                    textColor: NSColor(isEditable ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary),
-                    placeholder: composerPrompt(task),
-                    onReturn: { [composerController] in
-                        if !onReturn() { composerController.insert("\n") }
-                    },
-                    onPasteCommandV: {
-                        guard isEditable else { return true }
-                        guard let pasted = AttachmentIntake.attachments(from: .general) else { return false }
-                        pasted.forEach(addFollowUpAttachment)
-                        return true
-                    },
-                    onImageChipTap: { index in previewImage = followUpImage(at: index) },
-                    isEditable: isEditable,
-                    accessibilityIdentifier: "task-run-follow-up",
-                    onTextViewReady: { [composerController] textView in
-                        // Let dropped files reach the composer's SwiftUI drop target.
-                        textView.unregisterDraggedTypes()
-                        composerController.textView = textView
-                    },
-                    chipThumbnail: { index in
-                        followUpImage(at: index).flatMap(ChipThumbnailCache.shared.thumbnail(for:))
-                    }
-                )
-            }
-    }
-
-    private func attachmentChip(_ attachment: Attachment, isRemovable: Bool) -> some View {
-        let icon: String = switch attachment.type {
-        case .image: "photo"
-        case .link: "link"
-        case .text: "doc.plaintext"
-        case .file: "doc"
-        }
-        return HStack(spacing: 4) {
-            Label(attachment.name, systemImage: icon)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if isRemovable {
-                Button {
-                    followUpAttachments.removeAll { $0.id == attachment.id }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: ClaudeTheme.size(9), weight: .bold))
-                }
-                .buttonStyle(.plain)
-                .help("Remove attachment")
-            }
-        }
-        .font(.system(size: ClaudeTheme.size(11)))
-        .foregroundStyle(ClaudeTheme.textSecondary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(ClaudeTheme.surfaceElevated))
-        .help(attachment.path.isEmpty ? attachment.name : attachment.path)
+        let editor = IMETextView(
+            text: $followUp, isFocused: $isComposerFocused, hasMarkedText: $composerHasMarkedText,
+            font: .systemFont(ofSize: ClaudeTheme.size(13)), textColor: NSColor(isEditable ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary),
+            chipColor: NSColor(ClaudeTheme.accent), placeholder: composerPrompt(task),
+            onReturn: { if !onReturn() { composerController.insert("\n") } },
+            isEditable: isEditable, accessibilityIdentifier: "task-run-follow-up",
+            onTextViewReady: { [composerController] in composerController.textView = $0 },
+            chipThumbnail: { index in followUpImage(at: index).flatMap(ChipThumbnailCache.shared.thumbnail(for:)) }
+        )
+        return AttachmentTextField(editor: editor, attachments: followUpAttachments, onAdd: { item, _ in
+            addFollowUpAttachment(item)
+            return nil
+        }, onRemove: { item in Attachment.remove(item.id, from: &followUpAttachments, text: &followUp) })
     }
 
     private func addFollowUpAttachment(_ attachment: Attachment) {

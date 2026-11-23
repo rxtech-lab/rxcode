@@ -460,7 +460,10 @@ struct MobileChatView: View {
                 MobileChatComposer(
                     isStreaming: isStreaming,
                     onSend: handleSend,
-                    onStop: handleStop
+                    onStop: handleStop,
+                    onResume: state.sessionSummary(sessionID: sessionID)?.isInterrupted == true ? {
+                        Task { await state.sendUserMessage("Resume", sessionID: sessionID, resumeInterruptedTurn: true) }
+                    } : nil
                 )
             }
             .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
@@ -695,9 +698,10 @@ private struct MobileChatComposer: View {
     let isStreaming: Bool
     let onSend: (String) -> Void
     let onStop: () -> Void
+    let onResume: (() -> Void)?
     @State private var text = ""
 
     var body: some View {
-        MobileInputBar(text: $text, isStreaming: isStreaming, onSend: onSend, onStop: onStop)
+        MobileInputBar(text: $text, isStreaming: isStreaming, onSend: onSend, onStop: onStop, onResume: onResume)
     }
 }

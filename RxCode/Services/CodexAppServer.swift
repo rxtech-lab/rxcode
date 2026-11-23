@@ -55,10 +55,6 @@ actor CodexAppServer {
     /// turn the app server has already closed.
     var activeTurns: [UUID: ActiveTurn] = [:]
     var stderrBuffers: [UUID: String] = [:]
-    var cachedRateLimits: RateLimitUsage?
-    var cachedRateLimitsAt: Date?
-    var rateLimitsFetchTask: Task<RateLimitUsage?, Never>?
-    let rateLimitsCacheTTL: TimeInterval = 300
     var notificationMethodCounts: [String: Int] = [:]
     /// Reference to the permission server for in-band permission requests.
     /// Wired once at app init; the `AgentBackend.send(_:)` adapter pulls it
@@ -174,31 +170,6 @@ actor CodexAppServer {
             AgentModel(provider: .codex, id: $0.id, displayName: $0.displayName,
                        description: $0.modelDescription ?? "")
         }
-    }
-
-    func fetchRateLimits(forceRefresh: Bool = false) async -> RateLimitUsage? {
-        if !forceRefresh,
-           let cachedRateLimits,
-           let cachedRateLimitsAt,
-           Date().timeIntervalSince(cachedRateLimitsAt) < rateLimitsCacheTTL {
-            return cachedRateLimits
-        }
-
-        if let rateLimitsFetchTask {
-            return await rateLimitsFetchTask.value ?? cachedRateLimits
-        }
-
-        let task = Task { await self.fetchRateLimitsUncached() }
-        rateLimitsFetchTask = task
-        let usage = await task.value
-        rateLimitsFetchTask = nil
-
-        if let usage {
-            cachedRateLimits = usage
-            cachedRateLimitsAt = Date()
-            return usage
-        }
-        return cachedRateLimits
     }
 
     func send(

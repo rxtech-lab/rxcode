@@ -1,3 +1,4 @@
+import RxCodeCore
 import RxCodeSync
 import XCTest
 
@@ -101,6 +102,24 @@ final class iPhoneNavigationUITests: XCTestCase {
         add(attachment)
     }
 
+    @MainActor
+    func testSyncedCodingPlanShowsVersionAndImplementationState() throws {
+        let r = try UITestRunner.launch(.phone, on: self, includePlan: true).robot
+        r.tap(r.briefingTab, "Briefing")
+        let card = r.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "briefing-card-A0000000-0000-0000-0000-000000000001"))
+            .firstMatch
+        r.tap(card, "Project Alpha briefing")
+        let row = r.app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Plugin discovery plan")).firstMatch
+        r.tap(row, "Coding plan")
+        r.assertExists(r.app.staticTexts["Plugin discovery plan"], "plan title")
+        r.assertExists(r.app.staticTexts["Implementation, Unimplemented"], "implementation status")
+        r.assertExists(r.app.staticTexts["Plan, Ready"], "planning status")
+        r.assertExists(r.app.staticTexts["Version, v3 · Plugin manifest"], "current version")
+        r.assertExists(r.app.staticTexts["Discover installed plugins"], "planned feature")
+        r.assertExists(r.app.staticTexts["Implementation has not started."], "implementation evidence")
+    }
+
     /// Case 1: Briefing tab → briefing detail → thread → messages → back →
     /// briefing detail is shown again.
     @MainActor
@@ -141,6 +160,45 @@ final class iPhoneNavigationUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2.0)
         r.assertExists(r.chatScreen, "chat screen remains after snapshot settles")
         r.assertMessagesShown()
+    }
+
+    @MainActor
+    func testNewThreadRemembersModelAndThinkingLevel() throws {
+        let model = AgentModel(provider: .codex, id: "test-codex", displayName: "Test Codex")
+        let settings = MobileSettingsSnapshot(
+            selectedAgentProvider: .claudeCode, selectedModel: "test-claude", selectedACPClientId: "",
+            selectedEffort: "low", permissionMode: .default, summarizationProvider: "",
+            summarizationProviderDisplayName: "", openAISummarizationEndpoint: "", openAISummarizationModel: "",
+            notificationsEnabled: true, focusMode: false, autoArchiveEnabled: false, archiveRetentionDays: 7,
+            autoPreviewSettings: .init(), availableEfforts: ["low", "high"],
+            reasoningLevelsByModel: [model.key: .levels(["low", "high"])],
+            availableModels: [.init(provider: .claudeCode, id: "test-claude", displayName: "Test Claude"), model]
+        )
+        let session = try UITestRunner.launch(.phone, on: self, settings: settings)
+        let r = session.robot
+        r.tap(r.briefingTab, "Briefing")
+        r.tap(r.anyBriefingCard, "project briefing")
+        r.tap(r.briefingDetailNewThreadButton, "new thread")
+
+        let modelPicker = r.app.buttons["new-thread-model-picker"]
+        let thinkingLevel = r.app.buttons["new-thread-thinking-level"]
+        r.app.scrollViews.firstMatch.swipeUp()
+        r.tap(modelPicker, "model picker")
+        r.tap(r.app.buttons["Test Codex"], "Codex model")
+        r.tap(thinkingLevel, "thinking level")
+        r.tap(r.app.buttons["High"], "High")
+        r.tap(r.app.navigationBars["New Thread"].buttons["Cancel"], "close new thread")
+
+        r.tap(r.briefingDetailNewThreadButton, "reopen new thread")
+        XCTAssertTrue(modelPicker.waitForExistence(timeout: 5))
+        XCTAssertTrue(modelPicker.label.contains("Test Codex"))
+        XCTAssertTrue(thinkingLevel.label.contains("High"))
+        r.createNewThread(with: "Use the saved model and thinking level.")
+        r.assertMessagesShown()
+        let request = try XCTUnwrap(session.server.latestNewSessionRequest)
+        XCTAssertEqual(request.selectedAgentProvider, .codex)
+        XCTAssertEqual(request.selectedModel, model.id)
+        XCTAssertEqual(request.selectedEffort, "high")
     }
 
     /// Case 3: Projects tab → project → thread list → thread → messages → back →

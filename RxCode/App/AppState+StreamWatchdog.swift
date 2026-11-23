@@ -37,6 +37,7 @@ extension AppState {
         streamId: UUID,
         sessionKey initialKey: String,
         agentProvider: AgentProvider,
+        projectID: UUID,
         in window: WindowState
     ) -> Task<Void, Never> {
         Task { [weak self] in
@@ -49,7 +50,7 @@ extension AppState {
                 // session_id mid-stream (compact_boundary, pending → real
                 // promotion), so the key the watchdog was spawned with may
                 // have been renamed under it.
-                let currentKey = self.sessionIdRedirect[initialKey] ?? initialKey
+                let currentKey = self.resolveCurrentSessionId(initialKey)
                 let state = self.stateForSession(currentKey)
 
                 guard state.isStreaming, state.activeStreamId == streamId else { return }
@@ -67,33 +68,14 @@ extension AppState {
 
                 self.logger.error("[Stream:Watchdog] no events for \(Int(gap))s on session=\(currentKey, privacy: .public) stream=\(streamId) — force-cleaning")
 
-                // Cancel the backend first so the CLI process group gets
-                // SIGINT/SIGKILL and stops emitting more events into the
-                // stream we're about to abandon.
-                await self.backend(for: agentProvider).cancel(streamId: streamId)
-
                 self.sessionStates[currentKey]?.streamTask?.cancel()
-
-                let message = "Agent stopped responding after \(Int(gap))s of silence. The session was reset — send your message again to continue."
-
-                // Inject the error bubble (and trip the unread flag for
-                // backgrounded sessions) inside the same finalize so the
-                // mobile diff broadcast carries both at once.
-                let isForeground = (window.currentSessionId ?? window.newSessionKey) == currentKey
-                self.finalizeStreamSession(for: currentKey, trackUnreadCompletion: true) { state in
-                    state.messages.append(ChatMessage(role: .assistant, content: message, isError: true))
-                }
-                if isForeground {
+                let message = "Agent stopped responding after \(Int(gap))s of silence."
+                await self.interruptStream(sessionID: currentKey, streamID: streamId, projectID: projectID, message: message)
+                await self.backend(for: agentProvider).cancel(streamId: streamId)
+                if window.currentSessionId == currentKey {
                     window.errorMessage = message
                     window.showError = true
                 }
-
-                self.recordStreamCompletion(
-                    streamId: streamId,
-                    sessionId: currentKey,
-                    assistantText: "",
-                    error: message
-                )
                 return
             }
         }

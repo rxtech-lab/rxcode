@@ -14,10 +14,6 @@ actor RateLimitService {
         let rawOauth: [String: Any]
     }
 
-    private var cached: RateLimitUsage?
-    private var cachedAt: Date?
-    private var fetchTask: Task<RateLimitUsage?, Never>?
-    private let cacheTTL: TimeInterval = 300  // 5 minutes
     private var authFailed = false
 
     /// In-memory copy of the Claude Code OAuth tokens. The
@@ -45,29 +41,13 @@ actor RateLimitService {
 
     func fetchUsage(forceRefresh: Bool = false) async -> RateLimitUsage? {
         guard !AppSupport.isTestProcess else { return nil }
-        if !forceRefresh, let c = cached, let at = cachedAt, Date().timeIntervalSince(at) < cacheTTL {
-            return c
-        }
-
-        if let fetchTask {
-            return await fetchTask.value ?? cached
-        }
-
-        let task = Task { await self.fetchUsageUncached(forceRefresh: forceRefresh) }
-        fetchTask = task
-        let usage = await task.value
-        fetchTask = nil
-        return usage ?? cached
-    }
-
-    private func fetchUsageUncached(forceRefresh: Bool) async -> RateLimitUsage? {
         if authFailed && !forceRefresh {
-            return cached
+            return nil
         }
 
         guard let tokens = await readOAuthTokens() else {
             logger.debug("[RateLimit] OAuth token not found in Keychain")
-            return cached
+            return nil
         }
 
         // If the token is expired, attempt to refresh it first
@@ -80,7 +60,7 @@ actor RateLimitService {
                 logger.debug("[RateLimit] Token refresh failed, cannot fetch usage")
                 authFailed = true
                 cachedTokens = nil
-                return cached
+                return nil
             }
         } else {
             accessToken = tokens.accessToken
@@ -90,13 +70,11 @@ actor RateLimitService {
 
         guard let usage = await callAPI(token: accessToken) else {
             logger.debug("[RateLimit] API call returned nil")
-            return cached
+            return nil
         }
         logger.info("[RateLimit] 5h=\(usage.fiveHourPercent)% 7d=\(usage.sevenDayPercent)%")
 
         authFailed = false
-        cached = usage
-        cachedAt = Date()
         return usage
     }
 

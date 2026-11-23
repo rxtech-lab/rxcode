@@ -58,6 +58,38 @@ final class ThreadStoreReaderTests: XCTestCase {
 
     // MARK: - Parity with ThreadStore
 
+    func testThreadRateLimitUsageTotalsRecordedTurnsByProviderAfterARename() async throws {
+        let store = makeStore()
+        let reader = ThreadStoreReader(container: store.container)
+        func record(_ thread: String, _ provider: AgentProvider, fiveHour: Double?, sevenDay: Double?, others: Int = 0) {
+            store.recordRateLimitTaskCost(RateLimitTaskCost(
+                providerRaw: provider.rawValue, model: nil, projectId: nil, threadId: thread,
+                threadTitle: "", startedAt: .now, endedAt: .now, fiveHourDelta: fiveHour,
+                sevenDayDelta: sevenDay, concurrentRuns: others
+            ))
+        }
+        record("original", .claudeCode, fiveHour: 1.5, sevenDay: 0.25)
+        record("final", .claudeCode, fiveHour: nil, sevenDay: 0.5)
+        record("final", .codex, fiveHour: 0, sevenDay: nil)
+        record("final", .codex, fiveHour: 12, sevenDay: 4, others: 1)
+        record("another-thread", .claudeCode, fiveHour: 50, sevenDay: 50)
+        store.renameRateLimitTaskCosts(from: "original", to: "final")
+
+        let totals = await reader.loadThreadRateLimitUsage(threadId: "final")
+        XCTAssertEqual(totals.map(\.provider), [.claudeCode, .codex])
+        let claude = try XCTUnwrap(totals.first)
+        XCTAssertEqual(claude.fiveHour.percent, 1.5)
+        XCTAssertTrue(claude.fiveHour.isPartial)
+        XCTAssertEqual(claude.sevenDay.percent, 0.75)
+        XCTAssertFalse(claude.sevenDay.isPartial)
+        let codex = try XCTUnwrap(totals.last)
+        XCTAssertEqual(codex.fiveHour.percent, 0)
+        XCTAssertTrue(codex.fiveHour.isPartial)
+        XCTAssertNil(codex.sevenDay.percent)
+        let oldTotals = await reader.loadThreadRateLimitUsage(threadId: "original")
+        XCTAssertTrue(oldTotals.isEmpty)
+    }
+
     func testStartupSnapshotMatchesTheMainActorStore() async {
         let store = makeStore()
         let projectId = UUID()

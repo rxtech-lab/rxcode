@@ -106,6 +106,9 @@ final class MobileAppState: ObservableObject {
     @Published var branchBriefings: [MobileBranchBriefing] = [] {
         didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
     }
+    @Published var briefingPlans: [CodingPlanActivity] = [] {
+        didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
+    }
     private var cachedBriefingGroups: [GroupedBriefing]?
     private var cachedBriefingTimeline: (filters: MobileBriefingFilters, calendar: Calendar, start: Date, end: Date, sections: [MobileBriefingDaySection])?
 
@@ -140,7 +143,7 @@ final class MobileAppState: ObservableObject {
     /// state publications must not rebuild and sort the entire thread history.
     var briefingGroups: [GroupedBriefing] {
         if let cachedBriefingGroups { return cachedBriefingGroups }
-        let groups = groupBriefings(briefings: branchBriefings, threads: threadSummaries)
+        let groups = groupBriefings(briefings: branchBriefings, threads: threadSummaries, plans: briefingPlans)
             .sortedByProjectOrder(projects)
         cachedBriefingGroups = groups
         return groups

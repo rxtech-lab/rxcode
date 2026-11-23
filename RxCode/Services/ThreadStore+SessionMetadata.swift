@@ -257,10 +257,17 @@ extension ThreadStore {
         skipHooks: Bool
     ) {
         guard let thread = fetch(id: sessionId) else { return }
+        let affectsPlan = isCodingPlanVerification(parentID: parentThreadId) || isCodingPlanVerification(parentID: thread.parentThreadId)
         thread.parentThreadId = parentThreadId
         thread.threadLabel = threadLabel
         thread.skipHooks = skipHooks
         save()
+        if affectsPlan { onCodingPlansChanged?() }
+    }
+
+    func isCodingPlanVerification(parentID: String?) -> Bool {
+        guard let parentID else { return false }
+        return fetch(id: parentID)?.implementationPlanID != nil
     }
 
     func renameHookStatus(from oldId: String, to newId: String) {

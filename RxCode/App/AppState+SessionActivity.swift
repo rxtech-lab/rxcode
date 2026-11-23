@@ -53,7 +53,8 @@ extension AppState {
     /// (O(sessions), no transcript work) so status stays exact; todo extraction
     /// is coalesced onto a short timer.
     func sessionStatesDidChange() {
-        var next = sessionActivity
+        let previousActivity = sessionActivity
+        var next = previousActivity
         var flagsChanged = false
         var streamingChanged = false
         var needsTodoRefresh = false
@@ -85,7 +86,15 @@ extension AppState {
         }
         if previews != computerUseWindowsBySession { computerUseWindowsBySession = previews }
         if flagsChanged { sessionActivity = next }
-        if streamingChanged { scheduleDesktopWidgetUpdate() }
+        if streamingChanged {
+            scheduleDesktopWidgetUpdate()
+            if briefingPlans.contains(where: { plan in
+                guard let id = plan.implementationThreadID else { return false }
+                return (previousActivity[id]?.isStreaming ?? false) != (next[id]?.isStreaming ?? false)
+            }) {
+                scheduleBriefingPlansRefresh()
+            }
+        }
         if needsTodoRefresh {
             scheduleSessionActivityTodoRefresh()
         }

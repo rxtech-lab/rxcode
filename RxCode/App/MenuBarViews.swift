@@ -48,13 +48,11 @@ struct MenuBarLabel: View {
             return (memoryText, "Model RAM",
                     "Local model process memory: \(memoryText). Includes model weights, cache, and runtime overhead; excludes other apps and system memory.")
         case .claudeCode, .codex:
-            let usage = provider == .codex ? appState.latestCodexRateLimitUsage : appState.latestRateLimitUsage
+            let usage = appState.cachedRateLimitUsage(for: provider)
             let usesFiveHour = provider == .claudeCode || (usage?.hasFiveHourLimit ?? true)
             let percent = usesFiveHour ? usage?.fiveHourPercent : usage?.sevenDayPercent
             let label = usesFiveHour ? "5h" : "7d"
-            let text = percent.map { value in
-                value > 0 && value < 1 ? String(format: "%.1f%%", value) : "\(Int(value.rounded()))%"
-            } ?? "—%"
+            let text = percent.map(RateLimitUsage.formattedPercent) ?? "—%"
             return (text, label, "\(provider.displayNameText) \(label) usage limit: \(text)")
         case .acp, .flowcy:
             return ("", "", "\(provider.displayNameText) activity")
@@ -158,11 +156,7 @@ struct MenuBarContentView: View {
     @State private var showManageWorkspaceSheet = false
 
     private var selectedUsage: RateLimitUsage? {
-        switch appState.selectedAgentProvider {
-        case .claudeCode: return appState.latestRateLimitUsage
-        case .codex: return appState.latestCodexRateLimitUsage
-        case .acp, .localAgent, .flowcy: return nil
-        }
+        appState.cachedRateLimitUsage(for: appState.selectedAgentProvider)
     }
 
     private var secondaryLimitLabel: String {
@@ -554,7 +548,7 @@ private struct MenuBarUsageBar: View {
                 Spacer()
 
                 if let percent {
-                    Text("\(formatPercent(percent))%")
+                    Text(RateLimitUsage.formattedPercent(percent))
                         .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(ClaudeTheme.textSecondary)
@@ -590,13 +584,6 @@ private struct MenuBarUsageBar: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
         }
-    }
-
-    private func formatPercent(_ value: Double) -> String {
-        if value > 0 && value < 1 {
-            return String(format: "%.1f", value)
-        }
-        return "\(Int(value.rounded()))"
     }
 
     private func barColor(for percent: Double) -> Color {

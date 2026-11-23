@@ -17,32 +17,33 @@ import UniformTypeIdentifiers
 /// The source editor is the chat input's `IMETextView`, so an image reference
 /// shows as the same `[ImageN]` chip the chat composer uses. The field edits a
 /// display string in which each `![name](url)` is stood in for by its token;
-/// `DescriptionImageChips` maps between that and the stored Markdown.
+/// `DescriptionAttachmentChips` maps between that and the stored Markdown.
 struct MarkdownDescriptionEditor: View {
     enum Layout {
-        case form(showsFilePicker: Bool = false)
+        case form
         case composer(onSubmit: () -> Void)
     }
 
     @Binding var text: String
     var attachments: Binding<[Attachment.DTO]>?
     var placeholder: String
+    var title: LocalizedStringKey = "Description"
     var isDisabled: Bool = false
     var height: CGFloat = 170
     /// Prefix for the accessibility identifiers, so two editors can be on
     /// screen at once and still be told apart.
     var identifierPrefix: String = "task-description"
     var editorIdentifier: String?
-    var layout: Layout = .form()
+    var layout: Layout = .form
 
     @State private var controller = MarkdownEditorController()
     @State private var isDropTargeted = false
     @State private var showsPreview = false
-    @State private var chips = DescriptionImageChips()
+    @State private var chips = DescriptionAttachmentChips()
     @State private var displayText = ""
     @State private var isFocused = false
     @State private var hasMarkedText = false
-    @State private var previewImage: Attachment?
+    @State private var previewAttachment: Attachment?
     @State private var choosingFiles = false
 
     /// Drops are accepted in preview mode too — the caret is unavailable there,
@@ -52,21 +53,10 @@ struct MarkdownDescriptionEditor: View {
     var body: some View {
         Group {
             switch layout {
-            case .form(let showsFilePicker):
-                form(showsFilePicker: showsFilePicker)
+            case .form:
+                form
             case .composer:
-                HStack(alignment: .bottom, spacing: 4) {
-                    addFilesButton.labelStyle(.iconOnly)
-                    // The text view scrolls once the draft reaches five lines.
-                    Text(displayText.isEmpty || displayText.hasSuffix("\n") ? displayText + " " : displayText)
-                        .font(.system(size: font.pointSize))
-                        .lineLimit(1...5)
-                        .padding(.horizontal, 5)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .hidden()
-                        .overlay { editor }
-                }
+                attachmentField
             }
         }
         .onDrop(of: AttachmentIntake.dropTypes, isTargeted: $isDropTargeted) { providers in
@@ -75,14 +65,15 @@ struct MarkdownDescriptionEditor: View {
             return true
         }
         .overlay { dropHint }
-        .sheet(item: $previewImage) { ImagePreviewSheet(attachment: $0) }
+        .sheet(item: $previewAttachment) { AttachmentPreviewSheet(attachment: $0) }
+        .rxCodeAttachmentPreviews()
         .onAppear {
             controller.fallbackAppend = { [binding = editorText] snippet in binding.wrappedValue += snippet }
         }
         .onChange(of: text, initial: true) { _, newValue in
             // An external reset starts a fresh draft with its own image tokens.
             guard chips.markdown(for: displayText) != newValue else { return }
-            chips = DescriptionImageChips()
+            chips = DescriptionAttachmentChips()
             displayText = chips.display(for: newValue)
         }
     }
@@ -94,11 +85,11 @@ struct MarkdownDescriptionEditor: View {
         })
     }
 
-    private func form(showsFilePicker: Bool) -> some View {
+    private var form: some View {
         VStack(alignment: .leading, spacing: 6) {
-            header(showsFilePicker: showsFilePicker)
+            header
             content
-                .frame(height: height)
+                .frame(height: showsPreview ? height : nil)
                 .background(ClaudeTheme.inputBackground, in: shape)
                 .overlay {
                     shape.strokeBorder(
@@ -119,11 +110,11 @@ struct MarkdownDescriptionEditor: View {
         RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
     }
 
-    private func header(showsFilePicker: Bool) -> some View {
+    private var header: some View {
         HStack(spacing: 8) {
-            Text("Description")
+            Text(title)
             Spacer()
-            if showsFilePicker { addFilesButton }
+            addFilesButton
             Picker("Editor Mode", selection: $showsPreview) {
                 Image(systemName: "pencil").tag(false)
                 Image(systemName: "eye").tag(true)
@@ -168,7 +159,7 @@ struct MarkdownDescriptionEditor: View {
                 .padding(8)
             }
         } else {
-            editor.padding(6)
+            attachmentField.padding(6)
         }
     }
 
@@ -179,13 +170,14 @@ struct MarkdownDescriptionEditor: View {
         }
     }
 
-    private var editor: some View {
+    private var editor: IMETextView {
         IMETextView(
             text: editorText,
             isFocused: $isFocused,
             hasMarkedText: $hasMarkedText,
             font: font,
             textColor: NSColor(isDisabled ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary),
+            chipColor: NSColor(ClaudeTheme.accent),
             placeholder: placeholder,
             onReturn: {
                 switch layout {
@@ -193,8 +185,7 @@ struct MarkdownDescriptionEditor: View {
                 case .composer(let onSubmit): onSubmit()
                 }
             },
-            onPasteCommandV: handlePaste,
-            onImageChipTap: openImage,
+            onImageChipTap: { previewAttachment = chips.attachment(at: $0) },
             isEditable: !isDisabled,
             accessibilityIdentifier: editorIdentifier ?? "\(identifierPrefix)-editor",
             onTextViewReady: { [controller] textView in
@@ -203,9 +194,25 @@ struct MarkdownDescriptionEditor: View {
                 controller.textView = textView
             },
             chipThumbnail: { index in
-                chips.url(forChip: index).flatMap(ChipThumbnailCache.shared.thumbnail(for:))
-            }
+                guard let item = chips.attachment(at: index) else { return nil }
+                return item.type == .image ? ChipThumbnailCache.shared.thumbnail(for: item) : NSWorkspace.shared.icon(forFile: item.path)
+            },
+            chipTokens: chips.indices
         )
+    }
+
+    private var attachmentField: some View {
+        let compact = if case .composer = layout { true } else { false }
+        let inline = chips.attachments(in: displayText)
+        let paths = Set(inline.map(\.path))
+        let extra = attachments?.wrappedValue.filter { !paths.contains($0.path) }.map(Attachment.init(dto:)) ?? []
+        return AttachmentTextField(editor: editor, attachments: inline + extra,
+                                   editorHeight: compact ? nil : height - 12, showsFilePicker: compact,
+                                   onAdd: { item, _ in attach(item); return nil },
+                                   onRemove: { item in
+            editorText.wrappedValue = chips.removing(item, from: displayText)
+            attachments?.wrappedValue.removeAll { $0.path == item.path }
+        })
     }
 
     @ViewBuilder
@@ -223,15 +230,6 @@ struct MarkdownDescriptionEditor: View {
     }
 
     // MARK: - Paste & Drop
-
-    /// Returns `true` when the paste was consumed here; `false` lets the text
-    /// view run its own plain-text paste, which keeps undo and IME intact.
-    private func handlePaste() -> Bool {
-        guard acceptsContent else { return true }
-        guard let pasted = AttachmentIntake.attachments(from: .general) else { return false }
-        pasted.forEach(attach)
-        return true
-    }
 
     private func handleDrop(_ providers: [NSItemProvider]) {
         AttachmentIntake.load(
@@ -252,7 +250,7 @@ struct MarkdownDescriptionEditor: View {
             if item.type == .image {
                 controller.insert(chips.token(for: reference))
             } else {
-                controller.insertBlock(reference)
+                controller.insertBlock(chips.token(for: reference))
             }
             guard let attachments, !item.path.isEmpty else { continue }
             let dto = item.persistableInTaskBoard().dto
@@ -261,16 +259,12 @@ struct MarkdownDescriptionEditor: View {
         }
     }
 
-    private func openImage(_ index: Int) {
-        guard let url = chips.url(forChip: index) else { return }
-        previewImage = Attachment(type: .image, name: url.lastPathComponent, path: url.path)
-    }
-
     /// `![alt](file://…)` for an image, `[label](file://…)` otherwise. The URL
     /// form is used rather than a bare path because Markdown link destinations
     /// end at the first space, and paths routinely contain spaces.
     static func markdownReference(for attachment: Attachment) -> String {
         let label = attachment.name
+            .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "[", with: "\\[")
             .replacingOccurrences(of: "]", with: "\\]")
         let destination = attachment.path.isEmpty
@@ -280,34 +274,69 @@ struct MarkdownDescriptionEditor: View {
                 .replacingOccurrences(of: ")", with: "%29")
         return "\(attachment.type == .image ? "!" : "")[\(label)](\(destination))"
     }
+
+    /// Preserve the chat draft's image positions and include files chosen without an inline token.
+    static func markdown(forChatDraft draft: String, files: [Attachment]) -> String {
+        guard !files.isEmpty else { return draft }
+        let images = files.filter { $0.type == .image }
+        let text = draft as NSString
+        let result = NSMutableString(string: draft)
+        let pattern = try! NSRegularExpression(pattern: #"\[Image(\d+)\]"#)
+        var inline: Set<UUID> = []
+        for match in pattern.matches(in: draft, range: NSRange(location: 0, length: text.length)).reversed() {
+            guard let slot = Int(text.substring(with: match.range(at: 1))), slot > 0, slot <= images.count else { continue }
+            let image = images[slot - 1]
+            inline.insert(image.id)
+            result.replaceCharacters(in: match.range, with: markdownReference(for: image))
+        }
+        let extra = files.filter { !inline.contains($0.id) }.map(markdownReference)
+        return ([result as String] + extra).filter { !$0.isEmpty }.joined(separator: "\n")
+    }
 }
 
-// MARK: - Image chips
+// MARK: - Attachment chips
 
-/// Maps a description's Markdown to the chat input's chip form and back: each
-/// image reference becomes `[ImageN]`, where N is its 1-based slot in
-/// `references`. Slots are only ever appended, so a token keeps pointing at the
-/// same image while the user edits around it.
-struct DescriptionImageChips {
-    private(set) var references: [String] = []
+/// The editable tokens keep a stable slot as the user moves or removes references.
+struct DescriptionAttachmentChips {
+    private struct Entry {
+        let reference: String
+        let token: String
+        let attachment: Attachment?
+    }
 
-    private static let imageReference = try! NSRegularExpression(
-        pattern: #"!\[(?:\\.|[^\]\\\n])*\]\([^)\s]+\)"#
-    )
-    private static let chipToken = try! NSRegularExpression(pattern: #"\[Image(\d+)\]"#)
+    private var entries: [Entry] = []
+    private(set) var indices: [String: Int] = [:]
+    private var imageCount = 0
+    private static let reference = try! NSRegularExpression(pattern: #"!?\[((?:\\.|[^\]\\\n])*)\]\(([^)\s]+)\)"#)
+    private static let tokenPattern = try! NSRegularExpression(pattern: #"\[(?:\\.|[^\[\]\\\n])+\]"#)
 
-    /// The `[ImageN]` token for a reference, registering it if it is new.
     mutating func token(for reference: String) -> String {
-        if let index = references.firstIndex(of: reference) {
-            return "[Image\(index + 1)]"
+        if let entry = entries.first(where: { $0.reference == reference }) { return entry.token }
+        let ns = reference as NSString
+        guard let match = Self.reference.firstMatch(in: reference, range: NSRange(location: 0, length: ns.length)),
+              let url = URL(string: ns.substring(with: match.range(at: 2))) else { return reference }
+        let image = reference.hasPrefix("!")
+        guard image || url.isFileURL else { return reference }
+
+        let label = ns.substring(with: match.range(at: 1))
+        let name = label.replacingOccurrences(of: #"\\(.)"#, with: "$1", options: .regularExpression)
+        let item = url.isFileURL ? Attachment(type: image ? .image : .file, name: name, path: url.path) : nil
+        let token: String
+        if image {
+            imageCount += 1
+            token = Attachment.imageToken(imageCount)
+        } else {
+            let base = "[File: \(label)]"
+            token = indices[base] == nil ? base : "[File \(entries.count + 1): \(label)]"
         }
-        references.append(reference)
-        return "[Image\(references.count)]"
+        entries.append(Entry(reference: reference, token: token, attachment: item))
+        indices[token] = entries.count
+        return token
     }
 
     mutating func display(for markdown: String) -> String {
         let ns = markdown as NSString
-        let matches = Self.imageReference.matches(in: markdown, range: NSRange(location: 0, length: ns.length))
+        let matches = Self.reference.matches(in: markdown, range: NSRange(location: 0, length: ns.length))
         var result = ""
         var cursor = 0
         for match in matches {
@@ -318,34 +347,29 @@ struct DescriptionImageChips {
         return result + ns.substring(from: cursor)
     }
 
-    /// Tokens with no registered reference are left as typed.
     func markdown(for display: String) -> String {
         let ns = display as NSString
-        let matches = Self.chipToken.matches(in: display, range: NSRange(location: 0, length: ns.length))
-        var result = ""
-        var cursor = 0
-        for match in matches {
-            result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
-            let token = ns.substring(with: match.range)
-            if let slot = Int(ns.substring(with: match.range(at: 1))), references.indices.contains(slot - 1) {
-                result += references[slot - 1]
-            } else {
-                result += token
+        let result = NSMutableString(string: display)
+        for match in Self.tokenPattern.matches(in: display, range: NSRange(location: 0, length: ns.length)).reversed() {
+            if let slot = indices[ns.substring(with: match.range)] {
+                result.replaceCharacters(in: match.range, with: entries[slot - 1].reference)
             }
-            cursor = NSMaxRange(match.range)
         }
-        return result + ns.substring(from: cursor)
+        return result as String
     }
 
-    /// The file an `[ImageN]` chip points at, when it is a local file.
-    func url(forChip index: Int) -> URL? {
-        guard references.indices.contains(index - 1) else { return nil }
-        let reference = references[index - 1]
-        guard let open = reference.lastIndex(of: "("),
-              let url = URL(string: String(reference[reference.index(after: open)...].dropLast())),
-              url.isFileURL
-        else { return nil }
-        return url
+    func attachment(at slot: Int) -> Attachment? {
+        guard slot > 0, slot <= entries.count else { return nil }
+        return entries[slot - 1].attachment
+    }
+
+    func attachments(in display: String) -> [Attachment] {
+        entries.compactMap { display.contains($0.token) ? $0.attachment : nil }
+    }
+
+    func removing(_ item: Attachment, from display: String) -> String {
+        guard let entry = entries.first(where: { $0.attachment?.id == item.id }) else { return display }
+        return display.replacingOccurrences(of: entry.token, with: "")
     }
 }
 

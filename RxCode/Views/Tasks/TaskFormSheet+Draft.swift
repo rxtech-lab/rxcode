@@ -227,9 +227,11 @@ extension TaskFormSheet {
             TextField("Title", text: $task.title, prompt: Text("Task title"))
                 .multilineTextAlignment(.leading)
                 .accessibilityIdentifier("task-create-title")
-            TextField("Details", text: $task.details, prompt: Text("Task details"), axis: .vertical)
-                .multilineTextAlignment(.leading)
-                .lineLimit(3...12)
+            MarkdownDescriptionEditor(
+                text: $task.details, attachments: $task.attachments,
+                placeholder: String(localized: "Task details"), title: "Details",
+                height: 130, identifierPrefix: "task-create-details"
+            )
             draftPropertyChips
             LabeledContent("Model") {
                 agentModelMenu($task.agent)

@@ -119,11 +119,9 @@ extension ClaudeCodeServer {
     }
 
     func generateBranchBriefing(
-        threadSummaries: [(title: String, summary: String)],
+        prompt: String,
         model: String = "claude-haiku-4-5-20251001"
     ) async -> String? {
-        guard !threadSummaries.isEmpty else { return nil }
-        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: threadSummaries)
         return await generatePlainSummary(prompt: prompt, model: model, limit: 1800)
     }
 

@@ -18,6 +18,24 @@ struct MCPToolResultViewTests {
         #expect(labels.contains("Image not available"))
     }
 
+    @Test("Namespaced IDE actions have the same readable title in the transcript and details")
+    func namespacedIDEToolLabels() throws {
+        let tool = ToolCall(id: "todos", name: "mcp__rxcode-ide__ide__set_todos")
+        let views = [
+            AnyView(ChatTransientToolSummaryView(tools: [tool])),
+            AnyView(ToolActivityGroupView(tools: [tool])),
+            AnyView(ToolResultView(toolCall: tool)),
+            AnyView(ToolCallDetailSheet(toolCall: tool)),
+            AnyView(ToolActivityDetailView(tool: tool, isStreaming: true)),
+        ]
+        for view in views {
+            let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
+            #expect(labels.contains("Updating to-dos"))
+            #expect(!labels.contains(tool.name))
+            #expect(!labels.contains("ide__set_todos"))
+        }
+    }
+
     private struct Host: View {
         let window = WindowState()
         let toolCall: ToolCall
@@ -55,7 +73,7 @@ struct MCPToolResultViewTests {
 
         let labels = try detail.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
 
-        #expect(labels.contains("MCP tool call"))
+        #expect(labels.contains("Using an MCP tool"))
         #expect(labels.contains("Completed"))
         #expect(labels.contains("Call Params"))
         #expect(labels.contains("Result"))

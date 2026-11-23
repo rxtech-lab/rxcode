@@ -9,12 +9,18 @@ public extension EnvironmentValues {
     @Entry var offersCodingPlan = false
 }
 
+@MainActor
+final class ChatInputEditor {
+    weak var textView: NSTextView?
+}
+
 struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @Environment(\.offersCodingPlan) private var offersCodingPlan
     @Environment(ChatBridge.self) private var environmentChatBridge: ChatBridge?
     @Environment(WindowState.self) private var environmentWindowState: WindowState?
     @State var isInputFocused: Bool = false
     @State var inputFocusTrigger: UUID? = nil
+    @State var inputEditor = ChatInputEditor()
 
     private let accessory: Accessory
     private let topAccessory: TopAccessory
@@ -25,7 +31,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @State var showSlashPopup = false
     @State var slashSelectedIndex = 0
     @State private var slashDetailCommand: SlashCommand?
-    @State private var textPreviewAttachment: Attachment?
     @State private var imagePreviewAttachment: Attachment?
     @State private var isDragOver = false
     @State var showAtPopup = false
@@ -69,10 +74,14 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !windowState.attachments.isEmpty || implicitStudioParent != nil {
-                attachmentPreviews
-                    .padding(.horizontal, 16)
-                    .transition(.offset(y: 10).combined(with: .opacity))
+            if let parent = implicitStudioParent {
+                HStack {
+                    StudioImplicitParentCard(path: parent) {
+                        imagePreviewAttachment = Attachment(type: .image, name: URL(fileURLWithPath: parent).lastPathComponent, path: parent)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
             }
 
             if !windowState.messageQueue.isEmpty {
@@ -97,10 +106,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             .padding(.bottom, 12)
             .sheet(item: $slashDetailCommand) { cmd in
                 CommandDetailSheet(command: cmd)
-                    .mobileSheetPresentation()
-            }
-            .sheet(item: $textPreviewAttachment) { attachment in
-                TextPreviewSheet(attachment: attachment)
                     .mobileSheetPresentation()
             }
             .sheet(item: $imagePreviewAttachment) { attachment in
@@ -178,11 +183,16 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .rxCodeAttachmentPreviews()
         .contentShape(Rectangle())
         .onTapGesture { inputFocusTrigger = UUID() }
     }
 
     // MARK: - Input Composer
+
+    private var awaitingPlanDecision: Bool {
+        chatBridge.hasPendingPlanDecision && chatBridge.interruptedSessionID == nil
+    }
 
     @ViewBuilder
     private var inputComposer: some View {
@@ -190,9 +200,9 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             inputTextField
             composerActionRow
         }
-        .disabled(chatBridge.hasPendingPlanDecision)
-        .opacity(chatBridge.hasPendingPlanDecision ? 0.55 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: chatBridge.hasPendingPlanDecision)
+        .disabled(awaitingPlanDecision)
+        .opacity(awaitingPlanDecision ? 0.55 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: awaitingPlanDecision)
     }
 
     private var composerActionRow: some View {
@@ -230,9 +240,19 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @ViewBuilder
     private var sendOrStopControls: some View {
         HStack(spacing: 8) {
+            if let id = chatBridge.interruptedSessionID {
+                Button {
+                    Task { await chatBridge.resumeInterruptedTurnHandler?(id) }
+                } label: {
+                    Label("Resume", systemImage: "play.fill")
+                }
+                .controlSize(.small)
+                .help("Resume the interrupted conversation")
+                .accessibilityIdentifier("resume-interrupted-turn")
+            }
             // While streaming, show the send button only when the user has typed
             // something to enqueue. When idle, always show send (disabled when empty).
-            if !chatBridge.isStreaming || hasComposerContent {
+            if (!chatBridge.isStreaming && chatBridge.interruptedSessionID == nil) || hasComposerContent {
                 if !showSlashPopup {
                     ClaudeSendButton(
                         isEnabled: hasComposerContent,
@@ -507,31 +527,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
     // MARK: - Attachment Previews
 
-    private var attachmentPreviews: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                if let parent = implicitStudioParent {
-                    StudioImplicitParentCard(path: parent) {
-                        imagePreviewAttachment = Attachment(type: .image, name: URL(fileURLWithPath: parent).lastPathComponent, path: parent)
-                    }
-                }
-                ForEach(windowState.attachments) { attachment in
-                    AttachmentPreviewItem(attachment: attachment) {
-                        windowState.removeAttachment(attachment.id)
-                    } onTap: {
-                        switch attachment.type {
-                        case .text: textPreviewAttachment = attachment
-                        case .image: imagePreviewAttachment = attachment
-                        default: break
-                        }
-                    }
-                }
-            }
-            .padding(.top, 10)
-            .padding(.bottom, 6)
-        }
-    }
-
     /// The image studio continues from the thread's newest image unless an
     /// image is attached; shown so the parent of the next prompt is visible.
     private var implicitStudioParent: String? {
@@ -547,16 +542,10 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         return nil
     }
 
-    func handleImageChipTap(_ index: Int) {
-        let images = windowState.attachments.filter { $0.type == .image }
-        guard index >= 1, index <= images.count else { return }
-        imagePreviewAttachment = images[index - 1]
-    }
-
     // MARK: - Send / Return
 
     private func sendMessage() {
-        guard !chatBridge.hasPendingPlanDecision else { return }
+        guard !awaitingPlanDecision else { return }
         guard !windowState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !windowState.attachments.isEmpty else { return }
         historyIndex = -1

@@ -12,6 +12,7 @@ struct MobileTaskRunDeviceSheet: View {
     @State private var selectedID: String?
     @State private var modelSections: [AgentModelSection] = []
     @State private var selectedModel: AgentModel?
+    @State private var selectedEffort: String?
     @State private var loadedDesktopID: String?
     @State private var progressMessage: String?
     @State private var errorMessage: String?
@@ -51,6 +52,12 @@ struct MobileTaskRunDeviceSheet: View {
                 }
                 .disabled(loadedDesktopID != selectedID)
                 .accessibilityIdentifier("task-run-model-picker")
+                if let model = selectedModel, loadedDesktopID == selectedID {
+                    MobileTaskThinkingLevelRow(provider: model.provider, model: model.id, effort: selectedEffort) { effort in
+                        selectedEffort = effort
+                        MobileModelPreferences.remember(provider: model.provider, model: model.id, effort: effort)
+                    }
+                }
                 if loadedDesktopID == nil, !isWorking {
                     Button("Reload Models") {
                         MobileHaptics.buttonTap()
@@ -156,7 +163,12 @@ struct MobileTaskRunDeviceSheet: View {
                 Section(section.title) {
                     ForEach(section.models, id: \.key) { model in
                         Button {
+                            if selectedModel?.key != model.key {
+                                let levels = state.desktopSettings?.reasoningLevels(for: model.provider, model: model.id) ?? []
+                                selectedEffort = levels.first { $0.id == selectedEffort }?.id
+                            }
                             selectedModel = model
+                            MobileModelPreferences.remember(provider: model.provider, model: model.id, effort: selectedEffort)
                             UISelectionFeedbackGenerator().selectionChanged()
                         } label: {
                             HStack {
@@ -191,6 +203,7 @@ struct MobileTaskRunDeviceSheet: View {
         loadedDesktopID = nil
         modelSections = []
         selectedModel = nil
+        selectedEffort = nil
         guard let desktop = selectedDesktop else { return }
         progressMessage = String(localized: "Loading models from \(desktop.displayName)…")
         defer { progressMessage = nil }
@@ -202,8 +215,14 @@ struct MobileTaskRunDeviceSheet: View {
             }
             modelSections = state.taskModelSections
             let models = modelSections.flatMap(\.models)
-            let provider = request.task.agent.provider ?? settings.selectedAgentProvider
-            let modelID = request.task.agent.model.flatMap { $0.isEmpty ? nil : $0 }
+            var agent = request.task.agent
+            if !agent.isAssigned, let remembered = MobileModelPreferences.selection(in: settings),
+               models.contains(where: { $0.provider == remembered.provider && $0.id == remembered.model }) {
+                agent = remembered
+            }
+            selectedEffort = agent.effort
+            let provider = agent.provider ?? settings.selectedAgentProvider
+            let modelID = agent.model.flatMap { $0.isEmpty ? nil : $0 }
                 ?? (provider == settings.selectedAgentProvider ? settings.selectedModel : nil)
             if let modelID, !modelID.isEmpty {
                 // Preserve the assignment even while a dynamic catalogue is incomplete.
@@ -236,11 +255,9 @@ struct MobileTaskRunDeviceSheet: View {
             defer { progressMessage = nil }
             do {
                 var agent = request.task.agent
-                if agent.provider != model.provider || agent.model != model.id {
-                    agent.effort = nil
-                }
                 agent.provider = model.provider
                 agent.model = model.id
+                agent.effort = selectedEffort
                 try await state.runTask(request.task, to: request.status, sortIndex: request.sortIndex, on: desktop, agent: agent)
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 dismiss()

@@ -35,7 +35,8 @@ struct InputBarImagePasteTests {
         pasteboard.setString(includesImage ? "\n" : "first\nsecond", forType: .string)
 
         let state = WindowState()
-        state.inputText = "Describe this"
+        let replacesSelection = action == "pasteAsPlainText:"
+        state.inputText = replacesSelection ? "Describe the selection now" : "Describe this"
         let bridge = ChatBridge()
         bridge.autoPreviewSettings.image = true
         let host = NSHostingView(rootView: InputBarView(
@@ -45,18 +46,19 @@ struct InputBarImagePasteTests {
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(50))
         let editor = try #require(findEditor(in: host))
-        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+        let content = editor.string as NSString
+        editor.setSelectedRange(replacesSelection ? content.range(of: "the selection") : NSRange(location: content.length, length: 0))
         editor.perform(NSSelectorFromString(action), with: nil)
         try await Task.sleep(for: .milliseconds(50))
 
         if includesImage {
             #expect(state.attachments.count == 1)
             #expect(state.attachments.first?.type == .image)
-            #expect(state.inputText == "Describe this [Image1] ")
+            #expect(state.inputText == (replacesSelection ? "Describe [Image1] now" : "Describe this [Image1] "))
             #expect(!state.inputText.contains("\n"))
         } else {
             #expect(state.attachments.isEmpty)
-            #expect(state.inputText == "Describe thisfirst\nsecond")
+            #expect(state.inputText == (replacesSelection ? "Describe first\nsecond now" : "Describe thisfirst\nsecond"))
         }
     }
 

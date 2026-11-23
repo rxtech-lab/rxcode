@@ -331,8 +331,11 @@ struct ChatDetailModifiers: ViewModifier {
             }
             .onDisappear { appState.setViewedChat(nil, for: chatViewID) }
             .environment(\.chatTranscriptEndActions, AnyView(HStack(spacing: 8) {
+                if let threadID = windowState.currentSessionId {
+                    ThreadUsageFooter(threadID: threadID)
+                        .id(threadID)
+                }
                 CodingSessionRatingButton()
-                if windowState.generalRoute != .chat { ChatCreationMenu() }
             }))
             .contentShape(Rectangle())
             .contextMenu {

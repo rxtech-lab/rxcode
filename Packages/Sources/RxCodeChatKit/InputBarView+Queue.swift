@@ -263,7 +263,7 @@ extension InputBarView {
                 }
             }
             if let attachment {
-                windowState.addAttachment(attachment)
+                addComposerAttachment(attachment)
             } else if provider.hasRepresentationConforming(toTypeIdentifier: UTType.image.identifier) {
                 loadImageDataAsAttachment(from: provider)
             }
@@ -275,7 +275,7 @@ extension InputBarView {
             guard let data else { return }
             let name = "drop-\(UUID().uuidString.prefix(8)).png"
             let attachment = Attachment(type: .image, name: name, imageData: data)
-            DispatchQueue.main.async { windowState.addAttachment(attachment) }
+            DispatchQueue.main.async { addComposerAttachment(attachment) }
         }
     }
 
@@ -283,7 +283,7 @@ extension InputBarView {
         guard case .success(let urls) = result else { return }
         for url in urls {
             if let attachment = AttachmentFactory.fromFileURL(url) {
-                windowState.addAttachment(attachment)
+                addComposerAttachment(attachment)
             }
         }
     }

@@ -26,7 +26,7 @@ extension BriefingView {
         }
         .buttonStyle(.plain)
         .help(copied ? "Copied" : "Copy briefing text")
-        .disabled(group.briefing == nil && group.threadSummaries.isEmpty)
+        .disabled(group.briefing == nil && group.threadSummaries.isEmpty && group.plans.isEmpty)
     }
 
     func copyBriefing(_ group: BriefingGroup) {
@@ -55,6 +55,14 @@ extension BriefingView {
 
         if let briefing = group.briefing {
             lines.append(briefing.briefing.trimmingCharacters(in: .whitespacesAndNewlines))
+            lines.append("")
+        }
+
+        if !group.plans.isEmpty {
+            lines.append("## Coding Plans")
+            for plan in group.plans {
+                lines.append("- \(plan.title) (\(plan.id.uuidString)) — \(plan.briefingDescription)")
+            }
             lines.append("")
         }
 

@@ -1,14 +1,14 @@
 import Foundation
 import RxCodeCore
 
-struct CodingPlan: Codable, Identifiable {
-    struct Reviewer: Codable, Identifiable {
+nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
+    nonisolated struct Reviewer: Codable, Identifiable, Sendable {
         var id = UUID()
         var model: AgentModel
         var prompt: String
     }
 
-    struct Configuration: Codable {
+    nonisolated struct Configuration: Codable, Sendable {
         var planner: AgentModel
         /// A nil override follows the planner, including changes in the setup sheet.
         var hostOverride: AgentModel?
@@ -16,7 +16,7 @@ struct CodingPlan: Codable, Identifiable {
         var host: AgentModel { hostOverride ?? planner }
     }
 
-    enum Step: Codable, Hashable {
+    nonisolated enum Step: Codable, Hashable, Sendable {
         case draft
         case moderate
         case review(Int)
@@ -39,7 +39,7 @@ struct CodingPlan: Codable, Identifiable {
         }
     }
 
-    struct Contribution: Codable, Identifiable {
+    nonisolated struct Contribution: Codable, Identifiable, Sendable {
         var id = UUID()
         let role: String
         let model: AgentModel?
@@ -51,10 +51,11 @@ struct CodingPlan: Codable, Identifiable {
         var isUserMessage: Bool { role == "You" && versionID == nil }
     }
 
-    struct Version: Codable, Identifiable {
+    nonisolated struct Version: Codable, Identifiable, Sendable {
         var id = UUID()
         let title: String
         let markdown: String
+        var createdAt: Date? = .now
         var edits: [CodingPlanReview.Edit] = []
     }
 
@@ -69,6 +70,7 @@ struct CodingPlan: Codable, Identifiable {
     var nextStep: Step? = .draft
     var approvedVersionID: UUID?
     var lastError: String?
+    var updatedAt: Date?
 
     func speaker(for step: Step) -> (role: String, model: AgentModel) {
         switch step {
@@ -289,20 +291,21 @@ struct CodingPlan: Codable, Identifiable {
     }
 }
 
-extension CodingPlan.Version {
+nonisolated extension CodingPlan.Version {
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(UUID.self, forKey: .id)
         title = try values.decode(String.self, forKey: .title)
         markdown = try values.decode(String.self, forKey: .markdown)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt)
         edits = try values.decodeIfPresent([CodingPlanReview.Edit].self, forKey: .edits) ?? []
     }
 }
 
 /// Only complete, unambiguous replacements can change the working draft. A
 /// reviewer's remaining commentary still reaches the host for reconciliation.
-struct CodingPlanReview {
-    struct Edit: Codable, Equatable {
+nonisolated struct CodingPlanReview {
+    nonisolated struct Edit: Codable, Equatable, Sendable {
         let original: String
         let replacement: String
         /// UTF-16 location in this version's Markdown, including for zero-width deletions.

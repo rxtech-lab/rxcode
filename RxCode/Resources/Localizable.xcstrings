@@ -396,6 +396,16 @@
         }
       }
     },
+    "%@ · 5h %@ · 7d %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · 5h %2$@ · 7d %3$@"
+          }
+        }
+      }
+    },
     "%@ · change in each limit between a task's start and finish." : {
       "localizations" : {
         "zh-Hans" : {
@@ -479,6 +489,9 @@
           }
         }
       }
+    },
+    "%@ (partial)" : {
+
     },
     "%@ %@" : {
       "localizations" : {
@@ -834,6 +847,7 @@
       }
     },
     "%@%%" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1849,6 +1863,9 @@
           }
         }
       }
+    },
+    "5h — · 7d —" : {
+
     },
     "5h · 7d" : {
       "localizations" : {
@@ -6794,6 +6811,9 @@
     "Coding Analytics Error" : {
 
     },
+    "Coding Plans" : {
+
+    },
     "Collapse %@" : {
 
     },
@@ -9830,6 +9850,9 @@
     "Describe the refinement" : {
 
     },
+    "Describe the requested changes…" : {
+
+    },
     "Describe the story and tasks, or choose a text or PDF file." : {
       "localizations" : {
         "zh-Hans" : {
@@ -11617,6 +11640,9 @@
         }
       }
     },
+    "Estimated from changes in provider limits across this thread’s recorded turns. Partial totals exclude readings marked as overlapping or reset. A dash means no measurement is available." : {
+
+    },
     "Estimates appear after tasks finish" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12308,6 +12334,7 @@
       }
     },
     "Files pasted or dropped into the description are listed here and sent to the agent with the task." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19962,6 +19989,9 @@
     "Open Pet Companion" : {
 
     },
+    "Open plan · %@" : {
+
+    },
     "Open PR" : {
       "localizations" : {
         "ko" : {
@@ -22789,6 +22819,7 @@
       }
     },
     "Remove attachment" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -29826,6 +29857,9 @@
           }
         }
       }
+    },
+    "Thread usage" : {
+
     },
     "Threads" : {
       "localizations" : {

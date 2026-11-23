@@ -140,11 +140,8 @@ extension AppState {
         // already reflects the cleared state.
         if let activeID = active.id { markCompletionRead(for: activeID) }
         let branches = await mobileProjectBranches()
-        // Keep mobile usage reasonably fresh. Non-forced — RateLimitService's
-        // 5-minute cache turns this into a no-op when usage was fetched
-        // recently, so frequent snapshots don't translate into API calls. A
-        // genuine refresh updates `latestRateLimitUsage`, which
-        // `observeMobileSnapshotInputs` tracks, re-broadcasting the snapshot.
+        // Warm the shared provider readings for mobile. Subsequent snapshots
+        // reuse them, and observeMobileSnapshotInputs broadcasts fresh readings.
         Task { [weak self] in
             await self?.refreshRateLimitUsage()
             await self?.refreshCodexRateLimitUsage()
@@ -166,10 +163,12 @@ extension AppState {
         }
         let sessions = await mobileSessionSummaries()
         guard !Task.isCancelled else { return }
+        let knownProjectIDs = Set(projects.map(\.id))
         let payload = SnapshotPayload(
             projects: projects,
             sessions: sessions,
             branchBriefings: mobileBranchBriefings(),
+            briefingPlans: briefingPlans.filter { knownProjectIDs.contains($0.projectID) },
             briefingDocuments: documentBriefings,
             usageDashboard: usageDashboard,
             threadSummaries: mobileThreadSummaries(),
@@ -260,6 +259,7 @@ extension AppState {
             todos: todos,
             queuedMessages: queued.map { QueuedUserMessage(id: $0.id, text: $0.text) },
             hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false,
+            isInterrupted: summary.hasUnfinishedTurn == true && sessionActivity[summary.id]?.isStreaming != true,
             parentThreadId: summary.parentThreadId,
             threadLabel: summary.threadLabel,
             changedFileCount: changedFileCount
@@ -501,6 +501,10 @@ extension AppState {
             )
         }
         let models = sections.flatMap(\.models)
+        var levelsByModel: [String: [ReasoningLevel]] = [:]
+        for model in models {
+            levelsByModel[model.key] = reasoningLevels(for: model.provider, model: model.id)
+        }
         return MobileSettingsSnapshot(
             selectedAgentProvider: selectedAgentProvider,
             selectedModel: defaultModelSelection(for: nil).model,
@@ -517,6 +521,7 @@ extension AppState {
             archiveRetentionDays: archiveRetentionDays,
             autoPreviewSettings: autoPreviewSettings,
             availableEfforts: ["auto"] + availableEfforts,
+            reasoningLevelsByModel: levelsByModel,
             availableModels: models,
             modelSections: sections,
             availableSummarizationProviders: SummarizationProvider.availableCases.map {

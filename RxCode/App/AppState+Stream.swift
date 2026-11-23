@@ -385,6 +385,9 @@ extension AppState {
         flushPendingUpdates(for: key, forceText: true)
         stopFlushTimer(for: key)
 
+        if streamToCancel != nil {
+            settleTurn(sessionID: key, interrupted: false, preservePartialTranscript: true)
+        }
         updateState(key) { state in
             state.isStreaming = false
             state.isThinking = false

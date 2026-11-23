@@ -112,7 +112,7 @@ struct ToolActivityTests {
             let view = ChatTransientGroupSummaryView(messages: messages)
             let inspected = try view.inspect()
             let labels = inspected.findAll(ViewType.Text.self).compactMap { try? $0.string() }
-            #expect(labels.contains("read_file"))
+            #expect(labels.contains("Reading a file"))
             #expect(labels.contains("6 tool calls"))
             #expect(!labels.contains("reasoning"))
             #expect(inspected.findAll(ToolResultView.self).isEmpty)
@@ -188,9 +188,9 @@ struct ToolActivityTests {
         ], isStreaming: true)
         let inspected = try view.inspect()
         let labels = inspected.findAll(ViewType.Text.self).compactMap { try? $0.string() }
-        #expect(labels.contains("read_file"))
+        #expect(labels.contains("Reading a file"))
         #expect(labels.contains("2 tool calls"))
-        #expect(!labels.contains("exec_command"))
+        #expect(!labels.contains("Running a command"))
         #expect(inspected.findAll(ToolResultView.self).isEmpty)
     }
     #endif
@@ -272,9 +272,9 @@ struct ToolActivityTests {
             ToolCall(id: "c", name: "Search")
         ], isStreaming: true)
         let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
-        #expect(labels.contains("Search"))
+        #expect(labels.contains("Searching"))
         #expect(labels.contains("3 tool calls · 1 running · 1 succeeded · 1 failed"))
-        #expect(!labels.contains("Read"))
+        #expect(!labels.contains("Reading a file"))
     }
 
     @Test func groupChangeCountsCombineShellAndStructuredEdits() throws {
@@ -353,12 +353,12 @@ struct ToolActivityTests {
     #endif
 
     @Test func toolNamesAndArgumentsBecomeReadableLabels() {
-        #expect(ToolActivityPresentation.title(for: "mcp__rxcode-ide__ide__get_projects") == "Get projects")
-        #expect(ToolActivityPresentation.title(for: "list_issues") == "List issues")
         #expect(ToolActivityPresentation.source(for: "mcp__github__search") == "github")
         #expect(ToolActivityPresentation.source(for: "list_issues") == nil)
-        #expect(ToolActivityPresentation.preview(for: ["limit": 5, "query": "open bugs\nmore"]) == "open bugs")
-        #expect(ToolActivityPresentation.preview(for: ["limit": 5]) == nil)
+        let search = ToolCall(id: "search", name: "search", input: ["query": "open bugs\nmore", "limit": 5])
+        #expect(ToolActivityPresentation.preview(for: search) == "open bugs")
+        let wrapped = ToolCall(id: "wrapped", name: "mcpToolCall", input: ["tool": "ide__set_todos"])
+        #expect(ToolActivityPresentation.preview(for: wrapped) == nil)
     }
 
     @Test func interactiveViewsRenderInlineOutsideTheGroup() throws {

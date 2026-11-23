@@ -11,6 +11,7 @@ struct MobileInputBar: View {
     var isStreaming: Bool
     var onSend: (String) -> Void
     var onStop: () -> Void
+    var onResume: (() -> Void)? = nil
 
     @State private var borderAnimationProgress: CGFloat = 0
     @State private var shimmerOffset: CGFloat = -1
@@ -50,6 +51,13 @@ struct MobileInputBar: View {
             if isStreaming {
                 stopButton
                     .transition(.scale.combined(with: .opacity))
+            } else if let onResume {
+                Button("Resume", systemImage: "play.fill") {
+                    MobileHaptics.buttonTap()
+                    onResume()
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("resume-interrupted-turn")
             }
         }
         .padding(.horizontal, 12)

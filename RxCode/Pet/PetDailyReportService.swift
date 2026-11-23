@@ -32,9 +32,12 @@ enum PetDailyReportService {
         var scheduledFailed: Int
         var activeJobsCount: Int
         var ciFailing: Bool
+        var plans: [CodingPlanActivity] = []
+        var planProjectNames: [UUID: String] = [:]
+        var planHistoryUnavailable = false
     }
 
-    static func captureSnapshot(from appState: AppState, now: Date = Date()) -> Snapshot {
+    static func captureSnapshot(from appState: AppState, now: Date = Date()) async -> Snapshot {
         let cutoff = now.addingTimeInterval(-86_400)
         let projectNames = Dictionary(uniqueKeysWithValues: appState.projects.map { ($0.id, $0.name) })
 
@@ -85,7 +88,7 @@ enum PetDailyReportService {
         let schedSucceeded = recentScheduled.filter { $0.status == .succeeded }.count
         let schedFailed = recentScheduled.filter { $0.status == .failed }.count
 
-        return Snapshot(
+        var snapshot = Snapshot(
             workspaceName: appState.activeWorkspace.name,
             completedTasks: completed,
             inProgressTasks: inProgress,
@@ -98,11 +101,21 @@ enum PetDailyReportService {
             activeJobsCount: appState.inProgressSessionCount,
             ciFailing: appState.anyCIFailing
         )
+        snapshot.planProjectNames = projectNames
+        do {
+            snapshot.plans = try await appState.codingPlanActivities().filter {
+                $0.updatedAt >= cutoff || $0.implementationStatus != "implemented"
+            }
+        } catch {
+            snapshot.planHistoryUnavailable = true
+        }
+        return snapshot
     }
 
     nonisolated static func formatDeterministicReport(from snapshot: Snapshot, generatedAt: Date = Date()) -> PetDailyReport {
         var spokenParts: [String] = []
-        if snapshot.completedTasks.isEmpty && snapshot.recentThreads.isEmpty && snapshot.inProgressTasks.isEmpty {
+        if snapshot.completedTasks.isEmpty && snapshot.recentThreads.isEmpty && snapshot.inProgressTasks.isEmpty
+            && snapshot.plans.isEmpty && !snapshot.planHistoryUnavailable {
             spokenParts.append("Here is your daily report for \(snapshot.workspaceName). Everything is quiet so far today, with no active tasks or recent threads in the last twenty-four hours.")
         } else {
             spokenParts.append("Here is your daily report for \(snapshot.workspaceName).")
@@ -116,6 +129,10 @@ enum PetDailyReportService {
             if !snapshot.recentThreads.isEmpty {
                 spokenParts.append("\(snapshot.recentThreads.count) chat \(snapshot.recentThreads.count == 1 ? "thread was" : "threads were") active recently.")
             }
+        }
+        if let latest = snapshot.plans.first {
+            let title = SpokenTextChunker.sanitizeForSpeech(String(latest.title.prefix(120)))
+            spokenParts.append("The latest coding plan is \(title). Its plan status is \(latest.planningStatusLabel.lowercased()) and its implementation status is \(latest.implementationStatusLabel.lowercased()).")
         }
         if snapshot.ciFailing {
             spokenParts.append("Heads up: at least one CI workflow is currently failing.")
@@ -164,6 +181,29 @@ enum PetDailyReportService {
             }
         }
 
+        if !snapshot.plans.isEmpty || snapshot.planHistoryUnavailable {
+            md.append("")
+            md.append("## Coding Plans")
+            if snapshot.planHistoryUnavailable {
+                md.append("Coding plan history could not be loaded.")
+            }
+            let groups = Dictionary(grouping: snapshot.plans, by: \.implementationStatusLabel)
+            for status in groups.keys.sorted() {
+                guard let plans = groups[status] else { continue }
+                md.append("")
+                md.append("### \(status) (\(plans.count))")
+                for plan in plans.prefix(6) {
+                    let project = snapshot.planProjectNames[plan.projectID] ?? "General"
+                    md.append("- **[\(project)] \(plan.title)** — \(plan.planningStatusLabel). \(plan.implementationEvidence)")
+                    if !plan.featureExcerpt.isEmpty {
+                        md.append("  \(plan.featureExcerpt.replacingOccurrences(of: "\n", with: "\n  "))")
+                    }
+                    md.append("  \(plan.versionLabel) · Plan ID: `\(plan.id.uuidString)`")
+                }
+                if plans.count > 6 { md.append("- \(plans.count - 6) more in this group.") }
+            }
+        }
+
         if !snapshot.attentionTasks.isEmpty {
             md.append("")
             md.append("## Needs Attention")
@@ -204,20 +244,21 @@ enum PetDailyReportService {
         )
     }
 
-    static func generate(for appState: AppState) async -> PetDailyReport {
-        let snapshot = captureSnapshot(from: appState)
+    static func generate(for appState: AppState, companion: PetController) async -> PetDailyReport {
+        let snapshot = await captureSnapshot(from: appState)
         let base = formatDeterministicReport(from: snapshot)
 
         // The current voice assistant summarizes the report itself during a conversation.
-        guard !PetController.shared.isVoiceActive else { return base }
+        guard !companion.isVoiceActive else { return base }
 
         // Ask the configured general AI model for a concise, natural spoken summary if available.
         let aiPrompt = """
         Write a friendly, concise 2-to-3 sentence spoken daily standup summary for the developer based on this workspace report.
         Rules:
         - Plain spoken text only: no markdown, no bullet points, no backticks, no symbols.
-        \(PetController.shared.configuration.conversationLanguageInstruction)
+        \(companion.configuration.conversationLanguageInstruction)
         - Highlight completed work, items waiting for review, and anything needing attention.
+        - When coding plans are present, mention a relevant planned feature and its recorded implementation status. A ready or approved plan alone does not establish implementation.
         - Keep it under 65 words.
 
         Report data:
@@ -226,8 +267,8 @@ enum PetDailyReportService {
 
         if let polishedSpoken = await appState.runTaskAgentCompletion(
             prompt: aiPrompt,
-            projectId: PetController.shared.configuration.pinnedProjectId ?? appState.projects.first?.id,
-            model: PetController.shared.configuration.customAgent.map { .agent($0) } ?? .taskAgent
+            projectId: companion.configuration.pinnedProjectId ?? appState.projects.first?.id,
+            model: companion.configuration.customAgent.map { .agent($0) } ?? .taskAgent
         ) {
             let cleaned = SpokenTextChunker.sanitizeForSpeech(polishedSpoken)
             if !cleaned.isEmpty {

@@ -75,13 +75,10 @@ private fun BriefingContentSplitPane(
     var selectedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val currentKey = selectedGroupKey
-    LaunchedEffect(state.branchBriefings, state.threadSummaries, currentKey) {
+    LaunchedEffect(state.branchBriefings, state.threadSummaries, state.briefingPlans, currentKey) {
         if (currentKey != null) {
-            val stillExists = state.branchBriefings.any {
-                it.projectId == currentKey.projectId && it.branch == currentKey.branch
-            } || state.threadSummaries.any {
-                it.projectId == currentKey.projectId && it.branch == currentKey.branch
-            }
+            val stillExists = groupBriefings(state.branchBriefings, state.threadSummaries, state.briefingPlans)
+                .any { it.key == currentKey }
             if (!stillExists) {
                 selectedGroupKey = null
                 selectedSessionId = null
@@ -372,19 +369,11 @@ private fun Dp.coerceIn(minimumValue: Dp, maximumValue: Dp): Dp {
 }
 
 private val briefingGroupKeySaver: Saver<BriefingGroupKey?, String> = Saver(
-    save = { key -> key?.let { "${it.projectId}::${it.branch}" } ?: "" },
+    save = { key -> key?.id.orEmpty() },
     restore = { raw ->
-        if (raw.isEmpty()) {
-            null
-        } else {
-            val separator = raw.indexOf("::")
-            if (separator <= 0) {
-                null
-            } else {
-                val projectId = runCatching { UUID.fromString(raw.substring(0, separator)) }.getOrNull()
-                val branch = raw.substring(separator + 2)
-                projectId?.let { BriefingGroupKey(it, branch) }
-            }
-        }
+        val parts = raw.split("::")
+        if (parts.size == 3) runCatching {
+            BriefingGroupKey(UUID.fromString(parts[0]), parts[1], java.time.LocalDate.parse(parts[2]))
+        }.getOrNull() else null
     },
 )

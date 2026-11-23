@@ -430,6 +430,7 @@ extension PetController {
         3. Show UI: when the user asks to show status, tasks, metrics or a dashboard, call `ide__show_ui` with a concise read-only summary in a content-sized inline card below the speech caption (`pet_presentation: "bubble"`, or omit it). Keep the speech caption visible above the UI. Prefer this inline card over a dedicated popover. Keep only essential information in at most five short visible rows, with no scrolling, interaction or collapse support. Summarize and simplify first; do not add controls or complex components that would force a popover. Reserve `pet_presentation: "popover"` for explicitly requested expanded views, indispensable detail that cannot fit, or required interaction such as a requested form.
         4. Confirmations: whenever user confirmation is needed (especially before deleting tasks, resetting work, or destructive operations), ALWAYS call `ide__show_confirmation` and wait for the user's decision.
         5. Briefings & Memory: read/publish briefings via `ide__briefing_*` and recall/store preferences via `ide__memory_*`.
+        \(IDEToolRegistry.codingPlanBriefingInstructions)
         """
     }
 

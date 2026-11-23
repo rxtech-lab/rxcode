@@ -196,6 +196,9 @@ struct MobileTaskFormView: View {
                 Button {
                     task.agent.provider = nil
                     task.agent.model = nil
+                    task.agent.effort = nil
+                    rememberAgent()
+                    MobileHaptics.buttonTap()
                 } label: {
                     if !task.agent.isAssigned {
                         Label("Unassigned", systemImage: "checkmark")
@@ -207,9 +210,14 @@ struct MobileTaskFormView: View {
                     Section(section.title) {
                         ForEach(section.models, id: \.key) { model in
                             Button {
+                                if task.agent.provider != model.provider || task.agent.model != model.id {
+                                    let levels = state.desktopSettings?.reasoningLevels(for: model.provider, model: model.id) ?? []
+                                    task.agent.effort = levels.first { $0.id == task.agent.effort }?.id
+                                }
                                 task.agent.provider = model.provider
                                 task.agent.model = model.id
-                                task.agent.effort = nil
+                                rememberAgent()
+                                MobileHaptics.buttonTap()
                             } label: {
                                 if task.agent.provider == model.provider && task.agent.model == model.id {
                                     Label(model.displayName, systemImage: "checkmark")
@@ -226,6 +234,11 @@ struct MobileTaskFormView: View {
                         .foregroundStyle(task.agent.isAssigned ? .primary : .secondary)
                 }
             }
+            MobileTaskThinkingLevelRow(provider: task.agent.provider, model: task.agent.model,
+                                       effort: task.agent.effort) { effort in
+                task.agent.effort = effort
+                rememberAgent()
+            }
             Toggle("Plan mode", isOn: $task.agent.planMode)
                 .disabled(!task.agent.isAssigned)
         } header: {
@@ -233,6 +246,10 @@ struct MobileTaskFormView: View {
         } footer: {
             Text("Moving this task into a chat column runs the assigned agent in a new thread on your Mac.")
         }
+    }
+
+    private func rememberAgent() {
+        MobileModelPreferences.remember(provider: task.agent.provider, model: task.agent.model, effort: task.agent.effort)
     }
 
     private func save() {
@@ -250,6 +267,34 @@ struct MobileTaskFormView: View {
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+/// Task creation and the Run on Mac sheet use the catalog from the selected Mac.
+struct MobileTaskThinkingLevelRow: View {
+    @EnvironmentObject private var state: MobileAppState
+    @State private var showsPicker = false
+    let provider: AgentProvider?
+    let model: String?
+    let effort: String?
+    let onSelect: (String?) -> Void
+
+    var body: some View {
+        let levels = state.desktopSettings?.reasoningLevels(for: provider, model: model) ?? []
+        if !levels.isEmpty {
+            let defaultTitle = state.desktopSettings?.defaultEffortTitle(for: provider, model: model)
+                ?? String(localized: "Agent default")
+            Button {
+                MobileHaptics.buttonTap()
+                showsPicker = true
+            } label: {
+                LabeledContent("Thinking Level", value: levels.first { $0.id == effort }?.displayName ?? defaultTitle)
+            }
+            .accessibilityIdentifier("task-thinking-level-picker")
+            .sheet(isPresented: $showsPicker) {
+                MobileThinkingLevelSheet(levels: levels, selected: effort, defaultTitle: defaultTitle, onSelect: onSelect)
             }
         }
     }

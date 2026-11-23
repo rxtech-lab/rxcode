@@ -112,7 +112,7 @@ struct CodingPlanWorkspace: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     contribution(role: "You", model: nil) {
-                        MarkdownContentView(text: plan.goal, style: .rxCodeChatUser, expandsHorizontally: false)
+                        CodingPlanUserMessage(text: plan.goal)
                     }
                     ForEach(plan.contributions.prefix(turnStart)) { recordedContribution($0) }
                     if let step = plan.nextStep, room.runID != nil {
@@ -193,8 +193,11 @@ struct CodingPlanWorkspace: View {
             if message.isReview {
                 reviewFeedback(CodingPlanReview(message.text), live: false, applied: index.map { plan.versions[$0].edits } ?? [])
             } else if index == nil {
-                MarkdownContentView(text: message.text, style: message.model == nil ? .rxCodeChatUser : .rxCodeCompact,
-                                    expandsHorizontally: false)
+                if message.isUserMessage {
+                    CodingPlanUserMessage(text: message.text)
+                } else {
+                    MarkdownContentView(text: message.text, style: .rxCodeCompact, expandsHorizontally: false)
+                }
             }
             if let index { planChip(versionAt: index, fromUser: message.model == nil) }
         }
@@ -433,6 +436,29 @@ struct CodingPlanWorkspace: View {
     }
 }
 
+private struct CodingPlanUserMessage: View {
+    let text: String
+    @State private var markdown = ""
+    @State private var attachments: [Attachment] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !attachments.isEmpty { AttachmentPreviewStrip(attachments: attachments) }
+            if !markdown.isEmpty {
+                MarkdownContentView(text: markdown, style: .rxCodeChatUser, expandsHorizontally: false)
+            }
+        }
+        .rxCodeAttachmentPreviews()
+        .onChange(of: text, initial: true) { _, text in
+            var chips = DescriptionAttachmentChips()
+            var display = chips.display(for: text)
+            attachments = chips.attachments(in: display)
+            for item in attachments { display = chips.removing(item, from: display) }
+            markdown = chips.markdown(for: display).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+}
+
 private struct CodingPlanImplementationPicker: View {
     @State var model: AgentModel
     let versionNumber: Int
@@ -478,13 +504,23 @@ private struct CodingPlanRevisionSheet: View {
                     Text("Ask Host").tag(true)
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
-                Text(askHost ? "What should the host change?" : "Implementation plan").font(.headline)
-                TextEditor(text: askHost ? $feedback : $edited)
-                    .font(askHost ? .body : .system(.body, design: .monospaced))
-                    .padding(6)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 6))
-                    .accessibilityIdentifier("coding-plan-revision-text")
-                if !askHost {
+                if askHost {
+                    ScrollView {
+                        MarkdownDescriptionEditor(
+                            text: $feedback,
+                            placeholder: String(localized: "Describe the requested changes…"),
+                            title: "What should the host change?",
+                            identifierPrefix: "coding-plan-revision-request",
+                            editorIdentifier: "coding-plan-revision-text"
+                        )
+                    }
+                } else {
+                    Text("Implementation plan").font(.headline)
+                    TextEditor(text: $edited)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(6)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 6))
+                        .accessibilityIdentifier("coding-plan-revision-text")
                     TextField("Comment (optional)", text: $comment, axis: .vertical)
                         .lineLimit(1...4)
                         .accessibilityIdentifier("coding-plan-revision-comment")

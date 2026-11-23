@@ -5,6 +5,22 @@ import RxCodeCore
 
 @Suite("Mobile sync payloads")
 struct PayloadTests {
+    @Test("Snapshot carries plan and implementation state separately and tolerates older senders")
+    func codingPlanBriefingSync() throws {
+        let activity = CodingPlanActivity(
+            id: UUID(), threadID: "draft", projectID: UUID(), title: "Extension support", goal: "Load extensions",
+            branch: nil, createdAt: .now, updatedAt: .now, planningStatus: "ready",
+            implementationStatus: "unimplemented", implementationEvidence: "No implementation started",
+            implementationThreadID: nil, currentVersionID: UUID(), currentVersionTitle: "Final design",
+            approvedVersionID: nil, versionCount: 3, featureExcerpt: "- Discover installed extensions"
+        )
+        let data = try JSONEncoder().encode(SnapshotPayload(projects: [], sessions: [], briefingPlans: [activity]))
+        let snapshot = try JSONDecoder().decode(SnapshotPayload.self, from: data)
+        #expect(snapshot.briefingPlans == [activity])
+        let legacy = try JSONDecoder().decode(SnapshotPayload.self, from: Data(#"{"projects":[],"sessions":[]}"#.utf8))
+        #expect(legacy.briefingPlans == nil)
+    }
+
     @Test("file edit notifications preserve detected script diffs and decode older updates")
     func detectedFileEditsSync() throws {
         var tool = ToolCall(id: "script", name: "exec_command", input: ["cmd": .string("python3 patch.py")], result: "")
@@ -177,6 +193,10 @@ struct PayloadTests {
     @Test("snapshot carries briefing and settings data")
     func snapshotCarriesBriefingAndSettingsData() throws {
         let projectId = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        let levelsByModel: [String: [ReasoningLevel]] = [
+            "codex:gpt-5.4": .levels(["low", "high"]),
+            "acp:example::default": []
+        ]
         let settings = MobileSettingsSnapshot(
             selectedAgentProvider: .codex,
             selectedModel: "gpt-5.4",
@@ -192,7 +212,8 @@ struct PayloadTests {
             autoArchiveEnabled: true,
             archiveRetentionDays: 7,
             autoPreviewSettings: AttachmentAutoPreviewSettings(),
-            availableEfforts: ["auto", "low", "medium", "high"]
+            availableEfforts: ["auto", "low", "medium", "high"],
+            reasoningLevelsByModel: levelsByModel
         )
         let payload = Payload.snapshot(
             SnapshotPayload(
@@ -259,6 +280,13 @@ struct PayloadTests {
         #expect(snapshot.ciStatuses?.first?.status.prNumber == 42)
         #expect(snapshot.settings?.selectedAgentProvider == .codex)
         #expect(snapshot.settings?.permissionMode == .acceptEdits)
+        #expect(snapshot.settings?.reasoningLevelsByModel == levelsByModel)
+
+        var legacySettings = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        legacySettings.removeValue(forKey: "reasoningLevelsByModel")
+        let legacy = try JSONDecoder().decode(MobileSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: legacySettings))
+        #expect(legacy.reasoningLevelsByModel == nil)
+        #expect(legacy.selectedEffort == "high")
     }
 
     @Test("session summary carries todo items")

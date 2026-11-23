@@ -189,6 +189,7 @@ extension AppState {
     /// recorded id; a provider new to the thread starts fresh; a legacy thread
     /// with no map at all resumes on its own id (preserving prior behavior).
     func resumeSessionId(for provider: AgentProvider, threadId: String) -> String? {
+        guard !threadId.hasPrefix("pending-") else { return nil }
         let map = providerSessionIdMap(for: threadId)
         if let id = map[provider.rawValue] { return id }
         // No native id recorded for this provider. If the thread has no map at
@@ -197,9 +198,35 @@ extension AppState {
         return map.isEmpty ? threadId : nil
     }
 
+    func promoteStreamingThread(from oldID: String, to newID: String, cwd: String, in window: WindowState) {
+        guard oldID != newID else { return }
+        if let state = sessionStates.removeValue(forKey: oldID) {
+            sessionStates[newID] = state
+        }
+        if var summary = allSessionSummaries.first(where: { $0.id == oldID }) {
+            summary.id = newID
+            allSessionSummaries.removeAll { $0.id == oldID || $0.id == newID }
+            allSessionSummaries.insert(summary, at: 0)
+            threadStore.renameId(from: oldID, to: newID)
+            renameThreadFileEdits(from: oldID, to: newID)
+            threadStore.upsert(summary, cliSessionId: newID)
+        }
+        applySessionIdRedirect(from: oldID, to: newID)
+        shellTrackerRenameSession(from: oldID, to: newID, cwd: cwd)
+        for target in [window] + registeredWindows().filter({ $0 !== window }) {
+            renameDraftState(from: oldID, to: newID, in: target)
+            target.removePendingPlaceholder(oldID)
+            if target.currentSessionId == oldID { target.currentSessionId = newID }
+        }
+        broadcastMobileSessionRedirect(from: oldID, to: newID)
+    }
+
     func applySessionIdRedirect(from pendingKey: String, to realSessionId: String) {
         logger.info("[IDE_SEND_THREAD] session id redirect pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")
         sessionIdRedirect[pendingKey] = realSessionId
+        if threadStore.renameRateLimitTaskCosts(from: pendingKey, to: realSessionId) {
+            rateLimitHistoryRevision += 1
+        }
         if let branches = ciBranchesBySessionId.removeValue(forKey: pendingKey) {
             ciBranchesBySessionId[realSessionId] = branches
         }

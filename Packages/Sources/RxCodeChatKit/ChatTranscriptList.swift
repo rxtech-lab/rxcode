@@ -69,6 +69,7 @@ public nonisolated struct ChatTranscriptListItem: Identifiable, MessageListItem,
 }
 
 public struct ChatTranscriptList<AccessoryContent: View>: View {
+    @State private var navigation = TranscriptMessageNavigation()
     private let items: [ChatTranscriptListItem]
     private let isStreaming: Bool
     private let shouldScrollToBottom: Bool
@@ -108,21 +109,60 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
     }
 
     public var body: some View {
+        let latestUserID = items.last(where: \.isUserMessage)?.id
+        let readingHistory = navigation.isReadingHistory(latestUserID: latestUserID)
         MessageList(
-            messages: items,
-            isStreaming: isStreaming,
+            messages: readingHistory ? rowsReleasingPin(on: latestUserID) : items,
+            isStreaming: isStreaming && !readingHistory,
             shouldScrollToBottom: shouldScrollToBottom,
             scrollToBottomAnimated: scrollToBottomAnimated,
-            isAtBottom: $isAtBottom,
+            userMessagePinning: readingHistory ? .never : .whileStreaming,
+            isAtBottom: Binding(
+                get: { !readingHistory && isAtBottom },
+                set: { value in
+                    if !navigation.isReadingHistory(latestUserID: latestUserID) { isAtBottom = value }
+                }
+            ),
             hasMorePrevious: hasMorePrevious,
             loadMorePrevious: loadMorePrevious,
             onLoadError: onLoadError
         ) { item in
             rowContent(for: item)
                 .padding(rowPadding)
+                .background {
+                    TranscriptScrollReader(surface: navigation.surface)
+                        .frame(width: 0, height: 0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
         }
+        .overlay(alignment: .trailing) {
+            TranscriptMessageSliderOverlay(items: items, navigation: navigation) { row in
+                guard let latestUserID else { return }
+                isAtBottom = navigation.select(row: row, latestUserID: latestUserID)
+            }
+        }
+        .onChange(of: shouldScrollToBottom) { _, requested in
+            if requested { navigation.followLatest() }
+        }
+        .onChange(of: latestUserID) {
+            // Loading an older page keeps the latest ID. A send or thread switch
+            // hands positioning back to the list.
+            navigation.reset()
+        }
+        .onDisappear { navigation.reset() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(accessibilityIdentifier ?? "")
+    }
+
+    /// MessageList retains a live turn's pin by row ID. Giving that one row a
+    /// reading-mode identity releases the pin before the engine handles the
+    /// end of bottom-following. The row still renders the live message.
+    private func rowsReleasingPin(on latestUserID: String?) -> [ChatTranscriptListItem] {
+        items.map { item in
+            guard item.id == latestUserID else { return item }
+            return ChatTranscriptListItem(id: "unpinned-\(item.id)", kind: item.kind)
+        }
     }
 
     @ViewBuilder

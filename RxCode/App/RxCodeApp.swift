@@ -27,8 +27,24 @@ extension FocusedValues {
 
 // MARK: - App
 
+@MainActor
+final class ChatTerminationDelegate: NSObject, NSApplicationDelegate {
+    weak var workspaces: WorkspaceManager?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let active = workspaces?.loadedAppStates.filter { $0.sessionActivity.values.contains(where: \.isStreaming) } ?? []
+        guard !active.isEmpty else { return .terminateNow }
+        Task {
+            for workspace in active { await workspace.checkpointActiveTurns() }
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}
+
 @main
 struct RxCodeApp: App {
+    @NSApplicationDelegateAdaptor(ChatTerminationDelegate.self) private var terminationDelegate
     @State private var workspaceManager: WorkspaceManager
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
 
@@ -38,7 +54,9 @@ struct RxCodeApp: App {
         if !AppSupport.isTestProcess {
             AppSupport.migrateSigningPreferencesIfNeeded()
         }
-        _workspaceManager = State(initialValue: WorkspaceManager())
+        let manager = WorkspaceManager()
+        _workspaceManager = State(initialValue: manager)
+        terminationDelegate.workspaces = manager
         #if DEBUG
         if AppSupport.isScreenshotCapture {
             UserDefaults.standard.set(true, forKey: "onboardingCompleted")

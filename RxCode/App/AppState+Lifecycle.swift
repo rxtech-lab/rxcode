@@ -79,6 +79,7 @@ extension AppState {
 
         permissionMode = PermissionMode(rawValue: workspaceDefaults.string(for: "selectedPermissionMode") ?? "") ?? .default
 
+        scheduleBriefingPlansRefresh()
         isInitialized = true
         if !AppSupport.isTestProcess { startCIStatusPoller() }
         scheduleDesktopWidgetUpdate()
@@ -199,7 +200,7 @@ extension AppState {
         }
 
         // Warm the rate-limit usage so the menu-bar label has data before the
-        // popover is opened. RateLimitService caches for 5 minutes internally.
+        // popover is opened.
         Task { [weak self] in
             await self?.refreshRateLimitUsage()
             await self?.refreshCodexRateLimitUsage()
@@ -438,6 +439,10 @@ extension AppState {
             guard let self, let window else { return }
             await self.cancelStreaming(in: window)
         }
+        bridge.resumeInterruptedTurnHandler = { [weak self, weak window] sessionID in
+            guard let self, let window, window.currentSessionId == sessionID else { return }
+            await self.resumeInterruptedTurn(in: window)
+        }
         bridge.sendSlashCommandHandler = { [weak self, weak window] command in
             guard let self, let window else { return }
             await self.sendSlashCommand(command, in: window)
@@ -481,6 +486,7 @@ extension AppState {
                     usage.context ?? min(self.localModels.effectiveContextSize,
                                          model.contextLength ?? self.localModels.effectiveContextSize))
         }
+        bridge.accountRateLimits = core.accountRateLimits
         bridge.fetchRateLimitHandler = { [weak self] provider in
             await self?.rateLimitUsage(for: provider)
         }
@@ -558,6 +564,12 @@ extension AppState {
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
                 bridge.isLoadingFromDisk = state.isLoadingFromDisk
+                if !state.isStreaming, !state.isLoadingFromDisk, let id = window.currentSessionId,
+                   allSessionSummaries.first(where: { $0.id == id })?.hasUnfinishedTurn == true {
+                    bridge.interruptedSessionID = id
+                } else {
+                    bridge.interruptedSessionID = nil
+                }
                 bridge.streamingStartDate = state.streamingStartDate
                 bridge.liveOutputTokens = state.currentTurnOutputTokens
                 bridge.lastTurnContextUsedPercentage = state.lastTurnContextUsedPercentage

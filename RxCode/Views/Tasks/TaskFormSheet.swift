@@ -28,7 +28,6 @@ struct TaskFormSheet: View {
     @State var task = ProjectTask(projectId: UUID(), title: "")
     @State var story = ProjectStory(projectId: UUID(), title: "")
     @State var tagInput = ""
-    @State var showingAttachmentPicker = false
     @State var isExistingRecord = false
     @State var tab: Tab = .details
     @State var followUpDraft = ""
@@ -287,6 +286,12 @@ struct TaskFormSheet: View {
         Form {
             detailsSection
                 .disabled(isReadOnly)
+            if isReadOnly, !isStory, !task.attachments.isEmpty {
+                Section("Attachments") {
+                    AttachmentPreviewStrip(attachments: task.attachments.map(Attachment.init(dto:)))
+                        .rxCodeAttachmentPreviews()
+                }
+            }
             if isStory {
                 storyTasksSection
             } else if isExistingRecord && !linkedChildren.isEmpty {
@@ -315,7 +320,6 @@ struct TaskFormSheet: View {
                         }
                     }
                     agentSection
-                    attachmentsSection
                 }
             }
             .disabled(isReadOnly)
@@ -337,15 +341,6 @@ struct TaskFormSheet: View {
             if appState.reasoningLevelsByProvider[selection.provider] != nil, !levels.contains(where: { $0.id == effort }) {
                 task.agent.effort = nil
             }
-        }
-        .fileImporter(
-            isPresented: $showingAttachmentPicker,
-            // Any file, not just images: the description can reference
-            // anything, and the agent reads text files straight off disk.
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            handleAttachmentImport(result)
         }
     }
 
@@ -548,40 +543,6 @@ struct TaskFormSheet: View {
                 defaultTitle: appState.defaultEffortTitle(for: selection.provider, model: selection.model),
                 effort: $task.agent.effort
             )
-        }
-    }
-
-    var attachmentsSection: some View {
-        Section {
-            if !task.attachments.isEmpty {
-                ForEach(task.attachments, id: \.id) { dto in
-                    HStack(spacing: 6) {
-                        Image(systemName: dto.type == Attachment.AttachmentType.image.rawValue ? "photo" : "doc")
-                            .foregroundStyle(ClaudeTheme.textSecondary)
-                        Text(dto.name)
-                            .lineLimit(1)
-                        Spacer()
-                        Button {
-                            task.attachments.removeAll { $0.id == dto.id }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Remove attachment")
-                    }
-                }
-            }
-
-            Button {
-                showingAttachmentPicker = true
-            } label: {
-                Label("Add Files…", systemImage: "paperclip")
-            }
-        } header: {
-            Text("Attachments")
-        } footer: {
-            Text("Files pasted or dropped into the description are listed here and sent to the agent with the task.")
         }
     }
 

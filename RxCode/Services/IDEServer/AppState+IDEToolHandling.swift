@@ -116,6 +116,8 @@ extension AppState {
             return try await handleRunTask(arguments: arguments)
         case "ide__get_task_status":
             return try await handleGetTaskStatus(arguments: arguments)
+        case "ide__list_coding_plans", "ide__list_coding_plan_versions", "ide__get_coding_plan_version":
+            return try await handleCodingPlanTool(name: name, arguments: arguments)
         case "ide__get_threads":
             return await handleGetThreads(arguments: arguments)
         case "ide__get_thread_messages", "ide__get_thread_detail":

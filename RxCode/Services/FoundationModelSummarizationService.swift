@@ -109,12 +109,8 @@ actor FoundationModelSummarizationService {
     }
 
     func generateBranchBriefing(
-        threadSummaries: [(title: String, summary: String)]
+        prompt: String
     ) async -> String? {
-        guard !threadSummaries.isEmpty else { return nil }
-        // Share the exact prompt used by the other providers so the categorized
-        // briefing format stays consistent regardless of backend.
-        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: threadSummaries)
         let raw = await respond(
             instructions: "You maintain concise local project summaries.",
             prompt: prompt

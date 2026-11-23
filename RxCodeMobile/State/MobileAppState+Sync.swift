@@ -572,6 +572,7 @@ extension MobileAppState {
         projects = []
         sessions = []
         branchBriefings = []
+        briefingPlans = []
         briefingDocuments = []
         usageDashboard = UsageDashboard()
         RxCodeWidgetStore.save(.empty)

@@ -15,6 +15,9 @@ public final class ChatThread {
 
     public var cliSessionId: String?
 
+    public var hasUnfinishedTurn: Bool? = nil
+    @Attribute(.externalStorage) public var unfinishedTranscript: Data? = nil
+
     /// Per-provider native session/resume ids for this thread, keyed by
     /// `AgentProvider.rawValue` and JSON-encoded. Lets a single thread carry a
     /// distinct backend session id per provider it has run under, so switching
@@ -121,7 +124,7 @@ extension ChatThread {
         let origin = originRaw.flatMap(SessionOrigin.init(rawValue:))
             ?? (agentProvider == .codex ? .codexAppServer : .cliBacked)
 
-        return ChatSession.Summary(
+        var summary = ChatSession.Summary(
             id: id,
             projectId: projectId,
             title: title,
@@ -141,6 +144,8 @@ extension ChatThread {
             threadLabel: threadLabel,
             skipHooks: skipHooks
         )
+        summary.hasUnfinishedTurn = hasUnfinishedTurn
+        return summary
     }
 
     public func apply(_ summary: ChatSession.Summary) {

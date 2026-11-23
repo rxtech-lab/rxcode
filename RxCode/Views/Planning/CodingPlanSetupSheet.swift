@@ -45,7 +45,7 @@ struct CodingPlanSetupSheet: View {
     init(source: ChatCreationSource, goal: String) {
         self.source = source
         _projectID = State(initialValue: source.project.id)
-        _goal = State(initialValue: goal)
+        _goal = State(initialValue: MarkdownDescriptionEditor.markdown(forChatDraft: goal, files: source.draftFiles))
         _configuration = State(initialValue: .init(planner: source.model, reviewers: [
             .init(model: source.model, prompt: "Review feasibility, edge cases, and verification.")
         ]))
@@ -66,8 +66,7 @@ struct CodingPlanSetupSheet: View {
                         isDisabled: starting,
                         height: 100,
                         identifierPrefix: "coding-plan-goal",
-                        editorIdentifier: "coding-plan-goal",
-                        layout: .form(showsFilePicker: true)
+                        editorIdentifier: "coding-plan-goal"
                     )
                     if let title = source.summary?.title {
                         LabeledContent("Source chat", value: title)
@@ -169,10 +168,15 @@ private struct CodingPlanReviewerSheet: View {
             Form {
                 PlanModelPicker(title: "Model", model: $reviewer.model)
                     .accessibilityIdentifier("coding-plan-reviewer-model")
-                Section("Review instructions") {
-                    TextField("What should this agent review?", text: $reviewer.prompt, axis: .vertical)
-                        .lineLimit(4...12)
-                        .accessibilityIdentifier("coding-plan-review-prompt")
+                Section {
+                    MarkdownDescriptionEditor(
+                        text: $reviewer.prompt,
+                        placeholder: String(localized: "What should this agent review?"),
+                        title: "Review instructions",
+                        height: 100,
+                        identifierPrefix: "coding-plan-review-prompt",
+                        editorIdentifier: "coding-plan-review-prompt"
+                    )
                 }
                 if canRemove {
                     Button("Remove Reviewer", role: .destructive) { save(nil); dismiss() }

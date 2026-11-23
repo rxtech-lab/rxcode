@@ -12,10 +12,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AccountTree
@@ -25,12 +29,15 @@ import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
@@ -51,10 +58,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.rxlab.rxcode.proto.MobileAgentModel
+import app.rxlab.rxcode.proto.MobileModelSettings
 import app.rxlab.rxcode.proto.PermissionMode
 import app.rxlab.rxcode.proto.ProjectBranchInfo
 import app.rxlab.rxcode.state.MobileAppState
@@ -62,18 +73,12 @@ import app.rxlab.rxcode.ui.util.HapticEvent
 import app.rxlab.rxcode.ui.util.rememberHaptics
 import java.util.UUID
 
-/**
- * New-thread bottom sheet. Mirrors iOS `NewThreadSheet`: a hero header that
- * names the project, a rounded composer card with an embedded gradient send
- * button, and a chip strip for the per-thread agent config (branch, permission
- * mode, plan mode). The branch chip only updates the local picker state — the
- * actual switch happens on the desktop the next time we wire up
- * `branch_op_request`.
- */
+/** Composer and per-thread agent settings for a project on the paired Mac. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewThreadSheet(
     viewModel: MobileAppState,
+    modelSettings: MobileModelSettings?,
     projectId: UUID,
     projectName: String?,
     branchInfo: ProjectBranchInfo?,
@@ -94,6 +99,31 @@ fun NewThreadSheet(
         preferredBranch ?: branchInfo?.currentBranch
     }
     var selectedBranch by remember(resolvedBranch) { mutableStateOf(resolvedBranch) }
+    var modelSelection by remember(modelSettings) {
+        mutableStateOf(viewModel.threadModelSelection(modelSettings))
+    }
+    val (model, effort) = modelSelection
+    var picker by remember { mutableStateOf<ThreadPicker?>(null) }
+
+    fun selectModel(model: MobileAgentModel, effort: String?) {
+        modelSelection = model to effort
+        viewModel.rememberThreadModel(model, effort)
+        haptics.play(HapticEvent.Selection)
+        picker = null
+    }
+
+    val openPicker = picker
+    if (openPicker != null && modelSettings != null) {
+        ThreadOptionsSheet(
+            picker = openPicker,
+            settings = modelSettings,
+            selectedModel = model,
+            effort = effort,
+            onSelect = ::selectModel,
+            onDismiss = { picker = null },
+        )
+        return
+    }
 
     val canSend = prompt.trim().isNotEmpty()
 
@@ -106,6 +136,7 @@ fun NewThreadSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
@@ -125,6 +156,8 @@ fun NewThreadSheet(
                             initialText = prompt.trim(),
                             planMode = planMode,
                             permissionMode = permissionMode.takeIf { it != PermissionMode.DEFAULT },
+                            model = model,
+                            effort = effort,
                         )
                         onSessionCreated(draftId)
                     }
@@ -143,6 +176,35 @@ fun NewThreadSheet(
                     haptics.play(HapticEvent.Selection)
                     permissionMode = it
                 },
+                modelControls = {
+                    if (modelSettings != null && modelSettings.sections.any { it.models.isNotEmpty() }) {
+                        ChipSurface(
+                            icon = Icons.Outlined.Memory,
+                            title = model?.displayName ?: "Choose a model",
+                            showsChevron = true,
+                            onClick = {
+                                haptics.play(HapticEvent.LightTap)
+                                picker = ThreadPicker.Model
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        val levels = modelSettings.levelsFor(model)
+                        if (model != null && levels.isNotEmpty()) {
+                            val title = levels.firstOrNull { it.id == effort }?.displayName
+                                ?: modelSettings.defaultEffortTitle(model)
+                            ChipSurface(
+                                icon = Icons.Outlined.Psychology,
+                                title = "Thinking level · $title",
+                                showsChevron = true,
+                                onClick = {
+                                    haptics.play(HapticEvent.LightTap)
+                                    picker = ThreadPicker.Effort
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                },
                 planMode = planMode,
                 onTogglePlan = {
                     haptics.play(HapticEvent.Selection)
@@ -153,6 +215,77 @@ fun NewThreadSheet(
             Spacer(Modifier.height(8.dp))
         }
     }
+}
+
+private enum class ThreadPicker(val title: String) {
+    Model("Model"), Effort("Thinking level")
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThreadOptionsSheet(
+    picker: ThreadPicker,
+    settings: MobileModelSettings,
+    selectedModel: MobileAgentModel?,
+    effort: String?,
+    onSelect: (MobileAgentModel, String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(picker.title, style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+        LazyColumn(Modifier.fillMaxWidth()) {
+            if (picker == ThreadPicker.Model) {
+                settings.sections.forEach { section ->
+                    if (section.models.isNotEmpty()) {
+                        item {
+                            Text(
+                                section.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                        items(section.models) { model ->
+                            ThreadOption(model.displayName, selectedModel?.key == model.key) {
+                                val validEffort = settings.levelsFor(model).firstOrNull { it.id == effort }?.id
+                                onSelect(model, validEffort)
+                            }
+                        }
+                    }
+                }
+            } else if (selectedModel != null) {
+                item {
+                    ThreadOption(settings.defaultEffortTitle(selectedModel), effort == null) {
+                        onSelect(selectedModel, null)
+                    }
+                }
+                items(settings.levelsFor(selectedModel)) { level ->
+                    ThreadOption(level.displayName, effort == level.id) { onSelect(selectedModel, level.id) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThreadOption(title: String, isSelected: Boolean, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(title) },
+        trailingContent = {
+            if (isSelected) Icon(Icons.Outlined.Check, contentDescription = null)
+        },
+        modifier = Modifier.clickable(onClick = onClick).semantics { selected = isSelected },
+    )
 }
 
 @Composable
@@ -290,6 +423,7 @@ private fun SettingsStrip(
     onSelectBranch: (String) -> Unit,
     permissionMode: PermissionMode,
     onSelectPermission: (PermissionMode) -> Unit,
+    modelControls: @Composable () -> Unit,
     planMode: Boolean,
     onTogglePlan: () -> Unit,
 ) {
@@ -306,6 +440,7 @@ private fun SettingsStrip(
             selected = selectedBranch,
             onSelect = onSelectBranch,
         )
+        modelControls()
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PermissionChip(

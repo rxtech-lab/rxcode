@@ -44,7 +44,7 @@ public enum IDEToolRegistry {
         IDETool(
             name: "ide__set_todos",
             description: "Replace the current chat's todo list shown in RxCode. Send the full list to track progress on large, multi-step tasks.",
-            visibility: .polyfill(.todos, alsoFor: [.codex, .localAgent]),
+            visibility: .polyfill(.todos, alsoFor: [.claudeCode, .codex, .localAgent]),
             inputSchema: .object([
                 "type": .string("object"),
                 "properties": .object([
@@ -334,7 +334,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__get_thread_messages",
-            description: "Fetch the message history of a specific thread by id. Hydrates the full ChatSession (CLI-backed history or RxCode JSON) and returns role+text per message.",
+            description: "Fetch the message history of a specific thread by id. Hydrates the full ChatSession (CLI-backed history or RxCode JSON) and returns role+text per message. Use ide__list_coding_plans with thread_id for the separate coding-plan history.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
@@ -528,7 +528,7 @@ public enum IDEToolRegistry {
                 "required": .array([.string("query")]),
             ])
         ),
-    ] + briefingTools + [
+    ] + briefingTools + codingPlanTools + [
         IDETool(
             name: "ide__setup_docs_secret",
             description: "Mint a DOCS_UPLOAD_TOKEN and install it as the repository's GitHub Actions secret in one step, so the repo's docs-publishing CI can authenticate. Use this when setting up documentation publishing instead of asking the user to run `gh secret set` manually. If the repository isn't registered with the docs service yet, it's registered automatically (the RxLab GitHub App must be installed on it). If the call fails with a permission error, tell the user to re-authorize the RxLab GitHub App (Actions secrets: read & write) and retry.",

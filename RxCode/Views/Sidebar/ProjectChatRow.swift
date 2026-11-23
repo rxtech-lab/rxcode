@@ -1,6 +1,15 @@
 import RxCodeCore
 import SwiftUI
 
+struct InterruptedThreadLabel: View {
+    var body: some View {
+        Label("Interrupted", systemImage: "pause.circle")
+            .font(.caption2)
+            .foregroundStyle(ClaudeTheme.statusWarning)
+            .fixedSize()
+    }
+}
+
 // MARK: - ChatStatus
 
 /// Per-chat status derived from streaming state, pending permissions, and errors.
@@ -283,6 +292,7 @@ struct ProjectChatRow: View {
             isHovered = hovering
         }
         .task(id: changeTotalsLoadID) { await loadChangeTotals() }
+        .task(id: summary.id) { await appState.loadLegacyTurnOutcome(for: summary) }
         .help(taskCompletionChip.map { "\(title) — \($0.text)" } ?? title)
         .onTapGesture { onSelect() }
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
@@ -323,6 +333,9 @@ struct ProjectChatRow: View {
 
     @ViewBuilder
     private var titleDetails: some View {
+        if summary.hasUnfinishedTurn == true && status != .streaming && status != .awaitingPermission {
+            InterruptedThreadLabel()
+        }
         AttentionBadge(attention: appState.threadAttention(sessionKey: summary.id, in: windowState))
 
         if let taskCompletionChip {

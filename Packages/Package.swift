@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "DiffView", targets: ["DiffView"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/rxtech-lab/RxAttachmentField.git", from: "0.1.0"),
         .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.0"),
         .package(url: "https://github.com/rxtech-lab/RxAgentSDK.git", .upToNextMinor(from: "1.5.0")),
         .package(url: "https://github.com/SDWebImage/libwebp-Xcode", from: "1.5.0"),
@@ -21,6 +22,7 @@ let package = Package(
         .target(
             name: "RxCodeCore",
             dependencies: [
+                .product(name: "RxAttachmentField", package: "RxAttachmentField"),
                 .product(name: "libwebp", package: "libwebp-Xcode"),
             ],
             path: "Sources/RxCodeCore",
@@ -31,6 +33,7 @@ let package = Package(
         .target(
             name: "RxCodeChatKit",
             dependencies: [
+                .product(name: "RxAttachmentField", package: "RxAttachmentField"),
                 "DiffView",
                 "RxCodeCore",
                 .product(name: "RxAgentSDK", package: "RxAgentSDK"),

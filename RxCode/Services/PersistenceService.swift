@@ -46,12 +46,15 @@ actor PersistenceService: AppStatePersistenceService {
     private let baseURL: URL
     private let metaStore: SessionMetaStore
     private let cliStore: CLISessionStore
+    private let threadReader: ThreadStoreReader?
     private let logger = Logger(subsystem: "com.claudework", category: "PersistenceService")
 
-    init(metaStore: SessionMetaStore, cliStore: CLISessionStore, baseURL: URL = AppSupport.bundleScopedURL) {
+    init(metaStore: SessionMetaStore, cliStore: CLISessionStore, baseURL: URL = AppSupport.bundleScopedURL,
+         threadReader: ThreadStoreReader? = nil) {
         self.baseURL = baseURL
         self.metaStore = metaStore
         self.cliStore = cliStore
+        self.threadReader = threadReader
     }
 
     // MARK: - Projects
@@ -196,6 +199,11 @@ actor PersistenceService: AppStatePersistenceService {
     /// - `.cliBacked` → CLI jsonl
     /// - `.legacyRxCode` / `.codexAppServer` / `.acpAgent` → RxCode's global json
     func loadFullSession(summary: ChatSession.Summary, cwd: String) async -> ChatSession? {
+        if summary.hasUnfinishedTurn == true, let messages = await threadReader?.unfinishedMessages(sessionID: summary.id) {
+            var session = summary.makeSession()
+            session.messages = messages
+            return session
+        }
         switch summary.origin {
         case .cliBacked:
             return await cliStore.loadFullSession(

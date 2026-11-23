@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 extension CodexAppServer {
-    func fetchRateLimitsUncached() async -> RateLimitUsage? {
+    func fetchRateLimits() async -> RateLimitUsage? {
         guard let binary = await findCodexBinary() else {
             logger.warning("Skipping Codex rate-limit fetch because no codex binary was found")
             return nil

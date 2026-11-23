@@ -14,7 +14,9 @@ extension ThreadStore {
         guard let source = fetch(id: plan.id.uuidString) else {
             throw PlanningTurnError(message: "The planning thread has been deleted.")
         }
-        let data = try JSONEncoder().encode(plan)
+        var snapshot = plan
+        snapshot.updatedAt = .now
+        let data = try JSONEncoder().encode(snapshot)
         let oldData = source.codingPlanData
         source.codingPlanData = data
         var child: ChatThread?
@@ -27,6 +29,7 @@ extension ThreadStore {
         }
         do {
             try context.save()
+            onCodingPlansChanged?()
         } catch {
             source.codingPlanData = oldData
             if let child { context.delete(child) }

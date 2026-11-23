@@ -1,5 +1,7 @@
 package app.rxlab.rxcode.proto
 
+import app.rxlab.rxcode.ui.briefing.groupBriefings
+import java.time.ZoneOffset
 import java.time.Instant
 import java.util.UUID
 import org.junit.Assert.assertEquals
@@ -7,6 +9,32 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BriefingPayloadTest {
+    @Test
+    fun swiftSnapshotGroupsPlanOnlyDayAndPreservesLegacyDecoding() {
+        val id = UUID.randomUUID()
+        val project = UUID.randomUUID()
+        val raw = """
+            {"type":"snapshot","data":{"projects":[],"sessions":[],
+             "branchBriefings":[{"projectId":"$project","branch":"main","briefing":"Previous day","updatedAt":0,"day":0}],
+             "briefingPlans":[{"id":"$id","projectID":"$project","threadID":"draft","branch":"main",
+             "title":"Extension support","updatedAt":90000,"planningStatus":"ready","implementationStatus":"unimplemented",
+             "implementationEvidence":"No implementation started","versionCount":3,"currentVersionTitle":"Final design",
+             "featureExcerpt":"- Discover extensions","futureField":true}]}}
+        """.trimIndent()
+        val snapshot = (RxJson.decodeFromString<Payload>(raw) as Payload.Snapshot).data
+        val groups = groupBriefings(snapshot.branchBriefings.orEmpty(), emptyList(), snapshot.briefingPlans.orEmpty(), ZoneOffset.UTC)
+        assertEquals(2, groups.size)
+        val plan = groups.first().plans.single()
+        assertEquals(id, plan.id)
+        assertEquals(3, plan.versionCount)
+        assertEquals("ready", plan.planningStatus)
+        assertEquals("unimplemented", plan.implementationStatus)
+        assertEquals(null, groups.first().briefing)
+        assertEquals("Previous day", groups.last().briefing?.briefing)
+        val legacy = RxJson.decodeFromString<SnapshotPayload>("""{"projects":[],"sessions":[]}""")
+        assertEquals(null, legacy.briefingPlans)
+    }
+
     @Test
     fun documentSnapshotAndContentRoundTrip() {
         val id = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")

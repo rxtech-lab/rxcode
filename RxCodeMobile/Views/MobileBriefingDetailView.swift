@@ -9,6 +9,7 @@ struct MobileBriefingDetailView: View {
     var onOpenSession: (String) -> Void = { _ in }
 
     @Environment(\.openURL) private var openURL
+    @State private var selectedPlan: CodingPlanActivity?
     @State private var showingNewThread = false
     @State private var isInitializingGit = false
 
@@ -26,7 +27,28 @@ struct MobileBriefingDetailView: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 24) {
                 headerCard
-                summaryCard
+                if group?.briefing != nil || group?.plans.isEmpty != false { summaryCard }
+                if let plans = group?.plans, !plans.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Coding plans", systemImage: "list.bullet.clipboard")
+                            .font(.subheadline.weight(.semibold))
+                        ForEach(plans) { plan in
+                            Button {
+                                MobileHaptics.buttonTap()
+                                selectedPlan = plan
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(plan.title).font(.headline)
+                                    Text(plan.briefingDescription).font(.caption).foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .mobileCardSurface()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
                 threadsSection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,6 +116,43 @@ struct MobileBriefingDetailView: View {
             info: $autopilotInfo,
             state: state
         )
+        .sheet(item: $selectedPlan) { selected in
+            NavigationStack {
+                Group {
+                    if let plan = state.briefingPlans.first(where: { $0.id == selected.id }) {
+                        List {
+                            Section {
+                                Text(plan.title).font(.headline)
+                                LabeledContent("Plan", value: plan.planningStatusLabel)
+                                LabeledContent("Implementation", value: plan.implementationStatusLabel)
+                                LabeledContent("Version", value: plan.versionLabel)
+                                LabeledContent("Updated", value: plan.updatedAt.formatted())
+                            }
+                            if !plan.featureExcerpt.isEmpty {
+                                Section("Planned features") { MarkdownContentView(text: plan.featureExcerpt) }
+                            }
+                            if !plan.implementationEvidence.isEmpty {
+                                Section("Implementation evidence") { Text(plan.implementationEvidence) }
+                            }
+                            Section("Plan ID") { Text(plan.id.uuidString).font(.footnote.monospaced()).textSelection(.enabled) }
+                        }
+                    } else {
+                        ContentUnavailableView("Plan unavailable", systemImage: "list.bullet.clipboard")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .navigationTitle("Coding plan")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            MobileHaptics.buttonTap()
+                            selectedPlan = nil
+                        }
+                    }
+                }
+            }
+            .mobileSheetPresentation()
+        }
         .sheet(isPresented: $showingNewThread) {
             NewThreadSheet(
                 projectID: groupKey.projectId,

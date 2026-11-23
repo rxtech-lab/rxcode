@@ -260,17 +260,3 @@ actor PetCustomAgentResponder: VoiceResponder {
     }
 }
 
-nonisolated enum PetCodexRealtimeConnectionFriendlyTool {
-    static func describe(_ raw: String) -> String {
-        // Realtime events already carry a display label; pipeline events carry raw names.
-        if ["Using ", "Running ", "Editing ", "Searching "].contains(where: raw.hasPrefix) {
-            return raw
-        }
-        let cleaned = raw
-            .replacingOccurrences(of: "mcp__rxcode-ide__", with: "")
-            .replacingOccurrences(of: "mcp__rxcode_ide__", with: "")
-            .replacingOccurrences(of: "ide__", with: "")
-            .replacingOccurrences(of: "_", with: " ")
-        return "Using \(cleaned)"
-    }
-}

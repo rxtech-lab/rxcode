@@ -45,6 +45,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
     /// "finished, unread" indicator. Defaults to `false` for summaries from
     /// an older desktop that predates this field.
     public let hasUncheckedCompletion: Bool
+    public let isInterrupted: Bool
     /// Id of the thread this thread was spawned from (e.g. a `[Code Review]`
     /// thread links back to the reviewed thread). `nil` for ordinary threads.
     public let parentThreadId: String?
@@ -69,6 +70,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
         todos: [TodoItem]? = nil,
         queuedMessages: [QueuedUserMessage]? = nil,
         hasUncheckedCompletion: Bool = false,
+        isInterrupted: Bool = false,
         parentThreadId: String? = nil,
         threadLabel: String? = nil,
         changedFileCount: Int? = nil
@@ -85,13 +87,14 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
         self.todos = todos
         self.queuedMessages = queuedMessages
         self.hasUncheckedCompletion = hasUncheckedCompletion
+        self.isInterrupted = isInterrupted
         self.parentThreadId = parentThreadId
         self.threadLabel = threadLabel
         self.changedFileCount = changedFileCount
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion, parentThreadId, threadLabel, changedFileCount
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion, isInterrupted, parentThreadId, threadLabel, changedFileCount
     }
 
     public init(from decoder: Decoder) throws {
@@ -108,6 +111,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
         todos = try container.decodeIfPresent([TodoItem].self, forKey: .todos)
         queuedMessages = try container.decodeIfPresent([QueuedUserMessage].self, forKey: .queuedMessages)
         hasUncheckedCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUncheckedCompletion) ?? false
+        isInterrupted = try container.decodeIfPresent(Bool.self, forKey: .isInterrupted) ?? false
         parentThreadId = try container.decodeIfPresent(String.self, forKey: .parentThreadId)
         threadLabel = try container.decodeIfPresent(String.self, forKey: .threadLabel)
         changedFileCount = try container.decodeIfPresent(Int.self, forKey: .changedFileCount)
@@ -183,10 +187,12 @@ public struct UserMessagePayload: Codable, Sendable {
     public let clientMessageID: UUID
     public let sessionID: String
     public let text: String
-    public init(clientMessageID: UUID = UUID(), sessionID: String, text: String) {
+    public let resumeInterruptedTurn: Bool?
+    public init(clientMessageID: UUID = UUID(), sessionID: String, text: String, resumeInterruptedTurn: Bool? = nil) {
         self.clientMessageID = clientMessageID
         self.sessionID = sessionID
         self.text = text
+        self.resumeInterruptedTurn = resumeInterruptedTurn
     }
 }
 

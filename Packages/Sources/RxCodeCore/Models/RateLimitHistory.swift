@@ -189,13 +189,15 @@ public enum RateLimitDelta {
 
     /// Percentage points used between `before` and `after`, per window. A
     /// window yields nil when it reset in between (its reset time moved or its
-    /// percentage dropped), since the usage can't be attributed.
+    /// percentage dropped). Plans with only a weekly limit have no 5-hour delta.
     public static func between(
         _ before: RateLimitUsage,
         _ after: RateLimitUsage
     ) -> (fiveHour: Double?, sevenDay: Double?) {
         (
-            delta(before.fiveHourPercent, after.fiveHourPercent, before.fiveHourResetsAt, after.fiveHourResetsAt),
+            before.hasFiveHourLimit && after.hasFiveHourLimit
+                ? delta(before.fiveHourPercent, after.fiveHourPercent, before.fiveHourResetsAt, after.fiveHourResetsAt)
+                : nil,
             delta(before.sevenDayPercent, after.sevenDayPercent, before.sevenDayResetsAt, after.sevenDayResetsAt)
         )
     }

@@ -1,72 +1,51 @@
 package app.rxlab.rxcode.ui.briefing
 
+import app.rxlab.rxcode.proto.CodingPlanActivity
 import app.rxlab.rxcode.proto.MobileBranchBriefing
 import app.rxlab.rxcode.proto.MobileThreadSummary
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
-/**
- * Same key shape iOS uses: `{ projectId, branch }`. Stable identifier for a
- * single briefing card and for selection in the tablet pane layout.
- */
-data class BriefingGroupKey(val projectId: UUID, val branch: String) {
-    val id: String get() = "$projectId::$branch"
+data class BriefingGroupKey(val projectId: UUID, val branch: String, val day: LocalDate) {
+    val id: String get() = "$projectId::$branch::$day"
 }
 
-/**
- * One project+branch row, paired with whatever briefing text and thread cards
- * the desktop sent for it. Mirrors Swift `GroupedBriefing`.
- */
 data class GroupedBriefing(
-    val projectId: UUID,
-    val branch: String,
+    val key: BriefingGroupKey,
     val briefing: MobileBranchBriefing?,
     val threads: List<MobileThreadSummary>,
+    val plans: List<CodingPlanActivity>,
     val updatedAt: Instant,
 ) {
-    val id: String get() = "$projectId::$branch"
-    val key: BriefingGroupKey get() = BriefingGroupKey(projectId, branch)
+    val id get() = key.id
+    val projectId get() = key.projectId
+    val branch get() = key.branch
 }
 
-/**
- * Combine the desktop's per-branch briefings with the per-thread summaries
- * into one card per (project, branch). `updatedAt` is the most recent of
- * either source so cards stay sorted by activity. Mirrors Swift
- * `groupBriefings(briefings:threads:)`.
- */
+/** Group plan activity and summaries on the same local calendar days as the iOS timeline. */
 fun groupBriefings(
     briefings: List<MobileBranchBriefing>,
     threads: List<MobileThreadSummary>,
+    plans: List<CodingPlanActivity> = emptyList(),
+    zone: ZoneId = ZoneId.systemDefault(),
 ): List<GroupedBriefing> {
-    val buckets = HashMap<String, GroupedBriefing>()
+    fun key(project: UUID, branch: String, timestamp: Instant) =
+        BriefingGroupKey(project, branch, timestamp.atZone(zone).toLocalDate())
 
-    for (briefing in briefings) {
-        val key = "${briefing.projectId}::${briefing.branch}"
-        val existing = buckets[key]
-        buckets[key] = GroupedBriefing(
-            projectId = briefing.projectId,
-            branch = briefing.branch,
-            briefing = briefing,
-            threads = existing?.threads ?: emptyList(),
-            updatedAt = maxOf(briefing.updatedAt, existing?.updatedAt ?: Instant.EPOCH),
-        )
-    }
+    val daily = briefings.groupBy { key(it.projectId, it.branch, it.day ?: it.updatedAt) }
+    val chats = threads.groupBy { key(it.projectId, it.branch, it.createdAt ?: it.updatedAt) }
+    val activities = plans.groupBy { key(it.projectID, it.branch ?: "unknown", it.updatedAt) }
 
-    for (thread in threads) {
-        val key = "${thread.projectId}::${thread.branch}"
-        val existing = buckets[key]
-        val mergedThreads = (existing?.threads.orEmpty() + thread)
-            .sortedByDescending { it.updatedAt }
-        buckets[key] = GroupedBriefing(
-            projectId = thread.projectId,
-            branch = thread.branch,
-            briefing = existing?.briefing,
-            threads = mergedThreads,
-            updatedAt = maxOf(thread.updatedAt, existing?.updatedAt ?: Instant.EPOCH),
-        )
-    }
-
-    return buckets.values.sortedByDescending { it.updatedAt }
+    return (daily.keys + chats.keys + activities.keys).map { day ->
+        // A legacy, branch-wide record can share the day of a dated briefing.
+        val briefing = daily[day]?.maxWithOrNull(compareBy<MobileBranchBriefing> { it.day != null }.thenBy { it.updatedAt })
+        val dayThreads = chats[day].orEmpty().sortedByDescending { it.updatedAt }
+        val dayPlans = activities[day].orEmpty().sortedByDescending { it.updatedAt }
+        val updated = listOfNotNull(briefing?.updatedAt, dayThreads.firstOrNull()?.updatedAt, dayPlans.firstOrNull()?.updatedAt).max()
+        GroupedBriefing(day, briefing, dayThreads, dayPlans, updated)
+    }.sortedByDescending { it.updatedAt }
 }
 
 /**

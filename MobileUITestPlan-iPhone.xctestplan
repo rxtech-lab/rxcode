@@ -15,6 +15,7 @@
   "testTargets" : [
     {
       "selectedTests" : [
+        "iPhoneNavigationUITests/testSyncedCodingPlanShowsVersionAndImplementationState()",
         "iPhoneNavigationUITests/testComputerUseConfirmationSendsBothDecisionsToTheMac()",
         "TaskDetailSheetUITests/testCardActionsAreInDropdownMenuAndNotSwipeable()",
         "MobileNativeReorderingUITests/testOnlyDeliberateHoldLiftsTaskCard()",

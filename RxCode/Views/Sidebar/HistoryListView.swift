@@ -235,8 +235,12 @@ struct HistoryListView: View {
                 isPinned: session.isPinned,
                 isBackgroundStreaming: session.isBackgroundStreaming
             )
+            if session.summary.hasUnfinishedTurn == true, appState.sessionActivity[session.id]?.isStreaming != true {
+                InterruptedThreadLabel()
+            }
             AttentionBadge(attention: appState.threadAttention(sessionKey: session.id, in: windowState))
         }
+        .task(id: session.id) { await appState.loadLegacyTurnOutcome(for: session.summary) }
         .onLongPressGesture(minimumDuration: 0, maximumDistance: 10, pressing: { pressing in
             if pressing {
                 appState.selectSession(id: session.id, inChatTab: opensInChatTab, in: windowState)

@@ -8,6 +8,7 @@ struct ChatCreationSource {
     let model: AgentModel
     let worktreePath: String?
     let worktreeBranch: String?
+    var draftFiles: [Attachment] = []
 }
 
 extension AppState {
@@ -46,12 +47,11 @@ extension AppState {
                 transcript = String(transcript.prefix(8_000)) + "\n\n[Earlier discussion omitted]\n\n" + String(transcript.suffix(24_000))
             }
         }
-        if !attachments.isEmpty {
-            let resolved = AttachmentFactory.resolvingClipboardImages(attachments).resolved
-            transcript = buildPromptWithAttachments(transcript, attachments: resolved)
-        }
+        let resolved = await Task.detached { AttachmentFactory.resolvingClipboardImages(attachments).resolved }.value
+        let files = resolved.filter { $0.type == .image || $0.type == .file }
+        transcript = buildPromptWithAttachments(transcript, attachments: resolved.filter { $0.type == .text || $0.type == .link })
         return ChatCreationSource(project: project, summary: summary, transcript: transcript, model: model,
-                                  worktreePath: path, worktreeBranch: branch)
+                                  worktreePath: path, worktreeBranch: branch, draftFiles: files)
     }
 }
 

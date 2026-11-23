@@ -55,7 +55,7 @@ struct GitCommitDetailView: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 5) {
-                ForEach(commit.refs, id: \.self) { GitRefBadge(ref: $0, onCheckout: store.checkout) }
+                GitRefBadges(refs: commit.refs, snapshot: store.snapshot, onCheckout: store.checkout)
             }
             Text(commit.subject)
                 .font(.system(size: ClaudeTheme.size(14), weight: .semibold))

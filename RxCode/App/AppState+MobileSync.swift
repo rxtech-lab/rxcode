@@ -522,6 +522,11 @@ extension AppState {
             _ = selectedModel
             _ = selectedACPClientId
             _ = selectedEffort
+            _ = reasoningLevelsByProvider
+            _ = codexLevelsByModel
+            _ = claudeModels
+            _ = codexModels
+            _ = acpClients
             _ = permissionMode
             _ = notificationsEnabled
             _ = focusMode
@@ -529,6 +534,7 @@ extension AppState {
             _ = archiveRetentionDays
             _ = autoPreviewSettings
             _ = branchBriefingRevision
+            _ = briefingPlans
             _ = briefingDocuments
             _ = threadSummaryRevision
             _ = ciStatusRevision

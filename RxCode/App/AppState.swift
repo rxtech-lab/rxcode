@@ -67,6 +67,9 @@ final class AppState: IDEToolHandling {
             attentionSessionIDsByProject = nil
             cachedTaskLinkedSessions = nil
             taskSessionIndexes.removeAll(keepingCapacity: true)
+            if briefingPlans.contains(where: { $0.implementationThreadID != nil }) {
+                scheduleBriefingPlansRefresh()
+            }
         }
     }
 
@@ -347,6 +350,8 @@ final class AppState: IDEToolHandling {
     /// Agent-written document briefings from `briefingStore`, newest first.
     /// Loaded lazily by the briefing tab via `reloadBriefingDocuments()`.
     var briefingDocuments: [BriefingDocument] = []
+    var briefingPlans: [CodingPlanActivity] = []
+    @ObservationIgnored var briefingPlansRefresh: Task<Void, Never>?
     /// Settings for sending published briefings as Autopilot notifications,
     /// mirrored from `notificationStore`.
     var briefingNotificationSettings = BriefingNotificationSettings()
@@ -567,12 +572,9 @@ final class AppState: IDEToolHandling {
 
     // MARK: - Menu Bar Status
 
-    /// Last-fetched usage percentages for the menu-bar status popup. Updated by
-    /// `refreshRateLimitUsage()`; nil until first successful fetch (or when not
-    /// signed in to Claude Code).
     @ObservationIgnored var usageLimitResumeTasks: [String: Task<Void, Never>] = [:]
-    var latestRateLimitUsage: RateLimitUsage?
-    var latestCodexRateLimitUsage: RateLimitUsage?
+    var latestRateLimitUsage: RateLimitUsage? { cachedRateLimitUsage(for: .claudeCode) }
+    var latestCodexRateLimitUsage: RateLimitUsage? { cachedRateLimitUsage(for: .codex) }
     @ObservationIgnored var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]
     @ObservationIgnored var rateLimitSamplingTask: Task<Void, Never>?
     /// Agent streams currently measuring their usage-limit cost, per provider.
@@ -871,8 +873,8 @@ final class AppState: IDEToolHandling {
     var desktopWidgetNavigationURL: URL?
     @ObservationIgnored var desktopWidgetUpdateTask: Task<Void, Never>?
     @ObservationIgnored var desktopWidgetsActive = false
-    @ObservationIgnored var desktopClaudeUsageDate: Date?
-    @ObservationIgnored var desktopCodexUsageDate: Date?
+    var desktopClaudeUsageDate: Date? { core.accountRateLimits[.claudeCode]?.measuredAt }
+    var desktopCodexUsageDate: Date? { core.accountRateLimits[.codex]?.measuredAt }
     /// Quick-added tasks whose properties the default agent is still filling
     /// in, so their rows can show progress.
     var classifyingTaskIds: Set<UUID> = []
@@ -1035,13 +1037,14 @@ final class AppState: IDEToolHandling {
         self.codex = CodexAppServer()
         let acp = ACPService()
         self.acp = acp
-        self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore, baseURL: active.storageURL)
         self.marketplace = MarketplaceService(baseURL: active.storageURL)
         self.mcp = MCPService(baseURL: active.storageURL, claudeService: claude)
         let threadStore = ThreadStore.make(baseURL: active.storageURL)
         if active.isPersonal && !AppSupport.isTestProcess { MemoryService.registerPersonalStore(threadStore) }
         self.threadStore = threadStore
         self.threadStoreReader = ThreadStoreReader(container: threadStore.container)
+        self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore,
+            baseURL: active.storageURL, threadReader: threadStoreReader)
         self.briefingStore = BriefingStore(
             baseURL: active.storageURL.appendingPathComponent("briefings", isDirectory: true)
         )
@@ -1059,6 +1062,7 @@ final class AppState: IDEToolHandling {
             baseURL: active.storageURL.appendingPathComponent("notifications", isDirectory: true)
         )
         loadWorkspaceSettings()
+        threadStore.onCodingPlansChanged = { [weak self] in self?.scheduleBriefingPlansRefresh() }
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.broadcastMobileRunTasks()

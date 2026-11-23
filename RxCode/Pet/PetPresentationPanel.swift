@@ -28,7 +28,7 @@ private final class PetDialogPanel: NSPanel {
 @MainActor
 final class PetPresentationAnchorView: NSView {
     private(set) var presentationPanel: NSPanel?
-    private var hosting: NSHostingView<AnyView>?
+    private var hosting: NSHostingController<AnyView>?
     private var presentationID: UUID?
     private var updatePending = false
 
@@ -38,7 +38,7 @@ final class PetPresentationAnchorView: NSView {
         if let hosting {
             hosting.rootView = content
         } else {
-            let host = NSHostingView(rootView: content)
+            let host = NSHostingController(rootView: content)
             host.sizingOptions = []
             hosting = host
         }
@@ -90,7 +90,7 @@ final class PetPresentationAnchorView: NSView {
             panel.isOpaque = false
             panel.backgroundColor = .clear
             panel.hasShadow = true
-            panel.contentView = hosting
+            panel.contentViewController = hosting
             presentationPanel = panel
         }
         guard let panel = presentationPanel else { return }
@@ -98,7 +98,7 @@ final class PetPresentationAnchorView: NSView {
             panel.parent?.removeChildWindow(panel)
             parent.addChildWindow(panel, ordered: .above)
         }
-        let fitting = hosting.fittingSize
+        let fitting = hosting.sizeThatFits(in: visible.size)
         let size = CGSize(width: min(max(1, fitting.width), visible.width), height: min(max(1, fitting.height), visible.height))
         let frame = Self.presentationFrame(anchor: anchor, size: size, visible: visible)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
@@ -121,7 +121,7 @@ final class PetPresentationAnchorView: NSView {
 
     func tearDown() {
         detachPanel()
-        presentationPanel?.contentView = nil
+        presentationPanel?.contentViewController = nil
         presentationPanel = nil
         hosting = nil
         presentationID = nil

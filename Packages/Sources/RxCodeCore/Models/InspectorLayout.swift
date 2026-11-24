@@ -243,10 +243,11 @@ extension InspectorPaneLayout where Item == InspectorToolTab {
     @discardableResult
     public mutating func reveal(_ tool: InspectorTab) -> UUID {
         let focused = panes.first { $0.id == focusedPaneID }
-        let existing = selectedTab.flatMap { $0.tool == tool ? $0 : nil }
-            ?? panes.compactMap(\.selectedTab).first { $0.tool == tool }
-            ?? focused?.tabs.first { $0.tool == tool }
-            ?? panes.lazy.flatMap(\.tabs).first { $0.tool == tool }
+        let matchesTool: (Tab) -> Bool = { $0.tool == tool }
+        let focusedSelection = focused?.selectedTab.flatMap { matchesTool($0) ? $0 : nil }
+        let selectedInAnyPane = focusedSelection ?? panes.lazy.compactMap(\.selectedTab).first(where: matchesTool)
+        let existingInFocusedPane = selectedInAnyPane ?? focused?.tabs.first(where: matchesTool)
+        let existing = existingInFocusedPane ?? panes.lazy.flatMap(\.tabs).first(where: matchesTool)
         if let existing {
             select(existing.id)
             return existing.id

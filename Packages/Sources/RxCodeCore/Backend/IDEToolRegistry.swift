@@ -28,7 +28,7 @@ public enum IDEToolRegistry {
 
     public static let qualifiedAskUserName = "mcp__rxcode-ide__" + askUser.name
 
-    public static let allTools: [IDETool] = designTools + petCaptureTools + petInteractionTools + flowcyTools + mediaTools + [
+    public static let allTools: [IDETool] = extensionDevelopmentTools + designTools + petCaptureTools + petInteractionTools + flowcyTools + mediaTools + [
         usageCardsTool,
         integrationUsageTool,
         taskViewsTool,

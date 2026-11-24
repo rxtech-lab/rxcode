@@ -176,8 +176,7 @@ extension AppState {
             throw PlanningTurnError(message: "Continue this conversation in the implementation chat.")
         }
         var updated = room.plan
-        updated.contributions.append(.init(role: "You", model: nil, text: message))
-        if updated.nextStep == nil { updated.nextStep = .reply }
+        updated.addUserMessage(message)
         try threadStore.saveCodingPlan(updated)
         room.plan = updated
         resumeCodingPlan(room, cwd: cwd)

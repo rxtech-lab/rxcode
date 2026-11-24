@@ -91,6 +91,28 @@ struct WhatsNewFeature: Identifiable {
                 Highlight(icon: "square.and.pencil", text: "Start a fresh chat whenever you want a separate topic."),
                 Highlight(icon: "clock.arrow.circlepath", text: "Return to earlier conversations from Chat History.")
             ]
+        ),
+        WhatsNewFeature(
+            slug: "extensions",
+            title: "Extensions",
+            subtitle: "Build and test native Swift service extensions from a project chat.",
+            illustration: "WhatsNewExtensions",
+            highlights: [
+                Highlight(icon: "swift", text: "Ask your agent to create an extension in your project."),
+                Highlight(icon: "arrow.clockwise", text: "Reload after editing and see the running extension’s test response in chat."),
+                Highlight(icon: "puzzlepiece.extension", text: "Open Settings → Extensions to manage extensions, read their READMEs, and check API compatibility.")
+            ]
+        ),
+        WhatsNewFeature(
+            slug: "plan-mode",
+            title: "Plan Mode",
+            subtitle: "Draft, debate, and revise an implementation plan before coding begins.",
+            illustration: "WhatsNewPlanMode",
+            highlights: [
+                Highlight(icon: "plus.circle", text: "Choose Plan Mode from the Add menu in chat to get started."),
+                Highlight(icon: "person.2", text: "Choose a planner and reviewer models, then follow their debate and plan revisions."),
+                Highlight(icon: "play.circle", text: "Pick a plan version and a model to start a linked implementation chat.")
+            ]
         )
     ]
 }

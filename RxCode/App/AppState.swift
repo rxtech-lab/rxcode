@@ -831,6 +831,9 @@ final class AppState: IDEToolHandling {
     let runService = RunService()
     let localWebProxy = LocalWebProxyServer()
     let ideMCPServer = IDEMCPServer()
+    /// Effective checkout for each active project turn that can develop extensions.
+    var extensionEnablementRequests: [ExtensionEnablementRequest] = []
+    @ObservationIgnored var extensionDevelopmentWorkspaces: [UUID: URL] = [:]
     var mobileSyncObservers: [NSObjectProtocol] = []
 
     /// The seam hooks act through (thread/IDE capabilities). Implicitly-unwrapped

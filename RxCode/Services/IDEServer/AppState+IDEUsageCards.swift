@@ -7,13 +7,10 @@ extension AppState {
         let workspaceURL = activeWorkspace.storageURL
         if query.refresh {
             for integration in query.integrations(in: usageDashboard) {
-                let snapshot = await refreshedUsageSnapshot(integration)
+                await refreshUsageIntegration(integration)
                 guard activeWorkspace.storageURL == workspaceURL else {
                     throw IDEToolError.handlerFailed("Workspace changed during usage refresh. Retry in the current workspace.")
                 }
-                guard usageDashboard.integrations.contains(integration) else { continue }
-                usageDashboard.snapshots.removeAll { $0.id == integration.id }
-                usageDashboard.snapshots.append(snapshot)
             }
             await persistUsageDashboard()
             guard activeWorkspace.storageURL == workspaceURL else {

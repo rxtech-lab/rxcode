@@ -5,7 +5,8 @@ import RxCodeCore
 extension AppState {
     func handleStreamResult(
         _ resultEvent: ResultEvent, sessionKey initialSessionKey: String, streamId: UUID,
-        agentProvider: AgentProvider, projectId: UUID, cwd: String, eventCount: Int, reportedError: String? = nil, in window: WindowState
+        agentProvider: AgentProvider, projectId: UUID, cwd: String, eventCount: Int, reportedError: String? = nil,
+        turnMode: PermissionMode, includeIDEMCP: Bool, in window: WindowState
     ) async -> String {
         var sessionKey = initialSessionKey
         // Recent Claude Code runs long tasks (background shells, subagents) as
@@ -98,6 +99,7 @@ extension AppState {
 
         let reviewedUserMessage = stateForSession(sessionKey).messages.last(where: { $0.role == .user })?.id
         finalizeStreamSession(for: sessionKey, trackUnreadCompletion: !resultEvent.isError, interrupted: resultEvent.isError) { state in
+            state.todoContinuationSource = streamId
             if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
             if let duration = resultEvent.durationMs { state.durationMs += duration }
             if let turns = resultEvent.totalTurns { state.turns += turns }
@@ -121,6 +123,30 @@ extension AppState {
             assistantText: finalAssistantText,
             error: resultEvent.isError ? "Agent reported an error result." : nil
         )
+
+        // Whether this turn was the synthetic commit/push follow-up the
+        // Commit & Push hook injected. Captured BEFORE the after-stop
+        // dispatch below, which is where CommitPushHook consumes the
+        // marker. A hook-injected turn's last "user" message is the
+        // commit prompt, not the user's words — summarizing or
+        // extracting memories from it pollutes the briefing/memories
+        // with "Commit the changes from this session…" boilerplate.
+        let wasHookInjectedTurn = isSetupSession(
+            kind: HookSetupKind.commitPush,
+            sessionKey: sessionKey
+        ) || isSetupSession(
+            kind: HookSetupKind.sendMessage,
+            sessionKey: sessionKey
+        )
+
+        if !resultEvent.isError, !hasQueuedFollowups, !wasHookInjectedTurn, turnMode != .plan,
+           let project = sessionProject(id: projectId),
+           !hookController.threadSkipsHooks(sessionId: sessionKey),
+           !sessionEndHooksSuppressed(sessionKey: sessionKey, sessionId: sessionKey),
+           await continueUnfinishedTodos(sessionKey: sessionKey, streamId: streamId, project: project,
+                                         turnMode: turnMode, includeIDEMCP: includeIDEMCP, reply: finalAssistantText) {
+            return sessionKey
+        }
 
         // Session-stop hooks fire when streaming stops. Before-stop
         // runs *after* `finalizeStreamSession` so its status card lands
@@ -161,21 +187,6 @@ extension AppState {
         if agentProvider == .claudeCode, !resultEvent.isError {
             reconcileFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
         }
-
-        // Whether this turn was the synthetic commit/push follow-up the
-        // Commit & Push hook injected. Captured BEFORE the after-stop
-        // dispatch below, which is where CommitPushHook consumes the
-        // marker. A hook-injected turn's last "user" message is the
-        // commit prompt, not the user's words — summarizing or
-        // extracting memories from it pollutes the briefing/memories
-        // with "Commit the changes from this session…" boilerplate.
-        let wasHookInjectedTurn = isSetupSession(
-            kind: HookSetupKind.commitPush,
-            sessionKey: sessionKey
-        ) || isSetupSession(
-            kind: HookSetupKind.sendMessage,
-            sessionKey: sessionKey
-        )
 
         // After-session-stop hooks: shown only, not re-saved. This
         // dispatch also drives the response-complete notification
@@ -250,5 +261,39 @@ extension AppState {
             }
         }
         return sessionKey
+    }
+
+    private func continueUnfinishedTodos(sessionKey: String, streamId: UUID, project: Project,
+                                         turnMode: PermissionMode, includeIDEMCP: Bool, reply: String) async -> Bool {
+        guard let state = sessionStates[sessionKey], state.todoContinuationSource == streamId else { return false }
+        let transcript = await Self.transcriptTodos(state.messages)
+        let recorded = threadStore.fetchTodoSnapshot(sessionId: sessionKey)?.list
+        let items = TodoListSnapshot.latest(transcript: transcript, recorded: recorded)?.items ?? []
+        var continuation = state.todoContinuation
+        guard let prompt = continuation.nextPrompt(items: items, reply: reply),
+              sessionStates[sessionKey]?.todoContinuationSource == streamId else { return false }
+
+        await saveSession(sessionId: sessionKey, projectId: project.id, messages: stateForSession(sessionKey).messages)
+        guard !Task.isCancelled, let current = sessionStates[sessionKey],
+              current.todoContinuationSource == streamId, !current.isStreaming,
+              !current.messages.isEmpty, !current.planMode,
+              threadStore.loadQueue(sessionKey: sessionKey).isEmpty else { return false }
+
+        sessionStates[sessionKey]?.todoContinuation = continuation
+        let card = hookController.insertCard(sessionKey: sessionKey, toolName: ToolCall.autoContinueToolName,
+                                             input: ["summary": .string("Continuing unfinished todos")])
+        hookController.completeCard(card, sessionKey: sessionKey, result: prompt, isError: false)
+        let window = WindowState()
+        window.currentSessionId = sessionKey
+        window.selectedProject = project
+        window.sessionPermissionMode = current.permissionMode ?? turnMode
+        window.sessionEffort = current.effort
+        return await sendPrompt(prompt, skipAppendingUserMessage: true, isStopHookReprompt: true,
+                                includeIDEMCP: includeIDEMCP, in: window) != nil
+    }
+
+    @concurrent
+    private static func transcriptTodos(_ messages: [ChatMessage]) async -> TodoListSnapshot? {
+        TodoExtractor.latestSnapshot(in: messages)
     }
 }

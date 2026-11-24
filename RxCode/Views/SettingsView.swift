@@ -12,6 +12,7 @@ struct SettingsView: View {
         case general, agent, media, message, commands, skills, extensions, mcp, mobile, flowcy, tasks, developer
     }
 
+    @AppStorage("showExtensionsSettings") private var showExtensionsSettings = false
     @State private var selectedPane = Pane.general
     @State private var showUserManual = false
     @State private var showOnboarding = false
@@ -46,7 +47,13 @@ struct SettingsView: View {
         }
         .frame(minWidth: 820, idealWidth: 940, minHeight: 620, idealHeight: 680)
         .background(ClaudeTheme.background)
-        .onAppear { selectedPane = .general }
+        .onAppear {
+            selectedPane = showExtensionsSettings ? .extensions : .general
+            showExtensionsSettings = false
+        }
+        .onChange(of: showExtensionsSettings) { _, open in
+            if open { selectedPane = .extensions; showExtensionsSettings = false }
+        }
         .sheet(isPresented: $showUserManual) {
             UserManualView()
         }

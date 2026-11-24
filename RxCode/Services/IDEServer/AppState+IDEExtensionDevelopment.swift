@@ -1,4 +1,5 @@
 import Foundation
+import ExtensionFoundation
 import RxCodeCore
 
 struct ExtensionEnablementRequest: Identifiable {
@@ -35,6 +36,15 @@ extension AppState {
     }
 
     func handleExtensionDevelopmentTool(_ tool: String, arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        if tool == "ide__list_extensions" {
+            guard arguments.objectValue?.isEmpty == true else { throw IDEToolError.invalidArguments("Pass an empty object.") }
+            let monitor = try await AppExtensionPoint.Monitor(appExtensionPoint: .workspaceServices)
+            try await monitor.addAppExtensionPoint(.workspaceContributions)
+            let rows = monitor.identities.sorted { $0.bundleIdentifier < $1.bundleIdentifier }.map {
+                ["bundleIdentifier": $0.bundleIdentifier, "name": $0.localizedName]
+            }
+            return textResult(String(decoding: try JSONEncoder().encode(rows), as: UTF8.self))
+        }
         let turn = try extensionDevelopmentTurn(for: sessionKey)
         let workspace = turn.workspace
         guard let fields = arguments.objectValue, let name = fields["name"]?.stringValue else {
@@ -56,13 +66,13 @@ extension AppState {
             guard try extensionDevelopmentTurn(for: sessionKey).id == turn.id else { throw CancellationError() }
             let confirmed = await requestAgentConfirmation(.init(
                 title: "Sign and load \(name)?",
-                message: "RxCode will build the extension in \(workspace.path), sign it with certificate \(identity), and load it for testing.",
+                message: "RxCode will build the extension in \(workspace.path), sign it using \(identity), and load it for testing.",
                 confirmLabel: "Sign and Load"
             ), sessionKey: sessionKey)
             guard confirmed else { throw IDEToolError.handlerFailed("The user cancelled the extension reload.") }
             try Task.checkCancellation()
             guard try extensionDevelopmentTurn(for: sessionKey).id == turn.id else { throw CancellationError() }
-            let result = try await development.reload(workspace: workspace, name: name, signingIdentity: identity) { isEnabled in
+            let result = try await development.reload(workspace: workspace, name: name, signingIdentity: identity, appState: self) { isEnabled in
                 try await self.waitForExtensionEnablement(name: name, sessionKey: sessionKey, turnID: turn.id, isEnabled: isEnabled)
             }
             return textResult(result)

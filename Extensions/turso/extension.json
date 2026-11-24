@@ -1,0 +1,34 @@
+{
+  "id": "app.rxlab.extensions.turso",
+  "name": "Turso Usage",
+  "version": "1.0.0",
+  "pluginAPI": "2.0",
+  "readme": "README.md",
+  "permissions": [
+    {
+      "id": "network",
+      "domains": [
+        "api.turso.tech"
+      ]
+    },
+    {
+      "id": "credentials.use",
+      "slots": [
+        "primary"
+      ]
+    }
+  ],
+  "contributes": {
+    "usage.provider": [
+      {
+        "pluginID": "turso",
+        "title": "Turso",
+        "authentication": "API key",
+        "fields": {
+          "account": "Organization slug",
+          "resource": "Database name (optional)"
+        }
+      }
+    ]
+  }
+}

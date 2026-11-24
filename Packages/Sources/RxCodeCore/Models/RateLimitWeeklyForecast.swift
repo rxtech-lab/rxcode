@@ -2,8 +2,8 @@ import Foundation
 
 /// Account-wide forecast calibrated from isolated task costs and daily activity.
 /// This is an estimate: provider accounting and work outside RxCode can differ.
-public struct RateLimitWeeklyForecast: Sendable, Equatable {
-    public enum Outcome: Sendable, Equatable {
+public struct RateLimitWeeklyForecast: Codable, Sendable, Equatable {
+    public enum Outcome: Codable, Sendable, Equatable {
         case insufficientData
         case exhausted
         case lastsUntilReset

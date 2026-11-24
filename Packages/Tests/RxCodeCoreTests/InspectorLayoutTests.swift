@@ -88,15 +88,26 @@ final class InspectorLayoutTests: XCTestCase {
         var layout = InspectorLayout(selected: .inspector)
         let pane = try XCTUnwrap(layout.tools.panes.first)
         let terminal = try XCTUnwrap(pane.selectedTab)
-        let views = try XCTUnwrap(pane.tabs.last)
+        let views = try XCTUnwrap(pane.tabs.first { $0.tool == .views })
 
         layout.tools.move(views.id, to: pane.id, before: terminal.id)
-        XCTAssertEqual(layout.tools.panes[0].tabs.map(\.tool), [.views, .terminal, .run])
+        XCTAssertEqual(layout.tools.panes[0].tabs.map(\.tool), [.views] + InspectorTab.availableCases.filter { $0 != .views })
         XCTAssertEqual(layout.tools.selectedTab?.id, terminal.id)
         XCTAssertEqual(layout.mode, .inspector)
 
-        layout.tools.move(views.id, to: pane.id)
-        XCTAssertEqual(layout.tools.panes[0].tabs.map(\.tool), InspectorTab.allCases)
+        layout.tools.move(views.id, to: pane.id, before: pane.tabs.first { $0.tool == .extensions }?.id)
+        XCTAssertEqual(layout.tools.panes[0].tabs.map(\.tool), InspectorTab.availableCases)
+    }
+
+    func testExtensionToolCanBeRevealedAndAddedToExistingLayout() throws {
+        var layout = InspectorToolLayout()
+        let pane = try XCTUnwrap(layout.panes.first)
+        let id = layout.reveal(.extensions)
+        XCTAssertEqual(layout.selectedTab?.tool, .extensions)
+        XCTAssertEqual(layout.reveal(.extensions), id)
+        let additional = layout.add(.extensions, to: pane.id)
+        XCTAssertNotEqual(id, additional)
+        XCTAssertEqual(layout.selectedTab?.id, additional)
     }
 
     func testMovingTheOnlyToolOutOfASplitCollapsesItsPane() throws {
@@ -165,6 +176,6 @@ final class InspectorLayoutTests: XCTestCase {
         XCTAssertEqual(layout.mode, .inspector)
         XCTAssertEqual(layout.browserID, browser)
         XCTAssertEqual(layout.tools.selectedTab?.tool, .views)
-        XCTAssertEqual(layout.tools.panes[0].tabs.map(\.tool), InspectorTab.allCases)
+        XCTAssertEqual(layout.tools.panes[0].tabs.map(\.tool), InspectorTab.availableCases)
     }
 }

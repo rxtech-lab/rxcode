@@ -1,0 +1,19 @@
+{
+  "id": "app.rxlab.extensions.github-ci",
+  "name": "GitHub CI",
+  "version": "1.0.0",
+  "pluginAPI": "2.0",
+  "readme": "README.md",
+  "permissions": [
+    { "id": "network", "domains": ["api.github.com"] },
+    { "id": "credentials.use", "slots": ["primary"] }
+  ],
+  "contributes": {
+    "usage.provider": [{
+      "pluginID": "github-ci",
+      "title": "GitHub CI",
+      "authentication": "API key",
+      "fields": { "account": "Repositories (owner/name, comma-separated)" }
+    }]
+  }
+}

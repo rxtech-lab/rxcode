@@ -220,8 +220,8 @@ public enum UsageStatsRange: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Aggregated statistics for one range, computed from bucket snapshots.
-public struct UsageStatsSummary: Sendable, Equatable {
-    public struct Usage: Sendable, Equatable, Identifiable {
+public struct UsageStatsSummary: Codable, Sendable, Equatable {
+    public struct Usage: Codable, Sendable, Equatable, Identifiable {
         public var providerRaw: String
         public var model: String
         public var turns: Int

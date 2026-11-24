@@ -50,6 +50,7 @@ tokens, no retry on 403, one retry on repeated 401, invalid-grant failure, and
 2026-10-28: the sole Cloudflare member served both resource requests and both
 failure cases. The native tests passed over real local HTTP. A partial GraphQL
 response with HTTP 200 was rejected, as was HTTP 403.
+2026-11-24: The Cloudflare extension passed its Worker and R2 tests through the SDK fixture broker. Four GraphQL requests covered Worker metrics, R2 latest storage samples, denied access and partial responses.
 <!-- end:observations -->
 
 ## What didn't work

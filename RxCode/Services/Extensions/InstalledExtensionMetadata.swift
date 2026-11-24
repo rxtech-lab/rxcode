@@ -1,5 +1,14 @@
 import AppKit
 import Foundation
+import RxCodeCore
+
+nonisolated struct ExtensionVerificationDetails: Hashable, Sendable {
+    let keyId: String
+    let fingerprint: String
+    let sha256: String
+    let blocked: Bool
+    let source: String
+}
 
 /// Presentation metadata read from an installed extension bundle on disk.
 nonisolated struct InstalledExtensionMetadata: Identifiable, Hashable, Sendable {
@@ -20,6 +29,8 @@ nonisolated struct InstalledExtensionMetadata: Identifiable, Hashable, Sendable 
     let icon: Icon
     let containerURL: URL?
     let isDevelopment: Bool
+    var manifest: ExtensionManifest? = nil
+    var verification: ExtensionVerificationDetails? = nil
 
     var id: String { bundleIdentifier }
     var compatibility: ExtensionPluginAPI.Compatibility { ExtensionPluginAPI.compatibility(of: pluginAPIVersion) }
@@ -47,16 +58,24 @@ nonisolated struct InstalledExtensionMetadata: Identifiable, Hashable, Sendable 
         let version = (info["CFBundleShortVersionString"] as? String).map { short in
             (info["CFBundleVersion"] as? String).map { "\(short) (\($0))" } ?? short
         }
+        let manifest = resourceRoots.lazy.compactMap { root -> ExtensionManifest? in
+            let url = root.appending(path: ExtensionManifest.resourceName)
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true, let bytes = values.fileSize, bytes <= 256 * 1024,
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(ExtensionManifest.self, from: data)
+        }.first
         return InstalledExtensionMetadata(
             bundleIdentifier: bundleIdentifier,
-            name: localizedName,
+            name: manifest?.name ?? localizedName,
             version: version,
             pluginAPIVersion: (info[ExtensionPluginAPI.infoPlistKey] ?? containerInfo[ExtensionPluginAPI.infoPlistKey]) as? String,
             readme: readme,
             readmeBaseURL: readmeURL?.deletingLastPathComponent(),
             icon: icon,
             containerURL: located.container,
-            isDevelopment: AgentExtensionBuilder.developmentContainer(forServiceIdentifier: bundleIdentifier) != nil
+            isDevelopment: AgentExtensionBuilder.developmentContainer(forServiceIdentifier: bundleIdentifier) != nil,
+            manifest: manifest
         )
     }
 

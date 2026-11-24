@@ -245,6 +245,20 @@ extension AppState {
         await loadScheduledTasksFromDisk()
         startScheduledTaskTimer()
         await loadBriefingNotificationSettings()
+        if ExtensionPluginAPI.v2Enabled {
+            let catalog = ExtensionCatalogController.shared
+            catalog.appState = self
+            #if RXCODE_EXTENSION_RELEASE_GATE && !DEBUG
+            // The notarized discovery candidate seeds through the same installer as a bundled provider.
+            let root = AppSupport.bundleScopedURL.appending(path: "DiscoveryProbeWorkspace")
+            do {
+                try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                try await catalog.seedUsage("discovery-probe", workspace: root)
+            } catch {
+                logger.error("Could not seed the discovery probe: \(error.localizedDescription, privacy: .public)")
+            }
+            #endif
+        }
         await startUsagePlugins()
         Task { [weak self] in await self?.refreshACPRegistry(forceRefresh: false) }
 
@@ -488,6 +502,9 @@ extension AppState {
     /// the bridge's state properties in sync with the underlying `sessionStates`.
     func setupChatBridge(_ bridge: ChatBridge, for window: WindowState) {
         registerLiveWindow(window)
+        bridge.mcpMentionNamesHandler = { [mcp] cwd in
+            await mcp.mentionNames(projectPath: cwd)
+        }
         bridge.sendHandler = { [weak self, weak window] in
             guard let self, let window else { return }
             await self.send(in: window)

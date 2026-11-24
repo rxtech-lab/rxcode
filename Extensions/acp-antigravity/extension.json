@@ -1,0 +1,33 @@
+{
+  "id": "app.rxlab.extensions.acp-antigravity",
+  "name": "Antigravity",
+  "version": "1.0.0",
+  "pluginAPI": "2.0",
+  "readme": "README.md",
+  "permissions": [
+    {
+      "id": "network",
+      "domains": [
+        "daily-cloudcode-pa.googleapis.com",
+        "cloudcode-pa.googleapis.com",
+        "cloudaicompanion.googleapis.com",
+        "oauth2.googleapis.com"
+      ]
+    },
+    {
+      "id": "acp.credentials.use",
+      "slots": [
+        "acp:antigravity"
+      ]
+    }
+  ],
+  "contributes": {
+    "usage.provider": [
+      {
+        "pluginID": "acp-antigravity",
+        "title": "Antigravity",
+        "authentication": "ACP client login"
+      }
+    ]
+  }
+}

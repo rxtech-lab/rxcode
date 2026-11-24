@@ -1,0 +1,209 @@
+{
+  "keys": {
+    "test-active": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w=",
+    "test-backup": "gTl3Dqh9F19Wo1Rmw0x+zMuNipG07jeiXfYPW4/Js5Q="
+  },
+  "revocationKey": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY/k2NsFGFKyHN9E=",
+  "archiveBase64": "UnhDb2RlIGV4dGVuc2lvbiB2ZXJpZmljYXRpb24gZml4dHVyZQo=",
+  "canonicalPayload": "RxCodeExtension-v1\ntest-active\napp.rxlab.extensions.vector\n1.2.0\n2.0\n6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4\narm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "releaseCases": [
+    {
+      "name": "good",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "F0sUF9Bg2i3du8fuke4995gbmlZwe2vGWCf9KlAy6+HnKGN4JgTRFBufuPkZtzrRtqzUlPs8rHcYfKh85t3yCg=="
+      },
+      "error": null
+    },
+    {
+      "name": "tampered",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.1",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "F0sUF9Bg2i3du8fuke4995gbmlZwe2vGWCf9KlAy6+HnKGN4JgTRFBufuPkZtzrRtqzUlPs8rHcYfKh85t3yCg=="
+      },
+      "error": "badSignature"
+    },
+    {
+      "name": "wrongKey",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "zTccTVK0B0OgEJX4VikBTx6FrYoPZoz9ccYnbYhPIlcQRQoEmORGv7UdY6sKwFIncvLdGEwuDmMEjgDWMNIGCg=="
+      },
+      "error": "badSignature"
+    },
+    {
+      "name": "unknownKey",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-unknown",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "XGNC9NOUww0U0rVkFKn/9ow4eCqCUELN9QwsCBhCLRjh02Wgp0PE5EiEys8oOjVAa1ZjH7vMHpcGh7SmZRBYCQ=="
+      },
+      "error": "unknownKey"
+    },
+    {
+      "name": "unknownFormat",
+      "envelope": {
+        "format": "ed25519-v2",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "F0sUF9Bg2i3du8fuke4995gbmlZwe2vGWCf9KlAy6+HnKGN4JgTRFBufuPkZtzrRtqzUlPs8rHcYfKh85t3yCg=="
+      },
+      "error": "unsupportedFormat"
+    },
+    {
+      "name": "lineBreak",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector\ninvalid",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "V61trxQtt2GfL3gOnfbQZpmCXO6uHcSGESBEn9R4Um5xdT/sjoqv7ZGNPTx0CJB7KZ8bNWZ66nhDvOC8ldj7Aw=="
+      },
+      "error": "invalidPayload"
+    },
+    {
+      "name": "carriageReturn",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active\r",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "iCEraIC1O7Fi3hPlpaZEi+SBWN10dtI+fJwey75KXe30lg3r152a/KW8lXBdAKA95nKZbgtUy1RA5hZAbDz9CA=="
+      },
+      "error": "invalidPayload"
+    },
+    {
+      "name": "unsortedSlices",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "fGid1C0EudIbedhfEDN9L6q6WLDUiqWJ6hepqPBpJXoXoiPY1UQZ4DfIDBkkDaghxU6WVMZ8dCjbrnS8Mq/nDA=="
+      },
+      "error": "invalidPayload"
+    },
+    {
+      "name": "missingSlice",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "/aQzYSBn4d23l7qsiokWrpVOMD/sUThBwIJ1Urb4fBHmCFYM95M1DeEhFa6ol3hFV5Dk8C8kYCYRTtuCBtQcAA=="
+      },
+      "error": "invalidPayload"
+    },
+    {
+      "name": "tamperedSlice",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-active",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:cccccccccccccccccccccccccccccccccccccccc,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "F0sUF9Bg2i3du8fuke4995gbmlZwe2vGWCf9KlAy6+HnKGN4JgTRFBufuPkZtzrRtqzUlPs8rHcYfKh85t3yCg=="
+      },
+      "error": "badSignature"
+    },
+    {
+      "name": "backup",
+      "envelope": {
+        "format": "ed25519-v1",
+        "keyId": "test-backup",
+        "id": "app.rxlab.extensions.vector",
+        "version": "1.2.0",
+        "pluginApi": "2.0",
+        "sha256": "6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4",
+        "cdhashes": "arm64:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,x86_64:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "F50YkdS1dd7Ym9jE2DMhNx6x/yaA+qXN1ROSZLw1ojaUQuc4mYXmfB1jvMB/knEAcvYVIkfSoerYft/K34nhBw=="
+      },
+      "error": null
+    }
+  ],
+  "revocationCases": [
+    {
+      "name": "baseline",
+      "rawPayload": "{\n  \"format\": \"rxcode-revocations-v1\",\n  \"sequence\": 1,\n  \"issuedAt\": \"2026-01-02T03:04:05Z\",\n  \"revokedKeyIds\": [],\n  \"revokedReleases\": []\n}\n",
+      "signature": "U4MywuE5Ckfv/xrX5vC8hdqHwrcgqwvc1tQ7HtzFykvprfKqZ3lQo1BuqykczBKY7A0kHrk0nCLQVTy+6D6iDg==",
+      "error": null
+    },
+    {
+      "name": "activeKey",
+      "rawPayload": "{\"format\":\"rxcode-revocations-v1\",\"sequence\":2,\"issuedAt\":\"2026-01-02T03:04:05Z\",\"revokedKeyIds\":[\"test-active\"],\"revokedReleases\":[]}",
+      "signature": "3sJZj/BEYbspv1boOljUNGsdmDcn13sfqFm0WZda4A1mirEE075KOa9ND+C8hGTraH/uxeTzPRsrdWeP1fgyBA==",
+      "error": null
+    },
+    {
+      "name": "release",
+      "rawPayload": "{\"format\":\"rxcode-revocations-v1\",\"sequence\":3,\"issuedAt\":\"2026-01-02T03:04:05Z\",\"revokedKeyIds\":[],\"revokedReleases\":[{\"id\":\"app.rxlab.extensions.vector\",\"version\":\"1.2.0\",\"sha256\":\"6ad47af034f7df292a2277f190f9a8e4c0db455e43050acc9764d868d99052e4\"}]}",
+      "signature": "/IDH5jIRQcbhA5YnYVMQLE4v7tf9M4t8DsymOGzLgZnt9RyMuudjztIfbaXmgjrwpIEiYfDAGNaw2OfZT3YZAA==",
+      "error": null
+    },
+    {
+      "name": "wrongSigner",
+      "rawPayload": "{\n  \"format\": \"rxcode-revocations-v1\",\n  \"sequence\": 1,\n  \"issuedAt\": \"2026-01-02T03:04:05Z\",\n  \"revokedKeyIds\": [],\n  \"revokedReleases\": []\n}\n",
+      "signature": "rDkjq2eoKPBIiu2eE+8ZtydXbL7y5inveW9XLGQrpjzfRrnK5RR1uvLNzreMHVuVsvxJ8UUD0IH/ZzR9rI1yBQ==",
+      "error": "badSignature"
+    },
+    {
+      "name": "unknownSigner",
+      "rawPayload": "{\n  \"format\": \"rxcode-revocations-v1\",\n  \"sequence\": 1,\n  \"issuedAt\": \"2026-01-02T03:04:05Z\",\n  \"revokedKeyIds\": [],\n  \"revokedReleases\": []\n}\n",
+      "signature": "A+2VCtwja3nTd6axg1kPy1eT1Cvfw0VTsPTWYIdTwh5MAGNr6fs/rxN8xxf+dqrRJmAw5jnMjWzxGTiHZtUQBQ==",
+      "error": "badSignature"
+    },
+    {
+      "name": "tampered",
+      "rawPayload": "{\n  \"format\": \"rxcode-revocations-v1\",\n  \"sequence\": 1,\n  \"issuedAt\": \"2026-01-02T03:04:05Z\",\n  \"revokedKeyIds\": [],\n  \"revokedReleases\": []\n}",
+      "signature": "U4MywuE5Ckfv/xrX5vC8hdqHwrcgqwvc1tQ7HtzFykvprfKqZ3lQo1BuqykczBKY7A0kHrk0nCLQVTy+6D6iDg==",
+      "error": "badSignature"
+    },
+    {
+      "name": "unknownFormat",
+      "rawPayload": "{\"format\":\"rxcode-revocations-v2\",\"sequence\":1,\"issuedAt\":\"2026-01-02T03:04:05Z\",\"revokedKeyIds\":[],\"revokedReleases\":[]}",
+      "signature": "9b6ZgdepkLIb4afIbAuWL0NeHeYpo+4WXyzsR4iE/HaDb6UwsDB18FjamzztucYUF1KVJ5xUHTOZ+5o4FpTxCg==",
+      "error": "unsupportedFormat"
+    }
+  ]
+}

@@ -75,7 +75,7 @@ struct WorkspacePreviewInspector: View {
         }
         .controlSize(.small).padding(10)
         ClaudeThemeDivider()
-        Group {
+        ZStack {
             if let error = design.error {
                 ContentUnavailableView { Label("Preview unavailable", systemImage: "exclamationmark.triangle") }
                     description: { Text(error).textSelection(.enabled) }
@@ -92,7 +92,7 @@ struct WorkspacePreviewInspector: View {
                                 }
                             }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: previewAlignment(for: source))
                 }
             } else if !design.loading {
                 ContentUnavailableView("Choose a preview", systemImage: "rectangle.on.rectangle",
@@ -103,6 +103,10 @@ struct WorkspacePreviewInspector: View {
         .overlay { if design.loading { ProgressView("Loading preview…").padding().background(.regularMaterial, in: .rect(cornerRadius: 8)) } }
     }
 
+    private func previewAlignment(for source: WorkspaceDesignSession.Source) -> Alignment {
+        if case .swift = source { return .top }
+        return .center
+    }
 }
 
 private struct DesignTargetPicker: View {

@@ -17,6 +17,7 @@ extension IDEToolRegistry {
             ]))
         }
         return [
+            tool("ide__list_extensions", "List enabled workspace extensions discovered by macOS.", [:], required: []),
             tool("ide__create_extension",
                  "Create an editable native workspace service extension in this project chat's checkout. Edit its generated Swift implementation and README.md, optionally add a square PNG named icon.png next to them, then call ide__reload_extension.",
                  ["name": name], required: ["name"]),

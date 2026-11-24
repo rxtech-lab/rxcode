@@ -24,6 +24,30 @@ struct UsageIntegrationEditor: View {
     @State private var accountsError: String?
     @State private var cloudflareAccounts: [CloudflareAccount] = []
     @State private var accountRefreshID = UUID()
+    @State private var connectionSettings = false
+    @State private var installing = false
+    private let catalog = ExtensionCatalogController.shared
+
+    private var manifest: ExtensionManifest? {
+        if let manifest = catalog.usageMetadata(integration.pluginID)?.manifest { return manifest }
+        guard let workspace = appState.usageExtensionWorkspace(for: integration) else { return nil }
+        return catalog.installedUsagePanel(pluginID: integration.pluginID, workspace: workspace)?.manifest
+    }
+    private var contribution: ExtensionManifest.UsageProvider? {
+        manifest?.contributes.usageProviders?.first { $0.pluginID == integration.pluginID }
+    }
+    private var pluginIDs: [String] {
+        guard ExtensionPluginAPI.v2Enabled else { return AppState.usagePluginIDs }
+        let installed = catalog.installed.values.flatMap { $0.manifest?.contributes.usageProviders?.map(\.pluginID) ?? [] }
+        let development = AgentExtensionRuntime.shared.panels.flatMap { $0.manifest.contributes.usageProviders?.map(\.pluginID) ?? [] }
+        return Set(installed + development + AppState.usagePluginIDs + [integration.pluginID]).sorted()
+    }
+    private var cannotSave: Bool {
+        if busy || integration.title.isEmpty || (acp && !compatibleACPClients.contains(where: { $0.id == integration.resource })) { return true }
+        if ExtensionPluginAPI.v2Enabled { return contribution == nil }
+        return (!local && !vercel && integration.account.isEmpty) || (integration.pluginID == "cloudflare" && cloudflareScope != .account && cloudflareResource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     private var acp: Bool { integration.pluginID.hasPrefix("acp-") }
     private var local: Bool { integration.pluginID.hasPrefix("ai-") || acp }
     private var compatibleACPClients: [ACPClientSpec] {
@@ -38,7 +62,7 @@ struct UsageIntegrationEditor: View {
             Form {
                 Section("Integration") {
                     Picker("Integration", selection: $integration.pluginID) {
-                        ForEach(AppState.usagePluginIDs, id: \.self) { Text(providerName($0)).tag($0) }
+                        ForEach(pluginIDs, id: \.self) { Text(providerName($0)).tag($0) }
                     }.disabled(existing)
                     TextField("Name", text: $integration.title)
                     Picker("RxCode project", selection: $integration.projectID) {
@@ -46,18 +70,22 @@ struct UsageIntegrationEditor: View {
                         ForEach(appState.projects) { Text($0.name).tag(Optional($0.id)) }
                     }
                 }
-                if local { localSection }
-                if vercel {
-                    vercelSection
-                    Section("AI Gateway credits") {
-                        SecureField("AI Gateway API key (leave blank to keep existing key)", text: $gatewayCredential)
-                        Text("Use an AI Gateway key from the selected Vercel team. Shows the team's remaining USD balance, even when billable usage is filtered by project. Stored only in Keychain.")
-                            .font(.caption).foregroundStyle(.secondary)
+                if ExtensionPluginAPI.v2Enabled {
+                    extensionFields
+                } else {
+                    if local { localSection }
+                    if vercel {
+                        vercelSection
+                        Section("AI Gateway credits") {
+                            SecureField("AI Gateway API key (leave blank to keep existing key)", text: $gatewayCredential)
+                            Text("Use an AI Gateway key from the selected Vercel team. Shows the team's remaining USD balance, even when billable usage is filtered by project. Stored only in Keychain.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else if !local {
+                        accountSection
+                        scopeSection
+                        if integration.pluginID == "cloudflare" && cloudflareScope == .account { cloudflareBillingSection }
                     }
-                } else if !local {
-                    accountSection
-                    scopeSection
-                    if integration.pluginID == "cloudflare" && cloudflareScope == .account { cloudflareBillingSection }
                 }
             }.formStyle(.grouped)
             .disabled(busy)
@@ -67,13 +95,13 @@ struct UsageIntegrationEditor: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { if signingIn { signInTask?.cancel() } else { dismiss() } }.disabled(busy && !signingIn)
                 }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(busy || integration.title.isEmpty || (acp && !compatibleACPClients.contains(where: { $0.id == integration.resource })) || (!local && !vercel && integration.account.isEmpty) || (integration.pluginID == "cloudflare" && cloudflareScope != .account && cloudflareResource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)) }
+                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(cannotSave) }
             }
         }
         .frame(minWidth: 580, idealWidth: 640, minHeight: 540, maxHeight: .infinity)
         .interactiveDismissDisabled(busy)
         .task(id: "\(integration.pluginID):\(signedIn):\(accountRefreshID)") {
-            if integration.pluginID == "cloudflare" && signedIn { await loadCloudflareAccounts() }
+            if !ExtensionPluginAPI.v2Enabled && integration.pluginID == "cloudflare" && signedIn { await loadCloudflareAccounts() }
         }
         .onChange(of: integration.pluginID) { _, _ in
             integration.account = ""
@@ -98,7 +126,24 @@ struct UsageIntegrationEditor: View {
             if acp && integration.resource.isEmpty && compatibleACPClients.count == 1 {
                 integration.resource = compatibleACPClients[0].id
             }
-            if vercel && (signedIn || !VercelUsageOAuth.isEnabled) { loadVercelAccounts() }
+            if !ExtensionPluginAPI.v2Enabled && vercel && (signedIn || !VercelUsageOAuth.isEnabled) { loadVercelAccounts() }
+        }
+        .sheet(isPresented: $installing) { UsageExtensionActionSheet(integration: integration, action: .install) }
+        .sheet(isPresented: $connectionSettings) {
+            NavigationStack {
+                Group {
+                    if let workspace = appState.usageExtensionWorkspace(for: integration),
+                       let panel = catalog.installedUsagePanel(pluginID: integration.pluginID, workspace: workspace) {
+                        ExtensionSceneView(extension: panel, scene: "settings", configuration: try? JSONEncoder().encode(integration),
+                                           integration: integration, appState: appState)
+                    } else {
+                        ContentUnavailableView("Extension unavailable", systemImage: "puzzlepiece.extension")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .navigationTitle("Connection settings")
+                .toolbar { Button("Done") { connectionSettings = false } }
+            }.frame(minWidth: 540, minHeight: 480, maxHeight: .infinity)
         }
         .task(id: integration.id) {
             hasBillingCredential = !(await UsageDashboardStore.shared.billingCredential(for: integration.id) ?? "").isEmpty
@@ -106,12 +151,56 @@ struct UsageIntegrationEditor: View {
         .overlay { if busy { ProgressView(signingIn ? "Waiting for browser sign-in…" : "Updating integration…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
         .alert("Integration could not be updated", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") { error = nil } } message: { Text(error ?? "") }
     }
+    @ViewBuilder private var extensionFields: some View {
+        if let contribution, let manifest {
+            if acp { localSection }
+            if let fields = contribution.fields {
+                Section("Usage scope") {
+                    if let label = fields["account"] { TextField(label, text: $integration.account) }
+                    if !acp, let label = fields["resource"] { TextField(label, text: $integration.resource) }
+                }
+            }
+            if catalog.usageMetadata(integration.pluginID)?.verification != nil,
+               let slots = manifest.permissions.first(where: { $0.id == .credentialsUse })?.slots {
+                Section("Account") {
+                    ForEach(slots, id: \.self) { slot in
+                        switch slot {
+                        case "primary": SecureField("API key (leave blank to keep existing key)", text: $credential)
+                        case "gateway": SecureField("AI Gateway API key (leave blank to keep existing key)", text: $gatewayCredential)
+                        case "billing": SecureField("Billing API token (leave blank to keep existing token)", text: $billingCredential)
+                        case "oauth": signInButton
+                        default: EmptyView()
+                        }
+                    }
+                }
+            }
+            if existing && manifest.contributes.settings == true {
+                Button("Connection settings…") {
+                    busy = true
+                    Task {
+                        defer { busy = false }
+                        do {
+                            guard let saved = appState.usageDashboard.integrations.first(where: { $0.id == integration.id }), saved == integration else {
+                                throw UsagePluginError.invalidConfiguration
+                            }
+                            let panel = try await appState.prepareUsageExtension(saved)
+                            try await ExtensionPermissionStore.shared.review(manifest: panel.manifest, identity: panel.permissionIdentity)
+                            connectionSettings = true
+                        } catch { self.error = error.localizedDescription }
+                    }
+                }
+            }
+        } else {
+            Button("Install extension") { installing = true }
+        }
+    }
     private var existing: Bool {
         appState.usageDashboard.integrations.contains { $0.id == integration.id }
     }
 
     private func providerName(_ id: String) -> String {
-        switch id {
+        if ExtensionPluginAPI.v2Enabled, let title = catalog.usageMetadata(id)?.manifest?.contributes.usageProviders?.first(where: { $0.pluginID == id })?.title { return title }
+        return switch id {
         case "vercel": "Vercel"
         case "neon": "Neon"
         case "turso": "Turso"
@@ -204,7 +293,7 @@ struct UsageIntegrationEditor: View {
                 defer { busy = false; signingIn = false; signInTask = nil }
                 do {
                     try await signIn.signIn(integration); signedIn = true
-                    if vercel { loadVercelAccounts() }
+                    if !ExtensionPluginAPI.v2Enabled && vercel { loadVercelAccounts() }
                     if integration.pluginID == "cloudflare" { accountRefreshID = UUID() }
                 }
                 catch is CancellationError {}
@@ -334,7 +423,7 @@ struct UsageIntegrationEditor: View {
     private func save() {
         busy = true
         if usesOAuth && integration.pluginID != "vercel" { integration.oauth = oauth }
-        if integration.pluginID == "cloudflare" {
+        if !ExtensionPluginAPI.v2Enabled && integration.pluginID == "cloudflare" {
             integration.resource = cloudflareScope.resource(named: cloudflareResource.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         Task {
@@ -351,7 +440,7 @@ struct UsageIntegrationEditor: View {
                 var dashboard = appState.usageDashboard
                 if let index = dashboard.integrations.firstIndex(where: { $0.id == integration.id }) {
                     dashboard.integrations[index] = integration
-                    dashboard.snapshots.removeAll { $0.id == integration.id }
+                    if !ExtensionPluginAPI.v2Enabled { dashboard.snapshots.removeAll { $0.id == integration.id } }
                 } else {
                     dashboard.integrations.append(integration)
                     dashboard.cards.append(.init(integrationID: integration.id, style: acp ? "metrics" : "summary"))

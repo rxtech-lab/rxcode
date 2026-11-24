@@ -3,16 +3,12 @@ import RxCodeCore
 
 #if os(macOS)
 
-// MARK: - @ Mention Popup (Shortcuts + Files)
-
-/// Popup shown when the user types `@` in the chat input. Lists matching
-/// shortcuts on top and project files below. `selectedIndex` is a single flat
-/// index spanning both sections: `0..<shortcuts.count` selects a shortcut,
-/// `shortcuts.count..<(shortcuts.count + files.count)` selects a file.
 struct AtMentionPopup: View {
     let shortcuts: [ChatShortcut]
+    let servers: [String]
     let files: [AtFileEntry]
     let onSelectShortcut: (ChatShortcut) -> Void
+    let onSelectServer: (String) -> Void
     let onSelectFile: (String) -> Void
     @Binding var selectedIndex: Int
 
@@ -28,10 +24,28 @@ struct AtMentionPopup: View {
                                     .id(index)
                             }
                         }
+                        if !servers.isEmpty {
+                            sectionHeader(icon: "server.rack", title: "MCP Servers", count: servers.count)
+                            ForEach(Array(servers.enumerated()), id: \.element) { index, name in
+                                let flatIndex = shortcuts.count + index
+                                Button {
+                                    onSelectServer(name)
+                                } label: {
+                                    Label(name, systemImage: "server.rack")
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(flatIndex == selectedIndex ? ClaudeTheme.accentSubtle : Color.clear)
+                                .id(flatIndex)
+                            }
+                        }
                         if !files.isEmpty {
                             sectionHeader(icon: "doc.text.magnifyingglass", title: "Files", count: files.count)
                             ForEach(Array(files.enumerated()), id: \.element.id) { index, entry in
-                                let flatIndex = shortcuts.count + index
+                                let flatIndex = shortcuts.count + servers.count + index
                                 fileRowButton(entry, isSelected: flatIndex == selectedIndex)
                                     .id(flatIndex)
                             }

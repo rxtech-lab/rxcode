@@ -371,6 +371,7 @@ extension AppState {
     func cancelStreaming(in window: WindowState, fireStopHooks: Bool = true) async {
         let key = window.currentSessionId ?? window.newSessionKey
         usageLimitResumeTasks.removeValue(forKey: key)?.cancel()
+        sessionStates[key]?.todoContinuationSource = nil
         let streamToCancel = sessionStates[key]?.activeStreamId
         sessionStates[key]?.streamTask?.cancel()
 

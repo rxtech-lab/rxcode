@@ -27,6 +27,9 @@ struct SessionStreamState {
     var activeStreamId: UUID?
     /// Retained after streaming stops so a late save cannot settle a newer turn.
     var latestTurnID: UUID?
+    /// Invalidated by a stop or newer turn while the completed transcript is saving.
+    var todoContinuationSource: UUID?
+    var todoContinuation = TodoContinuation()
     var checkpointRevision = 0
     var checkpointTask: Task<Void, Never>?
     var streamingStartDate: Date?

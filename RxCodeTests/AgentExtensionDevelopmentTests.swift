@@ -154,9 +154,9 @@ final class AgentExtensionDevelopmentTests: XCTestCase {
         XCTAssertNil(ExtensionPluginAPI.warning(for: .compatible))
         XCTAssertNotNil(ExtensionPluginAPI.warning(for: .mismatch("0.9")))
         #if DEBUG
-        XCTAssertEqual(ExtensionPluginAPI.version, "main")
+        XCTAssertEqual(ExtensionPluginAPI.version, ExtensionPluginAPI.v2Enabled ? "2.0" : "main")
         #else
-        XCTAssertEqual(ExtensionPluginAPI.version, ExtensionPluginAPI.releaseVersion)
+        XCTAssertEqual(ExtensionPluginAPI.version, "1.0")
         #endif
     }
 
@@ -179,6 +179,27 @@ final class AgentExtensionDevelopmentTests: XCTestCase {
         let icns = try XCTUnwrap(AgentExtensionBuilder.icns(fromPNG: png))
         XCTAssertEqual(icns.prefix(4), Data("icns".utf8))
         XCTAssertEqual(icns.count, Int(icns[4..<8].reduce(UInt32(0)) { $0 << 8 | UInt32($1) }))
+    }
+
+    #if DEBUG
+    func testManifestScaffoldMatchesTheDebugHostAPI() throws {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "RxCodeExtensionAPI2")
+        defaults.set(true, forKey: "RxCodeExtensionAPI2")
+        defer { defaults.set(previous, forKey: "RxCodeExtensionAPI2") }
+        let url = try AgentExtensionBuilder.create(in: root, name: "manifest-example")
+        let manifest = try JSONDecoder().decode(ExtensionManifest.self, from:
+            Data(contentsOf: url.deletingLastPathComponent().appending(path: "extension.json")))
+        try manifest.validate(supportedAPI: ExtensionPluginAPI.version)
+        XCTAssertEqual(manifest.id, "app.rxlab.extensions.manifest-example")
+        XCTAssertEqual(Set(manifest.effectivePermissions.map(\.id)), [.projectRead, .storage])
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("ExtensionService.configuration"))
+    }
+    #endif
+
+    func testAdHocIdentityNeedsNoCertificate() async throws {
+        let identity = try await AgentExtensionBuilder.resolveSigningIdentity(in: root, name: "adhoc", requested: "-")
+        XCTAssertEqual(identity, "-")
     }
 
     func testDevelopmentIdentifiersResolveToTheirInstalledContainer() throws {

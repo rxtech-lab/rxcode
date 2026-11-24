@@ -42,6 +42,31 @@ struct TodoExtractorTests {
         #expect(todos == nil)
     }
 
+    @Test("Auto-continue only prompts for open work and pauses for user input")
+    func continuationStopsWhenClearedCompletedOrBlocked() {
+        var continuation = TodoContinuation()
+        let done = TodoItem(id: 1, content: "Inspect", activeForm: "Inspecting", status: .completed)
+        let pending = TodoItem(id: 2, content: "Verify", activeForm: "Verifying", status: .pending)
+        #expect(continuation.nextPrompt(items: [], reply: "") == nil)
+        #expect(continuation.nextPrompt(items: [done], reply: "") == nil)
+        #expect(continuation.nextPrompt(items: [pending], reply: "Choose a target.\nWaiting for user input.\n") == nil)
+        let prompt = continuation.nextPrompt(items: [done, pending], reply: "Ready for verification.")
+        #expect(prompt?.contains("- [pending] Verify") == true)
+        #expect(prompt?.contains("Inspect") == false)
+    }
+
+    @Test("Unchanged todos have bounded reminders and progress renews them")
+    func continuationTracksProgress() {
+        let pending = TodoItem(id: 1, content: "Verify", activeForm: "Verifying", status: .pending)
+        let active = TodoItem(id: 1, content: "Verify", activeForm: "Verifying", status: .inProgress)
+        var continuation = TodoContinuation()
+        for _ in 0..<3 {
+            #expect(continuation.nextPrompt(items: [pending], reply: "") != nil)
+        }
+        #expect(continuation.nextPrompt(items: [pending], reply: "") == nil)
+        #expect(continuation.nextPrompt(items: [active], reply: "") != nil)
+    }
+
     // MARK: - Task tools (TaskCreate / TaskUpdate)
 
     private func taskCreate(id: Int, subject: String, activeForm: String? = nil) -> MessageBlock {

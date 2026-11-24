@@ -64,6 +64,8 @@ struct InspectorContentView: View {
                     ),
                     showsLiveTerminal: showsLiveRunTerminal
                 )
+            case .extensions:
+                ExtensionsInspectorView()
             case .views:
                 AgentViewsInspectorView()
             }

@@ -13,6 +13,7 @@ extension AppState {
 
     /// The thread row and its checkpoint move together when a provider assigns its native ID.
     func beginTurnRecovery(sessionID: String, streamID: UUID) async {
+        sessionStates[sessionID]?.todoContinuationSource = nil
         guard let index = allSessionSummaries.firstIndex(where: { $0.id == sessionID }) else { return }
         if allSessionSummaries[index].hasUnfinishedTurn == true,
            allSessionSummaries[index].origin == .cliBacked {

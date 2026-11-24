@@ -1,6 +1,51 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Connection settings" : {
+
+    },
+    "Connection settings…" : {
+
+    },
+    "Enable extension" : {
+
+    },
+    "Install extension" : {
+
+    },
+    "Review permissions" : {
+
+    },
+    "%lld extensions need enabling in System Settings" : {
+
+    },
+    "Disable" : {
+
+    },
+    "Disable this extension?" : {
+
+    },
+    "Disable…" : {
+
+    },
+    "Enable" : {
+
+    },
+    "Enable…" : {
+
+    },
+    "Extension update failed" : {
+
+    },
+    "Manage Extension" : {
+
+    },
+    "Read Secret" : {
+
+    },
+    "Create Secret" : {
+
+    },
     "" : {
       "localizations" : {
         "ko" : {
@@ -18,6 +63,144 @@
       }
     },
     "\nThis can’t be undone." : {
+
+    },
+    "%@ need attention" : {
+
+    },
+    "Allow %@ to use %@?" : {
+
+    },
+    "Archive SHA-256" : {
+
+    },
+    "Available" : {
+
+    },
+    "Check for RxCode Updates" : {
+
+    },
+    "Choose a project" : {
+
+    },
+    "Choose Folder…" : {
+
+    },
+    "Confirm" : {
+
+    },
+    "Confirmed" : {
+
+    },
+    "Create RxCode Secrets environments and files." : {
+
+    },
+    "Enable Extension" : {
+
+    },
+    "Extension API 2.0 preview is enabled." : {
+
+    },
+    "Extension blocked · update required" : {
+
+    },
+    "Extension Details" : {
+
+    },
+    "Extension installation failed" : {
+
+    },
+    "Extension unavailable" : {
+
+    },
+    "High risk" : {
+
+    },
+    "Install Extension" : {
+
+    },
+    "Key fingerprint" : {
+
+    },
+    "Key ID" : {
+
+    },
+    "Local development build." : {
+
+    },
+    "Make network requests to the listed domains." : {
+
+    },
+    "No compatible releases available." : {
+
+    },
+    "No Extension Panels" : {
+
+    },
+    "Open Extension Settings" : {
+
+    },
+    "Pending" : {
+
+    },
+    "Permission review failed" : {
+
+    },
+    "Permission update failed" : {
+
+    },
+    "Permissions" : {
+
+    },
+    "Project or worktree" : {
+
+    },
+    "Read contacts through RxCode." : {
+
+    },
+    "Read files outside the project and sensitive files." : {
+
+    },
+    "Read local usage, rate limits and task costs." : {
+
+    },
+    "Read project files, excluding sensitive files." : {
+
+    },
+    "Read RxCode Secrets after passkey verification." : {
+
+    },
+    "Rejected" : {
+
+    },
+    "Revocations last refreshed" : {
+
+    },
+    "Save settings for this extension." : {
+
+    },
+    "Signed by rxlab · Verified by RxCode." : {
+
+    },
+    "Signed with a test key · Verified by RxCode." : {
+
+    },
+    "Standard" : {
+
+    },
+    "Uninstall failed" : {
+
+    },
+    "Uninstall this extension?" : {
+
+    },
+    "Update couldn't be verified. This version of RxCode doesn't recognize its signing key." : {
+
+    },
+    "Update Extension" : {
+
+    },
+    "Use ACP account credentials for network requests." : {
 
     },
     " :" : {
@@ -63,6 +246,12 @@
           }
         }
       }
+    },
+    "Use the listed credential slots for network requests." : {
+
+    },
+    "Verification details" : {
+
     },
     "—" : {
       "localizations" : {

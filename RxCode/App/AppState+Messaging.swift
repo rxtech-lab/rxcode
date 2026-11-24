@@ -357,6 +357,7 @@ extension AppState {
         // fix-round counter resets on the same terms (and the review fix turn is
         // also sent with `isStopHookReprompt`, so it won't reset its own bound).
         if !isStopHookReprompt {
+            sessionStates[sessionKey]?.todoContinuation = TodoContinuation()
             stopHookRepromptCounts[sessionKey] = nil
             reviewRoundBySession[sessionKey] = nil
             // Drop the carried-over review feedback too: a fresh user turn is a

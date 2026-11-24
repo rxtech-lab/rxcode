@@ -46,7 +46,10 @@ public struct InspectorLayout: Codable, Equatable {
 
     public static func restore(from data: Data) -> Self? {
         let decoder = JSONDecoder()
-        if let layout = try? decoder.decode(Self.self, from: data), layout.tools.isValid {
+        if var layout = try? decoder.decode(Self.self, from: data), layout.tools.isValid {
+            if !ExtensionFeatures.isV2Enabled {
+                for tab in layout.tools.panes.flatMap(\.tabs) where tab.tool == .extensions { layout.tools.close(tab.id) }
+            }
             return layout
         }
         guard let legacy = try? decoder.decode(LegacyInspectorLayout.self, from: data) else { return nil }
@@ -233,17 +236,18 @@ extension InspectorPaneLayout where Item == InspectorMode {
 
 extension InspectorPaneLayout where Item == InspectorToolTab {
     public init(selected tool: InspectorTab = .terminal) {
-        let tabs = InspectorTab.allCases.map(Tab.init(tool:))
+        let tabs = InspectorTab.availableCases.map(Tab.init(tool:))
         self.init(tabs: tabs, selectedTabID: tabs.first { $0.tool == tool }?.id)
     }
 
     @discardableResult
     public mutating func reveal(_ tool: InspectorTab) -> UUID {
         let focused = panes.first { $0.id == focusedPaneID }
-        let existing = selectedTab.flatMap { $0.tool == tool ? $0 : nil }
-            ?? panes.compactMap(\.selectedTab).first { $0.tool == tool }
-            ?? focused?.tabs.first { $0.tool == tool }
-            ?? panes.lazy.flatMap(\.tabs).first { $0.tool == tool }
+        let matchesTool: (Tab) -> Bool = { $0.tool == tool }
+        let focusedSelection = focused?.selectedTab.flatMap { matchesTool($0) ? $0 : nil }
+        let selectedInAnyPane = focusedSelection ?? panes.lazy.compactMap(\.selectedTab).first(where: matchesTool)
+        let existingInFocusedPane = selectedInAnyPane ?? focused?.tabs.first(where: matchesTool)
+        let existing = existingInFocusedPane ?? panes.lazy.flatMap(\.tabs).first(where: matchesTool)
         if let existing {
             select(existing.id)
             return existing.id

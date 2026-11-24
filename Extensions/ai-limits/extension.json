@@ -1,0 +1,22 @@
+{
+  "id": "app.rxlab.extensions.ai-limits",
+  "name": "AI usage limits",
+  "version": "1.0.0",
+  "pluginAPI": "2.0",
+  "readme": "README.md",
+  "permissions": [
+    {
+      "id": "usage.local.read"
+    }
+  ],
+  "contributes": {
+    "usage.provider": [
+      {
+        "pluginID": "ai-limits",
+        "title": "AI usage limits",
+        "authentication": "Local usage history"
+      }
+    ],
+    "usage.detail": true
+  }
+}

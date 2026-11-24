@@ -51,6 +51,13 @@ actor MCPService {
             .map { makeInfo(record: $0, projectPath: projectPath) }
     }
 
+    /// Composer discovery must not start OAuth relays or probe a server while typing.
+    func mentionNames(projectPath: String?) -> [String] {
+        let records = (try? loadConfig().servers) ?? []
+        let names = records.filter { isAvailableToAgents($0, projectPath: projectPath) }.map(\.name)
+        return Set(names + ["rxcode-ide"]).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     /// Full server records sorted by name. Unlike `list`, this exposes the
     /// command/args/env/headers needed to render an editable form (e.g. on the
     /// mobile MCP screen).

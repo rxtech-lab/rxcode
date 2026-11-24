@@ -1,0 +1,37 @@
+{
+  "id": "app.rxlab.extensions.vercel",
+  "name": "Vercel Usage",
+  "version": "1.0.0",
+  "pluginAPI": "2.0",
+  "readme": "README.md",
+  "permissions": [
+    {
+      "id": "network",
+      "domains": [
+        "api.vercel.com",
+        "ai-gateway.vercel.sh"
+      ]
+    },
+    {
+      "id": "credentials.use",
+      "slots": [
+        "primary",
+        "gateway"
+      ]
+    }
+  ],
+  "contributes": {
+    "usage.provider": [
+      {
+        "pluginID": "vercel",
+        "title": "Vercel",
+        "authentication": "API key",
+        "fields": {
+          "account": "Team ID or slug",
+          "resource": "Project ID (optional)"
+        }
+      }
+    ],
+    "settings": true
+  }
+}

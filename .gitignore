@@ -17,6 +17,7 @@ scripts/.env
 # Build artifacts
 build/
 Packages/.build/
+Extensions/.build/
 
 # Sparkle private key (only public key is included in Xcode build settings)
 scripts/.sparkle_private_key

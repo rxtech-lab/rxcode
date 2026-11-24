@@ -51,7 +51,7 @@ public final class RateLimitSample {
 }
 
 /// Value copy of a `RateLimitSample` row.
-public struct RateLimitSamplePoint: Sendable, Equatable {
+public struct RateLimitSamplePoint: Codable, Sendable, Equatable {
     public var providerRaw: String
     public var capturedAt: Date
     public var fiveHourPercent: Double
@@ -137,7 +137,7 @@ public final class RateLimitTaskCost {
 }
 
 /// Value copy of a `RateLimitTaskCost` row.
-public struct RateLimitTaskCostSnapshot: Sendable, Equatable, Identifiable {
+public struct RateLimitTaskCostSnapshot: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
     public var providerRaw: String
     public var model: String
@@ -214,8 +214,8 @@ public enum RateLimitDelta {
 
 /// Per-task limit cost statistics for one provider, plus how many more tasks
 /// of average cost fit in what's left of each window.
-public struct RateLimitTaskCostSummary: Sendable, Equatable {
-    public enum Estimate: Sendable, Equatable {
+public struct RateLimitTaskCostSummary: Codable, Sendable, Equatable {
+    public enum Estimate: Codable, Sendable, Equatable {
         /// No measured tasks for this window yet.
         case insufficientData
         /// Tasks measured so far didn't move the limit at all.
@@ -245,7 +245,7 @@ public struct RateLimitTaskCostSummary: Sendable, Equatable {
     public var models: [ModelStats] = []
 
     /// Limit cost and remaining-task estimates for one model.
-    public struct ModelStats: Sendable, Equatable, Identifiable {
+    public struct ModelStats: Codable, Sendable, Equatable, Identifiable {
         public var model: String
         public var sampleCount: Int
         public var averageFiveHour: Double?

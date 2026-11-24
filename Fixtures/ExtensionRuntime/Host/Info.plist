@@ -7,6 +7,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>ProbeCombinedID</key>
+	<string>$(FIXTURE_PRIMARY_CONTAINER_ID).combined</string>
+	<key>ProbeCombinedCDHash</key>
+	<string>$(FIXTURE_COMBINED_CDHASH)</string>
 	<key>ProbeAssociations</key>
 	<array>
 		<dict>

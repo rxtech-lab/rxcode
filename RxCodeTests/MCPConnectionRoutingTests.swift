@@ -40,6 +40,13 @@ final class MCPConnectionRoutingTests: XCTestCase {
         XCTAssertTrue(settings.allSatisfy(\.effectiveEnabled))
     }
 
+    func testMentionContextResolvesWholeServerNames() {
+        let names = ["git", "git tools", "issues.v2"]
+        let context = AppState.mcpMentionContext(in: "@git tools check @issues.v2, then @git tools", names: names)
+        XCTAssertTrue(context.hasSuffix("git tools, issues.v2."))
+        XCTAssertEqual(AppState.mcpMentionContext(in: "dev@git @git/file @issues.v2.swift @unknown", names: names), "")
+    }
+
     func testSuccessfulRetestRestoresRouting() async throws {
         let detail = try await service.get(name: "broken", projectPath: project)
         await service.recordProbeResult(MCPProbeResult(ok: false), for: detail)
@@ -104,6 +111,8 @@ final class MCPConnectionRoutingTests: XCTestCase {
     private func assertRoutedNames(_ names: [String], file: StaticString = #filePath, line: UInt = #line) async throws {
         let records = await service.enabledServerRecords(projectPath: project)
         XCTAssertEqual(records.map(\.name).sorted(), names.sorted(), file: file, line: line)
+        let mentions = await service.mentionNames(projectPath: project)
+        XCTAssertEqual(mentions.sorted(), (names + ["rxcode-ide"]).sorted(), file: file, line: line)
         let acp = await service.acpMCPServers(projectPath: project, bridgeCommand: bridge)
         let acpNames = acp.compactMap { entry -> String? in
             guard case .string(let name) = entry["name"] else { return nil }

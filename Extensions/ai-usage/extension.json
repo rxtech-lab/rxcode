@@ -1,0 +1,22 @@
+{
+  "id": "app.rxlab.extensions.ai-usage",
+  "name": "AI usage",
+  "version": "1.0.0",
+  "pluginAPI": "2.0",
+  "readme": "README.md",
+  "permissions": [
+    {
+      "id": "usage.local.read"
+    }
+  ],
+  "contributes": {
+    "usage.provider": [
+      {
+        "pluginID": "ai-usage",
+        "title": "AI usage",
+        "authentication": "Local usage history"
+      }
+    ],
+    "usage.detail": true
+  }
+}

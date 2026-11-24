@@ -52,7 +52,7 @@ targets:
   Contributors:
     type: application
     platform: macOS
-    sources: [Container]
+    sources: [Container/Contributors.swift]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(FIXTURE_CONTAINER_ID)
@@ -73,3 +73,21 @@ targets:
       base:
         FIXTURE_POINT_NAME: workspace
         PRODUCT_BUNDLE_IDENTIFIER: $(FIXTURE_CONTAINER_ID).sidebar
+  CombinedContributors:
+    type: application
+    platform: macOS
+    sources: [Container/CombinedContainer.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FIXTURE_CONTAINER_ID)
+        ENABLE_APP_SANDBOX: YES
+    dependencies:
+      - target: Combined
+  Combined:
+    templates: [Contributor]
+    sources: [Contributor/FixtureService.swift, Contributor/CombinedExtension.swift]
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: Contributor/SandboxOnly.entitlements
+        FIXTURE_POINT_NAME: workspace
+        PRODUCT_BUNDLE_IDENTIFIER: $(FIXTURE_CONTAINER_ID).combined

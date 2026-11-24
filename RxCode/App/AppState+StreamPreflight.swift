@@ -58,8 +58,25 @@ extension AppState {
         final status visible. \(toolGuidance)
 
         If work is unfinished, continue until the request is complete within the current mode, the user asks you to \
-        stop, or a blocker requires their input or approval. Keep blocked or unfinished steps open and explain the blocker.
+        stop, or a blocker requires their input or approval. When pausing with unfinished steps for either reason, \
+        leave them open, explain why, and end with: \(TodoContinuation.waitingMessage)
         """
+    }
+
+    static func mcpMentionContext(in prompt: String, names: [String]) -> String {
+        guard prompt.contains("@") else { return "" }
+        // Match a whole mention, leaving email addresses and longer file paths alone.
+        let alternatives = Set(names).filter { !$0.isEmpty }.sorted { $0.count > $1.count }
+            .map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
+        guard !alternatives.isEmpty,
+              let regex = try? NSRegularExpression(
+                pattern: #"(?<!\S)@("# + alternatives + #")(?=[.,:;!?]?(?:\s|$))"#
+              ) else { return "" }
+        let matches = regex.matches(in: prompt, range: NSRange(prompt.startIndex..., in: prompt))
+        let mentioned = matches.compactMap { Range($0.range(at: 1), in: prompt).map { String(prompt[$0]) } }
+        guard !mentioned.isEmpty else { return "" }
+        return "Use the appropriate tools from the MCP servers addressed in the user's request: "
+            + Set(mentioned).sorted().joined(separator: ", ") + "."
     }
 
     /// Runs the expensive, independent pre-spawn work (memory lookup,
@@ -244,12 +261,17 @@ extension AppState {
         let extensionContext = bridge != nil && extensionDevelopmentWorkspaces[streamId] != nil
             ? "For a native RxCode workspace service extension, use ide__create_extension, edit the generated Swift source, then use ide__reload_extension and ide__test_extension to check its response. Repeat reload and test after each source change."
             : ""
+        let records = await mcp.enabledServerRecords(projectPath: cwd)
+        let mentionNames = records.map(\.name) + (bridge == nil ? [] : ["rxcode-ide"])
+        let mentionContext = agentProvider == .codex && !shouldIncludeIDEMCP
+            ? "" : Self.mcpMentionContext(in: prompt, names: mentionNames)
         let codexAndACPContext = [
-            taskProgressContext, extensionContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
+            mentionContext, taskProgressContext, extensionContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
         ]
         switch agentProvider {
         case .claudeCode:
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
+            appendExtraSystemPrompt(mentionContext)
             appendExtraSystemPrompt(taskProgressContext)
             if mcpClaudeConfigPath != nil { appendExtraSystemPrompt(extensionContext) }
             appendExtraSystemPrompt(configuredPromptContext)
@@ -281,6 +303,7 @@ extension AppState {
             // The harness renders one system prompt per turn, so background
             // context goes there rather than into the user's message.
             if localModels.model(id: resolvedModel)?.studioKind.isStudio == false {
+                appendExtraSystemPrompt(mentionContext)
                 appendExtraSystemPrompt(taskProgressContext)
                 appendExtraSystemPrompt(extensionContext)
             }
@@ -356,7 +379,7 @@ extension AppState {
             // Unrendered, for backends that build their own config. The
             // provider switch above writes the same servers into the three
             // rendered fields; these are the source those were rendered from.
-            mcpRecords: await mcp.enabledServerRecords(projectPath: cwd),
+            mcpRecords: records,
             ideBridgeCommand: bridge.map { MCPBridgeCommand(command: $0.command, args: $0.args) }
         )
     }

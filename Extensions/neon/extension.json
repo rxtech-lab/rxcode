@@ -1,0 +1,34 @@
+{
+  "id": "app.rxlab.extensions.neon",
+  "name": "Neon Usage",
+  "version": "1.0.0",
+  "pluginAPI": "2.0",
+  "readme": "README.md",
+  "permissions": [
+    {
+      "id": "network",
+      "domains": [
+        "console.neon.tech"
+      ]
+    },
+    {
+      "id": "credentials.use",
+      "slots": [
+        "primary"
+      ]
+    }
+  ],
+  "contributes": {
+    "usage.provider": [
+      {
+        "pluginID": "neon",
+        "title": "Neon",
+        "authentication": "API key",
+        "fields": {
+          "account": "Organization ID",
+          "resource": "Project ID (optional)"
+        }
+      }
+    ]
+  }
+}

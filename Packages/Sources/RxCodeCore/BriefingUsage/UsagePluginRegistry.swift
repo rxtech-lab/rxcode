@@ -1,8 +1,8 @@
 import Foundation
 import SwiftUI
 
-/// Registration is explicit: plugins execute native code, never downloaded code
-/// or scripts from a synced dashboard. Unknown IDs are unavailable, not executed.
+/// Stable IDs resolve to explicitly registered native providers or host adapters for verified
+/// extensions. A synced usage dashboard cannot register a provider.
 public actor UsagePluginRegistry {
     private var plugins: [String: any UsagePlugin] = [:]
     public init() {}

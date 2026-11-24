@@ -33,6 +33,7 @@ Use the listening event's address if the port differs. Stop with Ctrl-C.
 silent. These fixtures do not prove that an OAuth token can access live billing.
 2026-10-29: The focused HTTP test passed. The sole member served two paginated
 success requests, one HTTP 403, and one malformed response. No member stayed silent.
+2026-11-24: The Cloudflare extension passed its billing and membership simulations through the SDK fixture broker. Nine HTTP requests covered current-period charges, billing slot precedence, denied credentials, malformed responses and two-page membership discovery.
 <!-- end:observations -->
 
 ## What didn't work

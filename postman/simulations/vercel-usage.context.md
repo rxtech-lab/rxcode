@@ -32,6 +32,7 @@ Use the listening event's address if the bound port differs. Stop with Ctrl-C.
 2026-10-29: 13 focused tests passed. The sole member served four billing requests
 and three Gateway requests (success, HTTP 403, malformed response). Missing-key
 case made no Gateway request. No member stayed silent. macOS Debug build passed.
+2026-11-24: The Vercel extension passed its HTTP simulation through the SDK fixture broker. The mock received four billing requests and three Gateway requests. The missing Gateway slot produced no HTTP request. Project-filtered charges survived denied, malformed and missing Gateway credentials.
 <!-- end:observations -->
 
 ## What didn't work

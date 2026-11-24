@@ -168,6 +168,18 @@ public struct UsageDashboard: Codable, Sendable, Equatable {
         snapshots.first { $0.id == card.integrationID }
     }
 
+    /// A failed refresh preserves the observation time, values, and stable identity of the last
+    /// successful snapshot. A provider with no prior observation starts empty.
+    public func failedSnapshot(for integration: UsageIntegration, message: String) -> UsagePluginSnapshot {
+        var previous = snapshots.first { $0.id == integration.id }
+            ?? .init(id: integration.id, pluginID: integration.pluginID, title: integration.title,
+                     projectID: integration.projectID, scope: integration.account, period: "", fetchedAt: .distantPast, metrics: [])
+        previous.title = integration.title
+        previous.projectID = integration.projectID
+        previous.error = message
+        return previous
+    }
+
     /// Use the same selection for rendering and empty states. Integrations
     /// without a snapshot do not produce a visible card yet.
     public func visibleCards(projectIDs: Set<UUID> = []) -> [UsageCardConfiguration] {

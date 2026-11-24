@@ -125,6 +125,11 @@ final class SecretsService {
         )
     }
 
+    func createFile(repo: String, envId: String, body: UpsertFileBody) async throws -> SecretsIDResponse {
+        try await send(method: "PUT", url: url("/api/v1/secrets/repositories/\(seg(repo))/environments/\(seg(envId))/files"),
+                       body: body, createOnly: true)
+    }
+
     /// Searches every environment of `repo` for files matching `filenames`,
     /// in a single request. Returns one result per requested filename, each
     /// listing the environments that contain it (`exists` = found anywhere).
@@ -178,7 +183,7 @@ final class SecretsService {
         }
     }
 
-    private func send<Body: Encodable, T: Decodable>(method: String, url: URL, body: Body) async throws -> T {
+    private func send<Body: Encodable, T: Decodable>(method: String, url: URL, body: Body, createOnly: Bool = false) async throws -> T {
         let payload: Data
         do {
             payload = try JSONEncoder().encode(body)
@@ -191,6 +196,7 @@ final class SecretsService {
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            if createOnly { request.setValue("*", forHTTPHeaderField: "If-None-Match") }
             request.httpBody = payload
             return request
         }

@@ -38,6 +38,8 @@
 		7C9BD5B8A69E483B91DA8102 /* InterruptedTurnTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9BD5B8A69E483B91DA8101 /* InterruptedTurnTests.swift */; };
 		7DEB38D712E3FE9EEDC3B3CD /* MockAppStatePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */; };
 		7FD1AC0733224BD3BF9B2172 /* AgentExtensionDevelopmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD1AC0733224BD3BF9B2171 /* AgentExtensionDevelopmentTests.swift */; };
+		7FD1AC0733224BD3BF9B2A72 /* ExtensionBrokerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD1AC0733224BD3BF9B2A71 /* ExtensionBrokerTests.swift */; };
+		7FD1AC0733224BD3BF9B2B72 /* ExtensionPermissionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD1AC0733224BD3BF9B2B71 /* ExtensionPermissionStoreTests.swift */; };
 		8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */; };
 		85846EB4D7F5500BA97AFC4B /* CodingPlanUITests+ACPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBC10A01453D5D22A2D570FE /* CodingPlanUITests+ACPClient.swift */; };
 		88A5F1863F866F9DFFC3C76C /* LocalModelTests+VideoGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA84274331D864DDC9F1A0CA /* LocalModelTests+VideoGeneration.swift */; };
@@ -57,6 +59,8 @@
 		A744CE513073010000000003 /* PetMusicVolumeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A744CE513073010000000004 /* PetMusicVolumeTests.swift */; };
 		A7C1D2E3F4051627384950A1 /* TaskRunClaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C1D2E3F4051627384950A2 /* TaskRunClaimTests.swift */; };
 		A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */; };
+		AB1100032FA0000100000500 /* RxCodeExtensionBuild in Frameworks */ = {isa = PBXBuildFile; productRef = AB1100022FA0000100000500 /* RxCodeExtensionBuild */; };
+		AB1100032FA0000100000600 /* RxCodeExtensionSDK in Frameworks */ = {isa = PBXBuildFile; productRef = AB1100022FA0000100000600 /* RxCodeExtensionSDK */; };
 		AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */; };
 		AC1900000000000000000100 /* RxCode/Services/RxAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */; };
 		AC1900000000000000000101 /* RxCode/Services/ProjectCloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */; };
@@ -282,6 +286,8 @@
 		7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossProjectSendConcurrencyTests.swift; sourceTree = "<group>"; };
 		7C9BD5B8A69E483B91DA8101 /* InterruptedTurnTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterruptedTurnTests.swift; sourceTree = "<group>"; };
 		7FD1AC0733224BD3BF9B2171 /* AgentExtensionDevelopmentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentExtensionDevelopmentTests.swift; sourceTree = "<group>"; };
+		7FD1AC0733224BD3BF9B2A71 /* ExtensionBrokerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExtensionBrokerTests.swift; sourceTree = "<group>"; };
+		7FD1AC0733224BD3BF9B2B71 /* ExtensionPermissionStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExtensionPermissionStoreTests.swift; sourceTree = "<group>"; };
 		82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunQueueTests.swift; sourceTree = "<group>"; };
 		85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
 		89C3D140648C4A64B7165620 /* ImageEngineValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageEngineValidationTests.swift; sourceTree = "<group>"; };
@@ -556,6 +562,8 @@
 				E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */,
 				DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */,
 				E6C001022F9B000100000001 /* Sparkle in Frameworks */,
+				AB1100032FA0000100000500 /* RxCodeExtensionBuild in Frameworks */,
+				AB1100032FA0000100000600 /* RxCodeExtensionSDK in Frameworks */,
 				E6D001032FA0000100000001 /* RxCodeCore in Frameworks */,
 				DF46526A2FCD34B3002D9562 /* JSONSchemaValidator in Frameworks */,
 				A30000000000000000000000 /* MLXLLM in Frameworks */,
@@ -596,6 +604,8 @@
 				E92A867810EB489390421B01 /* GlobalChatTests.swift */,
 				F190AE02DEB74040ABC41201 /* CodingPlanTests.swift */,
 				7FD1AC0733224BD3BF9B2171 /* AgentExtensionDevelopmentTests.swift */,
+				7FD1AC0733224BD3BF9B2A71 /* ExtensionBrokerTests.swift */,
+				7FD1AC0733224BD3BF9B2B71 /* ExtensionPermissionStoreTests.swift */,
 				EF8F745476D75239AA0231B7 /* CodingPlanTests+Tools.swift */,
 				01555D784FD554D4B2E0DD0C /* CodingPlanTests+Versions.swift */,
 				F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */,
@@ -991,6 +1001,7 @@
 				E67335352F7356F600FD26C7 /* Frameworks */,
 				E67335362F7356F600FD26C7 /* Resources */,
 				ABF17E000000000000000003 /* Remove Legacy Bundled Compiler */,
+				ABF17E000000000000000004 /* Bundle Verified Extensions */,
 				2D079341FFDF244B1EB7C14C /* Embed Desktop Widgets */,
 			);
 			buildRules = (
@@ -1005,6 +1016,8 @@
 			packageProductDependencies = (
 				E6A001012F8A000100000001 /* SwiftTerm */,
 				E6C001012F9B000100000001 /* Sparkle */,
+				AB1100022FA0000100000500 /* RxCodeExtensionBuild */,
+				AB1100022FA0000100000600 /* RxCodeExtensionSDK */,
 				E6D001012FA0000100000001 /* RxCodeCore */,
 				E6D001022FA0000100000001 /* RxCodeChatKit */,
 				E6D001082FA0000100000001 /* RxCodeEditor */,
@@ -1188,6 +1201,18 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		ABF17E000000000000000004 /* Bundle Verified Extensions */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Bundle Verified Extensions";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "/bin/bash \"$SRCROOT/scripts/ci/embed-extension-archives.sh\"";
+		};
 		ABF17E000000000000000003 /* Remove Legacy Bundled Compiler */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1242,6 +1267,8 @@
 				E92A867810EB489390421B02 /* GlobalChatTests.swift in Sources */,
 				F190AE02DEB74040ABC41202 /* CodingPlanTests.swift in Sources */,
 				7FD1AC0733224BD3BF9B2172 /* AgentExtensionDevelopmentTests.swift in Sources */,
+				7FD1AC0733224BD3BF9B2A72 /* ExtensionBrokerTests.swift in Sources */,
+				7FD1AC0733224BD3BF9B2B72 /* ExtensionPermissionStoreTests.swift in Sources */,
 				B308169FACFC557D83C59360 /* CodingPlanTests+Tools.swift in Sources */,
 				501B4F13B1BC545593AF7091 /* CodingPlanTests+Versions.swift in Sources */,
 				0B12D21F297E4FA89EACF738 /* CodingPlanTests+ImplementationReview.swift in Sources */,
@@ -2285,6 +2312,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10000000000000000000003 /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLX;
+		};
+		AB1100022FA0000100000500 /* RxCodeExtensionBuild */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeExtensionBuild;
+		};
+		AB1100022FA0000100000600 /* RxCodeExtensionSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeExtensionSDK;
 		};
 		CCDF9594876099576D4FD46E /* RxCodeCore */ = {
 			isa = XCSwiftPackageProductDependency;

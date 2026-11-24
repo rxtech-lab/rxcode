@@ -452,7 +452,8 @@ extension AppState {
 
                     sessionKey = await handleStreamResult(
                         resultEvent, sessionKey: sessionKey, streamId: streamId, agentProvider: agentProvider,
-                        projectId: projectId, cwd: cwd, eventCount: eventCount, reportedError: reportedError, in: window
+                        projectId: projectId, cwd: cwd, eventCount: eventCount, reportedError: reportedError,
+                        turnMode: permissionMode, includeIDEMCP: includeIDEMCP, in: window
                     )
 
                 case .rateLimitEvent(let info):

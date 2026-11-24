@@ -10,21 +10,35 @@ struct UsageDashboardCard: View {
     var isRefreshing = false
     @State private var showingDetails = false
     @State private var editing = false
+    @State private var action: UsageExtensionStatus?
     @State private var editingIntegration: UsageIntegration?
 
     private var integration: UsageIntegration? {
         appState.usageDashboard.integrations.first { $0.id == configuration.integrationID }
     }
 
+    private var status: UsageExtensionStatus? { integration.flatMap { appState.usageExtensionStatus(for: $0) } }
+
     var body: some View {
-        Button { showingDetails = true } label: {
-            UsagePluginCard(snapshot: snapshot, configuration: configuration,
-                showsDetailIndicator: true, reservesEditControlSpace: allowsEditing,
-                isRefreshing: isRefreshing)
-                .contentShape(RoundedRectangle(cornerRadius: 14))
+        Group {
+            if let panel = appState.usageScene(snapshot: snapshot, scene: "usage-card"), status == nil {
+                ExtensionSceneView(extension: panel, scene: "usage-card", snapshot: try? JSONEncoder().encode(snapshot),
+                                   configuration: try? JSONEncoder().encode(configuration), integration: integration, appState: appState)
+                    .overlay(alignment: .topLeading) {
+                        Button("Usage details", systemImage: "info.circle") { showingDetails = true }
+                            .labelStyle(.iconOnly).padding(8)
+                    }
+            } else {
+                Button { showingDetails = true } label: {
+                    UsagePluginCard(snapshot: snapshot, configuration: configuration,
+                                    showsDetailIndicator: true, reservesEditControlSpace: allowsEditing,
+                                    isRefreshing: isRefreshing && (!ExtensionPluginAPI.v2Enabled || snapshot.metrics.isEmpty))
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .help("Show \(snapshot.title) details")
+            }
         }
-        .buttonStyle(.plain)
-        .help("Show \(snapshot.title) details")
         .accessibilityIdentifier("usage-card-\(configuration.id.uuidString)")
         .overlay(alignment: .topTrailing) {
             if allowsEditing {
@@ -41,6 +55,17 @@ struct UsageDashboardCard: View {
                 .accessibilityIdentifier("usage-card-edit-\(configuration.id.uuidString)")
                 .padding(8)
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let status {
+                Button { action = status } label: {
+                    Label(LocalizedStringKey(status.rawValue), systemImage: "puzzlepiece.extension")
+                        .font(.caption)
+                }.buttonStyle(.borderless)
+            }
+        }
+        .sheet(item: $action) { action in
+            if let integration { UsageExtensionActionSheet(integration: integration, action: action) }
         }
         .popover(isPresented: $showingDetails, arrowEdge: .bottom) {
             UsageCardDetailPopover(snapshot: snapshot, configuration: configuration,
@@ -89,11 +114,18 @@ private struct UsageCardDetailPopover: View {
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding()
             ClaudeThemeDivider()
-            ScrollView {
-                if let plugin {
-                    plugin.detailView(snapshot: snapshot, configuration: configuration)
-                } else {
-                    UsagePluginDetailView(snapshot: snapshot, configuration: configuration)
+            if let panel = appState.usageScene(snapshot: snapshot, scene: "usage-detail"),
+               let integration = appState.usageDashboard.integrations.first(where: { $0.id == snapshot.id }),
+               appState.usageExtensionStatus(for: integration) == nil {
+                ExtensionSceneView(extension: panel, scene: "usage-detail", snapshot: try? JSONEncoder().encode(snapshot),
+                                   configuration: try? JSONEncoder().encode(configuration), integration: integration, appState: appState)
+            } else {
+                ScrollView {
+                    if let plugin, !ExtensionPluginAPI.v2Enabled {
+                        plugin.detailView(snapshot: snapshot, configuration: configuration)
+                    } else {
+                        UsagePluginDetailView(snapshot: snapshot, configuration: configuration)
+                    }
                 }
             }
         }

@@ -1,9 +1,14 @@
 import ExtensionFoundation
 import RxCodeChatKit
 import RxCodeCore
+import RxCodeExtensionBuild
 import SwiftUI
 
 struct ExtensionsSettingsTab: View {
+    @State private var installing: ExtensionCatalogItem?
+    @State private var catalogError: String?
+    @State private var refreshing = false
+    private let catalog = ExtensionCatalogController.shared
     @State private var monitor: AppExtensionPoint.Monitor?
     @State private var failure: String?
     @State private var metadata: [String: InstalledExtensionMetadata] = [:]
@@ -22,6 +27,13 @@ struct ExtensionsSettingsTab: View {
                 }
                 .frame(minWidth: 540, minHeight: 480)
             }
+            .task { if ExtensionPluginAPI.v2Enabled { await refreshCatalog() } }
+            .overlay {
+                if refreshing { ProgressView().padding().background(.regularMaterial, in: Capsule()) }
+            }
+            .sheet(item: $installing) { item in
+                ExtensionInstallSheet(item: item, updating: catalog.installed[item.id] != nil)
+            }
             .sheet(item: $selected) { item in
                 ExtensionDetailSheet(item: item)
             }
@@ -38,18 +50,33 @@ struct ExtensionsSettingsTab: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let failure {
+        if let failure, !ExtensionPluginAPI.v2Enabled {
             ContentUnavailableView("Extension discovery failed", systemImage: "exclamationmark.triangle",
                                    description: Text(failure))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if monitor == nil {
+        } else if monitor == nil && !ExtensionPluginAPI.v2Enabled {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     header
+                    if let failure {
+                        Label(failure, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                    }
                     PluginAPICard()
+                    if ExtensionPluginAPI.v2Enabled {
+                        if let count = monitor?.state.unapprovedCount, count > 0 {
+                            HStack {
+                                Label("\(count) extensions need enabling in System Settings", systemImage: "puzzlepiece.extension")
+                                Spacer()
+                                Button("Manage Extensions…") { showingBrowser = true }
+                            }
+                            .padding()
+                            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        availableSection
+                    }
                     installedSection
                 }
                 .padding(24)
@@ -66,14 +93,61 @@ struct ExtensionsSettingsTab: View {
         }
     }
 
-    private var identityKeys: [String] { identities.map { "\($0.bundleIdentifier)|\($0.localizedName)" } }
+    private var identityKeys: [String] {
+        identities.map { "\($0.bundleIdentifier)|\($0.localizedName)" } +
+            AgentExtensionRuntime.shared.panels.map { "\($0.bundleIdentifier)|\($0.generation)" }
+    }
 
     private var items: [InstalledExtensionMetadata] {
-        identities.map { identity in
+        let discovered = identities.map { identity in
             metadata[identity.bundleIdentifier] ?? InstalledExtensionMetadata(
                 bundleIdentifier: identity.bundleIdentifier, name: identity.localizedName, version: nil,
                 pluginAPIVersion: nil, readme: nil, readmeBaseURL: nil, icon: .none, containerURL: nil, isDevelopment: false
             )
+        }
+        guard ExtensionPluginAPI.v2Enabled else { return discovered }
+        let verified = catalog.installed.values
+        let ids = Set(verified.map(\.bundleIdentifier))
+        return (discovered.filter { !ids.contains($0.bundleIdentifier) } + verified).sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
+    private func refreshCatalog() async {
+        refreshing = true
+        defer { refreshing = false }
+        do {
+            try await catalog.refresh()
+            catalogError = nil
+        } catch { catalogError = error.localizedDescription }
+    }
+
+    private var availableSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Available").font(.headline)
+            if let catalogError {
+                Label(catalogError, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+            }
+            ForEach(catalog.available) { release in
+                let installed = catalog.installed[release.id]
+                HStack {
+                    Text(verbatim: release.name)
+                    Text(verbatim: release.version).foregroundStyle(.secondary)
+                    Spacer()
+                    if installed?.manifest?.version == release.version {
+                        Text("Installed").foregroundStyle(.secondary)
+                    } else {
+                        Button { installing = release } label: {
+                            if installed == nil { Text("Install") } else { Text("Update") }
+                        }
+                    }
+                }
+                .padding(10)
+                .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 8))
+            }
+            if catalog.available.isEmpty && catalogError == nil && !refreshing {
+                Text("No compatible releases available.").foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -99,7 +173,10 @@ struct ExtensionsSettingsTab: View {
             }
             Spacer()
             Button {
-                Task { await loadMetadata() }
+                Task {
+                    await loadMetadata()
+                    if ExtensionPluginAPI.v2Enabled { await refreshCatalog() }
+                }
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: ClaudeTheme.size(12)))
@@ -138,7 +215,7 @@ struct ExtensionsSettingsTab: View {
                 } actions: {
                     Button("Manage Extensions…") { showingBrowser = true }
                 }
-                .frame(maxWidth: .infinity, minHeight: 260)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 10))
             } else {
                 VStack(spacing: 0) {
@@ -204,14 +281,15 @@ private struct PluginAPICard: View {
 
     private var subtitle: String {
         #if DEBUG
-        "Debug build tracks the unreleased API on main. Release builds support \(ExtensionPluginAPI.releaseVersion)."
+        if ExtensionPluginAPI.v2Enabled { return String(localized: "Extension API 2.0 preview is enabled.") }
+        return "Debug build tracks the unreleased API on main. Release builds support \(ExtensionPluginAPI.releaseVersion)."
         #else
         "Extensions built for a different plugin API show a compatibility warning."
         #endif
     }
 }
 
-private struct APIVersionBadge: View {
+struct APIVersionBadge: View {
     let version: String?
     let compatible: Bool
 
@@ -244,7 +322,10 @@ private struct ExtensionRow: View {
                     Text(verbatim: item.name)
                         .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                         .lineLimit(1)
-                    if item.isDevelopment {
+                    if let verified = item.verification {
+                        Text(verbatim: verified.source)
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if item.isDevelopment {
                         Text("Development")
                             .font(.system(size: ClaudeTheme.size(9.5), weight: .semibold))
                             .foregroundStyle(.secondary)
@@ -305,97 +386,6 @@ struct ExtensionIconView: View {
         case .image(let url): NSImage(contentsOf: url)
         case .application(let url): NSWorkspace.shared.icon(forFile: url.path)
         case .none: nil
-        }
-    }
-}
-
-// MARK: - Detail
-
-private struct ExtensionDetailSheet: View {
-    let item: InstalledExtensionMetadata
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                header
-                if let warning = ExtensionPluginAPI.warning(for: item.compatibility) {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(ClaudeTheme.statusWarning)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Compatibility Warning")
-                                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                            Text(verbatim: warning)
-                                .font(.system(size: ClaudeTheme.size(11)))
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(10)
-                    .background(ClaudeTheme.statusWarning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
-                }
-                ClaudeThemeDivider()
-                readme
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle(item.name)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-                if let container = item.containerURL {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            NSWorkspace.shared.activateFileViewerSelecting([container])
-                        } label: {
-                            Label("Show in Finder", systemImage: "folder")
-                        }
-                    }
-                }
-            }
-        }
-        .frame(minWidth: 620, idealWidth: 720, maxWidth: .infinity, minHeight: 560, idealHeight: 680, maxHeight: .infinity)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
-            ExtensionIconView(icon: item.icon, size: 64)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(verbatim: item.name)
-                    .font(.system(size: ClaudeTheme.size(18), weight: .semibold))
-                Text(verbatim: item.bundleIdentifier)
-                    .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    APIVersionBadge(version: item.pluginAPIVersion, compatible: item.compatibility.isCompatible)
-                    Text(verbatim: "Host API \(ExtensionPluginAPI.version)")
-                        .font(.system(size: ClaudeTheme.size(10.5)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    if let version = item.version {
-                        Text(verbatim: "· Version \(version)")
-                            .font(.system(size: ClaudeTheme.size(10.5)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(20)
-    }
-
-    @ViewBuilder private var readme: some View {
-        if let text = item.readme, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            MarkdownPreviewView(content: text, baseURL: item.readmeBaseURL)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ContentUnavailableView("No README", systemImage: "doc.text",
-                                   description: Text("This extension does not include a README.md."))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

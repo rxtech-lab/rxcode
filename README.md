@@ -64,7 +64,7 @@ In a project chat, ask “Create a service extension named `shout` that uppercas
 
 If the contributor needs enablement, RxCode opens the macOS extension manager in the originating chat. Turn on the named contributor there. Reload resumes automatically. To try a change, ask “Add an exclamation mark, reload `shout`, and test `hello` again.” The agent receives the running service’s reply in chat.
 
-Each extension folder also gets a `README.md`. If you add a square `icon.png`, RxCode packages it with the README on every reload. Settings → Extensions shows each enabled extension with its icon, or a default icon if it has none. Click an extension to read its README. The same page lists the plugin API this RxCode build supports. Release builds use the version defined in code and Debug builds use `main`. If an extension was built for a different plugin API version, the page shows a compatibility warning.
+Each extension folder also gets a `README.md`. If you add a square `icon.png`, RxCode packages it with the README on every reload. Settings → Extensions shows each enabled extension with its icon, or a default icon if it has none. Click an extension to read its README. The same page lists the plugin API this RxCode build supports. API 1.0 development contributors continue to use the legacy service point. Debug builds can opt into API 2.0 for manifest permissions, native scenes and signed archive development. See the [extension development and distribution guide](docs/extensions.md).
 
 ## Concurrent Chatting With Git Worktrees
 

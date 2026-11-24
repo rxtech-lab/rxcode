@@ -109,6 +109,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSContactsUsageDescription</key>
+	<string>RxCode reads contacts when you allow an extension to look them up.</string>
 	<key>AutopilotBaseURL</key>
 	<string>https://www.flowcy.dev</string>
 	<key>NSHumanReadableCopyright</key>

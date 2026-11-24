@@ -1,18 +1,24 @@
 import Foundation
+import RxCodeCore
 
 /// The plugin API that this RxCode build exposes to workspace extensions.
 ///
-/// Release builds report `releaseVersion`. Debug builds track the unreleased API on `main`,
-/// so extensions built by a Debug host are flagged when loaded by a release host and vice versa.
+/// The API 2.0 preview is opt-in until distributed first-party packages pass the release gate.
 nonisolated enum ExtensionPluginAPI {
     /// Bump when the host/extension contract (bridge messages, entry points, packaging) changes.
-    static let releaseVersion = "1.0"
+    static let releaseVersion = ExtensionManifest.apiVersion
 
-    #if DEBUG
-    static let version = "main"
-    #else
-    static let version = releaseVersion
-    #endif
+    static var v2Enabled: Bool { ExtensionFeatures.isV2Enabled }
+
+    static var legacyVersion: String {
+        #if DEBUG
+        "main"
+        #else
+        "1.0"
+        #endif
+    }
+
+    static var version: String { v2Enabled ? releaseVersion : legacyVersion }
 
     /// Info.plist key that records the plugin API an extension was built against.
     static let infoPlistKey = "RxCodePluginAPIVersion"
@@ -24,7 +30,11 @@ nonisolated enum ExtensionPluginAPI {
         let symbol: String
     }
 
-    static let capabilities: [Capability] = [
+    static var capabilities: [Capability] { legacyCapabilities + (v2Enabled ? [
+        Capability(id: "manifest", title: "Extension manifest", detail: "Declares permissions and native scenes in extension.json.", symbol: "puzzlepiece.extension")
+    ] : []) }
+
+    private static let legacyCapabilities: [Capability] = [
         Capability(
             id: "workspace-service",
             title: "Workspace Service",

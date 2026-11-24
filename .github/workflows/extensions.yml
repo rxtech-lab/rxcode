@@ -1,0 +1,121 @@
+name: Extension builds
+on:
+  workflow_dispatch:
+    inputs:
+      probe_version:
+        description: Version of the discovery probe to publish from main (for example 1.0.0 or 2.0.0)
+        type: string
+        required: true
+        default: "2.0.0"
+  pull_request:
+    paths:
+      - Extensions/**
+      - Fixtures/ExtensionRuntime/**
+      - Packages/Sources/RxCodeCore/Extensions/**
+      - Packages/Sources/RxCodeExtension*/**
+      - Packages/Sources/CExtensionArchive/**
+      - Packages/Sources/rxcode-extension/**
+      - Packages/Tests/*Extension*/**
+      - Packages/Tests/RxCodeCoreTests/Extension*.swift
+      - Packages/Package.swift
+      - scripts/ci/*extension*
+      - .github/workflows/extensions.yml
+  push:
+    branches: [main]
+    paths:
+      - Extensions/**
+      - Packages/Sources/RxCodeExtension*/**
+      - Packages/Sources/CExtensionArchive/**
+      - Packages/Sources/RxCodeCore/Extensions/**
+      - Packages/Sources/rxcode-extension/**
+      - Packages/Package.swift
+      - scripts/ci/*extension*
+      - .github/workflows/extensions.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Verify extension SDK, builder and trust checks
+        run: swift test --package-path Packages --filter 'Extension(Manifest|Distribution|Archive|Catalog|CatalogRotation)Tests|UsageExtensionUpgradeTests|ExtensionUsageSchedulerTests|BriefingUsageBaselineTests|UsageDashboardSyncTests'
+      - name: Build distribution tool
+        run: swift build --package-path Packages --product rxcode-extension
+      - name: Test first-party providers
+        run: swift test --package-path Extensions
+      - name: Verify the nine signed Debug archives and bundled revocation baseline
+        run: |
+          cli="$(swift build --package-path Packages --show-bin-path)/rxcode-extension"
+          python3 scripts/ci/extension-distribution.py debug --cli "$cli" --output "$RUNNER_TEMP/BundledExtensions"
+
+  publish:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: macos-26
+    environment: extensions-release
+    concurrency: rxcode-first-party-extension-publishing
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Build the release tool
+        run: |
+          swift build --package-path Packages --product rxcode-extension
+          echo "RXCODE_EXTENSION_CLI=$(swift build --package-path Packages --show-bin-path)/rxcode-extension" >> "$GITHUB_ENV"
+      - name: Read the Apple signing decision
+        id: signing
+        run: |
+          mode=$(jq -er '.appleSigning | select(. == "adHoc" or . == "developerID")' Packages/Sources/RxCodeExtensionDistribution/Resources/production-trust.json)
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+      - name: Import fallback Developer ID
+        if: steps.signing.outputs.mode == 'developerID'
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.DEVELOPER_ID_P12 }}
+          p12-password: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      - name: Configure notarization on the ephemeral runner
+        if: steps.signing.outputs.mode == 'developerID'
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: xcrun notarytool store-credentials rxcode-extension-notary --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id T7GYB573Y6
+      - name: Build requested discovery probe
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PROBE_VERSION: ${{ inputs.probe_version }}
+          APPLE_SIGNING: ${{ steps.signing.outputs.mode }}
+          DEVELOPER_ID_IDENTITY: ${{ vars.DEVELOPER_ID_IDENTITY }}
+        run: |
+          [[ "$PROBE_VERSION" =~ ^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$ ]]
+          args=(package "$PROBE_VERSION" "$RUNNER_TEMP/discovery-probe" "$RXCODE_EXTENSION_CLI")
+          case "$APPLE_SIGNING" in
+            adHoc) ;;
+            developerID) args+=("${DEVELOPER_ID_IDENTITY:?Developer ID identity is required}" rxcode-extension-notary) ;;
+            *) exit 1 ;;
+          esac
+          Fixtures/ExtensionRuntime/build-probe.sh "${args[@]}"
+      - name: Sign, verify and publish
+        env:
+          RXCODE_EXTENSION_PRIVATE_KEY: ${{ secrets.RXCODE_EXTENSION_PRIVATE_KEY }}
+          RXCODE_EXTENSION_KEY_ID: ${{ secrets.RXCODE_EXTENSION_KEY_ID }}
+          FLOWCY_EXTENSIONS_TOKEN: ${{ secrets.FLOWCY_EXTENSIONS_TOKEN }}
+          DEVELOPER_ID_IDENTITY: ${{ vars.DEVELOPER_ID_IDENTITY }}
+          APPLE_SIGNING: ${{ steps.signing.outputs.mode }}
+          BASE_COMMIT: ${{ github.event.before }}
+          PROBE_VERSION: ${{ inputs.probe_version }}
+        run: |
+          signer=-
+          if [[ "$APPLE_SIGNING" == developerID ]]; then signer="${DEVELOPER_ID_IDENTITY:?Developer ID identity is required}"; fi
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            args=(publish-probe --probe-version "$PROBE_VERSION" --probe-artifacts "$RUNNER_TEMP/discovery-probe")
+          else
+            args=(publish --since "$BASE_COMMIT")
+          fi
+          python3 scripts/ci/extension-distribution.py "${args[@]}" --cli "$RXCODE_EXTENSION_CLI" --sign "$signer"

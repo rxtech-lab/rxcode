@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import RxCodeCore
+import RxCodeExtensionBuild
 
 extension AppState {
     var usagePluginRegistry: UsagePluginRegistry { usagePlugins.registry }
@@ -27,7 +28,7 @@ extension AppState {
 
     static let usagePluginIDs = ["acp-opencode", "acp-antigravity", "ai-usage", "ai-limits", "vercel", "neon", "turso", "cloudflare", "github-ci"]
 
-    func startUsagePlugins() async {
+    private func registerBuiltInUsagePlugins() async {
         for id in ["vercel", "neon", "turso", "cloudflare"] {
             await usagePluginRegistry.register(CloudUsagePlugin(id: id, gatewayCredential: { integrationID in
                 await UsageDashboardStore.shared.gatewayCredential(for: integrationID)
@@ -54,6 +55,10 @@ extension AppState {
                 return await self.localUsageSnapshot(configuration)
             })
         }
+    }
+
+    func startUsagePlugins() async {
+        if !ExtensionPluginAPI.v2Enabled { await registerBuiltInUsagePlugins() }
         do {
             if let saved = try await UsageDashboardStore.shared.load(at: activeWorkspace.storageURL) { usageDashboard = saved }
             else {
@@ -68,12 +73,17 @@ extension AppState {
             }
         } catch { usageDashboardError = "Could not load usage cards: \(error.localizedDescription)"; return }
         reconcileACPUsageIntegrations()
+        if ExtensionPluginAPI.v2Enabled {
+            await seedDashboardUsageExtensions()
+            Task { try? await ExtensionCatalogController.shared.refresh() }
+        }
         usagePluginRefreshTask?.cancel()
         usagePluginRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.refreshUsagePlugins()
                 do { try await Task.sleep(for: .seconds(900)) } catch { return }
+                if ExtensionPluginAPI.v2Enabled { try? await ExtensionCatalogController.shared.refresh() }
             }
         }
     }
@@ -108,34 +118,49 @@ extension AppState {
             return
         }
 
-        guard !usagePlugins.refreshingIntegrationIDs.contains(integration.id) else { return }
-        usagePlugins.refreshingIntegrationIDs.insert(integration.id)
-        defer { usagePlugins.refreshingIntegrationIDs.remove(integration.id) }
-
-        let snapshot = await refreshedUsageSnapshot(integration)
-        guard usageDashboard.integrations.contains(integration) else { return }
-        usageDashboard.snapshots.removeAll { $0.id == integration.id }
-        usageDashboard.snapshots.append(snapshot)
+        await refreshUsageIntegration(integration)
         await persistUsageDashboard()
     }
 
     func refreshUsagePlugins() async {
         guard !usagePluginsRefreshing else { usagePluginsRefreshPending = true; return }
         usagePluginsRefreshing = true
-        usagePlugins.refreshingIntegrationIDs = Set(usageDashboard.integrations.map(\.id))
         defer {
             usagePluginsRefreshing = false
-            usagePlugins.refreshingIntegrationIDs = []
             if usagePluginsRefreshPending {
                 usagePluginsRefreshPending = false
                 Task { await refreshUsagePlugins() }
             }
         }
         for integration in usageDashboard.integrations {
-            let snapshot = await refreshedUsageSnapshot(integration)
+            await refreshUsageIntegration(integration)
+        }
+        await persistUsageDashboard()
+    }
+
+    func refreshUsageForExtension(_ id: String) async {
+        let manifest = ExtensionCatalogController.shared.installed[id]?.manifest
+        let plugins = Set(manifest?.contributes.usageProviders?.map(\.pluginID) ?? [])
+        let affected = usageDashboard.integrations.filter { plugins.contains($0.pluginID) }
+        guard !affected.isEmpty else { return }
+        for integration in affected {
+            if let old = usagePlugins.running.removeValue(forKey: integration.id) { old.task.cancel() }
+            await refreshUsageIntegration(integration)
+        }
+        await persistUsageDashboard()
+    }
+
+    func markUsageExtension(_ id: String, manifest: ExtensionManifest?, status: UsageExtensionStatus) async {
+        let plugins = Set(manifest?.contributes.usageProviders?.map(\.pluginID) ?? [])
+        let affected = usageDashboard.integrations.filter {
+            plugins.contains($0.pluginID) || BundledUsageExtensions.releaseID(for: $0.pluginID) == id
+        }
+        guard !affected.isEmpty else { return }
+        for integration in affected {
+            usagePlugins.running.removeValue(forKey: integration.id)?.task.cancel()
             usagePlugins.refreshingIntegrationIDs.remove(integration.id)
-            // A deleted or edited integration must not be resurrected by an in-flight fetch.
-            guard usageDashboard.integrations.contains(integration) else { continue }
+            usagePlugins.extensionStatuses[integration.id] = status
+            let snapshot = refreshedUsageSnapshot(integration, error: status, status: status)
             usageDashboard.snapshots.removeAll { $0.id == integration.id }
             usageDashboard.snapshots.append(snapshot)
         }
@@ -150,22 +175,71 @@ extension AppState {
         return true
     }
 
-    /// Shared by dashboard refresh and MCP reads; a failed fetch retains the last successful data.
-    func refreshedUsageSnapshot(_ integration: UsageIntegration) async -> UsagePluginSnapshot {
-        do {
-            return try await fetchUsageSnapshot(integration)
-        } catch {
-            var previous = usageDashboard.snapshots.first { $0.id == integration.id }
-                ?? .init(id: integration.id, pluginID: integration.pluginID, title: integration.title,
-                         projectID: integration.projectID, scope: integration.account, period: "", fetchedAt: .distantPast, metrics: [])
-            previous.title = integration.title
-            previous.projectID = integration.projectID
-            previous.error = (error as? ACPUsageError)?.localizedDescription ?? (error as? ACPUsageFetchError)?.localizedDescription ?? (error as? UsagePluginError)?.localizedDescription ?? "Unable to refresh usage. Check the connection and credentials."
-            return previous
+    /// Every refresh entry point joins the same job. Only the current integration and generation
+    /// can publish a result, including when a workspace changes during an XPC call.
+    func refreshUsageIntegration(_ integration: UsageIntegration) async {
+        let id = integration.id
+        let root = activeWorkspace.storageURL
+        guard usageDashboard.integrations.contains(integration) else { return }
+        if let existing = usagePlugins.running[id] {
+            if existing.integration == integration && existing.workspace == root {
+                await existing.task.value
+                return
+            }
+            existing.task.cancel()
+        }
+        let token = UUID()
+        let job = Task { @MainActor in
+            var generation: ActivatedExtension?
+            var status: UsageExtensionStatus?
+            let snapshot: UsagePluginSnapshot
+            do {
+                if ExtensionPluginAPI.v2Enabled {
+                    let panel = try await prepareUsageExtension(integration)
+                    generation = panel
+                    guard let provider = panel.manifest.contributes.usageProviders?.first(where: { $0.pluginID == integration.pluginID }) else {
+                        throw UsageExtensionStatus.unavailable
+                    }
+                    let plugin = ExtensionUsagePlugin(provider, appState: self)
+                    await usagePluginRegistry.register(plugin)
+                    snapshot = try await plugin.fetch(configuration: integration, credential: "", now: .now)
+                } else {
+                    snapshot = try await fetchBuiltInUsageSnapshot(integration)
+                }
+            } catch is CancellationError { return }
+            catch {
+                if ExtensionPluginAPI.v2Enabled {
+                    status = UsageExtensionStatus.status(for: error) ?? (generation == nil ? .unavailable : nil)
+                }
+                snapshot = refreshedUsageSnapshot(integration, error: error, status: status)
+            }
+            guard !Task.isCancelled, activeWorkspace.storageURL == root, usagePlugins.running[id]?.id == token,
+                  usageDashboard.integrations.contains(integration) else { return }
+            if let generation, ExtensionCatalogController.shared.installedUsagePanel(
+                pluginID: integration.pluginID, workspace: generation.workspace
+            )?.broker !== generation.broker { return }
+            usagePlugins.extensionStatuses[id] = status
+            usageDashboard.snapshots.removeAll { $0.id == id }
+            usageDashboard.snapshots.append(snapshot)
+        }
+        usagePlugins.running[id] = .init(id: token, integration: integration, workspace: root, task: job)
+        usagePlugins.refreshingIntegrationIDs.insert(id)
+        await job.value
+        if usagePlugins.running[id]?.id == token {
+            usagePlugins.running[id] = nil
+            usagePlugins.refreshingIntegrationIDs.remove(id)
         }
     }
 
-    private func fetchUsageSnapshot(_ integration: UsageIntegration) async throws -> UsagePluginSnapshot {
+    /// A failed refresh retains both the metrics and their last successful observation time.
+    private func refreshedUsageSnapshot(_ integration: UsageIntegration, error: Error, status: UsageExtensionStatus?) -> UsagePluginSnapshot {
+        let message = status?.errorDescription ?? (error as? ACPUsageError)?.localizedDescription ??
+            (error as? ACPUsageFetchError)?.localizedDescription ?? (error as? UsagePluginError)?.localizedDescription ??
+            "Unable to refresh usage. Check the connection and credentials."
+        return usageDashboard.failedSnapshot(for: integration, message: message)
+    }
+
+    private func fetchBuiltInUsageSnapshot(_ integration: UsageIntegration) async throws -> UsagePluginSnapshot {
         let registry = usagePluginRegistry
         if integration.pluginID.hasPrefix("ai-") || integration.pluginID.hasPrefix("acp-") {
             return try await registry.fetch(integration, credential: "")
@@ -191,6 +265,21 @@ extension AppState {
     }
 
     func refreshLocalUsagePlugins() {
+        if ExtensionPluginAPI.v2Enabled {
+            usagePlugins.localRefreshPending = true
+            guard usagePlugins.localRefreshTask == nil else { return }
+            usagePlugins.localRefreshTask = Task {
+                defer { usagePlugins.localRefreshTask = nil }
+                while usagePlugins.localRefreshPending {
+                    usagePlugins.localRefreshPending = false
+                    for integration in usageDashboard.integrations where integration.pluginID.hasPrefix("ai-") {
+                        await refreshUsageIntegration(integration)
+                    }
+                    await persistUsageDashboard()
+                }
+            }
+            return
+        }
         for integration in usageDashboard.integrations where integration.pluginID.hasPrefix("ai-") {
             usageDashboard.snapshots.removeAll { $0.id == integration.id }
             usageDashboard.snapshots.append(localUsageSnapshot(integration))

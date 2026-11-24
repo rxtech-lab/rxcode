@@ -12,7 +12,7 @@ actor AgentExtensionDevelopment {
         return "Created \(file.path) and \(folder)/README.md. Edit the Swift test handler and the README. Optionally add a square PNG at \(folder)/icon.png. Then call ide__reload_extension with name '\(name)'."
     }
 
-    func reload(workspace: URL, name: String, signingIdentity: String?,
+    func reload(workspace: URL, name: String, signingIdentity: String?, appState: AppState? = nil,
                 requestEnablement: ExtensionEnablementHandler) async throws -> String {
         let identifier = try AgentExtensionBuilder.serviceIdentifier(in: workspace, name: name)
         guard reloading.insert(identifier).inserted else { throw DevelopmentError.reloadInProgress(name) }
@@ -25,6 +25,8 @@ actor AgentExtensionDevelopment {
             bundleIdentifier: build.bundleIdentifier,
             container: build.containerURL,
             generation: build.generation,
+            usesManifest: build.usesManifest,
+            appState: appState,
             requestEnablement: requestEnablement
         )
         return "Loaded \(name) (build \(build.generation), plugin API \(ExtensionPluginAPI.version)). Call ide__test_extension with name '\(name)' and a text input."

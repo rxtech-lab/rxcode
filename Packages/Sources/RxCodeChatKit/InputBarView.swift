@@ -35,6 +35,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @State private var isDragOver = false
     @State var showAtPopup = false
     @State var atSelectedIndex = 0
+    @State private var serverNames: [String] = []
     @State private var shortcuts: [ChatShortcut] = []
     @State var historyIndex: Int = -1
     @State var textFieldLayoutID = 0
@@ -133,9 +134,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
                     if showAtPopup && atCombinedCount > 0 {
                         AtMentionPopup(
                             shortcuts: atShortcutMatches,
+                            servers: atServerMatches,
                             files: atFileFilteredEntries,
                             onSelectShortcut: { shortcut in selectShortcut(shortcut) },
-                            onSelectFile: { relativePath in selectAtFile(relativePath) },
+                            onSelectServer: insertAtMention,
+                            onSelectFile: insertAtMention,
                             selectedIndex: $atSelectedIndex
                         )
                         .transition(.offset(y: 10).combined(with: .opacity))
@@ -173,6 +176,13 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
                 AtFileSearch.prefetch(projectPath: path)
             }
             shortcuts = ChatShortcutRegistry.currentShortcuts
+        }
+        .task(id: mcpMentionDirectory) {
+            serverNames = []
+            guard let directory = mcpMentionDirectory else { return }
+            let names = await chatBridge.mcpMentionNamesHandler?(directory) ?? []
+            guard !Task.isCancelled else { return }
+            serverNames = names
         }
         .onReceive(NotificationCenter.default.publisher(for: .chatShortcutsDidChange)) { _ in
             shortcuts = ChatShortcutRegistry.currentShortcuts
@@ -451,9 +461,20 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
     }
 
-    /// Total rows in the unified `@` popup — shortcuts followed by files.
+    private var mcpMentionDirectory: String? {
+        guard showAtPopup, chatBridge.agentProvider.staticCapabilities.contains(.mcpServers),
+              !chatBridge.studioKind.isStudio else { return nil }
+        return chatBridge.workingDirectory ?? windowState.selectedProject?.path
+    }
+
+    private var atServerMatches: [String] {
+        guard mcpMentionDirectory != nil else { return [] }
+        let query = atFileQuery
+        return query.isEmpty ? serverNames : serverNames.filter { $0.localizedCaseInsensitiveContains(query) }
+    }
+
     var atCombinedCount: Int {
-        atShortcutMatches.count + atFileFilteredEntries.count
+        atShortcutMatches.count + atServerMatches.count + atFileFilteredEntries.count
     }
 
     func selectSlashCommand(_ cmd: SlashCommand) {
@@ -467,26 +488,31 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
     }
 
-    private func selectAtFile(_ relativePath: String) {
+    private func insertAtMention(_ name: String) {
         withAnimation(.easeOut(duration: 0.15)) { showAtPopup = false }
         var text = windowState.inputText
         if let atRange = text.range(of: "@", options: .backwards) {
-            text.replaceSubrange(atRange.lowerBound..., with: "@\(relativePath) ")
+            text.replaceSubrange(atRange.lowerBound..., with: "@\(name) ")
         }
         windowState.inputText = text
     }
 
-    /// Dispatches a flat `@` popup index to the shortcut or file at that row.
     func selectAtMention(at index: Int) {
         let shortcutMatches = atShortcutMatches
         if index < shortcutMatches.count {
             selectShortcut(shortcutMatches[index])
             return
         }
-        let fileIndex = index - shortcutMatches.count
+        let serverIndex = index - shortcutMatches.count
+        let servers = atServerMatches
+        if servers.indices.contains(serverIndex) {
+            insertAtMention(servers[serverIndex])
+            return
+        }
+        let fileIndex = serverIndex - servers.count
         let entries = atFileFilteredEntries
         if fileIndex >= 0 && fileIndex < entries.count {
-            selectAtFile(entries[fileIndex].relativePath)
+            insertAtMention(entries[fileIndex].relativePath)
         }
     }
 
@@ -509,7 +535,8 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     func hasActiveAtQuery(in text: String) -> Bool {
         guard let atRange = text.range(of: "@", options: .backwards) else { return false }
         let afterAt = String(text[atRange.upperBound...])
-        return !afterAt.contains(" ")
+        let prefix = text[..<atRange.lowerBound]
+        return (prefix.last?.isWhitespace ?? true) && !afterAt.contains(where: \.isWhitespace)
     }
 
     // MARK: - Drag Overlay

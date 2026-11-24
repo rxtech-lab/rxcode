@@ -49,7 +49,7 @@ extension AppState {
             return try await handleDesignTool(name, arguments: arguments, sessionKey: sessionKey)
         }
         switch name {
-        case "ide__create_extension", "ide__reload_extension", "ide__test_extension":
+        case "ide__list_extensions", "ide__create_extension", "ide__reload_extension", "ide__test_extension":
             return try await handleExtensionDevelopmentTool(name, arguments: arguments, sessionKey: sessionKey)
         case "ide__pet_schedule":
             return try await handlePetSchedule(arguments: arguments, sessionKey: sessionKey)

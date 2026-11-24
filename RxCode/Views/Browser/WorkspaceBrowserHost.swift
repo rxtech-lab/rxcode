@@ -56,7 +56,6 @@ struct WorkspaceBrowserHost: ViewModifier {
                 }
                 design.revealBrowser = nil
             }
-            .onChange(of: windowState.selectedProject?.id) { design.reset() }
     }
 
     private func revealBrowser() -> WorkspaceBrowser {

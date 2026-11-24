@@ -66,12 +66,18 @@ public enum InspectorTab: String, CaseIterable, Codable, Sendable {
     case terminal = "Terminal"
     case run = "Run"
     case views = "Views"
+    case extensions = "Extensions"
+
+    public static var availableCases: [Self] {
+        allCases.filter { $0 != .extensions || ExtensionFeatures.isV2Enabled }
+    }
 
     public var title: LocalizedStringResource {
         switch self {
         case .terminal: "Terminal"
         case .run: "Run"
         case .views: "Views"
+        case .extensions: "Extensions"
         }
     }
 
@@ -84,6 +90,7 @@ public enum InspectorTab: String, CaseIterable, Codable, Sendable {
         case .terminal: "apple.terminal"
         case .run: "play.fill"
         case .views: "square.grid.2x2"
+        case .extensions: "puzzlepiece.extension"
         }
     }
 }

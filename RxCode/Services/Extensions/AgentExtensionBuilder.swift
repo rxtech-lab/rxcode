@@ -3,14 +3,16 @@ import Darwin
 import Foundation
 import ImageIO
 import RxCodeCore
+import RxCodeExtensionBuild
 import Security
 import UniformTypeIdentifiers
 
 nonisolated struct AgentExtensionBuild: Sendable {
     let containerURL: URL
     let bundleIdentifier: String
-    let teamIdentifier: String
+    let teamIdentifier: String?
     let generation: String
+    var usesManifest = false
 }
 
 /// Compiles only a snapshot of the editable Swift file. Bundle metadata, compiler arguments,
@@ -50,7 +52,10 @@ nonisolated enum AgentExtensionBuilder {
     static func create(in workspace: URL, name: String) throws -> URL {
         try validate(name)
         try withDirectory(in: workspace, name: name, create: true) { directory in
-            for (file, contents) in [("Extension.swift", starterSource), (readmeFileName, starterReadme(name))] {
+            let v2 = ExtensionPluginAPI.v2Enabled
+            var files = [("Extension.swift", v2 ? manifestSource : starterSource), (readmeFileName, starterReadme(name))]
+            if v2 { files.append(("extension.json", starterManifest(name))) }
+            for (file, contents) in files {
                 let fd = openat(directory, file, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
                 guard fd >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
                 let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
@@ -145,8 +150,6 @@ nonisolated enum AgentExtensionBuilder {
     static func build(in workspace: URL, name: String, signingIdentity: String? = nil) async throws -> AgentExtensionBuild {
         let serviceID = try serviceIdentifier(in: workspace, name: name)
         let containerID = String(serviceID.dropLast(".service".count))
-        let source = try source(in: workspace, name: name)
-        let resources = try resources(in: workspace, name: name)
         let destination = destination(for: serviceID, name: name)
         let builds = destination.deletingLastPathComponent()
         let signer = try await signingCertificate(requested: signingIdentity, previous: destination)
@@ -156,6 +159,24 @@ nonisolated enum AgentExtensionBuilder {
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: staging) }
         let container = staging.appending(path: "Contributor.app")
+        let hasManifest = try withDirectory(in: workspace, name: name, create: false) { directory in
+            try readFile("extension.json", in: directory, name: name, maxBytes: maxReadmeBytes) != nil
+        }
+        if hasManifest {
+            guard ExtensionPluginAPI.v2Enabled else { throw ExtensionBuildError("Enable the extension API 2.0 preview in a Debug build.") }
+            let files = try ExtensionFileAccess(projectRoot: workspace)
+            try await Task.detached(priority: .userInitiated) {
+                try ExtensionPackageBuilder.build(files: files, prefix: ".rxcode/extensions/\(name)/", output: container,
+                                                  signer: signer, developmentID: containerID, generation: generation,
+                                                  workspacePoint: "\(hostID).workspace")
+            }.value
+            try Task.checkCancellation()
+            try publish(container, to: destination)
+            return AgentExtensionBuild(containerURL: destination, bundleIdentifier: serviceID, teamIdentifier: signature(of: destination)?.team,
+                                       generation: generation, usesManifest: true)
+        }
+        let source = try source(in: workspace, name: name)
+        let resources = try resources(in: workspace, name: name)
         let service = container.appending(path: "Contents/Extensions/Service.appex")
         let serviceBinary = service.appending(path: "Contents/MacOS/Service")
         let containerBinary = container.appending(path: "Contents/MacOS/Contributor")
@@ -171,7 +192,7 @@ nonisolated enum AgentExtensionBuilder {
                                    "LSMinimumSystemVersion": "26.0", "CFBundleShortVersionString": "1.0", "CFBundleVersion": version,
                                    "CFBundleName": name, "CFBundleDisplayName": name, "CFBundleExecutable": "Contributor",
                                    "CFBundleIdentifier": containerID, "CFBundlePackageType": "APPL",
-                                   ExtensionPluginAPI.infoPlistKey: ExtensionPluginAPI.version]
+                                   ExtensionPluginAPI.infoPlistKey: ExtensionPluginAPI.legacyVersion]
         try packageResources(resources, container: container, service: service)
         if fm.fileExists(atPath: container.appending(path: "Contents/Resources/AppIcon.icns").path) {
             info["CFBundleIconFile"] = "AppIcon"
@@ -191,26 +212,31 @@ nonisolated enum AgentExtensionBuilder {
         try Self.bridge(generation).write(to: bridge, atomically: true, encoding: .utf8)
         let main = staging.appending(path: "Contributor.c")
         try "int main(void) { return 0; }\n".write(to: main, atomically: true, encoding: .utf8)
-        #if arch(arm64)
-        let target = "arm64-apple-macosx26.0"
-        #else
-        let target = "x86_64-apple-macosx26.0"
-        #endif
-        _ = try await DesignCommand.run("/usr/bin/xcrun", ["--sdk", "macosx", "swiftc", "-target", target, "-parse-as-library",
-            "-application-extension", "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain", swift.path, bridge.path, "-o", serviceBinary.path], timeout: 120)
-        _ = try await DesignCommand.run("/usr/bin/xcrun", ["--sdk", "macosx", "clang", "-target", target, main.path, "-o", containerBinary.path])
-        let signing = ["--sign", signer, "--force", "--options", "runtime", "--timestamp=none"]
+        try await Task.detached(priority: .userInitiated) {
+            try ExtensionCompiler.compile(serviceSources: [swift, bridge], containerSource: main,
+                                          serviceBinary: serviceBinary, containerBinary: containerBinary,
+                                          staging: staging, includeSDK: false)
+        }.value
+        let timestamp = signingIdentity?.hasPrefix("Developer ID Application:") == true ? "--timestamp" : "--timestamp=none"
+        let signing = ["--sign", signer, "--force", "--options", "runtime", timestamp]
         _ = try await DesignCommand.run("/usr/bin/codesign", signing + ["--entitlements", entitlement.path, service.path])
         _ = try await DesignCommand.run("/usr/bin/codesign", signing + [container.path])
         _ = try await DesignCommand.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", container.path])
-        guard let team = signature(of: service)?.team else { throw IDEToolError.handlerFailed("The signed extension is missing its team identifier.") }
+        _ = try ExtensionCompiler.codeHashes(of: service)
+        let team = signature(of: service)?.team
+        guard signer == "-" || team != nil else { throw IDEToolError.handlerFailed("The signed extension is missing its team identifier.") }
         try Task.checkCancellation()
+        try publish(container, to: destination)
+        return AgentExtensionBuild(containerURL: destination, bundleIdentifier: serviceID, teamIdentifier: team, generation: generation)
+    }
+
+    private static func publish(_ container: URL, to destination: URL) throws {
+        let fm = FileManager.default
         if fm.fileExists(atPath: destination.path) {
             _ = try fm.replaceItemAt(destination, withItemAt: container, options: .usingNewMetadataOnly)
         } else {
             try fm.moveItem(at: container, to: destination)
         }
-        return AgentExtensionBuild(containerURL: destination, bundleIdentifier: serviceID, teamIdentifier: team, generation: generation)
     }
 
     /// Copies README.md and Icon.png into both bundles so either can be inspected on its own.
@@ -282,6 +308,7 @@ nonisolated enum AgentExtensionBuilder {
     }
 
     private static func signingCertificate(requested: String?, previous: URL) async throws -> String {
+        if requested == "-" { return "-" }
         let output = try await DesignCommand.run("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"])
         let identities = String(decoding: output, as: UTF8.self).components(separatedBy: .newlines).compactMap { line -> (hash: String, name: String)? in
             let fields = line.components(separatedBy: "\"")
@@ -304,6 +331,33 @@ nonisolated enum AgentExtensionBuilder {
         let choices = identities.map { "\($0.hash) \($0.name)" }.joined(separator: "\n")
         throw IDEToolError.handlerFailed("Choose a signing_identity from the installed certificates and reload again.\n\(choices)")
     }
+
+    static func starterManifest(_ name: String) -> String {
+        """
+        {
+          "id": "app.rxlab.extensions.\(name)",
+          "name": "\(name)",
+          "version": "1.0.0",
+          "pluginAPI": "\(ExtensionManifest.apiVersion)",
+          "readme": "README.md",
+          "permissions": [],
+          "contributes": {}
+        }
+        """
+    }
+
+    private static let manifestSource = """
+        import ExtensionFoundation
+        import RxCodeExtensionSDK
+
+        @main struct WorkspaceExtension: AppExtension {
+            var configuration: some AppExtensionConfiguration {
+                ExtensionService.configuration(scenes: [], test: Self.runTest)
+            }
+
+            static func runTest(_ input: String) -> String { input }
+        }
+        """
 
     static let starterSource = """
         import Foundation

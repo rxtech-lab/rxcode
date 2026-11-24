@@ -66,7 +66,7 @@ struct InspectorToolTabStrip: View {
 
     private var addMenu: some View {
         Menu {
-            ForEach(InspectorTab.allCases, id: \.self) { tool in
+            ForEach(InspectorTab.availableCases, id: \.self) { tool in
                 Button { windowState.inspectorLayout.tools.add(tool, to: pane.id) } label: {
                     Label { Text(tool.title) } icon: { Image(systemName: tool.icon) }
                 }

@@ -30,7 +30,9 @@ private struct ProbeWindow: View {
                                 }
                             }
                             Spacer()
-                            if let session = sessions[identity.id], session.active {
+                            if identity.bundleIdentifier == Bundle.main.infoDictionary?["ProbeCombinedID"] as? String {
+                                CombinedProbe(identity: identity)
+                            } else if let session = sessions[identity.id], session.active {
                                 ProbeControls(session: session)
                             } else {
                                 Button("Run") { start(identity, paired: false) }
@@ -62,8 +64,17 @@ private struct ProbeWindow: View {
                 let available = try await AppExtensionPoint.Monitor(appExtensionPoint: .workspaceContributions)
                 try await available.addAppExtensionPoint(.workspaceServices)
                 monitor = available
+                if let index = CommandLine.arguments.firstIndex(of: "--observe-combined"),
+                   CommandLine.arguments.indices.contains(index + 1) {
+                    await observeCombined(available, containerPath: CommandLine.arguments[index + 1])
+                }
             }
-            catch { errorMessage = error.localizedDescription }
+            catch {
+                errorMessage = error.localizedDescription
+                print("Monitor failed: \(error.localizedDescription)")
+                fflush(stdout)
+                if CommandLine.arguments.contains("--observe-combined") { NSApp.terminate(nil) }
+            }
         }
         .onChange(of: monitor?.identities, initial: true) {
             let identities = monitor?.identities ?? []
@@ -78,6 +89,26 @@ private struct ProbeWindow: View {
         .onDisappear {
             for session in sessions.values { session.stop("Window closed") }
         }
+    }
+
+    /// Measure from the start of container opening. Only enabled identities are individually identifiable.
+    @MainActor
+    private func observeCombined(_ monitor: AppExtensionPoint.Monitor, containerPath: String) async {
+        defer { fflush(stdout); NSApp.terminate(nil) }
+        guard let expected = Bundle.main.infoDictionary?["ProbeCombinedID"] as? String else { return }
+        let start = ContinuousClock.now
+        do {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false
+            configuration.addsToRecentItems = false
+            _ = try await NSWorkspace.shared.openApplication(at: URL(filePath: containerPath), configuration: configuration)
+            while start.duration(to: .now) < .seconds(5),
+                  !monitor.identities.contains(where: { $0.bundleIdentifier == expected }) {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            let count = monitor.identities.filter { $0.bundleIdentifier == expected }.count
+            print("Observed \(expected): enabled matches=\(count), all unapproved=\(monitor.state.unapprovedCount), all disabled=\(monitor.state.disabledCount), elapsed=\(start.duration(to: .now))")
+        } catch { print("Probe observation failed: \(error.localizedDescription)") }
     }
 
     private func association(for identity: AppExtensionIdentity) -> ProbeAssociation? {

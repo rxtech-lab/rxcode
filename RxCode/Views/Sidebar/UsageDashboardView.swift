@@ -9,8 +9,20 @@ struct UsageDashboardView: View {
     @State private var editingCard: UsageCardConfiguration?
     @State private var editingIntegration: UsageIntegration?
     private var visibleCards: [UsageCardConfiguration] {
-        appState.usageDashboard.visibleCards(projectIDs: projectIds)
+        guard ExtensionPluginAPI.v2Enabled else { return appState.usageDashboard.visibleCards(projectIDs: projectIds) }
+        return appState.usageDashboard.cards.filter { card in
+            guard card.isVisible, let integration = appState.usageDashboard.integrations.first(where: { $0.id == card.integrationID }) else { return false }
+            return integration.projectID.map { projectIds.isEmpty || projectIds.contains($0) } ?? true
+        }
     }
+    private func snapshot(for card: UsageCardConfiguration) -> UsagePluginSnapshot? {
+        if let saved = appState.usageDashboard.snapshot(for: card) { return saved }
+        guard ExtensionPluginAPI.v2Enabled,
+              let integration = appState.usageDashboard.integrations.first(where: { $0.id == card.integrationID }) else { return nil }
+        return .init(id: integration.id, pluginID: integration.pluginID, title: integration.title, projectID: integration.projectID,
+                     scope: integration.account, period: "", fetchedAt: .distantPast, metrics: [])
+    }
+
     var body: some View {
         let _ = BriefingPerformanceLog.log("usage dashboard body\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : ""): \(visibleCards.count) visible cards")
         VStack(alignment: .leading, spacing: 12) {
@@ -23,7 +35,7 @@ struct UsageDashboardView: View {
             }
             UsageCardGridLayout {
                 ForEach(visibleCards) { card in
-                    if let snapshot = appState.usageDashboard.snapshot(for: card) {
+                    if let snapshot = snapshot(for: card) {
                         UsageDashboardCard(snapshot: snapshot, configuration: card,
                                            isRefreshing: appState.usagePlugins.refreshingIntegrationIDs.contains(card.integrationID))
                             .usageCardSize(card.cardSize)

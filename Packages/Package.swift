@@ -6,6 +6,10 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
+        .library(name: "RxCodeExtensionSDK", targets: ["RxCodeExtensionSDK"]),
+        .library(name: "RxCodeExtensionBuild", targets: ["RxCodeExtensionBuild"]),
+        .library(name: "RxCodeExtensionDistribution", targets: ["RxCodeExtensionDistribution"]),
+        .executable(name: "rxcode-extension", targets: ["rxcode-extension"]),
         .library(name: "RxCodeCore", targets: ["RxCodeCore"]),
         .library(name: "RxCodeChatKit", targets: ["RxCodeChatKit"]),
         .library(name: "RxCodeEditor", targets: ["RxCodeEditor"]),
@@ -19,6 +23,13 @@ let package = Package(
         .package(url: "https://github.com/SDWebImage/libwebp-Xcode", from: "1.5.0"),
     ],
     targets: [
+        .target(name: "RxCodeExtensionSDK", resources: [.process("Resources")]),
+        .target(name: "CExtensionArchive", linkerSettings: [.linkedLibrary("archive")]),
+        .target(name: "RxCodeExtensionBuild", dependencies: ["RxCodeCore", "RxCodeExtensionDistribution", "CExtensionArchive"], resources: [.copy("../RxCodeExtensionSDK")]),
+        .target(name: "RxCodeExtensionDistribution", resources: [.process("Resources")]),
+        .executableTarget(name: "rxcode-extension", dependencies: ["RxCodeExtensionDistribution", "RxCodeExtensionBuild"]),
+        .testTarget(name: "RxCodeExtensionBuildTests", dependencies: ["RxCodeExtensionBuild", "RxCodeExtensionDistribution"]),
+        .testTarget(name: "RxCodeExtensionDistributionTests", dependencies: ["RxCodeExtensionDistribution"]),
         .target(
             name: "RxCodeCore",
             dependencies: [

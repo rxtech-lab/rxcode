@@ -41,6 +41,35 @@ public struct TodoListSnapshot: Sendable, Equatable {
     }
 }
 
+/// Tracks consecutive reminders for the same unfinished checklist in one thread.
+public struct TodoContinuation: Sendable {
+    public static let waitingMessage = "Waiting for user input."
+    private var previousItems: [TodoItem] = []
+    private var reminders = 0
+
+    public init() {}
+
+    public mutating func nextPrompt(items: [TodoItem], reply: String) -> String? {
+        let open = items.filter { $0.status != .completed }
+        guard !open.isEmpty, !reply.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(Self.waitingMessage)
+        else { return nil }
+        if open != previousItems {
+            previousItems = open
+            reminders = 0
+        }
+        guard reminders < 3 else { return nil }
+        reminders += 1
+        let list = open.map { "- [\($0.status.rawValue)] \($0.content)" }.joined(separator: "\n")
+        return """
+        Review the open todos against the user's latest instructions. Mark work you have verified as finished \
+        in the existing checklist and continue any remaining authorized work. If the user asked you to stop or \
+        you need their input or approval, leave unfinished items open, explain why, and end with: \(Self.waitingMessage)
+
+        \(list)
+        """
+    }
+}
+
 // MARK: - Todo Extractor
 
 public enum TodoExtractor {

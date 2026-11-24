@@ -1,15 +1,8 @@
-# Usage integration API (v1)
+# Usage integrations
 
-Native implementations conform to `UsagePlugin` in RxCodeCore. Register them by
-stable ID with `UsagePluginRegistry` during `AppState.startUsagePlugins` and add
-the ID to the integration editor catalog. This is a compiled native plugin API;
-it does not load executable plugins from disk or synced data.
+The API 2.0 Debug preview loads each usage provider from its signed extension. A manifest declares the provider ID, editor fields, credential slots and optional macOS scenes. The host passes integration configuration to the provider over XPC. The provider returns a snapshot with the existing card ID, metric IDs, units and timestamp. Mobile clients and widgets render that snapshot with their existing layouts.
 
-`fetch(configuration:credential:now:)` returns `UsagePluginSnapshot`. Keep stable
-metric IDs and explicit units. Do not combine currencies, treat unavailable data
-as zero, or return credentials in snapshots/errors. Network collection runs in
-actors. `LocalUsagePlugin` adapts existing AI collectors to the same contract.
-Refresh is deduplicated and runs every 15 minutes while RxCode is running.
+On first use, the preview seeds providers referenced by the dashboard from the nine archives embedded in the app. Later catalog checks can install a verified update. Refreshes share one operation per integration, with up to two providers fetching at once. A failed refresh preserves the previous values and success time. Production builds keep the built-in providers through the clean-machine upgrade and signing gates. [Extension development and rollout](extensions.md)
 
 `UsageIntegration` identifies one account/resource connection. `UsageCardConfiguration`
 identifies an independent view: summary, compact, or metrics; optional metric IDs;
@@ -72,6 +65,8 @@ the JSON while RxCode is running: the in-memory state owns writes. No secret is
 accepted by the agent tool or sent in mobile/widget snapshots.
 
 ## Providers
+
+Each provider has its own manifest, README, Swift entry point and fixture tests under `Extensions/<pluginID>/`. The two local AI providers request host usage reports. The network providers call the host HTTP broker and select a slot for credentials. ACP connections require an explicit high-risk permission before the broker uses the selected client’s account. [First-party provider sources](../Extensions/)
 
 - Vercel: uses a Vercel access token and optional team ID/slug. OAuth is
   hidden while team/billing permissions remain restricted. A blank team resolves

@@ -200,6 +200,39 @@ final class InterruptedTurnTests: XCTestCase {
         XCTAssertEqual(reopened.streamState(in: restored).messages.filter { $0.role == .user }.count, 1)
     }
 
+    func testOpenTodosResumeTheSameThreadUntilCompleted() async throws {
+        let app = await openWorkspace()
+        let id = UUID().uuidString
+        let initial = ChatSession(id: id, projectId: project.id, title: "Checklist",
+                                  messages: [], agentProvider: .codex, model: "test", origin: .codexAppServer)
+        seed(initial, in: app)
+        let window = window(for: initial, app: app)
+        let backend = MockAgentBackend(provider: .codex)
+        app.agentBackendOverrides[.codex] = backend
+        for status in [TodoItem.Status.inProgress, .completed] {
+            let item = TodoItem(id: 1, content: "Verify the build", activeForm: "Verifying", status: status)
+            await backend.enqueueScript([
+                .systemInit(sessionId: id),
+                .init(delay: 0, event: .todoSnapshot(.init(sessionId: id, items: [item]))),
+                .assistantText(status == .completed ? "Verified." : "Started."),
+                .result(sessionId: id)
+            ], forCwd: project.path)
+        }
+
+        _ = await app.sendPrompt("Check the build", includeIDEMCP: false, in: window)
+        let first = try XCTUnwrap(app.sessionStates[id]?.streamTask)
+        await first.value
+        // The follow-up may already have finished by the time the first stream exits.
+        await app.sessionStates[id]?.streamTask?.value
+        let requests = await backend.receivedRequests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.last?.sessionId, id)
+        XCTAssertTrue(requests.last?.prompt.contains("- [in_progress] Verify the build") == true)
+        XCTAssertEqual(app.threadStore.fetchTodoSnapshot(sessionId: id)?.list.items.first?.status, .completed)
+        XCTAssertEqual(app.messages(in: window).filter { $0.role == .user }.map(\.content), ["Check the build"])
+        XCTAssertTrue(app.messages(in: window).flatMap(\.toolCalls).contains { $0.name == ToolCall.autoContinueToolName })
+    }
+
     func testUnexpectedEOFIsInterruptedAndDeliberateStopIsSettled() async throws {
         let app = await openWorkspace()
         let id = UUID().uuidString

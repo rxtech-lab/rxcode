@@ -48,6 +48,44 @@ actor ACPUsageService {
         }
     }
 
+    /// Credentials are attached only to the selected ACP client's quota operation.
+    func authorizedExtensionRequest(_ requested: URLRequest, client: ACPClientSpec,
+                                    integration: UsageIntegration, domains: Set<String>) async throws -> URLRequest {
+        guard client.enabled, client.id == integration.resource,
+              let provider = ACPUsageProvider.provider(for: client), provider.pluginID == integration.pluginID else {
+            throw ACPUsageError.unavailable
+        }
+        let environment = environment(for: client)
+        // Only the provider's fixed quota operation can request this login. Antigravity
+        // binds the operation to the personal or enterprise endpoint discovered for this client.
+        let operation = provider.request(token: "")
+        guard operation.url == requested.url, operation.httpMethod == requested.httpMethod else {
+            throw ACPUsageError.unavailable
+        }
+        let authorized: URLRequest
+        switch provider {
+        case .opencode:
+            authorized = provider.request(token: try openCodeCredential(environment: environment))
+        case .antigravity:
+            let info: CachedAntigravitySession
+            if let cached = cachedAntigravitySessions[client.id], cached.expiresAt > Date.now.addingTimeInterval(60) {
+                info = cached
+            } else {
+                info = try await resolveAntigravitySession(client: client, environment: environment, extensionDomains: domains)
+                cachedAntigravitySessions[client.id] = info
+            }
+            authorized = try antigravityRequest(sessionInfo: info)
+        }
+        return authorized
+    }
+
+    func invalidateExtensionSession(clientID: String, request: URLRequest) {
+        if let cached = cachedAntigravitySessions[clientID],
+           request.value(forHTTPHeaderField: "Authorization") == "Bearer \(cached.accessToken)" {
+            cachedAntigravitySessions[clientID] = nil
+        }
+    }
+
     private func environment(for client: ACPClientSpec) -> [String: String] {
         let launchEnvironment: [String: String]
         switch client.launch {
@@ -88,7 +126,16 @@ actor ACPUsageService {
         sessionInfo: CachedAntigravitySession,
         integration: UsageIntegration
     ) async throws -> UsagePluginSnapshot {
-        let request: URLRequest
+        let request = try antigravityRequest(sessionInfo: sessionInfo)
+        return try await ACPUsageAPI.fetch(
+            request: request,
+            provider: .antigravity,
+            integration: integration,
+            session: session
+        )
+    }
+
+    private func antigravityRequest(sessionInfo: CachedAntigravitySession) throws -> URLRequest {
         if sessionInfo.isBusiness {
             guard let projectID = sessionInfo.projectID,
                   let businessReq = ACPUsageProvider.antigravityBusinessRequest(
@@ -100,27 +147,22 @@ actor ACPUsageService {
                   ) else {
                 throw UsagePluginError.invalidConfiguration
             }
-            request = businessReq
+            return businessReq
         } else {
             let quotaURL = sessionInfo.endpointBaseURL
                 .appendingPathComponent("v1internal:retrieveUserQuotaSummary")
-            request = ACPUsageProvider.antigravity.request(
+            return ACPUsageProvider.antigravity.request(
                 token: sessionInfo.accessToken,
                 projectID: sessionInfo.projectID,
                 endpointURL: quotaURL
             )
         }
-        return try await ACPUsageAPI.fetch(
-            request: request,
-            provider: .antigravity,
-            integration: integration,
-            session: session
-        )
     }
 
     private func resolveAntigravitySession(
         client: ACPClientSpec,
-        environment: [String: String]
+        environment: [String: String],
+        extensionDomains: Set<String>? = nil
     ) async throws -> CachedAntigravitySession {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let geminiHome = environment["GEMINI_HOME"]
@@ -147,7 +189,7 @@ actor ACPUsageService {
             let baseURL = cleanHTTPSURL(environment["AGY_ACP_BAIC_HOST"])
                 ?? URL(string: "https://cloudaicompanion.googleapis.com")!
             for stored in candidates {
-                if let token = try? await resolveAccessToken(from: stored, client: client) {
+                if let token = try? await resolveAccessToken(from: stored, client: client, extensionDomains: extensionDomains) {
                     return CachedAntigravitySession(
                         accessToken: token.accessToken,
                         expiresAt: token.expiresAt,
@@ -174,11 +216,11 @@ actor ACPUsageService {
         }
 
         for stored in candidates {
-            guard let token = try? await resolveAccessToken(from: stored, client: client) else { continue }
+            guard let token = try? await resolveAccessToken(from: stored, client: client, extensionDomains: extensionDomains) else { continue }
             let onboard = await resolveCCPAEndpoint(
                 accessToken: token.accessToken,
                 storedProjectID: stored.projectID,
-                environment: environment
+                environment: environment, extensionDomains: extensionDomains
             )
             return CachedAntigravitySession(
                 accessToken: token.accessToken,
@@ -291,7 +333,8 @@ actor ACPUsageService {
 
     private func resolveAccessToken(
         from stored: StoredAntigravityCredential,
-        client: ACPClientSpec
+        client: ACPClientSpec,
+        extensionDomains: Set<String>?
     ) async throws -> (accessToken: String, expiresAt: Date) {
         if let access = stored.accessToken {
             if let expiry = stored.expiry {
@@ -312,7 +355,7 @@ actor ACPUsageService {
                 refreshToken: refreshToken,
                 clientID: clientID,
                 clientSecret: clientSecret,
-                tokenURI: stored.tokenURI
+                tokenURI: stored.tokenURI, extensionDomains: extensionDomains
             )
         }
 
@@ -322,7 +365,7 @@ actor ACPUsageService {
                 refreshToken: refreshToken,
                 clientID: pair.clientID,
                 clientSecret: pair.clientSecret,
-                tokenURI: stored.tokenURI
+                tokenURI: stored.tokenURI, extensionDomains: extensionDomains
             ) {
                 return refreshed
             }
@@ -334,7 +377,8 @@ actor ACPUsageService {
         refreshToken: String,
         clientID: String,
         clientSecret: String,
-        tokenURI: URL
+        tokenURI: URL,
+        extensionDomains: Set<String>?
     ) async throws -> (accessToken: String, expiresAt: Date) {
         var request = URLRequest(url: tokenURI)
         request.httpMethod = "POST"
@@ -351,8 +395,8 @@ actor ACPUsageService {
         ]
         request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+        let (data, status) = try await credentialHTTP(request, extensionDomains: extensionDomains)
+        guard status == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let accessToken = clean(json["access_token"] as? String) else {
             throw ACPUsageError.signIn(ACPUsageProvider.antigravity.title)
@@ -361,10 +405,25 @@ actor ACPUsageService {
         return (accessToken, Date.now.addingTimeInterval(max(60, expiresIn)))
     }
 
+    private func credentialHTTP(_ request: URLRequest, extensionDomains: Set<String>?) async throws -> (Data, Int) {
+        if let extensionDomains {
+            try Task.checkCancellation()
+            guard let url = request.url, let host = url.host?.lowercased(),
+                  ExtensionRedirectPolicy.permits(url, domains: extensionDomains) else { throw ACPUsageError.unavailable }
+            // Refresh tokens in form bodies need the same origin binding as authorization headers.
+            let response = try await ExtensionNetworkResponse.fetch(request, domains: [host])
+            return (response.body, response.status)
+        }
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ACPUsageError.unavailable }
+        return (data, http.statusCode)
+    }
+
     private func resolveCCPAEndpoint(
         accessToken: String,
         storedProjectID: String?,
-        environment: [String: String]
+        environment: [String: String],
+        extensionDomains: Set<String>?
     ) async -> (baseURL: URL, projectID: String?) {
         let customBase = Self.cleanHTTPSURL(environment["AGY_ACP_CCPA_BASE_URL"])
         let onboardBase = customBase ?? URL(string: "https://cloudcode-pa.googleapis.com")!
@@ -384,8 +443,7 @@ actor ACPUsageService {
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["metadata": metadata])
 
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
+        guard let (data, status) = try? await credentialHTTP(request, extensionDomains: extensionDomains), status == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return (defaultQuotaBase, storedProjectID)
         }

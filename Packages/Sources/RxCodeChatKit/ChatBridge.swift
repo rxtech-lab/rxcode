@@ -77,6 +77,7 @@ public final class ChatBridge {
     // MARK: - Action Handlers (set up by the app target)
 
     public var computerUseDecisionHandler: ((PermissionRequest, PermissionDecision) async -> Void)?
+    public var mcpMentionNamesHandler: ((String?) async -> [String])?
     public var sendHandler: (() async -> Void)?
     public var cancelStreamingHandler: (() async -> Void)?
     public var resumeInterruptedTurnHandler: ((String) async -> Void)?

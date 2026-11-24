@@ -120,7 +120,7 @@ struct InspectorTabControl: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(InspectorTab.allCases, id: \.self) { tab in
+            ForEach(InspectorTab.availableCases, id: \.self) { tab in
                 Button {
                     selection = tab
                     onTabClick(tab)

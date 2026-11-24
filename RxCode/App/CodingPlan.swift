@@ -95,6 +95,17 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
         }
     }
 
+    mutating func addUserMessage(_ text: String) {
+        contributions.append(.init(role: "You", model: nil, text: text))
+        if nextStep == nil { startFollowUp() }
+    }
+
+    private mutating func startFollowUp() {
+        // A full round includes any reviewers added during the previous host turn.
+        deferredReviewerIndex = nil
+        nextStep = configuration.reviewers.isEmpty ? .reply : .moderate
+    }
+
     @discardableResult
     mutating func addReviewer(_ reviewer: Reviewer) -> Bool {
         guard !configuration.reviewers.contains(where: { $0.id == reviewer.id }) else { return false }
@@ -152,10 +163,10 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
             Task:
             \(brief)
 
-            Planner's draft:
+            Current plan:
             \(current)
 
-            You are hosting a single review round. Give each listed reviewer one concrete question to resolve based on this draft and their review instructions. Return a short Markdown agenda.
+            You are hosting a single review round. Give each listed reviewer one concrete question to resolve based on the current plan, the latest user messages, and their review instructions. Return a short Markdown agenda.
 
             \(seats)
             """
@@ -191,7 +202,7 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
             Review discussion:
             \(reviewDiscussion)
 
-            You are the host. Resolve conflicting suggestions, retain sound details and close the debate now. \(detail) Return the complete final plan. \(Self.hostEditInstructions)
+            You are the host. Address the latest user messages, resolve conflicting suggestions, retain sound details and close this review round. \(detail) Return the complete final plan. \(Self.hostEditInstructions)
             """
         case .revise(let feedback):
             return """
@@ -276,7 +287,7 @@ nonisolated struct CodingPlan: Codable, Identifiable, Sendable {
         let index = turnStart ?? contributions.endIndex
         contributions.insert(message, at: index)
         if nextStep == nil, contributions[(index + 1)...].contains(where: { $0.isUserMessage && $0.question == nil }) {
-            nextStep = .reply
+            startFollowUp()
         }
         if nextStep == nil, let deferredReviewerIndex {
             nextStep = .review(deferredReviewerIndex)

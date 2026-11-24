@@ -58,6 +58,14 @@ Run profiles let you keep repeatable project commands close to the chat. Define 
 
 The app also includes a SwiftTerm-powered terminal for interactive work, slash-command flows, and quick command shortcuts.
 
+## Develop Swift Extensions in Chat
+
+In a project chat, ask “Create a service extension named `shout` that uppercases its input. Load it and test it with `hello`.” The agent creates an editable Swift file at `.rxcode/extensions/shout/Extension.swift` in the chat’s worktree. RxCode builds and signs a sandboxed ExtensionKit service with your Mac’s Xcode toolchain and a local signing identity.
+
+If the contributor needs enablement, RxCode opens the macOS extension manager in the originating chat. Turn on the named contributor there. Reload resumes automatically. To try a change, ask “Add an exclamation mark, reload `shout`, and test `hello` again.” The agent receives the running service’s reply in chat.
+
+Each extension folder also gets a `README.md`. If you add a square `icon.png`, RxCode packages it with the README on every reload. Settings → Extensions shows each enabled extension with its icon, or a default icon if it has none. Click an extension to read its README. The same page lists the plugin API this RxCode build supports. Release builds use the version defined in code and Debug builds use `main`. If an extension was built for a different plugin API version, the page shows a compatibility warning.
+
 ## Concurrent Chatting With Git Worktrees
 
 RxCode is built for parallel agent work. You can open multiple project windows, keep streams running in the background, and attach sessions to Git worktrees so each agent can work on an isolated branch.

@@ -10,11 +10,13 @@ struct AgentPromptUIModifier: ViewModifier {
     private enum Prompt: Identifiable {
         case confirmation(AgentConfirmation)
         case dialog(AgentUIDialog)
+        case enableExtension(ExtensionEnablementRequest)
 
         var id: UUID {
             switch self {
             case .confirmation(let item): item.id
             case .dialog(let item): item.id
+            case .enableExtension(let request): request.id
             }
         }
     }
@@ -24,6 +26,13 @@ struct AgentPromptUIModifier: ViewModifier {
            let confirmation = appState.agentConfirmations(forSession: windowState.currentSessionId ?? windowState.newSessionKey).first,
            !confirmation.isMinimized {
             return .confirmation(confirmation)
+        }
+        let sessionKey = appState.resolveCurrentSessionId(windowState.currentSessionId ?? windowState.newSessionKey)
+        if (windowState.generalRoute == nil || windowState.generalRoute == .chat),
+           let request = appState.extensionEnablementRequests.first(where: {
+               appState.resolveCurrentSessionId($0.sessionKey) == sessionKey
+           }) {
+            return .enableExtension(request)
         }
         return appState.agentPrompts.dialogs.first(where: { !$0.isPetPresentation }).map { .dialog($0) }
     }
@@ -39,6 +48,8 @@ struct AgentPromptUIModifier: ViewModifier {
                     switch prompt {
                     case .confirmation(let confirmation):
                         appState.setAgentConfirmationMinimized(id: confirmation.id, minimized: true)
+                    case .enableExtension(let request):
+                        appState.extensionEnablementRequests.removeAll { $0.id == request.id }
                     case .dialog(let dialog):
                         appState.dismissAgentUIDialog(id: dialog.id)
                     }
@@ -47,6 +58,19 @@ struct AgentPromptUIModifier: ViewModifier {
                 switch prompt {
                 case .confirmation(let confirmation):
                     AgentConfirmationSheet(confirmation: confirmation)
+                case .enableExtension(let request):
+                    NavigationStack {
+                        SystemExtensionBrowser()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .navigationTitle("Enable \(request.name)")
+                            .toolbar {
+                                Button("Cancel") {
+                                    appState.extensionEnablementRequests.removeAll { $0.id == request.id }
+                                }
+                                .keyboardShortcut(.cancelAction)
+                            }
+                    }
+                    .frame(minWidth: 540, minHeight: 480)
                 case .dialog(let dialog):
                     AgentUIDialogSheet(dialog: dialog) {
                         appState.dismissAgentUIDialog(id: dialog.id)

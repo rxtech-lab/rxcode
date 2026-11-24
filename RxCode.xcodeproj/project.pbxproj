@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		091212EB3154C7852D28AB2F /* PetVoiceAndStateTests+ToolActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1E8D55AC31D3AB571B5483 /* PetVoiceAndStateTests+ToolActivity.swift */; };
+		0B12D21F297E4FA89EACF738 /* CodingPlanTests+ImplementationReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */; };
 		0FA17996BACE436FBB3E324A /* PetVoiceUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1D1CF0EDE34AD69E39EE41 /* PetVoiceUpdateTests.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
@@ -18,7 +19,6 @@
 		4DB3FD78155F4469BBFB353C /* MCPAppConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535C9B55985741FE9A80AF27 /* MCPAppConnectionTests.swift */; };
 		4F5117912F2C443F97ED1691 /* PetCIFailureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7337E1B4B7264A38B4BA5236 /* PetCIFailureTests.swift */; };
 		501B4F13B1BC545593AF7091 /* CodingPlanTests+Versions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01555D784FD554D4B2E0DD0C /* CodingPlanTests+Versions.swift */; };
-		0B12D21F297E4FA89EACF738 /* CodingPlanTests+ImplementationReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */; };
 		54F5577C2A9B42D393384D6E /* MCPOAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F2EE0EE87F4F36B534FDDA /* MCPOAuthTests.swift */; };
 		55B292C0080C4AA2BA5AB539 /* ImageEngineValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C3D140648C4A64B7165620 /* ImageEngineValidationTests.swift */; };
 		569C22D1696CD0026DC7BFFD /* AppStateTests+ProjectSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082D838B04830BED06204608 /* AppStateTests+ProjectSessions.swift */; };
@@ -37,6 +37,7 @@
 		7A5C0002000000000000A002 /* CrossProjectSendConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */; };
 		7C9BD5B8A69E483B91DA8102 /* InterruptedTurnTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9BD5B8A69E483B91DA8101 /* InterruptedTurnTests.swift */; };
 		7DEB38D712E3FE9EEDC3B3CD /* MockAppStatePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */; };
+		7FD1AC0733224BD3BF9B2172 /* AgentExtensionDevelopmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD1AC0733224BD3BF9B2171 /* AgentExtensionDevelopmentTests.swift */; };
 		8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */; };
 		85846EB4D7F5500BA97AFC4B /* CodingPlanUITests+ACPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBC10A01453D5D22A2D570FE /* CodingPlanUITests+ACPClient.swift */; };
 		88A5F1863F866F9DFFC3C76C /* LocalModelTests+VideoGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA84274331D864DDC9F1A0CA /* LocalModelTests+VideoGeneration.swift */; };
@@ -252,7 +253,6 @@
 
 /* Begin PBXFileReference section */
 		01555D784FD554D4B2E0DD0C /* CodingPlanTests+Versions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "CodingPlanTests+Versions.swift"; sourceTree = "<group>"; };
-		F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "CodingPlanTests+ImplementationReview.swift"; sourceTree = "<group>"; };
 		082D838B04830BED06204608 /* AppStateTests+ProjectSessions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "AppStateTests+ProjectSessions.swift"; sourceTree = "<group>"; };
 		08E8362A4C375BE089BE79D4 /* AppStateTests+Usage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "AppStateTests+Usage.swift"; sourceTree = "<group>"; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
@@ -281,6 +281,7 @@
 		7A5C0001000000000000A001 /* MockAgentBackend.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAgentBackend.swift; sourceTree = "<group>"; };
 		7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossProjectSendConcurrencyTests.swift; sourceTree = "<group>"; };
 		7C9BD5B8A69E483B91DA8101 /* InterruptedTurnTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterruptedTurnTests.swift; sourceTree = "<group>"; };
+		7FD1AC0733224BD3BF9B2171 /* AgentExtensionDevelopmentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentExtensionDevelopmentTests.swift; sourceTree = "<group>"; };
 		82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunQueueTests.swift; sourceTree = "<group>"; };
 		85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
 		89C3D140648C4A64B7165620 /* ImageEngineValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageEngineValidationTests.swift; sourceTree = "<group>"; };
@@ -373,6 +374,7 @@
 		F190AE02DEB74040ABC41201 /* CodingPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodingPlanTests.swift; sourceTree = "<group>"; };
 		F190AE02DEB74040ABC41204 /* CodingPlanUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingPlanUITests.swift; sourceTree = "<group>"; };
 		F298966B9AA8AA6C5552E8DA /* DesktopWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DesktopWidgets.swift; sourceTree = "<group>"; };
+		F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "CodingPlanTests+ImplementationReview.swift"; sourceTree = "<group>"; };
 		FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTaskStateTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
@@ -593,6 +595,7 @@
 				FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */,
 				E92A867810EB489390421B01 /* GlobalChatTests.swift */,
 				F190AE02DEB74040ABC41201 /* CodingPlanTests.swift */,
+				7FD1AC0733224BD3BF9B2171 /* AgentExtensionDevelopmentTests.swift */,
 				EF8F745476D75239AA0231B7 /* CodingPlanTests+Tools.swift */,
 				01555D784FD554D4B2E0DD0C /* CodingPlanTests+Versions.swift */,
 				F52EDC20E98E424595C9A776 /* CodingPlanTests+ImplementationReview.swift */,
@@ -1238,6 +1241,7 @@
 				8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */,
 				E92A867810EB489390421B02 /* GlobalChatTests.swift in Sources */,
 				F190AE02DEB74040ABC41202 /* CodingPlanTests.swift in Sources */,
+				7FD1AC0733224BD3BF9B2172 /* AgentExtensionDevelopmentTests.swift in Sources */,
 				B308169FACFC557D83C59360 /* CodingPlanTests+Tools.swift in Sources */,
 				501B4F13B1BC545593AF7091 /* CodingPlanTests+Versions.swift in Sources */,
 				0B12D21F297E4FA89EACF738 /* CodingPlanTests+ImplementationReview.swift in Sources */,

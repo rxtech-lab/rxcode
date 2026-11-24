@@ -241,13 +241,17 @@ extension AppState {
             hasIDEBridge: bridge != nil && (agentProvider != .claudeCode || mcpClaudeConfigPath != nil),
             planMode: permissionMode == .plan
         )
+        let extensionContext = bridge != nil && extensionDevelopmentWorkspaces[streamId] != nil
+            ? "For a native RxCode workspace service extension, use ide__create_extension, edit the generated Swift source, then use ide__reload_extension and ide__test_extension to check its response. Repeat reload and test after each source change."
+            : ""
         let codexAndACPContext = [
-            taskProgressContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
+            taskProgressContext, extensionContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
         ]
         switch agentProvider {
         case .claudeCode:
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
             appendExtraSystemPrompt(taskProgressContext)
+            if mcpClaudeConfigPath != nil { appendExtraSystemPrompt(extensionContext) }
             appendExtraSystemPrompt(configuredPromptContext)
             appendExtraSystemPrompt(briefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
@@ -278,6 +282,7 @@ extension AppState {
             // context goes there rather than into the user's message.
             if localModels.model(id: resolvedModel)?.studioKind.isStudio == false {
                 appendExtraSystemPrompt(taskProgressContext)
+                appendExtraSystemPrompt(extensionContext)
             }
             appendExtraSystemPrompt(configuredPromptContext)
             appendExtraSystemPrompt(briefingContext)

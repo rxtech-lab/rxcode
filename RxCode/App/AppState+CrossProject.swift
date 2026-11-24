@@ -36,6 +36,10 @@ extension AppState {
         }
 
         var sessionKey = internalSessionKey
+        if includeIDEMCP, permissionMode != .plan, projects.contains(where: { $0.id == projectId }) {
+            extensionDevelopmentWorkspaces[streamId] = URL(fileURLWithPath: cwd, isDirectory: true)
+        }
+        defer { extensionDevelopmentWorkspaces.removeValue(forKey: streamId) }
         // Measures how much of the provider's usage limits each finished
         // span on this stream consumed.
         var rateLimitMeasurement = beginRateLimitMeasurement(for: agentProvider)

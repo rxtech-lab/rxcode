@@ -320,6 +320,39 @@ final class CodingPlanTests: XCTestCase {
         XCTAssertEqual(state.threadStore.codingPlan(for: id)?.versions.last?.edits.first?.comment, "Keep two copies.")
     }
 
+    func testMessageOnReadyPlanReopensDebateWithEveryReviewer() async throws {
+        let moderator = backend(.claudeCode), critic = backend(.acp)
+        var plan = CodingPlan(id: UUID(), goal: "Save files", source: "",
+            configuration: .init(planner: planner, hostOverride: host, reviewers: [
+                .init(model: reviewer, prompt: "Check writes"), .init(model: reviewer, prompt: "Check recovery")
+            ]))
+        plan.finish(.draft, text: "Original draft")
+        plan.finish(.moderate, text: "Initial agenda")
+        plan.finish(.review(0), text: "Writes checked")
+        plan.finish(.review(1), text: "Recovery checked")
+        plan.finish(.reconcile, text: "Latest plan")
+        state.threadStore.upsert(ChatSession(id: plan.id.uuidString, projectId: project.id, title: "Plan").summary)
+        try state.threadStore.saveCodingPlan(plan)
+        let room = try XCTUnwrap(state.codingPlanRoom(for: plan.id.uuidString))
+
+        await answer("Consider backups", using: moderator)
+        await answer("Write two copies", using: critic)
+        await answer("Test restoring a copy", using: critic)
+        await answer("Plan with backups", using: moderator)
+        try state.sendCodingPlanMessage("How should we handle backups?", to: room, cwd: repo.path)
+        await room.task?.value
+
+        let reviews = await critic.receivedRequests
+        XCTAssertEqual(reviews.count, 2)
+        XCTAssertTrue(reviews.allSatisfy { $0.prompt.contains("Latest plan") && $0.prompt.contains("How should we handle backups?") })
+        XCTAssertTrue(reviews.last?.prompt.contains("Write two copies") == true)
+        let saved = try XCTUnwrap(state.threadStore.codingPlan(for: plan.id.uuidString))
+        XCTAssertEqual(saved.contributions.dropFirst(plan.contributions.count).map(\.role),
+                       ["You", "Host", "Reviewer 1", "Reviewer 2", "Host"])
+        XCTAssertEqual(saved.versions.last?.markdown, "Plan with backups")
+        XCTAssertEqual(saved.planningStatus, "ready")
+    }
+
     func testReviewersAddedDuringDraftAndHostTurnsRunOnceInOrder() async throws {
         let writer = backend(.codex), moderator = backend(.claudeCode), critic = backend(.acp)
         let (draftGate, releaseDraft) = AsyncStream<Void>.makeStream()
@@ -383,9 +416,10 @@ final class CodingPlanTests: XCTestCase {
         let turnStart = plan.contributions.endIndex
         plan.contributions.append(.init(role: "You", model: nil, text: "Which folder?"))
         plan.finish(revision, text: "Revised backup plan", at: turnStart)
-        XCTAssertEqual(plan.nextStep, .reply)
+        XCTAssertEqual(plan.nextStep, .moderate)
+        XCTAssertTrue(plan.prompt(for: .moderate).contains("Which folder?"))
         plan.addReviewer(.init(model: reviewer, prompt: "Review folders."))
-        plan.finish(.reply, text: "Use the project folder.")
+        plan.finish(.moderate, text: "Review folder selection.")
         XCTAssertEqual(plan.nextStep, .review(0))
         XCTAssertTrue(plan.prompt(for: .review(0)).contains("Revised backup plan"))
         plan.finish(.review(0), text: "Backups covered.")

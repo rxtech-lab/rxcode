@@ -1228,6 +1228,9 @@
         }
       }
     },
+    "%lld need attention" : {
+
+    },
     "%lld of %lld" : {
       "localizations" : {
         "en" : {
@@ -4250,6 +4253,9 @@
     "Ask the voice agent to play, pause, resume, or stop a song or artist." : {
 
     },
+    "Ask your agent to create an extension in your project." : {
+
+    },
     "Assign an agent to a task and move it into a chat column to start work." : {
       "localizations" : {
         "ko" : {
@@ -5308,6 +5314,9 @@
         }
       }
     },
+    "Build and test native Swift service extensions from a project chat." : {
+
+    },
     "Build runs `xcodebuild build`. Run builds, then launches the produced .app (macOS) or installs + launches on the selected simulator. Pick the destination from the Run toolbar." : {
       "localizations" : {
         "ko" : {
@@ -5781,6 +5790,9 @@
     "Choose a model to fill in empty properties" : {
 
     },
+    "Choose a planner and reviewer models, then follow their debate and plan revisions." : {
+
+    },
     "Choose a preview" : {
 
     },
@@ -5908,6 +5920,9 @@
       }
     },
     "Choose one changed file to see its diff." : {
+
+    },
+    "Choose Plan Mode from the Add menu in chat to get started." : {
 
     },
     "Choose preview source" : {
@@ -7107,6 +7122,9 @@
 
     },
     "Companion Files" : {
+
+    },
+    "Compatibility Warning" : {
 
     },
     "Compile" : {
@@ -10083,6 +10101,9 @@
     "Developer" : {
 
     },
+    "Development" : {
+
+    },
     "Device" : {
 
     },
@@ -10638,6 +10659,9 @@
 
     },
     "Draft with Agent" : {
+
+    },
+    "Draft, debate, and revise an implementation plan before coding begins." : {
 
     },
     "Drafted by AI from your description." : {
@@ -17303,6 +17327,9 @@
         }
       }
     },
+    "Native ExtensionKit contributors enabled for RxCode workspaces." : {
+
+    },
     "Needs approval" : {
 
     },
@@ -18287,6 +18314,9 @@
         }
       }
     },
+    "No Enabled Extensions" : {
+
+    },
     "No environment variables defined" : {
       "localizations" : {
         "ko" : {
@@ -18699,6 +18729,9 @@
           }
         }
       }
+    },
+    "No README" : {
+
     },
     "No Recorded Session" : {
 
@@ -19142,9 +19175,6 @@
           }
         }
       }
-    },
-    "No System-Enabled Extensions" : {
-
     },
     "No tags in this view." : {
       "localizations" : {
@@ -20262,6 +20292,9 @@
     "Open Settings" : {
 
     },
+    "Open Settings → Extensions to manage extensions, read their READMEs, and check API compatibility." : {
+
+    },
     "Open Source" : {
       "localizations" : {
         "en" : {
@@ -21093,6 +21126,9 @@
           }
         }
       }
+    },
+    "Pick a plan version and a model to start a linked implementation chat." : {
+
     },
     "Pick a profile in the toolbar and press Run." : {
       "localizations" : {
@@ -22815,6 +22851,9 @@
 
     },
     "Reload accounts" : {
+
+    },
+    "Reload after editing and see the running extension’s test response in chat." : {
 
     },
     "Reload Flowcy Models" : {
@@ -28125,6 +28164,9 @@
         }
       }
     },
+    "Supported Plugin API" : {
+
+    },
     "Swift filter" : {
       "localizations" : {
         "zh-Hans" : {
@@ -29615,6 +29657,9 @@
     "this extension" : {
 
     },
+    "This extension does not include a README.md." : {
+
+    },
     "This extension doesn’t request any permissions." : {
 
     },
@@ -30921,7 +30966,7 @@
         }
       }
     },
-    "Use Manage Extensions to enable an installed contributor." : {
+    "Use Manage Extensions to enable an installed contributor, or ask an agent to create one in a project chat." : {
 
     },
     "Use planner as host" : {

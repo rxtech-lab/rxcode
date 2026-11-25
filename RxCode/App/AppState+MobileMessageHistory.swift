@@ -53,21 +53,17 @@ extension AppState {
         return (Array(messages[startIndex ..< clampedEnd]), startIndex)
     }
 
-    /// Single-entry cache of a disk-loaded session's full message list. Mobile
-    /// pages one thread at a time, so caching just the most recent one lets the
-
     /// Resolve the full, cleaned message list for a session — from live stream
     /// state when available, otherwise from disk (cached). `nil` only when the
     /// session genuinely can't be located.
     func fullMobileMessages(for resolvedID: String) async -> [ChatMessage]? {
-        if let state = sessionStates[resolvedID] {
+        if let state = sessionStates[resolvedID], !state.messages.isEmpty || state.isStreaming {
             return messagesWithPlanDecisions(
                 rehydrateDetectedToolChanges(in: cleanLoadedMessages(state.messages), sessionId: resolvedID),
                 summaries: state.planDecisionSummaries
             )
         }
-        // Non-active session: the in-memory sidecar is absent, so pull the
-        // persisted decisions from the thread store.
+        // Runtime metadata can exist before the transcript is loaded.
         let summaries = threadStore.loadPlanDecisions(sessionId: resolvedID)
         if let cache = mobileFullMessageCache, cache.sessionID == resolvedID {
             return messagesWithPlanDecisions(
@@ -76,10 +72,13 @@ extension AppState {
             )
         }
         guard let summary = allSessionSummaries.first(where: { $0.id == resolvedID }),
-              let project = projects.first(where: { $0.id == summary.projectId }),
-              let full = await persistence.loadFullSession(summary: summary, cwd: project.path)
+              let project = projects.first(where: { $0.id == summary.projectId }) ?? agentVirtualProject(id: summary.projectId)
         else {
             return nil
+        }
+        guard let full = await persistence.loadFullSession(summary: summary, cwd: summary.worktreePath ?? project.path) else {
+            // A newly created phone thread has no saved transcript until its first message.
+            return resolvedID.hasPrefix("pending-mobile-") ? [] : nil
         }
         let cleaned = rehydrateDetectedToolChanges(
             in: cleanLoadedMessages(full.messages),
@@ -132,7 +131,8 @@ extension AppState {
         guard let requestedID else { return (nil, nil, false) }
         let resolvedID = resolveCurrentSessionId(requestedID)
         guard let all = await fullMobileMessages(for: resolvedID) else {
-            return (nil, nil, false)
+            // An unavailable transcript still completes this particular subscription.
+            return (requestedID, nil, false)
         }
         let (page, startIndex) = mobileMessagePage(
             from: all,

@@ -3,7 +3,7 @@ import RxCodeCore
 import RxCodeSync
 import SwiftUI
 
-private enum FlowcyTab: Hashable { case tasks, projects, chat, settings, agent }
+private enum FlowcyTab: Hashable { case tasks, projects, settings, agent }
 
 struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -125,12 +125,6 @@ struct RootView: View {
             Tab("Projects", systemImage: "square.grid.2x2", value: FlowcyTab.projects) {
                 FlowcyProjectsView()
             }
-            Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: FlowcyTab.chat) {
-                NavigationStack(path: $agentChatPath) {
-                    MobileAgentHubView(onPair: { showingPairing = true })
-                        .navigationDestination(for: String.self) { MobileChatView(sessionID: $0) }
-                }
-            }
             Tab("Settings", systemImage: "gear", value: FlowcyTab.settings) {
                 FlowcySettingsView()
             }
@@ -147,32 +141,31 @@ struct RootView: View {
         .onChange(of: selected) { _, _ in MobileHaptics.buttonTap() }
     }
 
+    /// Flowcy's cloud assistant and the paired Mac's agents share this tab;
+    /// the navigation-bar dropdown switches between them.
     private var agentContent: some View {
-        NavigationStack {
-            FlowcyAgentView()
-                .toolbar { FlowcyRemoteToolbar() }
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Flowcy Tools", systemImage: "wrench.and.screwdriver") {
-                            MobileHaptics.buttonTap()
-                            showingTools = true
-                        }
-                    }
-                }
+        NavigationStack(path: $agentChatPath) {
+            MobileAssistantView(onPair: { showingPairing = true }, onShowTools: { showingTools = true })
+                .navigationDestination(for: String.self) { MobileChatView(sessionID: $0) }
         }
     }
 
+    /// Opens an agent's thread from a notification in the Agent tab: its
+    /// ongoing conversation in place, any other thread pushed on top.
     private func openLinkedThread() {
         guard let link = state.pendingDeepLink,
-              state.agentHub.agents.contains(where: { $0.id == link.projectID || $0.primarySessionId == link.sessionID }) else {
+              let agent = state.agentHub.agents.first(where: {
+                  (link.projectID.map($0.profile.owns(projectId:)) ?? false) || $0.primarySessionId == link.sessionID
+              }) else {
             openRemote()
             return
         }
         state.pendingDeepLink = nil
         showingRemote = false
-        selected = .chat
+        selected = .agent
+        UserDefaults.standard.set(agent.id.uuidString, forKey: MobileAssistantView.selectionKey)
         var path = NavigationPath()
-        path.append(link.sessionID)
+        if agent.primarySessionId != link.sessionID { path.append(link.sessionID) }
         agentChatPath = path
     }
 

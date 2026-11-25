@@ -38,10 +38,7 @@ extension AppState {
             if request.operation == .refresh { await sendAgentHub(to: peer); return }
             let result: AgentResultPayload
             do {
-                guard let id = request.agentID, agentProfile(id: id) != nil else { throw AgentHubError.unknownAgent }
-                guard request.operation == .sendMessage else { throw AgentHubError.sendFailed("Unsupported phone action.") }
-                let session = try await sendMessageToAgent(id, text: request.text ?? "")
-                result = .init(clientRequestID: request.clientRequestID, ok: true, agentID: id, sessionID: session)
+                result = try await performPhoneAgentRequest(request)
             } catch {
                 result = .init(clientRequestID: request.clientRequestID, ok: false, error: error.localizedDescription, agentID: request.agentID)
             }
@@ -49,6 +46,47 @@ extension AppState {
             await MobileSyncService.shared.send(.agentResult(result), toHex: peer)
             await sendAgentHub(to: peer)
         default: break
+        }
+    }
+
+    /// Applies one agent change or message from a paired phone.
+    private func performPhoneAgentRequest(_ request: AgentRequestPayload) async throws -> AgentResultPayload {
+        switch request.operation {
+        case .createAgent:
+            guard let profile = request.agent, agentProfile(id: profile.id) == nil else {
+                throw AgentHubError.sendFailed(String(localized: "The phone sent an invalid agent."))
+            }
+            guard !profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AgentHubError.sendFailed(String(localized: "Give the agent a name."))
+            }
+            var agent = profile
+            // A phone's copy can't carry the Mac's conversation links.
+            agent.primarySessionId = nil
+            agent.phoneMessages = []
+            agent.createdAt = .now
+            let saved = upsertAgent(agent)
+            return .init(clientRequestID: request.clientRequestID, ok: true, agentID: saved.id)
+        case .updateAgent:
+            guard let profile = request.agent, agentProfile(id: profile.id) != nil else { throw AgentHubError.unknownAgent }
+            guard !profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AgentHubError.sendFailed(String(localized: "Give the agent a name."))
+            }
+            let saved = upsertAgent(profile)
+            return .init(clientRequestID: request.clientRequestID, ok: true, agentID: saved.id)
+        case .deleteAgent:
+            guard let id = request.agentID, agentProfile(id: id) != nil else { throw AgentHubError.unknownAgent }
+            await deleteAgent(id: id)
+            return .init(clientRequestID: request.clientRequestID, ok: true, agentID: id)
+        case .sendMessage:
+            guard let id = request.agentID, agentProfile(id: id) != nil else { throw AgentHubError.unknownAgent }
+            let session = try await sendMessageToAgent(id, text: request.text ?? "")
+            return .init(clientRequestID: request.clientRequestID, ok: true, agentID: id, sessionID: session)
+        case .openConversation:
+            guard let id = request.agentID, let agent = agentProfile(id: id) else { throw AgentHubError.unknownAgent }
+            return .init(clientRequestID: request.clientRequestID, ok: true, agentID: id,
+                         sessionID: agentConversationSummary(agent)?.id)
+        default:
+            throw AgentHubError.sendFailed(String(localized: "Unsupported phone action."))
         }
     }
 }

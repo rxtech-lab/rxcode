@@ -85,7 +85,11 @@ extension MobileAppState {
     /// Whether the initial message window for a newly opened thread is still
     /// being refreshed from the desktop.
     func isLoadingThreadMessages(sessionID: String) -> Bool {
-        loadingThreadMessageSessions.contains(resolveSessionID(sessionID))
+        pendingThreadMessageRequest?.sessionID == resolveSessionID(sessionID)
+    }
+
+    func finishLoadingThreadMessages(for sessionID: String) {
+        if pendingThreadMessageRequest?.sessionID == sessionID { pendingThreadMessageRequest = nil }
     }
 
     /// Mirror of the desktop's per-session queue, surfaced via `SessionSummary`.
@@ -265,7 +269,7 @@ extension MobileAppState {
     /// of the active list right away.
     func archiveThread(sessionID: String) async {
         let sessionID = resolveSessionID(sessionID)
-        loadingThreadMessageSessions.remove(sessionID)
+        finishLoadingThreadMessages(for: sessionID)
         replaceSession(sessionID: sessionID) { current in
             SessionSummary(
                 id: current.id,
@@ -291,7 +295,7 @@ extension MobileAppState {
         messagesBySession.removeValue(forKey: sessionID)
         sessionsWithMoreMessages.remove(sessionID)
         loadingMoreSessions.remove(sessionID)
-        loadingThreadMessageSessions.remove(sessionID)
+        finishLoadingThreadMessages(for: sessionID)
         if activeSessionID == sessionID { activeSessionID = nil }
         await sendThreadAction(sessionID: sessionID, action: .delete)
     }
@@ -403,19 +407,23 @@ extension MobileAppState {
     func subscribe(to sessionID: String?) async {
         let sessionID = sessionID.map(resolveSessionID)
         activeSessionID = sessionID
-        guard isPaired else { return }
-        if let sessionID {
-            loadingThreadMessageSessions = [sessionID]
-        } else {
-            loadingThreadMessageSessions.removeAll()
+        guard isPaired else {
+            pendingThreadMessageRequest = nil
+            return
+        }
+        let requestID = UUID()
+        pendingThreadMessageRequest = sessionID.map { (requestID, $0) }
+        let finishIfPending: (MobileAppState) -> Void = { state in
+            if state.pendingThreadMessageRequest?.id == requestID { state.pendingThreadMessageRequest = nil }
+        }
+        if sessionID != nil {
+            scheduleTimeout(.seconds(30), perform: finishIfPending)
         }
         let payload = SubscribeSessionPayload(sessionID: sessionID)
         do {
             try await client.send(.subscribeSession(payload), toHex: pairedDesktopPubkey)
         } catch {
-            if let sessionID {
-                loadingThreadMessageSessions.remove(sessionID)
-            }
+            finishIfPending(self)
         }
     }
 }

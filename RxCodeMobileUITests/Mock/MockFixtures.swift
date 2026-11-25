@@ -17,6 +17,7 @@ nonisolated struct MockFixtures: Sendable {
     let threadSummaries: [MobileThreadSummary]
     /// Full message list keyed by session id.
     let messagesBySession: [String: [ChatMessage]]
+    var agentHub: AgentHubSnapshot?
 
     /// Builds a `snapshot` payload for whichever session the app is asking
     /// about. When `activeSessionID` has fixture messages they are embedded as

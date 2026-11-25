@@ -13730,6 +13730,9 @@
         }
       }
     },
+    "Give the agent a name." : {
+
+    },
     "Global" : {
       "localizations" : {
         "ko" : {
@@ -29792,6 +29795,9 @@
     "The pet only takes a single photo when you ask. It can photograph its display, another display, or a visible window. macOS may require reopening RxCode after access changes." : {
 
     },
+    "The phone sent an invalid agent." : {
+
+    },
     "The planner drafts first. The host sets a review agenda, then resolves the reviewers’ feedback into a final plan." : {
 
     },
@@ -31289,6 +31295,9 @@
           }
         }
       }
+    },
+    "Unsupported phone action." : {
+
     },
     "Untitled" : {
       "localizations" : {

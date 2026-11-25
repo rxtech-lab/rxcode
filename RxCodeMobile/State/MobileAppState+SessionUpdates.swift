@@ -157,8 +157,8 @@ extension MobileAppState {
             if loadingMoreSessions.remove(previous) != nil {
                 loadingMoreSessions.insert(update.sessionID)
             }
-            if loadingThreadMessageSessions.remove(previous) != nil {
-                loadingThreadMessageSessions.insert(update.sessionID)
+            if pendingThreadMessageRequest?.sessionID == previous {
+                pendingThreadMessageRequest?.sessionID = update.sessionID
             }
             if activeSessionID == previous {
                 activeSessionID = update.sessionID

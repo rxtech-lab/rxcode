@@ -530,8 +530,9 @@ extension AppState {
         }
         let queue = threadStore.loadQueue(sessionKey: sessionID)
         guard let next = queue.first else { return }
+        // Agent conversations live in virtual projects; the phone queues into them too.
         guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
-              let project = projects.first(where: { $0.id == summary.projectId })
+              let project = projects.first(where: { $0.id == summary.projectId }) ?? agentVirtualProject(id: summary.projectId)
         else { return }
 
         updateState(sessionID) { $0.queueDispatchInProgress = true }

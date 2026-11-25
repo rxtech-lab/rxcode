@@ -4,7 +4,6 @@ import RxCodeSync
 import SwiftUI
 
 private enum MobileRootTab: Hashable {
-    case chat
     case briefing
     case projects
     case settings
@@ -196,9 +195,6 @@ struct RemoteWorkspaceView: View {
                 }
             }
 
-            Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: MobileRootTab.chat) {
-                NavigationStack { MobileAgentHubView().toolbar { RemoteWorkspaceCloseToolbar() } }
-            }
             Tab("Settings", systemImage: "gear", value: MobileRootTab.settings) {
                 MobileSettingsView(showsDoneButton: false)
             }

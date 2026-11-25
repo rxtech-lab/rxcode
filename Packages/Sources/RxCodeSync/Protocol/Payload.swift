@@ -387,7 +387,10 @@ public struct SnapshotPayload: Codable, Sendable {
     /// desktop predates CI-status sync.
     public let ciStatuses: [MobileProjectCIStatus]?
     public let settings: MobileSettingsSnapshot?
+    /// The requested thread. Workspace-only snapshots omit this ID.
     public let activeSessionID: String?
+    /// An empty array is a loaded, empty thread. A named thread with no page
+    /// means the desktop could not read its history.
     public let activeSessionMessages: [ChatMessage]?
     /// Whether the active thread has messages older than the window in
     /// `activeSessionMessages`. Mobile uses this to decide whether to offer

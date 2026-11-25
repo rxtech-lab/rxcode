@@ -139,7 +139,7 @@ extension AppState {
         // "finished, unread" flag so the green indicator clears on desktop and
         // mobile alike. Done before the snapshot is built so the payload below
         // already reflects the cleared state.
-        if let activeID = active.id { markCompletionRead(for: activeID) }
+        if let activeID = active.id, active.messages != nil { markCompletionRead(for: activeID) }
         let branches = await mobileProjectBranches()
         // Warm the shared provider readings for mobile. Subsequent snapshots
         // reuse them, and observeMobileSnapshotInputs broadcasts fresh readings.

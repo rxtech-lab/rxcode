@@ -608,6 +608,7 @@ extension MobileAppState {
         sessionsWithMoreMessages = []
         loadingMoreSessions = []
         pendingLoadMoreRequests = [:]
+        pendingThreadMessageRequest = nil
         remoteFolderRoot = nil
         remoteFolderIsLoading = false
         remoteFolderError = nil

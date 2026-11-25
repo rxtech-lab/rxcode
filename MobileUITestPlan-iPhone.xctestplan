@@ -27,6 +27,7 @@
         "TaskDetailSheetUITests/testTaskAndStoryCardsOpenDismissibleDetailSheets()",
         "FlowcyAIDraftUITests/testTaskAndStoryDraftReviewBeforeSave()",
         "FlowcyProductionUITests/testDashboardWithoutPairingAndRootNavigation()",
+        "FlowcyProductionUITests/testSelectingPairedAgentsLoadsAndRetriesTheirConversations()",
         "FlowcyProductionUITests/testProjectCardsDragHideRestoreAndPersist()",
         "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",
         "iPhoneNavigationUITests\/testBriefingFlowReturnsToDetailAfterBack()",

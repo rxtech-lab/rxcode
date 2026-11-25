@@ -1075,6 +1075,9 @@
         }
       }
     },
+    "Agent actions" : {
+
+    },
     "Agent Clients" : {
       "localizations" : {
         "en" : {
@@ -1159,6 +1162,9 @@
 
     },
     "Agent usage is temporarily unavailable." : {
+
+    },
+    "Agents" : {
 
     },
     "AI cost across rolling windows, including pending requests." : {
@@ -1290,6 +1296,9 @@
       }
     },
     "Allow %@?" : {
+
+    },
+    "Allow Computer Use" : {
 
     },
     "Allowances for automation and release tools." : {
@@ -1755,6 +1764,9 @@
         }
       }
     },
+    "Behavior" : {
+
+    },
     "Branch" : {
       "localizations" : {
         "ko" : {
@@ -2070,6 +2082,9 @@
     "Cancels" : {
 
     },
+    "Capabilities" : {
+
+    },
     "Change the summarization provider from mobile; API keys and endpoint secrets stay on the Mac." : {
       "localizations" : {
         "en" : {
@@ -2120,9 +2135,6 @@
     "Channel" : {
 
     },
-    "Chat" : {
-
-    },
     "Chats and review feedback appear here after this task runs on your Mac." : {
 
     },
@@ -2152,6 +2164,9 @@
 
     },
     "Choose a thread from the sidebar to open its chat." : {
+
+    },
+    "Choose assistant" : {
 
     },
     "Choose from Photos" : {
@@ -2616,6 +2631,9 @@
         }
       }
     },
+    "Computer Use" : {
+
+    },
     "Config" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2655,9 +2673,6 @@
 
     },
     "Confirmation required before execution" : {
-
-    },
-    "Connect a Mac" : {
 
     },
     "Connect a Mac first." : {
@@ -2747,6 +2762,9 @@
           }
         }
       }
+    },
+    "Connect a Mac to Use Agents" : {
+
     },
     "Connect an online Mac to use Flowcy." : {
       "localizations" : {
@@ -3048,6 +3066,9 @@
     "Could Not Create Project" : {
 
     },
+    "Could Not Delete Agent" : {
+
+    },
     "Could Not Enable Feature" : {
 
     },
@@ -3058,6 +3079,9 @@
 
     },
     "Could Not Save" : {
+
+    },
+    "Could Not Save Agent" : {
 
     },
     "Could Not Save Automation" : {
@@ -3323,9 +3347,6 @@
       }
     },
     "Create a webhook to receive Flowcy events." : {
-
-    },
-    "Create an agent in RxCode on your paired Mac." : {
 
     },
     "Create branch" : {
@@ -3898,6 +3919,15 @@
         }
       }
     },
+    "Delete %@" : {
+
+    },
+    "Delete agent and its schedules, memory, and jobs?" : {
+
+    },
+    "Delete Agent…" : {
+
+    },
     "Delete document?" : {
       "localizations" : {
         "ko" : {
@@ -4057,6 +4087,9 @@
       }
     },
     "Delete this webhook?" : {
+
+    },
+    "Deleting %@…" : {
 
     },
     "Deleting environment…" : {
@@ -4729,6 +4762,12 @@
           }
         }
       }
+    },
+    "Edit Agent" : {
+
+    },
+    "Edit Agent…" : {
+
     },
     "Edit Directory" : {
 
@@ -6129,6 +6168,9 @@
         }
       }
     },
+    "How it talks and behaves" : {
+
+    },
     "HTTP" : {
       "localizations" : {
         "ko" : {
@@ -6530,7 +6572,7 @@
         }
       }
     },
-    "Jobs" : {
+    "Its conversations stay in history and search on your Mac." : {
 
     },
     "Keep Editing" : {
@@ -7373,7 +7415,7 @@
     "Merged" : {
 
     },
-    "Message" : {
+    "Message %@…" : {
 
     },
     "Message Delivery" : {
@@ -7617,6 +7659,12 @@
         }
       }
     },
+    "New Agent" : {
+
+    },
+    "New Agent…" : {
+
+    },
     "New Chat" : {
 
     },
@@ -7784,7 +7832,7 @@
     "No %@" : {
 
     },
-    "No Agents" : {
+    "No Activity Yet" : {
 
     },
     "No agents found." : {
@@ -8128,9 +8176,6 @@
 
     },
     "No jobs are available yet. Pull to refresh." : {
-
-    },
-    "No Jobs Yet" : {
 
     },
     "No matches" : {
@@ -8927,6 +8972,9 @@
     "Notifications" : {
 
     },
+    "Notify This Phone" : {
+
+    },
     "Number" : {
 
     },
@@ -9329,9 +9377,6 @@
         }
       }
     },
-    "Pair Mac" : {
-
-    },
     "Pair New Mac" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -9556,6 +9601,9 @@
       }
     },
     "Personal Access Token" : {
+
+    },
+    "Personality" : {
 
     },
     "Pick a desktop folder remotely, then start or continue its threads from mobile." : {
@@ -10461,6 +10509,9 @@
     "Rescanning workflows…" : {
 
     },
+    "Researcher, Planner, Inbox Helper…" : {
+
+    },
     "Reset Filters" : {
 
     },
@@ -10667,6 +10718,9 @@
       }
     },
     "Revise Request" : {
+
+    },
+    "Role and standing instructions" : {
 
     },
     "Round trip %lld ms." : {
@@ -10940,6 +10994,9 @@
 
     },
     "Saving…" : {
+
+    },
+    "Say hello to start the conversation. It carries on between your Mac and this phone." : {
 
     },
     "Scan" : {
@@ -11772,6 +11829,9 @@
       }
     },
     "Show All" : {
+
+    },
+    "Show as Pet on Mac" : {
 
     },
     "Show Sidebar" : {
@@ -12781,6 +12841,9 @@
         }
       }
     },
+    "The first line of the instructions tells teammates what this agent is good at, so they know when to ask it for help." : {
+
+    },
     "The first Mac with this project open picks the task up. Other Macs leave it alone and show where it runs." : {
 
     },
@@ -12799,6 +12862,9 @@
           }
         }
       }
+    },
+    "The Mac has not confirmed the change. Check RxCode on your Mac before retrying." : {
+
     },
     "The Mac is performing the requested action." : {
       "localizations" : {
@@ -13503,6 +13569,9 @@
           }
         }
       }
+    },
+    "Tone" : {
+
     },
     "Tool" : {
       "localizations" : {
@@ -14428,6 +14497,9 @@
         }
       }
     },
+    "What this agent is for and how it should work" : {
+
+    },
     "Why is this delayed?" : {
       "localizations" : {
         "ko" : {
@@ -14535,6 +14607,9 @@
           }
         }
       }
+    },
+    "Workspace Default" : {
+
     },
     "Wrap Lines" : {
 
@@ -14668,6 +14743,9 @@
           }
         }
       }
+    },
+    "Your Mac didn’t return the messages for this conversation." : {
+
     },
     "Your Mac titles and classifies the task in the background." : {
       "localizations" : {

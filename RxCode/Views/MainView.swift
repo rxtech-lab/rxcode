@@ -338,6 +338,8 @@ struct MainView: View {
                 BriefingView()
             } else if windowState.generalRoute == .chat {
                 GlobalChatView()
+            } else if windowState.generalRoute == .agents {
+                AgentHubView()
             } else if windowState.generalRoute == .scheduled {
                 ScheduledTasksView()
             } else if windowState.selectedProject != nil {

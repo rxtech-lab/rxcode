@@ -1,5 +1,6 @@
 import RxAuthSwift
 import RxCodeCore
+import RxCodeSync
 import SwiftUI
 
 private enum FlowcyTab: Hashable { case tasks, projects, settings, agent }
@@ -12,6 +13,7 @@ struct RootView: View {
     @State private var agent = FlowcyAgentState()
     @AppStorage("flowcy.appearance") private var appearance = "system"
     @State private var selected: FlowcyTab = .tasks
+    @State private var agentChatPath = NavigationPath()
     @State private var showingRemote = false
     @State private var showingPairing = false
     @State private var pairingCompleted = false
@@ -38,7 +40,7 @@ struct RootView: View {
             agent.restore(accountID: cloud.accountID)
             if cloud.isSignedIn {
                 state.usesCloudTasks = true
-                if state.pendingDeepLink != nil && state.isPaired { openRemote() }
+                if state.pendingDeepLink != nil && state.isPaired { openLinkedThread() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .rxAuthSessionExpired)) { _ in
@@ -68,7 +70,7 @@ struct RootView: View {
             if request != nil && cloud.isSignedIn && state.isPaired { openRemote() }
         }
         .onChange(of: state.pendingDeepLink) { _, link in
-            if link != nil && cloud.isSignedIn && state.isPaired { openRemote() }
+            if link != nil && cloud.isSignedIn && state.isPaired { openLinkedThread() }
         }
         .sheet(item: Binding(get: {
             cloud.isSignedIn && !showingRemote && !showingTools && !showingPairing ? cloud.pendingNotification : nil
@@ -139,19 +141,32 @@ struct RootView: View {
         .onChange(of: selected) { _, _ in MobileHaptics.buttonTap() }
     }
 
+    /// Flowcy's cloud assistant and the paired Mac's agents share this tab;
+    /// the navigation-bar dropdown switches between them.
     private var agentContent: some View {
-        NavigationStack {
-            FlowcyAgentView()
-                .toolbar { FlowcyRemoteToolbar() }
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Flowcy Tools", systemImage: "wrench.and.screwdriver") {
-                            MobileHaptics.buttonTap()
-                            showingTools = true
-                        }
-                    }
-                }
+        NavigationStack(path: $agentChatPath) {
+            MobileAssistantView(onPair: { showingPairing = true }, onShowTools: { showingTools = true })
+                .navigationDestination(for: String.self) { MobileChatView(sessionID: $0) }
         }
+    }
+
+    /// Opens an agent's thread from a notification in the Agent tab: its
+    /// ongoing conversation in place, any other thread pushed on top.
+    private func openLinkedThread() {
+        guard let link = state.pendingDeepLink,
+              let agent = state.agentHub.agents.first(where: {
+                  (link.projectID.map($0.profile.owns(projectId:)) ?? false) || $0.primarySessionId == link.sessionID
+              }) else {
+            openRemote()
+            return
+        }
+        state.pendingDeepLink = nil
+        showingRemote = false
+        selected = .agent
+        UserDefaults.standard.set(agent.id.uuidString, forKey: MobileAssistantView.selectionKey)
+        var path = NavigationPath()
+        if agent.primarySessionId != link.sessionID { path.append(link.sessionID) }
+        agentChatPath = path
     }
 
     private func openRemote() {

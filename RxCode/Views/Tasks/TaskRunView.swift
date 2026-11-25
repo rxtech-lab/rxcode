@@ -19,6 +19,7 @@ struct TaskRunView: View {
     @State private var isLoading = true
     @State private var queuedMessages: [QueuedMessage] = []
     @State private var steerDeclinedIDs: Set<UUID> = []
+    @State private var isDispatchingQueue = false
     @State private var isSending = false
     @State private var isDropTargeted = false
     @State private var composerController = MarkdownEditorController()
@@ -377,7 +378,26 @@ struct TaskRunView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .help(message.text)
 
-                        if appState.canSteerTask(task), isAgentRunning {
+                        if isAgentRunning, appState.canInterruptQueuedACPTask(task), appState.canSteerTask(task) {
+                            Menu {
+                                Button("Steer into Current Response", systemImage: "arrow.turn.down.right") {
+                                    steerQueuedMessage(message.id, for: task)
+                                }
+                                Button("Interrupt and Send Now", systemImage: "paperplane.fill") {
+                                    steerQueuedMessage(message.id, for: task, interrupt: true)
+                                }
+                            } label: {
+                                Label("Send Now", systemImage: "paperplane.fill")
+                            }
+                            .controlSize(.mini)
+                        } else if isAgentRunning, appState.canInterruptQueuedACPTask(task) {
+                            Button("Interrupt and Send Now", systemImage: "paperplane.fill") {
+                                steerQueuedMessage(message.id, for: task, interrupt: true)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                            .help("This ACP response has no compatible steering capability")
+                        } else if isAgentRunning, appState.canSteerTask(task) {
                             Button {
                                 steerQueuedMessage(message.id, for: task)
                             } label: {
@@ -400,7 +420,7 @@ struct TaskRunView: View {
                         .help("Remove queued message")
                     }
                     if steerDeclinedIDs.contains(message.id) {
-                        Text("Couldn't reach the current response — still queued, sends when it ends.")
+                        Text("This instruction is still queued.")
                             .foregroundStyle(ClaudeTheme.textTertiary)
                     }
                 }
@@ -408,6 +428,16 @@ struct TaskRunView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(ClaudeTheme.inputBackground, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+            }
+        }
+        .disabled(isDispatchingQueue)
+        .overlay(alignment: .topTrailing) {
+            if isDispatchingQueue {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(5)
+                    .background(.regularMaterial, in: Capsule())
+                    .accessibilityLabel("Sending queued instruction")
             }
         }
     }
@@ -421,9 +451,16 @@ struct TaskRunView: View {
         return text.isEmpty ? count : "\(text)  \(count)"
     }
 
-    private func steerQueuedMessage(_ id: UUID, for task: ProjectTask) {
+    private func steerQueuedMessage(_ id: UUID, for task: ProjectTask, interrupt: Bool = false) {
+        guard !isDispatchingQueue else { return }
+        isDispatchingQueue = true
         Task {
-            let steered = await appState.steerQueuedTaskMessage(id: id, for: task)
+            defer { isDispatchingQueue = false }
+            let steered = if interrupt {
+                await appState.interruptQueuedACPTaskMessage(id: id, for: task)
+            } else {
+                await appState.steerQueuedTaskMessage(id: id, for: task)
+            }
             refreshQueue()
             if steered {
                 await reload()

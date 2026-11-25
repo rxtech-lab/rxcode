@@ -169,12 +169,15 @@ final class DownloadCenter {
             speedSamples[id] = nil
             lastByteUpdate[id] = nil
         }
+        let learnedTotal = items[index].totalBytes == nil && (totalBytes ?? 0) > 0
         let reachedTotal = receivedBytes != nil && receivedBytes == (totalBytes ?? items[index].totalBytes)
-        if items[index].phase == phase, !reachedTotal, receivedBytes != nil,
+        if items[index].phase == phase, !reachedTotal, !learnedTotal, receivedBytes != nil,
            let last = lastByteUpdate[id], now.timeIntervalSince(last) < Self.byteUpdateInterval {
             return
         }
-        lastByteUpdate[id] = now
+        if receivedBytes != nil {
+            lastByteUpdate[id] = now
+        }
         if phase == .downloading, let receivedBytes {
             let receivedBytes = transferredBytes ?? receivedBytes
             var samples = speedSamples[id] ?? []

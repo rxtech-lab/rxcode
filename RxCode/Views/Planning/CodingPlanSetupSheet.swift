@@ -57,7 +57,7 @@ struct CodingPlanSetupSheet: View {
                 Section("Planning request") {
                     if source.project.isGlobalChat {
                         Picker("Project", selection: $projectID) {
-                            ForEach(appState.sessionProjects) { Text($0.name).tag($0.id) }
+                            ForEach(appState.projects + [appState.globalChatProject]) { Text($0.name).tag($0.id) }
                         }
                     }
                     MarkdownDescriptionEditor(

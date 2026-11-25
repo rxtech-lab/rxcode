@@ -37,9 +37,10 @@ extension ACPService {
                     continuation: continuation
                 )
             }
-            continuation.onTermination = { _ in
-                task.cancel()
-                Task { await self.handleStreamTermination(streamId: streamId) }
+            turnTasks[streamId] = task
+            continuation.onTermination = { reason in
+                guard case .cancelled = reason else { return }
+                Task { await self.cancel(streamId: streamId) }
             }
         }
     }
@@ -101,11 +102,6 @@ extension ACPService {
         } onCancel: {
             Task { await self.cancel(streamId: streamId) }
         }
-    }
-
-    func handleStreamTermination(streamId: UUID) {
-        logger.info("[ACP] stream consumer detached streamId=\(streamId.uuidString, privacy: .public)")
-        finalize(streamId: streamId)
     }
 
     /// One-shot probe that spawns the agent, runs `initialize` + `session/new`,
@@ -248,11 +244,27 @@ extension ACPService {
         isEphemeral: Bool = false,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
+        var resolvedKey = aliasToCanonical[clientSessionKey] ?? clientSessionKey
+        var expectedGeneration: UUID?
+        defer {
+            if startingTurns[resolvedKey] == streamId { startingTurns.removeValue(forKey: resolvedKey) }
+            finishTurn(streamId: streamId)
+            continuation.finish()
+        }
         do {
-            // Resolve the pool key — AppState may pass the original
-            // `pending-…` key OR the agent's later sessionId. Either should
-            // map to the same pooled entry.
-            let resolvedKey = aliasToCanonical[clientSessionKey] ?? clientSessionKey
+            // A replacement prompt waits for the previous wire turn to finish.
+            // The UI may have already detached its consumer after Stop.
+            while let active = sessions[resolvedKey]?.currentStreamId ?? startingTurns[resolvedKey] {
+                expectedGeneration = sessions[resolvedKey]?.agentSessionId == nil ? nil : sessions[resolvedKey]?.generation
+                guard await waitForTurnEnd(streamId: active) else { throw ACPError.previousTurnUnconfirmed }
+                try Task.checkCancellation()
+                resolvedKey = aliasToCanonical[clientSessionKey] ?? clientSessionKey
+                if let expectedGeneration, sessions[resolvedKey]?.generation != expectedGeneration {
+                    throw ACPError.previousTurnUnconfirmed
+                }
+            }
+            try Task.checkCancellation()
+            startingTurns[resolvedKey] = streamId
             let canReuse: Bool = {
                 guard let existing = sessions[resolvedKey] else { return false }
                 guard !existing.isEphemeral else { return false }
@@ -294,6 +306,12 @@ extension ACPService {
                 continuation: continuation
             )
         } catch {
+            guard !Task.isCancelled else { return }
+            if let key = streamToKey[streamId], sessions[key]?.cancellationRequested == true {
+                // Older agents can acknowledge cancellation with a JSON-RPC error.
+                // The response still closes the prompt and permits the next turn.
+                return
+            }
             logger.error("[ACP] turn failed: \(error.localizedDescription, privacy: .public)")
             // Resolve the canonical pool key (may still be the bootstrap
             // `pending-…` key if the failure happened before `session/new`
@@ -331,8 +349,6 @@ extension ACPService {
                 contextWindow: nil
             )))
             if let key { killSession(key: key) }
-            continuation.finish()
-            finalize(streamId: streamId)
         }
     }
 
@@ -350,6 +366,11 @@ extension ACPService {
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async throws {
         let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: model, cwd: cwd)
+        if Task.isCancelled {
+            try? stdin.close()
+            if process.isRunning { process.terminate() }
+            throw CancellationError()
+        }
         var entry = SessionEntry(
             process: process,
             stdin: stdin,
@@ -398,6 +419,10 @@ extension ACPService {
         )
         heartbeat.cancel()
         logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")
+        if let version = initResult["protocolVersion"]?.intValue, version != 1 {
+            throw ACPError.protocolMismatch("expected ACP v1, received v\(version)")
+        }
+        mutateSession(bootstrapKey) { $0.supportsHostOwnedSteering = Self.supportsHostOwnedSteering(initResult) }
         logger.info("[ACP-MCP] runFreshTurn received \(mcpServers.count, privacy: .public) candidate mcpServers from caller")
         let filteredMCPServers = supportedMCPServers(mcpServers, initResult: initResult)
 
@@ -486,6 +511,7 @@ extension ACPService {
 
         try await runPrompt(
             key: canonicalKey,
+            streamId: streamId,
             agentSessionId: agentSessionId,
             prompt: prompt,
             continuation: continuation
@@ -552,6 +578,7 @@ extension ACPService {
 
         try await runPrompt(
             key: poolKey,
+            streamId: streamId,
             agentSessionId: agentSessionId,
             prompt: prompt,
             continuation: continuation
@@ -590,6 +617,7 @@ extension ACPService {
 
     func runPrompt(
         key: String,
+        streamId: UUID,
         agentSessionId: String,
         prompt: String,
         continuation: AsyncStream<StreamEvent>.Continuation
@@ -597,18 +625,26 @@ extension ACPService {
         // Flip the gate AFTER any optional `session/set_config_option`
         // exchange so we don't accept stray updates before the prompt is
         // actually in flight.
-        mutateSession(key) { $0.acceptingUpdates = true }
-        let promptResult = try await sendRequest(
-            key: key,
-            method: "session/prompt",
-            params: [
-                "sessionId": .string(agentSessionId),
-                "prompt": .array([.object([
-                    "type": .string("text"),
-                    "text": .string(prompt)
-                ])])
-            ]
-        )
+        try Task.checkCancellation()
+        guard sessions[key]?.currentStreamId == streamId else { throw ACPError.streamClosed }
+        let requestId = nextRequestId(key: key)
+        mutateSession(key) {
+            $0.promptRequestId = requestId
+            $0.acceptingUpdates = true
+        }
+        continuation.yield(.acpSteeringAvailable(sessions[key]?.supportsHostOwnedSteering == true))
+        let promptResult: JSONValue
+        do {
+            promptResult = try await sendRequest(
+                key: key, method: "session/prompt",
+                params: ["sessionId": .string(agentSessionId), "prompt": Self.textPrompt(prompt)],
+                requestId: requestId
+            )
+        } catch {
+            await waitForSteeringResponse(key: key)
+            throw error
+        }
+        await waitForSteeringResponse(key: key)
 
         let stopReason = promptResult.objectValue?["stopReason"]?.stringValue ?? "end_turn"
         continuation.yield(.result(ResultEvent(
@@ -620,11 +656,6 @@ extension ACPService {
             usage: nil,
             contextWindow: nil
         )))
-
-        continuation.finish()
-        if let streamId = sessions[key]?.currentStreamId {
-            finalize(streamId: streamId)
-        }
     }
 
     func heartbeatTick(displayName: String, elapsed: Int, launchKind: String) {

@@ -368,8 +368,15 @@ extension AppState {
     ///   stream), the session isn't stopping — a new turn starts immediately —
     ///   so the stop hooks are skipped. The cancelled stream is still marked
     ///   handled either way so a trailing `.result` can't re-fire them.
-    func cancelStreaming(in window: WindowState, fireStopHooks: Bool = true) async {
+    @discardableResult
+    func cancelStreaming(
+        in window: WindowState, fireStopHooks: Bool = true, waitForACPResponse: Bool = false
+    ) async -> Bool {
         let key = window.currentSessionId ?? window.newSessionKey
+        let project = window.selectedProject
+        let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
+        let agent = backend(for: provider)
+        let hasACPSession = sessionStates[key]?.providerSessionIds[AgentProvider.acp.rawValue] != nil
         usageLimitResumeTasks.removeValue(forKey: key)?.cancel()
         sessionStates[key]?.todoContinuationSource = nil
         let streamToCancel = sessionStates[key]?.activeStreamId
@@ -394,6 +401,7 @@ extension AppState {
             state.isThinking = false
             state.needsNewMessage = false
             state.activeStreamId = nil
+            state.acpSteeringStreamId = nil
             state.streamTask = nil
             state.activeToolId = nil
             state.activeToolInputBuffer = ""
@@ -403,6 +411,7 @@ extension AppState {
             state.lastStreamEventDate = nil
             state.liveBackgroundTaskIds.removeAll()
             state.unconsumedSteerCount = 0
+            if fireStopHooks { state.queueFlushDeferred = false }
             for idx in state.messages.indices where state.messages[idx].role == .assistant {
                 let hasPendingTool = state.messages[idx].blocks.contains {
                     guard let tc = $0.toolCall else { return false }
@@ -428,6 +437,20 @@ extension AppState {
         window.showError = false
         window.errorMessage = nil
 
+        // ACP must return wire-level cancelled outcomes to pending permission
+        // requests before the shared permission UI clears their decisions.
+        let acp = agent as? ACPService
+        var acpSettled = true
+        if let streamToCancel, let acp {
+            if waitForACPResponse {
+                acpSettled = await acp.prepareQueuedFollowUp(
+                    cancelling: streamToCancel, sessionKey: key, requiresSession: hasACPSession
+                )
+            } else {
+                await acp.cancel(streamId: streamToCancel)
+            }
+        }
+
         // A backend can already have withdrawn its approval when its stream task was cancelled.
         let resolvedID = resolveCurrentSessionId(key)
         let sessionIDs = Set(sessionIdRedirect.keys.filter { resolveCurrentSessionId($0) == resolvedID }).union([resolvedID])
@@ -435,9 +458,8 @@ extension AppState {
         let cancelled = await permission.cancelPending(sessionIDs: sessionIDs)
         clearResolvedPermissionRequests(displayed + cancelled)
 
-        if let streamToCancel {
-            let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
-            await backend(for: provider).cancel(streamId: streamToCancel)
+        if let streamToCancel, acp == nil {
+            await agent.cancel(streamId: streamToCancel)
         }
 
         await awaitPendingShellDetections(for: key)
@@ -445,7 +467,7 @@ extension AppState {
         // Save messages accumulated up to the point of cancellation to disk (prevent data loss).
         // The placeholder session (if any) is left in place so partial messages remain visible;
         // it will be promoted to the real CLI session id on the next user turn.
-        if let project = window.selectedProject {
+        if let project {
             // Cancelling is also "streaming stops" — fire the stop hooks, guarded
             // by the same per-stream set so a trailing `.result` won't re-run them.
             // Before-stop runs ahead of the save so its cards persist; after-stop
@@ -481,6 +503,7 @@ extension AppState {
                 ))
             }
         }
+        return acpSettled
     }
 
     func recordStreamingDuration(for key: String) {

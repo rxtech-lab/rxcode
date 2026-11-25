@@ -7,6 +7,7 @@ import SwiftUI
 /// is app-level, not scoped to a single window.
 struct HookUIModifier: ViewModifier {
     @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
 
     func body(content: Content) -> some View {
         content
@@ -26,6 +27,13 @@ struct HookUIModifier: ViewModifier {
             }) { request in
                 HookChoiceSheet(request: request)
                     .environment(appState)
+            }
+            .sheet(item: Binding(
+                get: { appState.projectPullRequestRequests[windowState.id] },
+                set: { appState.projectPullRequestRequests[windowState.id] = $0 }
+            )) { request in
+                ProjectPullRequestSheet(request: request)
+                    .appThemeForeground()
             }
             .alert(
                 appState.hookConfirmRequest?.title ?? "",

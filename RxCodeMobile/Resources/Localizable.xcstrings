@@ -1075,6 +1075,9 @@
         }
       }
     },
+    "Agent actions" : {
+
+    },
     "Agent Clients" : {
       "localizations" : {
         "en" : {
@@ -1096,6 +1099,9 @@
           }
         }
       }
+    },
+    "Agent default" : {
+
     },
     "Agent is working on this task" : {
       "localizations" : {
@@ -1156,6 +1162,9 @@
 
     },
     "Agent usage is temporarily unavailable." : {
+
+    },
+    "Agents" : {
 
     },
     "AI cost across rolling windows, including pending requests." : {
@@ -1287,6 +1296,9 @@
       }
     },
     "Allow %@?" : {
+
+    },
+    "Allow Computer Use" : {
 
     },
     "Allowances for automation and release tools." : {
@@ -1752,6 +1764,9 @@
         }
       }
     },
+    "Behavior" : {
+
+    },
     "Branch" : {
       "localizations" : {
         "ko" : {
@@ -2067,6 +2082,9 @@
     "Cancels" : {
 
     },
+    "Capabilities" : {
+
+    },
     "Change the summarization provider from mobile; API keys and endpoint secrets stay on the Mac." : {
       "localizations" : {
         "en" : {
@@ -2146,6 +2164,9 @@
 
     },
     "Choose a thread from the sidebar to open its chat." : {
+
+    },
+    "Choose assistant" : {
 
     },
     "Choose from Photos" : {
@@ -2500,6 +2521,12 @@
         }
       }
     },
+    "Coding plan" : {
+
+    },
+    "Coding plans" : {
+
+    },
     "Collaboration" : {
 
     },
@@ -2603,6 +2630,9 @@
           }
         }
       }
+    },
+    "Computer Use" : {
+
     },
     "Config" : {
       "localizations" : {
@@ -2732,6 +2762,9 @@
           }
         }
       }
+    },
+    "Connect a Mac to Use Agents" : {
+
     },
     "Connect an online Mac to use Flowcy." : {
       "localizations" : {
@@ -2864,6 +2897,9 @@
         }
       }
     },
+    "Connecting to Mac…" : {
+
+    },
     "Connecting to your Mac…" : {
 
     },
@@ -2968,6 +3004,9 @@
         }
       }
     },
+    "Control" : {
+
+    },
     "Control desktop summaries" : {
       "localizations" : {
         "en" : {
@@ -3027,6 +3066,9 @@
     "Could Not Create Project" : {
 
     },
+    "Could Not Delete Agent" : {
+
+    },
     "Could Not Enable Feature" : {
 
     },
@@ -3037,6 +3079,9 @@
 
     },
     "Could Not Save" : {
+
+    },
+    "Could Not Save Agent" : {
 
     },
     "Could Not Save Automation" : {
@@ -3215,6 +3260,9 @@
           }
         }
       }
+    },
+    "Couldn’t send your decision to your Mac. Tap Review to retry." : {
+
     },
     "Couldn't Start Thread" : {
 
@@ -3871,6 +3919,15 @@
         }
       }
     },
+    "Delete %@" : {
+
+    },
+    "Delete agent and its schedules, memory, and jobs?" : {
+
+    },
+    "Delete Agent…" : {
+
+    },
     "Delete document?" : {
       "localizations" : {
         "ko" : {
@@ -4030,6 +4087,9 @@
       }
     },
     "Delete this webhook?" : {
+
+    },
+    "Deleting %@…" : {
 
     },
     "Deleting environment…" : {
@@ -4702,6 +4762,12 @@
           }
         }
       }
+    },
+    "Edit Agent" : {
+
+    },
+    "Edit Agent…" : {
+
     },
     "Edit Directory" : {
 
@@ -6102,6 +6168,9 @@
         }
       }
     },
+    "How it talks and behaves" : {
+
+    },
     "HTTP" : {
       "localizations" : {
         "ko" : {
@@ -6177,6 +6246,12 @@
           }
         }
       }
+    },
+    "Implementation" : {
+
+    },
+    "Implementation evidence" : {
+
     },
     "Import JSON File" : {
 
@@ -6440,6 +6515,12 @@
     "Integrations" : {
 
     },
+    "Interrupt and Send" : {
+
+    },
+    "Interrupted" : {
+
+    },
     "Into" : {
 
     },
@@ -6490,6 +6571,9 @@
           }
         }
       }
+    },
+    "Its conversations stay in history and search on your Mac." : {
+
     },
     "Keep Editing" : {
 
@@ -6988,6 +7072,9 @@
         }
       }
     },
+    "Mac Screen" : {
+
+    },
     "main" : {
       "localizations" : {
         "ko" : {
@@ -7328,6 +7415,12 @@
     "Merged" : {
 
     },
+    "Message %@…" : {
+
+    },
+    "Message Delivery" : {
+
+    },
     "Message Flowcy…" : {
 
     },
@@ -7352,6 +7445,9 @@
           }
         }
       }
+    },
+    "Messages from Agent" : {
+
     },
     "Messages from this session will appear here." : {
 
@@ -7563,6 +7659,12 @@
         }
       }
     },
+    "New Agent" : {
+
+    },
+    "New Agent…" : {
+
+    },
     "New Chat" : {
 
     },
@@ -7728,6 +7830,9 @@
       }
     },
     "No %@" : {
+
+    },
+    "No Activity Yet" : {
 
     },
     "No agents found." : {
@@ -8131,6 +8236,9 @@
         }
       }
     },
+    "No Memory Yet" : {
+
+    },
     "No Messages" : {
 
     },
@@ -8380,6 +8488,9 @@
           }
         }
       }
+    },
+    "No Schedules" : {
+
     },
     "No Secrets" : {
       "localizations" : {
@@ -8861,6 +8972,9 @@
     "Notifications" : {
 
     },
+    "Notify This Phone" : {
+
+    },
     "Number" : {
 
     },
@@ -9022,6 +9136,9 @@
           }
         }
       }
+    },
+    "Open Conversation" : {
+
     },
     "Open failing CI run" : {
       "localizations" : {
@@ -9486,6 +9603,9 @@
     "Personal Access Token" : {
 
     },
+    "Personality" : {
+
+    },
     "Pick a desktop folder remotely, then start or continue its threads from mobile." : {
       "localizations" : {
         "en" : {
@@ -9511,6 +9631,12 @@
     "Pinned account button" : {
 
     },
+    "Plan" : {
+
+    },
+    "Plan ID" : {
+
+    },
     "Plan mode" : {
       "localizations" : {
         "en" : {
@@ -9532,6 +9658,12 @@
           }
         }
       }
+    },
+    "Plan unavailable" : {
+
+    },
+    "Planned features" : {
+
     },
     "Previous change" : {
       "localizations" : {
@@ -9940,6 +10072,9 @@
           }
         }
       }
+    },
+    "Release Control" : {
+
     },
     "Release Failed" : {
 
@@ -10374,6 +10509,9 @@
     "Rescanning workflows…" : {
 
     },
+    "Researcher, Planner, Inbox Helper…" : {
+
+    },
     "Reset Filters" : {
 
     },
@@ -10459,6 +10597,9 @@
     "Results" : {
 
     },
+    "Resume" : {
+
+    },
     "Retry" : {
       "localizations" : {
         "en" : {
@@ -10485,6 +10626,9 @@
 
     },
     "Retry Response" : {
+
+    },
+    "Return" : {
 
     },
     "Return to your request to generate a new draft." : {
@@ -10574,6 +10718,9 @@
       }
     },
     "Revise Request" : {
+
+    },
+    "Role and standing instructions" : {
 
     },
     "Round trip %lld ms." : {
@@ -10849,6 +10996,9 @@
     "Saving…" : {
 
     },
+    "Say hello to start the conversation. It carries on between your Mac and this phone." : {
+
+    },
     "Scan" : {
       "localizations" : {
         "ko" : {
@@ -11082,6 +11232,9 @@
         }
       }
     },
+    "Schedules" : {
+
+    },
     "Scheme" : {
       "localizations" : {
         "en" : {
@@ -11119,6 +11272,12 @@
           }
         }
       }
+    },
+    "Screen Sharing Ended" : {
+
+    },
+    "Screen Unavailable" : {
+
     },
     "Script" : {
       "localizations" : {
@@ -11493,6 +11652,9 @@
     "Send Voice Message" : {
 
     },
+    "Sending…" : {
+
+    },
     "Sent today" : {
 
     },
@@ -11638,6 +11800,9 @@
         }
       }
     },
+    "Settings (%@)" : {
+
+    },
     "Settings menu item" : {
 
     },
@@ -11664,6 +11829,9 @@
       }
     },
     "Show All" : {
+
+    },
+    "Show as Pet on Mac" : {
 
     },
     "Show Sidebar" : {
@@ -12673,6 +12841,9 @@
         }
       }
     },
+    "The first line of the instructions tells teammates what this agent is good at, so they know when to ask it for help." : {
+
+    },
     "The first Mac with this project open picks the task up. Other Macs leave it alone and show where it runs." : {
 
     },
@@ -12691,6 +12862,9 @@
           }
         }
       }
+    },
+    "The Mac has not confirmed the change. Check RxCode on your Mac before retrying." : {
+
     },
     "The Mac is performing the requested action." : {
       "localizations" : {
@@ -12917,6 +13091,12 @@
           }
         }
       }
+    },
+    "Thinking Level" : {
+
+    },
+    "Thinking level: %@" : {
+
     },
     "This Device" : {
 
@@ -13390,6 +13570,9 @@
         }
       }
     },
+    "Tone" : {
+
+    },
     "Tool" : {
       "localizations" : {
         "en" : {
@@ -13516,6 +13699,9 @@
           }
         }
       }
+    },
+    "Type on Mac" : {
+
     },
     "Type your answer…" : {
       "localizations" : {
@@ -14137,6 +14323,9 @@
     "View Log" : {
 
     },
+    "View Mac Screen" : {
+
+    },
     "View pull request" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14308,6 +14497,9 @@
         }
       }
     },
+    "What this agent is for and how it should work" : {
+
+    },
     "Why is this delayed?" : {
       "localizations" : {
         "ko" : {
@@ -14415,6 +14607,9 @@
           }
         }
       }
+    },
+    "Workspace Default" : {
+
     },
     "Wrap Lines" : {
 
@@ -14548,6 +14743,9 @@
           }
         }
       }
+    },
+    "Your Mac didn’t return the messages for this conversation." : {
+
     },
     "Your Mac titles and classifies the task in the background." : {
       "localizations" : {

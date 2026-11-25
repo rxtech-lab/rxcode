@@ -42,11 +42,12 @@ extension InputBarView {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .disabled(chatBridge.queueDispatchInProgress)
                         .help("Remove")
                     }
 
                     if steerDeclinedIDs.contains(queued.id) {
-                        Text("Couldn't reach the current response — still queued, sends when it ends.")
+                        Text("This instruction is still queued.")
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(ClaudeTheme.textTertiary)
                             .padding(.leading, 21)
@@ -65,14 +66,22 @@ extension InputBarView {
                 .frame(maxWidth: .infinity)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if chatBridge.queueDispatchInProgress {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(7)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.trailing, 14)
+                    .accessibilityLabel("Sending queued instruction")
+            }
+        }
         .padding(.horizontal, 8)
         .padding(.bottom, 6)
     }
 
-    /// Attachments steer too: they travel as path lines in the prompt text,
-    /// the same encoding a normal send uses for every provider.
-    func canSteer(_ queued: QueuedMessage) -> Bool {
-        chatBridge.canSteer
+    private var queuedSendDisabled: Bool {
+        chatBridge.queueDispatchInProgress || (chatBridge.agentProvider != .acp && chatBridge.hasPendingPlanDecision)
     }
 
     /// The per-message "when should this go out?" control.
@@ -84,7 +93,7 @@ extension InputBarView {
     /// plain interrupt button instead of a one-item menu.
     @ViewBuilder
     func queuedSendControl(for queued: QueuedMessage) -> some View {
-        if canSteer(queued) {
+        if chatBridge.canSteer {
             Menu {
                 Button {
                     steerQueuedMessage(queued.id)
@@ -105,8 +114,8 @@ extension InputBarView {
             .menuIndicator(.hidden)
             .fixedSize()
             .frame(width: 24, height: 24)
-            .disabled(chatBridge.hasPendingPlanDecision)
-            .help("Send before the current response ends — steer it in, or interrupt")
+            .disabled(queuedSendDisabled)
+            .help("Steer the current response or interrupt and send")
         } else {
             Button {
                 sendQueuedNow(queued.id)
@@ -118,8 +127,11 @@ extension InputBarView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(chatBridge.hasPendingPlanDecision)
-            .help("Send now — cancels current response")
+            .disabled(queuedSendDisabled)
+            .accessibilityLabel("Interrupt and send now")
+            .help(chatBridge.agentProvider == .acp
+                ? "Interrupt and send now. This ACP response has no compatible steering capability."
+                : "Interrupt the current response and send now")
         }
     }
 
@@ -131,7 +143,7 @@ extension InputBarView {
 
             Spacer(minLength: 0)
 
-            if windowState.messageQueue.allSatisfy(canSteer) {
+            if chatBridge.canSteer {
                 Menu {
                     Button {
                         steerAllQueuedAsOne()
@@ -149,7 +161,7 @@ extension InputBarView {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .disabled(chatBridge.hasPendingPlanDecision)
+                .disabled(queuedSendDisabled)
                 .help("Combine every queued message and send it as a single turn")
             } else {
                 Button {
@@ -158,8 +170,9 @@ extension InputBarView {
                     sendAllLabel
                 }
                 .buttonStyle(.plain)
-                .disabled(chatBridge.hasPendingPlanDecision)
-                .help("Combine and send all queued messages as a single turn")
+                .disabled(queuedSendDisabled)
+                .accessibilityLabel("Interrupt and send all now")
+                .help("Interrupt the current response and send the queued messages as one turn")
             }
         }
         .padding(.horizontal, 4)

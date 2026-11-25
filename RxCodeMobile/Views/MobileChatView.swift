@@ -21,6 +21,9 @@ struct MobileChatView: View {
     /// Invoked after the thread is archived or deleted so the parent can pop
     /// this view — the thread is no longer reachable from the active list.
     var onClose: () -> Void = {}
+    /// Off when a host owns the navigation bar, such as an agent's ongoing
+    /// conversation in the Agent tab, where the title is the agent picker.
+    var showsThreadToolbar = true
     @State var isNearBottom: Bool = true
     @State var showingQueueSheet = false
     /// Set once the thread has been scrolled to its newest message on open.
@@ -143,7 +146,7 @@ struct MobileChatView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(title)
-            .toolbar { threadActionsToolbar }
+            .toolbar { if showsThreadToolbar { threadActionsToolbar } }
             .task(id: sessionID) {
                 AnalyticsService.shared.log(.threadOpened, parameters: [
                     "session_id": sessionID,
@@ -168,9 +171,11 @@ struct MobileChatView: View {
             .sheet(isPresented: $showingQueueSheet) {
                 QueuedMessagesSheet(
                     messages: queuedMessages,
+                    sendMode: state.sessions.first { $0.id == resolvedSessionID }?.queuedSendMode
+                        ?? (isStreaming ? .steer : .wait),
                     onRemove: removeQueued,
-                    onAction: { message, text in
-                        try await state.queueMessageAction(sessionID: sessionID, queuedID: message.id, text: text)
+                    onAction: { message, text, interrupt in
+                        try await state.queueMessageAction(sessionID: sessionID, queuedID: message.id, text: text, interrupt: interrupt)
                     }
                 )
             }
@@ -491,6 +496,20 @@ struct MobileChatView: View {
                         )
                     )
                     .zIndex(3)
+            } else if !MobileDraftSessionID.isDraft(sessionID), state.messagesBySession[resolvedSessionID] == nil {
+                ContentUnavailableView {
+                    Label("Unable to Load Conversation", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("Your Mac didn’t return the messages for this conversation.")
+                } actions: {
+                    Button("Retry") {
+                        MobileHaptics.buttonTap()
+                        Task { await state.subscribe(to: resolvedSessionID) }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.background)
+                .zIndex(3)
             }
         }
         .accessibilityElement(children: .contain)

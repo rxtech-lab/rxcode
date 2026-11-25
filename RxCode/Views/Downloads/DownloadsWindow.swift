@@ -167,6 +167,7 @@ private struct DownloadItemRow: View {
                 }
                 HStack(spacing: 6) {
                     Text(statusText)
+                        .monospacedDigit()
                     if item.phase == .downloading {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             if let speed = DownloadCenter.shared.bytesPerSecond(item.id, at: context.date) {

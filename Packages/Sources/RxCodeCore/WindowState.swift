@@ -141,6 +141,10 @@ public enum GeneralRoute: String, Codable, Sendable, CaseIterable, Hashable {
     case tasks
     case briefing
     case chat
+    /// Personal agents, their subagents, memory and schedules.
+    case agents
+    /// Kept so saved windows and links still decode. Schedules now live in the
+    /// Agents tab, which this route opens.
     case scheduled
 
     public var displayName: LocalizedStringResource {
@@ -148,6 +152,7 @@ public enum GeneralRoute: String, Codable, Sendable, CaseIterable, Hashable {
         case .chat: return "Chat"
         case .tasks: return "Projects"
         case .briefing: return "Briefing"
+        case .agents: return "Agents"
         case .scheduled: return "Scheduled"
         }
     }
@@ -161,9 +166,14 @@ public enum GeneralRoute: String, Codable, Sendable, CaseIterable, Hashable {
         case .chat: return "bubble.left.and.bubble.right"
         case .tasks: return "checklist"
         case .briefing: return "text.page"
+        case .agents: return "person.2.badge.gearshape"
         case .scheduled: return "calendar.badge.clock"
         }
     }
+
+    /// Routes whose page hosts a chat, so a pending thread load must survive
+    /// navigating to them.
+    public var hostsChat: Bool { self == .chat || self == .agents }
 }
 
 @Observable
@@ -348,7 +358,7 @@ public final class WindowState {
     public var generalRoute: GeneralRoute? = .tasks {
         didSet {
             // A pending thread load must not reopen chat after navigation.
-            if let generalRoute, generalRoute != .chat {
+            if let generalRoute, !generalRoute.hostsChat {
                 cancelSessionSwitchTask()
             }
         }

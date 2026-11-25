@@ -4,6 +4,7 @@ import SwiftUI
 /// The sidebar's "Scheduled" route: every cron-scheduled task, grouped by
 /// project (tasks without one first), with its schedule, next run, and an enable switch.
 struct ScheduledTasksView: View {
+    var agentID: UUID? = nil
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
@@ -36,7 +37,7 @@ struct ScheduledTasksView: View {
     /// Tasks without a project, then projects in sidebar order, each with its
     /// scheduled tasks by name.
     private var groups: [ProjectGroup] {
-        let byProject = Dictionary(grouping: appState.scheduledTasks, by: \.projectId)
+        let byProject = Dictionary(grouping: appState.scheduledTasks.filter { $0.agentId == agentID }, by: \.projectId)
         let sections: [Project?] = [nil] + appState.projects.map(Optional.some)
         return sections.compactMap { project in
             guard let tasks = byProject[project?.id], !tasks.isEmpty else { return nil }
@@ -176,15 +177,14 @@ struct ScheduledTasksView: View {
     }
 
     private func startNewTask(projectId: UUID? = nil, mode: TaskCreationMode) {
-        editing = EditingTask(
-            task: ScheduledTask(
+        var task = ScheduledTask(
                 projectId: projectId,
                 name: "",
                 prompt: "",
                 cronExpression: "0 9 * * *"
-            ),
-            mode: mode
         )
+        task.agentId = agentID
+        editing = EditingTask(task: task, mode: mode)
     }
 
     // MARK: - Sections

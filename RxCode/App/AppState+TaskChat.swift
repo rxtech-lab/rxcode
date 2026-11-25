@@ -106,6 +106,7 @@ extension AppState {
 
     func removeQueuedTaskMessage(id: UUID, for task: ProjectTask) {
         guard let sessionId = chatSessionId(for: task),
+              !stateForSession(sessionId).queueDispatchInProgress,
               threadStore.loadQueue(sessionKey: sessionId).contains(where: { $0.id == id })
         else { return }
         threadStore.removeQueued(id: id)
@@ -119,41 +120,38 @@ extension AppState {
             ?? allSessionSummaries.first(where: { $0.id == sessionId })?.agentProvider
             ?? task.agent.provider
             ?? selectedAgentProvider
-        return backend(for: provider).supportsSteering
+        return canSteer(sessionID: sessionId, fallbackProvider: provider)
+    }
+
+    func canInterruptQueuedACPTask(_ task: ProjectTask) -> Bool {
+        guard let sessionID = chatSessionId(for: task) else { return false }
+        let state = stateForSession(sessionID)
+        return state.isStreaming && (state.agentProvider ?? task.agent.provider) == .acp
+    }
+
+    func interruptQueuedACPTaskMessage(id: UUID, for task: ProjectTask) async -> Bool {
+        guard canInterruptQueuedACPTask(task), let sessionID = chatSessionId(for: task),
+              let message = threadStore.loadQueue(sessionKey: sessionID).first(where: { $0.id == id }),
+              let project = projects.first(where: { $0.id == task.projectId }) else { return false }
+        let window = WindowState()
+        window.currentSessionId = sessionID
+        window.selectedProject = project
+        return await interruptACPAndSend([message], in: window)
     }
 
     /// A failed steer leaves the queued entry in place for the normal flush.
     @discardableResult
     func steerQueuedTaskMessage(id: UUID, for task: ProjectTask) async -> Bool {
         guard let sessionId = chatSessionId(for: task),
-              let message = threadStore.loadQueue(sessionKey: sessionId).first(where: { $0.id == id }),
-              let streamId = sessionStates[sessionId]?.activeStreamId,
-              sessionStates[sessionId]?.isStreaming == true
+              let message = threadStore.loadQueue(sessionKey: sessionId).first(where: { $0.id == id })
         else { return false }
-
-        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !message.attachments.isEmpty else { return false }
-        // Images travel as path lines in the prompt, exactly as on a normal send.
-        let resolved = AttachmentFactory.resolvingClipboardImages(message.attachments).resolved
         let provider = sessionStates[sessionId]?.agentProvider
             ?? allSessionSummaries.first(where: { $0.id == sessionId })?.agentProvider
             ?? task.agent.provider
             ?? selectedAgentProvider
-        guard await backend(for: provider).steer(
-            streamId: streamId,
-            prompt: buildPromptWithAttachments(text, attachments: resolved)
-        ) else {
-            return false
-        }
-
-        updateState(sessionId) { state in
-            state.messages.append(ChatMessage(role: .user, content: message.text, attachments: resolved))
-            state.needsNewMessage = true
-            state.unconsumedSteerCount += 1
-        }
-        await saveSession(sessionId: sessionId, projectId: task.projectId, messages: stateForSession(sessionId).messages)
-        removeQueuedTaskMessage(id: id, for: task)
-        return true
+        return await steerQueuedMessages(
+            [message], sessionID: sessionId, projectID: task.projectId, fallbackProvider: provider
+        )
     }
 
     /// Sends a follow-up into the task's thread in the background and puts the

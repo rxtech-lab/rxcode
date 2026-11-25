@@ -115,6 +115,12 @@
     "ACP" : {
 
     },
+    "Agent Request" : {
+
+    },
+    "Agents" : {
+
+    },
     "All" : {
 
     },
@@ -179,7 +185,13 @@
     "Auto" : {
 
     },
+    "Automatic" : {
+
+    },
     "Available in all projects" : {
+
+    },
+    "Background Task" : {
 
     },
     "Backlog" : {
@@ -216,6 +228,9 @@
         }
       }
     },
+    "Cancelled" : {
+
+    },
     "Changes" : {
 
     },
@@ -232,6 +247,9 @@
 
     },
     "Codex" : {
+
+    },
+    "Concise" : {
 
     },
     "Couldn’t list ignored files." : {
@@ -333,6 +351,9 @@
     "Expected 5 fields (minute hour day month weekday), found %lld." : {
 
     },
+    "Extensions" : {
+
+    },
     "Extra Large" : {
       "localizations" : {
         "zh-Hans" : {
@@ -352,6 +373,12 @@
           }
         }
       }
+    },
+    "Fact" : {
+
+    },
+    "Failed" : {
+
     },
     "Feature" : {
 
@@ -384,6 +411,9 @@
     "Forest (Green)" : {
 
     },
+    "Friendly" : {
+
+    },
     "High" : {
 
     },
@@ -406,6 +436,9 @@
 
     },
     "Inspector" : {
+
+    },
+    "Interrupted" : {
 
     },
     "Invalid %@ field \"%@\"." : {
@@ -469,10 +502,16 @@
         }
       }
     },
+    "Mentor" : {
+
+    },
     "Midnight (Indigo)" : {
 
     },
     "Milestone" : {
+
+    },
+    "Model's Own Computer Use" : {
 
     },
     "No Matching Members" : {
@@ -502,6 +541,9 @@
 
     },
     "No usage data" : {
+
+    },
+    "Note" : {
 
     },
     "Ocean (Blue)" : {
@@ -571,6 +613,9 @@
     "Only commits on the current branch can be reworded." : {
 
     },
+    "Open-Source Agent (cua)" : {
+
+    },
     "Overdue since %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -590,16 +635,28 @@
     "Plan" : {
 
     },
+    "Playful" : {
+
+    },
+    "Preference" : {
+
+    },
     "Preview" : {
 
     },
     "Priority" : {
 
     },
+    "Professional" : {
+
+    },
     "Project" : {
 
     },
     "Projects" : {
+
+    },
+    "Queued" : {
 
     },
     "Recent %@ tasks are light (median %@ tokens). A smaller model could handle them for less of the limit." : {
@@ -653,6 +710,9 @@
     "Run" : {
 
     },
+    "Running" : {
+
+    },
     "RxCode (Default)" : {
 
     },
@@ -660,6 +720,9 @@
 
     },
     "Scheduled" : {
+
+    },
+    "Scheduled Run" : {
 
     },
     "Scheduled task finished" : {
@@ -723,6 +786,12 @@
 
     },
     "Stop generating" : {
+
+    },
+    "Subagent" : {
+
+    },
+    "Succeeded" : {
 
     },
     "Switch to %@" : {
@@ -834,6 +903,9 @@
       }
     },
     "Unsupported macro %@." : {
+
+    },
+    "Untitled Agent" : {
 
     },
     "Updated %@%@" : {

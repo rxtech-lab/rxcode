@@ -259,4 +259,92 @@ final class WorkspaceSidebarTests: XCTestCase {
         XCTAssertNil(store.operation)
         XCTAssertNil(store.error)
     }
+
+    func testGitSidebarSectionContextMenusCreateBranchAndTag() async throws {
+        let repo = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repo) }
+        func git(_ arguments: String...) async throws {
+            if let error = await GitHelper.runWithError(arguments, at: repo.path) {
+                XCTFail(error)
+                throw CocoaError(.fileWriteUnknown)
+            }
+        }
+        try await git("init", "-b", "main")
+        try await git("-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false",
+                      "commit", "--allow-empty", "-m", "Initial commit")
+
+        let store = GitWorkflowStore(root: repo.path)
+        await store.reload()
+        XCTAssertTrue(store.snapshot.tags.isEmpty)
+        let head = try XCTUnwrap(store.snapshot.headCommit)
+
+        let host = NSHostingView(rootView: GitWorkflowSidebar(store: store).environment(RepositoryStatus()))
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 310, height: 550),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+
+        func tableView(in view: NSView) -> NSTableView? {
+            if let table = view as? NSTableView { return table }
+            return view.subviews.lazy.compactMap { tableView(in: $0) }.first
+        }
+        func resolvedMenu(at row: Int, in table: NSTableView) throws -> NSMenu? {
+            let rowBounds = table.rect(ofRow: row)
+            guard rowBounds.height > 0 else { return nil }
+            let pointInWindow = table.convert(CGPoint(x: rowBounds.midX, y: rowBounds.midY), to: nil)
+            let event = try XCTUnwrap(NSEvent.mouseEvent(
+                with: .rightMouseDown,
+                location: pointInWindow,
+                modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber,
+                context: nil,
+                eventNumber: 0,
+                clickCount: 1,
+                pressure: 1
+            ))
+            let pointInHost = host.convert(pointInWindow, from: nil)
+            var candidate = host.hitTest(pointInHost)
+            while let view = candidate {
+                if let menu = view.menu(for: event) {
+                    menu.delegate?.menuNeedsUpdate?(menu)
+                    if !menu.items.isEmpty {
+                        return menu
+                    }
+                }
+                candidate = view.superview
+            }
+            return nil
+        }
+
+        let table = try XCTUnwrap(tableView(in: host))
+        let menus = try (0..<table.numberOfRows).compactMap { try resolvedMenu(at: $0, in: table) }
+
+        let branchesMenu = try XCTUnwrap(menus.first { $0.items.contains { $0.title == "New Branch…" } })
+        let newBranchIndex = try XCTUnwrap(branchesMenu.items.firstIndex { $0.title == "New Branch…" })
+        XCTAssertTrue(branchesMenu.items[newBranchIndex].isEnabled)
+        branchesMenu.performActionForItem(at: newBranchIndex)
+        if case .createBranch(let startPoint, let label) = store.sheet {
+            XCTAssertEqual(startPoint, "HEAD")
+            XCTAssertEqual(label, "main")
+        } else {
+            XCTFail("Expected createBranch sheet, got \(String(describing: store.sheet))")
+        }
+
+        store.sheet = nil
+
+        let tagsMenu = try XCTUnwrap(menus.first { $0.items.contains { $0.title == "New Tag…" } })
+        let newTagIndex = try XCTUnwrap(tagsMenu.items.firstIndex { $0.title == "New Tag…" })
+        XCTAssertTrue(tagsMenu.items[newTagIndex].isEnabled)
+        tagsMenu.performActionForItem(at: newTagIndex)
+        if case .createTag(let target, let label) = store.sheet {
+            XCTAssertEqual(target, head)
+            XCTAssertTrue(label.contains("Initial commit"))
+        } else {
+            XCTFail("Expected createTag sheet, got \(String(describing: store.sheet))")
+        }
+    }
 }

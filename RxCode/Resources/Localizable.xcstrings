@@ -1,51 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Connection settings" : {
-
-    },
-    "Connection settings…" : {
-
-    },
-    "Enable extension" : {
-
-    },
-    "Install extension" : {
-
-    },
-    "Review permissions" : {
-
-    },
-    "%lld extensions need enabling in System Settings" : {
-
-    },
-    "Disable" : {
-
-    },
-    "Disable this extension?" : {
-
-    },
-    "Disable…" : {
-
-    },
-    "Enable" : {
-
-    },
-    "Enable…" : {
-
-    },
-    "Extension update failed" : {
-
-    },
-    "Manage Extension" : {
-
-    },
-    "Read Secret" : {
-
-    },
-    "Create Secret" : {
-
-    },
     "" : {
       "localizations" : {
         "ko" : {
@@ -63,144 +18,6 @@
       }
     },
     "\nThis can’t be undone." : {
-
-    },
-    "%@ need attention" : {
-
-    },
-    "Allow %@ to use %@?" : {
-
-    },
-    "Archive SHA-256" : {
-
-    },
-    "Available" : {
-
-    },
-    "Check for RxCode Updates" : {
-
-    },
-    "Choose a project" : {
-
-    },
-    "Choose Folder…" : {
-
-    },
-    "Confirm" : {
-
-    },
-    "Confirmed" : {
-
-    },
-    "Create RxCode Secrets environments and files." : {
-
-    },
-    "Enable Extension" : {
-
-    },
-    "Extension API 2.0 preview is enabled." : {
-
-    },
-    "Extension blocked · update required" : {
-
-    },
-    "Extension Details" : {
-
-    },
-    "Extension installation failed" : {
-
-    },
-    "Extension unavailable" : {
-
-    },
-    "High risk" : {
-
-    },
-    "Install Extension" : {
-
-    },
-    "Key fingerprint" : {
-
-    },
-    "Key ID" : {
-
-    },
-    "Local development build." : {
-
-    },
-    "Make network requests to the listed domains." : {
-
-    },
-    "No compatible releases available." : {
-
-    },
-    "No Extension Panels" : {
-
-    },
-    "Open Extension Settings" : {
-
-    },
-    "Pending" : {
-
-    },
-    "Permission review failed" : {
-
-    },
-    "Permission update failed" : {
-
-    },
-    "Permissions" : {
-
-    },
-    "Project or worktree" : {
-
-    },
-    "Read contacts through RxCode." : {
-
-    },
-    "Read files outside the project and sensitive files." : {
-
-    },
-    "Read local usage, rate limits and task costs." : {
-
-    },
-    "Read project files, excluding sensitive files." : {
-
-    },
-    "Read RxCode Secrets after passkey verification." : {
-
-    },
-    "Rejected" : {
-
-    },
-    "Revocations last refreshed" : {
-
-    },
-    "Save settings for this extension." : {
-
-    },
-    "Signed by rxlab · Verified by RxCode." : {
-
-    },
-    "Signed with a test key · Verified by RxCode." : {
-
-    },
-    "Standard" : {
-
-    },
-    "Uninstall failed" : {
-
-    },
-    "Uninstall this extension?" : {
-
-    },
-    "Update couldn't be verified. This version of RxCode doesn't recognize its signing key." : {
-
-    },
-    "Update Extension" : {
-
-    },
-    "Use ACP account credentials for network requests." : {
 
     },
     " :" : {
@@ -246,12 +63,6 @@
           }
         }
       }
-    },
-    "Use the listed credential slots for network requests." : {
-
-    },
-    "Verification details" : {
-
     },
     "—" : {
       "localizations" : {
@@ -637,6 +448,9 @@
         }
       }
     },
+    "%@ · Subagents" : {
+
+    },
     "%@ · tasks of each model's average cost that fit in what's left of each limit." : {
       "localizations" : {
         "zh-Hans" : {
@@ -723,6 +537,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 个操作"
+          }
+        }
+      }
+    },
+    "%@ asked %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ asked %2$@"
           }
         }
       }
@@ -863,6 +687,16 @@
         }
       }
     },
+    "%@ of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@"
+          }
+        }
+      }
+    },
     "%@ of 5h per 1M tokens" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -881,6 +715,9 @@
 
     },
     "%@ proactively reacts when coding sessions finish, request permissions or answers, or when CI fails." : {
+
+    },
+    "%@ saves preferences, facts and decisions here as you talk." : {
 
     },
     "%@ Studio Setup" : {
@@ -959,6 +796,9 @@
           }
         }
       }
+    },
+    "%@ will no longer remember it." : {
+
     },
     "%@, %@" : {
       "localizations" : {
@@ -1340,6 +1180,9 @@
           }
         }
       }
+    },
+    "%lld extensions need enabling in System Settings" : {
+
     },
     "%lld files" : {
       "localizations" : {
@@ -1852,6 +1695,26 @@
         }
       }
     },
+    "↩︎ %@ “%@” %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "↩︎ %1$@ “%2$@” %3$@"
+          }
+        }
+      }
+    },
+    "↩︎ %@ replied to “%@” (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "↩︎ %1$@ replied to “%2$@” (%3$@)"
+          }
+        }
+      }
+    },
     "+%lld" : {
       "localizations" : {
         "ko" : {
@@ -2239,6 +2102,12 @@
     "A forecast needs two completed days of activity and at least three isolated cost measurements for each active model. Partial days and overlapping task costs are excluded." : {
 
     },
+    "A memory note can't be empty." : {
+
+    },
+    "a teammate" : {
+
+    },
     "A workflow failed" : {
       "comment" : "CI failure notification body when the workflow name is unknown.",
       "localizations" : {
@@ -2443,6 +2312,9 @@
 
     },
     "Active Voice Engine" : {
+
+    },
+    "Activity" : {
 
     },
     "Add" : {
@@ -3496,6 +3368,9 @@
         }
       }
     },
+    "Agent actions" : {
+
+    },
     "Agent Availability" : {
       "localizations" : {
         "ko" : {
@@ -3528,10 +3403,16 @@
         }
       }
     },
+    "Agent deleted" : {
+
+    },
     "Agent Media Tools" : {
 
     },
     "Agent Model" : {
+
+    },
+    "Agent Not Found" : {
 
     },
     "Agent Prompts" : {
@@ -3595,6 +3476,15 @@
       }
     },
     "Agent, ACP client and local model downloads appear here." : {
+
+    },
+    "Agents" : {
+
+    },
+    "Agents are long-lived helpers with their own look, personality, memory and schedules. They can ask each other for help." : {
+
+    },
+    "Agents ask teammates for help on their own when the work fits a teammate better. You can also ask in chat, for example “Ask Researcher to compare these options.”" : {
 
     },
     "AI" : {
@@ -3917,6 +3807,15 @@
     "Allow “%@” to use more features?" : {
 
     },
+    "Allow %@ to use %@?" : {
+
+    },
+    "Allow computer use" : {
+
+    },
+    "Allow paired phones to control this Mac" : {
+
+    },
     "Allow Personal Voice…" : {
 
     },
@@ -4017,6 +3916,9 @@
     "Amend Commit…" : {
 
     },
+    "An agent can't send a request to itself." : {
+
+    },
     "An agent is working on this story's tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4101,6 +4003,9 @@
 
     },
     "Another device claimed this run. The card moves on when that run finishes." : {
+
+    },
+    "Answering a request from %@" : {
 
     },
     "Any" : {
@@ -4331,6 +4236,9 @@
         }
       }
     },
+    "Archive SHA-256" : {
+
+    },
     "archived" : {
       "localizations" : {
         "ko" : {
@@ -4443,6 +4351,9 @@
 
     },
     "Ask your agent to create an extension in your project." : {
+
+    },
+    "Asked %@" : {
 
     },
     "Assign an agent to a task and move it into a chat column to start work." : {
@@ -4896,6 +4807,9 @@
         }
       }
     },
+    "Available" : {
+
+    },
     "Available to Claude, Codex, ACP clients, and local chat agents through IDE media tools. Codex and downloaded image models can refine attached images. Flowcy currently generates images from text." : {
 
     },
@@ -5000,6 +4914,9 @@
       }
     },
     "Back to %@" : {
+
+    },
+    "Back to Conversation" : {
 
     },
     "Back to Draft" : {
@@ -5129,6 +5046,9 @@
           }
         }
       }
+    },
+    "Behavior" : {
+
     },
     "Billing API token" : {
 
@@ -5478,6 +5398,12 @@
         }
       }
     },
+    "Browser Engine" : {
+
+    },
+    "Browser Engine: %@…" : {
+
+    },
     "Browser Extensions" : {
 
     },
@@ -5549,6 +5475,9 @@
       }
     },
     "Built-in Kokoro voices. Analyze the README to load every voice this model lists." : {
+
+    },
+    "Built-in macOS WebKit engine. Fast, native, and requires no extra download." : {
 
     },
     "by %@" : {
@@ -5676,10 +5605,28 @@
     "Cancel Download" : {
 
     },
+    "Cancel Job" : {
+
+    },
+    "Cancel Request" : {
+
+    },
     "Cancel this download?" : {
 
     },
     "Cancelled" : {
+
+    },
+    "Cancelled by %@." : {
+
+    },
+    "Cancelled." : {
+
+    },
+    "Cancelling job…" : {
+
+    },
+    "Capabilities" : {
 
     },
     "Card size" : {
@@ -5782,6 +5729,9 @@
     "Chat Unavailable" : {
 
     },
+    "Chat with %@" : {
+
+    },
     "Chat with any agent" : {
 
     },
@@ -5813,7 +5763,13 @@
         }
       }
     },
+    "Check for Chrome runtime updates" : {
+
+    },
     "Check for runtime updates" : {
+
+    },
+    "Check for RxCode Updates" : {
 
     },
     "Check for Updates" : {
@@ -5985,6 +5941,9 @@
     "Choose a preview" : {
 
     },
+    "Choose a project" : {
+
+    },
     "Choose a project from the workspace most recently used in RxCode." : {
 
     },
@@ -6069,6 +6028,9 @@
     "Choose Flowcy Voice…" : {
 
     },
+    "Choose Folder…" : {
+
+    },
     "Choose frequency" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6108,7 +6070,7 @@
         }
       }
     },
-    "Choose one changed file to see its diff." : {
+    "Choose one changed file to see its diff or preview." : {
 
     },
     "Choose Plan Mode from the Add menu in chat to get started." : {
@@ -6151,6 +6113,9 @@
           }
         }
       }
+    },
+    "Choose the rendering engine for the workspace browser and manage the optional downloadable Chrome runtime." : {
+
     },
     "Choose the time window for usage statistics." : {
       "extractionState" : "stale",
@@ -6231,6 +6196,27 @@
           }
         }
       }
+    },
+    "Chrome" : {
+
+    },
+    "Chrome (%@)" : {
+
+    },
+    "Chrome browser runtime is not installed. Download Chrome in Settings to use the Chrome engine." : {
+
+    },
+    "Chrome for Testing" : {
+
+    },
+    "Chrome for Testing is downloaded on demand from Google’s official release servers into Application Support and is never bundled inside RxCode." : {
+
+    },
+    "Chrome Runtime" : {
+
+    },
+    "Chrome stopped responding." : {
+
     },
     "Chrome’s cookie database could not be read: %@" : {
 
@@ -7034,6 +7020,9 @@
     "Coding Plans" : {
 
     },
+    "Collaboration" : {
+
+    },
     "Collapse %@" : {
 
     },
@@ -7388,6 +7377,9 @@
     "Compressing ZIP…" : {
 
     },
+    "Computer use" : {
+
+    },
     "Computer use — %@" : {
 
     },
@@ -7446,6 +7438,9 @@
       }
     },
     "Configure a summarization provider in Settings to generate a commit message." : {
+
+    },
+    "Configure Browser Engine…" : {
 
     },
     "Configure Codex Realtime…" : {
@@ -7516,6 +7511,9 @@
         }
       }
     },
+    "Confirm" : {
+
+    },
     "Confirm computer use" : {
 
     },
@@ -7548,6 +7546,9 @@
 
     },
     "Confirmations: %lld" : {
+
+    },
+    "Confirmed" : {
 
     },
     "Connect any MCP server to give every agent extra tools. You can also skip this and add servers later in Settings → MCP." : {
@@ -7792,6 +7793,12 @@
           }
         }
       }
+    },
+    "Connection settings" : {
+
+    },
+    "Connection settings…" : {
+
     },
     "Contains…" : {
       "localizations" : {
@@ -8074,6 +8081,9 @@
         }
       }
     },
+    "Could not extract Chrome: %@" : {
+
+    },
     "Could not generate a cron expression. Try rewording the schedule." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8189,6 +8199,7 @@
 
     },
     "Couldn't reach the current response — still queued, sends when it ends." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8211,6 +8222,9 @@
 
     },
     "Couldn't Sign In" : {
+
+    },
+    "Couldn’t start Chrome: %@" : {
 
     },
     "Couldn’t switch branches" : {
@@ -8322,6 +8336,9 @@
         }
       }
     },
+    "Create a second agent so they can work together." : {
+
+    },
     "Create a token on Hugging Face…" : {
 
     },
@@ -8417,9 +8434,6 @@
           }
         }
       }
-    },
-    "Create Now (%@)" : {
-
     },
     "Create Pet Look" : {
 
@@ -8529,6 +8543,9 @@
         }
       }
     },
+    "Create RxCode Secrets environments and files." : {
+
+    },
     "Create Scheduled Task with AI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8548,6 +8565,9 @@
           }
         }
       }
+    },
+    "Create Secret" : {
+
     },
     "Create Story and Tasks" : {
       "localizations" : {
@@ -8650,9 +8670,6 @@
     "Create tracking reference" : {
 
     },
-    "Create with Model" : {
-
-    },
     "Create with Prompt…" : {
 
     },
@@ -8719,6 +8736,9 @@
           }
         }
       }
+    },
+    "Create your first agent" : {
+
     },
     "Created %@" : {
       "localizations" : {
@@ -8875,6 +8895,9 @@
           }
         }
       }
+    },
+    "Current engine: %@" : {
+
     },
     "Current name" : {
 
@@ -9547,6 +9570,9 @@
         }
       }
     },
+    "Delete %@" : {
+
+    },
     "Delete after" : {
       "localizations" : {
         "ko" : {
@@ -9562,6 +9588,12 @@
           }
         }
       }
+    },
+    "Delete agent and its schedules, memory, and jobs?" : {
+
+    },
+    "Delete Agent…" : {
+
     },
     "Delete All" : {
       "localizations" : {
@@ -9788,6 +9820,12 @@
     "Delete model?" : {
 
     },
+    "Delete Note" : {
+
+    },
+    "Delete Note…" : {
+
+    },
     "Delete Preset" : {
       "localizations" : {
         "ko" : {
@@ -9948,6 +9986,9 @@
         }
       }
     },
+    "Delete this memory note?" : {
+
+    },
     "Delete this scheduled task?" : {
       "localizations" : {
         "ko" : {
@@ -10016,6 +10057,9 @@
         }
       }
     },
+    "Deleted agent" : {
+
+    },
     "Deleting \"%@\"…" : {
       "localizations" : {
         "ko" : {
@@ -10031,6 +10075,9 @@
           }
         }
       }
+    },
+    "Deleting %@…" : {
+
     },
     "Deleting branch…" : {
 
@@ -10255,6 +10302,9 @@
         }
       }
     },
+    "Detected in /Applications (%@)" : {
+
+    },
     "dev" : {
       "localizations" : {
         "ko" : {
@@ -10315,6 +10365,9 @@
     "Device output volume" : {
 
     },
+    "Diff" : {
+
+    },
     "Direct · LAN%@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10345,6 +10398,9 @@
         }
       }
     },
+    "Disable" : {
+
+    },
     "Disable globally" : {
       "localizations" : {
         "ko" : {
@@ -10360,6 +10416,12 @@
           }
         }
       }
+    },
+    "Disable this extension?" : {
+
+    },
+    "Disable…" : {
+
     },
     "Disabled" : {
       "localizations" : {
@@ -10468,6 +10530,9 @@
           }
         }
       }
+    },
+    "Display %u" : {
+
     },
     "Display name" : {
       "localizations" : {
@@ -10730,6 +10795,9 @@
         }
       }
     },
+    "Download Chrome below to activate the Chrome engine. WebKit is used until Chrome is ready." : {
+
+    },
     "Download for iOS" : {
       "localizations" : {
         "ko" : {
@@ -10798,6 +10866,12 @@
     "Downloaded" : {
 
     },
+    "Downloaded (Chrome for Testing)" : {
+
+    },
+    "Downloaded Chrome %@" : {
+
+    },
     "Downloaded Models" : {
 
     },
@@ -10813,6 +10887,9 @@
           }
         }
       }
+    },
+    "Downloading Chrome runtime…" : {
+
     },
     "Downloading…" : {
 
@@ -10844,12 +10921,6 @@
         }
       }
     },
-    "Draft the title and description with an agent" : {
-
-    },
-    "Draft with Agent" : {
-
-    },
     "Draft, debate, and revise an implementation plan before coding begins." : {
 
     },
@@ -10862,6 +10933,9 @@
           }
         }
       }
+    },
+    "Drafting Model" : {
+
     },
     "Drafting with %@…" : {
 
@@ -11099,6 +11173,12 @@
     "Each view has its own style, metric, and visibility." : {
 
     },
+    "Earlier conversation from %@" : {
+
+    },
+    "Earlier Conversations" : {
+
+    },
     "Edit" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11146,6 +11226,12 @@
           }
         }
       }
+    },
+    "Edit Agent" : {
+
+    },
+    "Edit Agent…" : {
+
     },
     "Edit Alias…" : {
 
@@ -11562,7 +11648,13 @@
         }
       }
     },
+    "Enable" : {
+
+    },
     "Enable %@" : {
+
+    },
+    "Enable Extension" : {
 
     },
     "Enable Focus Mode" : {
@@ -11640,6 +11732,9 @@
       }
     },
     "Enable RxCode in System Settings → Privacy & Security → Microphone, then try Start Voice again. If access is already enabled, quit and reopen RxCode." : {
+
+    },
+    "Enable…" : {
 
     },
     "Enabled" : {
@@ -12111,6 +12206,9 @@
         }
       }
     },
+    "Exit code" : {
+
+    },
     "Exit full width" : {
 
     },
@@ -12277,7 +12375,22 @@
     "Extension" : {
 
     },
+    "Extension blocked · update required" : {
+
+    },
+    "Extension Details" : {
+
+    },
     "Extension discovery failed" : {
+
+    },
+    "Extension installation failed" : {
+
+    },
+    "Extension unavailable" : {
+
+    },
+    "Extension update failed" : {
 
     },
     "Extensions" : {
@@ -12348,6 +12461,12 @@
           }
         }
       }
+    },
+    "Extracting Chrome runtime…" : {
+
+    },
+    "Extracting downloaded archive…" : {
+
     },
     "Fact" : {
       "localizations" : {
@@ -12439,6 +12558,9 @@
         }
       }
     },
+    "Fallback model" : {
+
+    },
     "Fast-forward Only" : {
 
     },
@@ -12525,6 +12647,9 @@
           }
         }
       }
+    },
+    "File deleted" : {
+
     },
     "File paths" : {
       "localizations" : {
@@ -12740,6 +12865,9 @@
       }
     },
     "Find the companion files again?" : {
+
+    },
+    "Finished" : {
 
     },
     "Finished installing? Tap Refresh." : {
@@ -13240,6 +13368,19 @@
         }
       }
     },
+    "From %@" : {
+
+    },
+    "From %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "From %1$@: %2$@"
+          }
+        }
+      }
+    },
     "func checkShowMenu(context: Context) async throws -> Bool" : {
       "localizations" : {
         "ko" : {
@@ -13334,6 +13475,9 @@
       }
     },
     "Generate a workspace daily report summarizing completed tasks, active threads, briefings, scheduled runs, and CI health from the past 24 hours." : {
+
+    },
+    "Generate and Create" : {
 
     },
     "Generate condition with AI" : {
@@ -13586,6 +13730,9 @@
         }
       }
     },
+    "Give the agent a name." : {
+
+    },
     "Global" : {
       "localizations" : {
         "ko" : {
@@ -13763,6 +13910,9 @@
 
     },
     "Hide" : {
+
+    },
+    "Hide agents sidebar" : {
 
     },
     "Hide chat sidebar" : {
@@ -13963,6 +14113,9 @@
           }
         }
       }
+    },
+    "High risk" : {
+
     },
     "Highest tier" : {
       "localizations" : {
@@ -14196,6 +14349,9 @@
     "How did this session go?" : {
 
     },
+    "How it talks and behaves" : {
+
+    },
     "How many more tasks of that average cost fit before each limit is reached, based on what's used now." : {
       "localizations" : {
         "zh-Hans" : {
@@ -14321,6 +14477,9 @@
           }
         }
       }
+    },
+    "Idle" : {
+
     },
     "If active, the pet returns to RxBuddy. Your conversation continues." : {
 
@@ -14493,6 +14652,12 @@
           }
         }
       }
+    },
+    "In-App Browser" : {
+
+    },
+    "In-App Browser Engine" : {
+
     },
     "Inactive chats are moved to the archive automatically. Pinned chats are never auto-archived." : {
       "localizations" : {
@@ -14780,6 +14945,12 @@
         }
       }
     },
+    "Install extension" : {
+
+    },
+    "Install Extension" : {
+
+    },
     "Install GitHub App" : {
       "localizations" : {
         "ko" : {
@@ -14970,6 +15141,9 @@
     "Installed ACP client" : {
 
     },
+    "Installed in Application Support" : {
+
+    },
     "Installed Neural Voice Models" : {
 
     },
@@ -15032,6 +15206,9 @@
         }
       }
     },
+    "Instructions" : {
+
+    },
     "Integration" : {
 
     },
@@ -15076,6 +15253,9 @@
       }
     },
     "Interrupt" : {
+
+    },
+    "Interrupt and Send Now" : {
 
     },
     "Interrupt Speech" : {
@@ -15143,6 +15323,9 @@
         }
       }
     },
+    "Its conversations stay in history and search." : {
+
+    },
     "Its layout and filters will be removed. Tasks are not affected." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15152,6 +15335,12 @@
           }
         }
       }
+    },
+    "Job Not Found" : {
+
+    },
+    "Jobs" : {
+
     },
     "Jump to Project" : {
       "localizations" : {
@@ -15172,6 +15361,9 @@
           }
         }
       }
+    },
+    "Just finished" : {
+
     },
     "Keep at least one commit." : {
 
@@ -15278,6 +15470,12 @@
           }
         }
       }
+    },
+    "Key fingerprint" : {
+
+    },
+    "Key ID" : {
+
     },
     "Keychain access to Chrome Safe Storage was denied." : {
 
@@ -15543,6 +15741,9 @@
           }
         }
       }
+    },
+    "Lets you watch agents that use the computer, and take over, from the RxCode app on your phone." : {
+
     },
     "Letters, numbers, dot, dash and underscore. Max 32 characters." : {
       "localizations" : {
@@ -16088,6 +16289,9 @@
     "Local Changes" : {
 
     },
+    "Local development build." : {
+
+    },
     "Local Models" : {
 
     },
@@ -16190,6 +16394,9 @@
     "macOS doesn't list Siri voices for apps. To use a Siri voice, select it as the System Voice in System Settings → Accessibility → Read & Speak, then choose Spoken Content System Voice here. Speech speed may not apply to every Siri voice." : {
 
     },
+    "macOS refused to create the input event." : {
+
+    },
     "macOS System Voice" : {
 
     },
@@ -16243,6 +16450,9 @@
           }
         }
       }
+    },
+    "Make network requests to the listed domains." : {
+
     },
     "Make Recommendations" : {
 
@@ -16368,6 +16578,9 @@
           }
         }
       }
+    },
+    "Manage Extension" : {
+
     },
     "Manage Extensions" : {
 
@@ -17522,6 +17735,9 @@
     "Needs approval" : {
 
     },
+    "Needs attention" : {
+
+    },
     "Needs Attention" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17593,7 +17809,13 @@
     "new (%@)" : {
 
     },
+    "New Agent" : {
+
+    },
     "New Branch" : {
+
+    },
+    "New Branch…" : {
 
     },
     "New chat" : {
@@ -17842,6 +18064,9 @@
       }
     },
     "New Tag" : {
+
+    },
+    "New Tag…" : {
 
     },
     "New Task" : {
@@ -18164,6 +18389,9 @@
     "No Active Runs" : {
 
     },
+    "No Activity Yet" : {
+
+    },
     "No agent turns yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18190,6 +18418,9 @@
           }
         }
       }
+    },
+    "No Agents Yet" : {
+
     },
     "No AI usage yet" : {
 
@@ -18306,6 +18537,9 @@
 
     },
     "No commits yet" : {
+
+    },
+    "No compatible releases available." : {
 
     },
     "No connection details" : {
@@ -18554,6 +18788,9 @@
         }
       }
     },
+    "No Extension Panels" : {
+
+    },
     "No Extensions" : {
 
     },
@@ -18631,6 +18868,9 @@
 
     },
     "No Log" : {
+
+    },
+    "No macOS Chrome for Testing release was found." : {
 
     },
     "No matches." : {
@@ -18741,6 +18981,9 @@
           }
         }
       }
+    },
+    "No Memory Yet" : {
+
     },
     "No milestones on this project yet." : {
       "localizations" : {
@@ -19097,6 +19340,9 @@
           }
         }
       }
+    },
+    "No requests between agents yet." : {
+
     },
     "No response text." : {
       "localizations" : {
@@ -19687,6 +19933,12 @@
         }
       }
     },
+    "Not downloaded · Latest Stable %@" : {
+
+    },
+    "Not downloaded · Official Google Chrome for Testing build" : {
+
+    },
     "Not enough daily activity yet" : {
 
     },
@@ -19741,6 +19993,9 @@
           }
         }
       }
+    },
+    "Not installed in /Applications" : {
+
     },
     "Not Now" : {
 
@@ -19882,6 +20137,9 @@
           }
         }
       }
+    },
+    "Notify paired phones" : {
+
     },
     "Notify when response completes" : {
       "localizations" : {
@@ -20147,6 +20405,9 @@
     "Open Accessibility Settings…" : {
 
     },
+    "Open agents and schedules" : {
+
+    },
     "Open Briefing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20184,6 +20445,9 @@
 
     },
     "Open Document…" : {
+
+    },
+    "Open Extension Settings" : {
 
     },
     "Open Git history, branches, and rebase tools" : {
@@ -21100,6 +21364,9 @@
         }
       }
     },
+    "Pending" : {
+
+    },
     "Per 1M tokens" : {
       "localizations" : {
         "zh-Hans" : {
@@ -21251,6 +21518,15 @@
         }
       }
     },
+    "Permission review failed" : {
+
+    },
+    "Permission update failed" : {
+
+    },
+    "Permissions" : {
+
+    },
     "Permissions: %lld" : {
 
     },
@@ -21261,6 +21537,9 @@
 
     },
     "Personal Voice isn't supported on this Mac." : {
+
+    },
+    "Personality" : {
 
     },
     "Pet" : {
@@ -21908,6 +22187,9 @@
         }
       }
     },
+    "Project or worktree" : {
+
+    },
     "Project prompt" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22481,6 +22763,24 @@
     "Read and change your data on %@" : {
 
     },
+    "Read contacts through RxCode." : {
+
+    },
+    "Read files outside the project and sensitive files." : {
+
+    },
+    "Read local usage, rate limits and task costs." : {
+
+    },
+    "Read project files, excluding sensitive files." : {
+
+    },
+    "Read RxCode Secrets after passkey verification." : {
+
+    },
+    "Read Secret" : {
+
+    },
     "Read your browser tabs" : {
 
     },
@@ -22889,6 +23189,9 @@
         }
       }
     },
+    "Rejected" : {
+
+    },
     "Relay" : {
       "localizations" : {
         "ko" : {
@@ -23085,6 +23388,9 @@
           }
         }
       }
+    },
+    "Remote Access" : {
+
     },
     "Remote branch" : {
 
@@ -23399,7 +23705,16 @@
     "Removed %@" : {
 
     },
+    "Removed downloaded Chrome runtime" : {
+
+    },
     "Removes the branch for everyone using this remote." : {
+
+    },
+    "Removing Chrome runtime…" : {
+
+    },
+    "Removing downloaded runtime…" : {
 
     },
     "Removing integration…" : {
@@ -23686,6 +24001,9 @@
     "Requires accepting the model's terms on Hugging Face" : {
 
     },
+    "Researcher, Planner, Inbox Helper…" : {
+
+    },
     "Resend Link" : {
       "localizations" : {
         "zh-Hans" : {
@@ -23863,6 +24181,9 @@
           }
         }
       }
+    },
+    "Result" : {
+
     },
     "Resume" : {
       "localizations" : {
@@ -24146,6 +24467,9 @@
     "Revision" : {
 
     },
+    "Revocations last refreshed" : {
+
+    },
     "Reword" : {
 
     },
@@ -24162,6 +24486,9 @@
 
     },
     "Rewording commit…" : {
+
+    },
+    "Role and standing instructions" : {
 
     },
     "Rotate token & reinstall" : {
@@ -24560,6 +24887,12 @@
     "RxCode asks for read access to your profile, your repositories and the gated repositories you can open. It never gets write access." : {
 
     },
+    "RxCode needs Accessibility permission to control the mouse and keyboard. Allow it in System Settings → Privacy & Security → Accessibility." : {
+
+    },
+    "RxCode needs Screen Recording permission. Allow it in System Settings → Privacy & Security → Screen & System Audio Recording." : {
+
+    },
     "RxCode needs the GitHub App to see your repositories. Install it for the account or organizations you want to import from." : {
       "localizations" : {
         "ko" : {
@@ -24612,6 +24945,9 @@
         }
       }
     },
+    "RxCode will push the branch, draft the title and description, and open the pull request." : {
+
+    },
     "RxCode.xcodeproj" : {
       "localizations" : {
         "ko" : {
@@ -24632,6 +24968,9 @@
 
     },
     "RxCode's copy of stable-diffusion.cpp will be deleted. Diffusion models stay on disk and need the engine reinstalled before they run." : {
+
+    },
+    "RxCode’s downloaded Chrome for Testing runtime will be deleted from Application Support. If no other Chrome runtime is available, the in-app browser will switch back to WebKit." : {
 
     },
     "RxCode's managed copy will be removed. Separately installed copies are managed outside RxCode." : {
@@ -24745,6 +25084,9 @@
           }
         }
       }
+    },
+    "Save settings for this extension." : {
+
     },
     "Save the connection and refresh its usage to preview this card." : {
 
@@ -25046,6 +25388,9 @@
           }
         }
       }
+    },
+    "Schedules" : {
+
     },
     "Scheme" : {
       "localizations" : {
@@ -25964,6 +26309,9 @@
         }
       }
     },
+    "Send Now" : {
+
+    },
     "Send test notification" : {
       "localizations" : {
         "ko" : {
@@ -26020,6 +26368,9 @@
 
     },
     "Send to the next speaker" : {
+
+    },
+    "Sending queued instruction" : {
 
     },
     "Sends a system notification while RxCode is in the background." : {
@@ -26421,6 +26772,9 @@
     "Share of each provider’s limits used by this thread" : {
 
     },
+    "Share screen with paired phones" : {
+
+    },
     "Shared Window" : {
 
     },
@@ -26533,6 +26887,9 @@
           }
         }
       }
+    },
+    "Show agents sidebar" : {
+
     },
     "Show all" : {
 
@@ -26902,6 +27259,9 @@
       }
     },
     "Show or hide individual default and custom actions in project, thread, and briefing-card menus. Some default actions appear only when applicable. Menus sync to mobile automatically." : {
+
+    },
+    "Show Preview" : {
 
     },
     "Show session time by provider and model." : {
@@ -27473,6 +27833,9 @@
     "Sign-out Failed" : {
 
     },
+    "Signed by rxlab · Verified by RxCode." : {
+
+    },
     "Signed in" : {
       "localizations" : {
         "ko" : {
@@ -27519,6 +27882,9 @@
 
     },
     "Signed in with Vercel" : {
+
+    },
+    "Signed with a test key · Verified by RxCode." : {
 
     },
     "Signing in lets the RxCode Agent browse and download your private models and public gated models your account has been granted access to." : {
@@ -27835,6 +28201,9 @@
         }
       }
     },
+    "Standard" : {
+
+    },
     "Start a fresh chat whenever you want a separate topic." : {
       "localizations" : {
         "zh-Hans" : {
@@ -27893,6 +28262,12 @@
 
     },
     "Start Voice Mode (%@)" : {
+
+    },
+    "Started" : {
+
+    },
+    "Starting download…" : {
 
     },
     "Starting point" : {
@@ -27991,6 +28366,9 @@
           }
         }
       }
+    },
+    "Steer into Current Response" : {
+
     },
     "Steer now" : {
       "localizations" : {
@@ -28250,6 +28628,9 @@
     "Style" : {
 
     },
+    "Subagent thread working for %@" : {
+
+    },
     "Subject" : {
       "localizations" : {
         "zh-Hans" : {
@@ -28475,6 +28856,12 @@
     "Switching branch…" : {
 
     },
+    "Switching engines reloads open tabs in the workspace browser while preserving their current URLs." : {
+
+    },
+    "Symbol" : {
+
+    },
     "Sync an existing project on this Mac with this cloud project" : {
       "localizations" : {
         "ko" : {
@@ -28554,10 +28941,16 @@
     "System" : {
 
     },
+    "System Chrome (%@)" : {
+
+    },
     "System Default" : {
 
     },
     "System Default follows System Settings → Sound. You can change devices during a call." : {
+
+    },
+    "System Google Chrome" : {
 
     },
     "Tag" : {
@@ -28897,6 +29290,12 @@
     "Team ID or slug (blank for default team)" : {
 
     },
+    "Teammate requests and background jobs of %@ appear here." : {
+
+    },
+    "Teammates" : {
+
+    },
     "Templates of GitHub merge settings and an optional branch ruleset. Your default template is applied automatically to new repositories." : {
       "localizations" : {
         "ko" : {
@@ -28977,6 +29376,9 @@
       }
     },
     "Text encoders, VAEs and other files downloaded so this model can generate. Deleting the model removes them." : {
+
+    },
+    "That display is not connected." : {
 
     },
     "The agent didn't return any code. Try rephrasing the filter." : {
@@ -29099,6 +29501,9 @@
         }
       }
     },
+    "The agent's subagent couldn't start." : {
+
+    },
     "The briefing's HTML is sent as the email body." : {
       "localizations" : {
         "zh-Hans" : {
@@ -29145,6 +29550,15 @@
         }
       }
     },
+    "The command exited with status %d." : {
+
+    },
+    "The command ran longer than its time limit and was stopped." : {
+
+    },
+    "The connection to Chrome was closed." : {
+
+    },
     "The current branch has no upstream" : {
 
     },
@@ -29178,6 +29592,9 @@
         }
       }
     },
+    "The downloaded Chrome archive did not contain the Chrome executable." : {
+
+    },
     "The extension archive couldn’t be extracted: %@" : {
 
     },
@@ -29188,6 +29605,9 @@
 
     },
     "The file is not a valid Chrome extension (.crx) or ZIP archive." : {
+
+    },
+    "The first line of the instructions tells teammates what this agent is good at, so they know when to ask it for help." : {
 
     },
     "The first time a model runs, this agent reads its Hugging Face card and files to find the companion files it needs. RxCode only downloads files it has seen listed in the repository. The choice applies to this studio's future setups." : {
@@ -29215,6 +29635,9 @@
           }
         }
       }
+    },
+    "The job was cancelled." : {
+
     },
     "The least expensive task in this window." : {
       "localizations" : {
@@ -29372,6 +29795,9 @@
     "The pet only takes a single photo when you ask. It can photograph its display, another display, or a visible window. macOS may require reopening RxCode after access changes." : {
 
     },
+    "The phone sent an invalid agent." : {
+
+    },
     "The planner drafts first. The host sets a review agenda, then resolves the reviewers’ feedback into a final plan." : {
 
     },
@@ -29469,6 +29895,9 @@
     "The saved setup for %@ is cleared. The setup agent looks it up on the next generation." : {
 
     },
+    "The schedule's agent no longer exists." : {
+
+    },
     "The scheduled task handles its own notification." : {
       "localizations" : {
         "zh-Hans" : {
@@ -29478,6 +29907,9 @@
           }
         }
       }
+    },
+    "The screenshot could not be encoded." : {
+
     },
     "The seed controls sampling variation. Reusing it with the same model, voice, and text helps repeat a result." : {
 
@@ -29544,6 +29976,9 @@
         }
       }
     },
+    "The subagent ran longer than the time limit and was stopped." : {
+
+    },
     "The suggestion agent did not respond. Review the schedule before creating it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -29598,6 +30033,9 @@
       }
     },
     "The task or its available levels changed. Reopen the picker to try again." : {
+
+    },
+    "The task was cancelled." : {
 
     },
     "The task's project no longer exists." : {
@@ -29736,6 +30174,9 @@
     "Thinking level updated" : {
 
     },
+    "This ACP response has no compatible steering capability" : {
+
+    },
     "This agent didn't advertise a model selector. The model picker shows a single \"Default\" entry — the agent picks its own model at runtime. Click Fetch to retry." : {
       "localizations" : {
         "ko" : {
@@ -29751,6 +30192,9 @@
           }
         }
       }
+    },
+    "This agent no longer exists." : {
+
     },
     "This agent reports its models over ACP. RxCode refreshes the list every session start." : {
       "localizations" : {
@@ -29852,6 +30296,12 @@
     "This extension doesn’t request any permissions." : {
 
     },
+    "This file does not exist in the working tree." : {
+
+    },
+    "This file was deleted in %@." : {
+
+    },
     "This form couldn't be rendered. Edit the raw template JSON instead (name, enabled, mergeSettings)." : {
       "localizations" : {
         "ko" : {
@@ -29868,6 +30318,9 @@
         }
       }
     },
+    "This instruction is still queued." : {
+
+    },
     "This is the final confirmation." : {
       "localizations" : {
         "zh-Hans" : {
@@ -29877,6 +30330,9 @@
           }
         }
       }
+    },
+    "This job no longer exists." : {
+
     },
     "This Mac" : {
       "localizations" : {
@@ -29898,6 +30354,9 @@
 
     },
     "This MCP server requires authentication. Sign in to test the connection again." : {
+
+    },
+    "This memory note no longer exists." : {
 
     },
     "This memory will be removed from future agent context." : {
@@ -30020,6 +30479,9 @@
     "This repository has no model card." : {
 
     },
+    "This request is already %lld hops deep between agents. Answer it yourself instead of passing it on." : {
+
+    },
     "This run has no chat thread, or it was deleted." : {
 
     },
@@ -30041,6 +30503,9 @@
           }
         }
       }
+    },
+    "This schedule no longer exists." : {
+
     },
     "This server has not advertised any tools." : {
 
@@ -30449,6 +30914,9 @@
         }
       }
     },
+    "Tone" : {
+
+    },
     "Tool activity sounds" : {
 
     },
@@ -30731,13 +31199,25 @@
     "Undo" : {
 
     },
+    "Unexpected response from Chrome: %@" : {
+
+    },
     "Uninstall" : {
 
     },
     "Uninstall %@?" : {
 
     },
+    "Uninstall Downloaded Chrome?" : {
+
+    },
+    "Uninstall this extension?" : {
+
+    },
     "Uninstall…" : {
+
+    },
+    "Unknown key combination: %@" : {
 
     },
     "Unknown project" : {
@@ -30815,6 +31295,9 @@
           }
         }
       }
+    },
+    "Unsupported phone action." : {
+
     },
     "Untitled" : {
       "localizations" : {
@@ -30894,6 +31377,9 @@
     "Up to date" : {
 
     },
+    "Up to date · Installed in Application Support" : {
+
+    },
     "Update" : {
 
     },
@@ -30906,6 +31392,12 @@
           }
         }
       }
+    },
+    "Update couldn't be verified. This version of RxCode doesn't recognize its signing key." : {
+
+    },
+    "Update Extension" : {
+
     },
     "Update to %@…" : {
       "localizations" : {
@@ -30936,7 +31428,13 @@
         }
       }
     },
+    "Updated Chrome to %@" : {
+
+    },
     "Updating card…" : {
+
+    },
+    "Updating Chrome runtime…" : {
 
     },
     "Updating file lists…" : {
@@ -31094,10 +31592,16 @@
     "Use a token with read access instead of signing in in the browser. It is stored in your Keychain." : {
 
     },
+    "Use ACP account credentials for network requests." : {
+
+    },
     "Use an AI Gateway key from the selected Vercel team. Shows the team's remaining USD balance, even when billable usage is filtered by project. Stored only in Keychain." : {
 
     },
     "Use an HTTP or HTTPS address, or a local address such as localhost:3000." : {
+
+    },
+    "Use as fallback" : {
 
     },
     "Use default Makefile lookup" : {
@@ -31155,6 +31659,9 @@
         }
       }
     },
+    "Use installed /Applications/Google Chrome.app when Chrome for Testing is not downloaded" : {
+
+    },
     "Use Manage Extensions to enable an installed contributor, or ask an agent to create one in a project chat." : {
 
     },
@@ -31184,6 +31691,9 @@
           }
         }
       }
+    },
+    "Use the listed credential slots for network requests." : {
+
     },
     "Use the registry to add Agent Client Protocol tools, then pick them from the thread model menu." : {
       "localizations" : {
@@ -31369,6 +31879,9 @@
         }
       }
     },
+    "Uses an optional downloaded Chrome for Testing runtime (or system Google Chrome) without bundling Chromium into RxCode." : {
+
+    },
     "Uses existing agent connections" : {
 
     },
@@ -31491,6 +32004,9 @@
       }
     },
     "Variation" : {
+
+    },
+    "Verification details" : {
 
     },
     "Verification link expired — resend it to try again" : {
@@ -31908,6 +32424,9 @@
     "Waiting for usage data" : {
 
     },
+    "Waiting on a job" : {
+
+    },
     "Waits for %@ to finish before starting" : {
       "localizations" : {
         "zh-Hans" : {
@@ -31959,6 +32478,12 @@
           }
         }
       }
+    },
+    "WebKit" : {
+
+    },
+    "WebKit (Built-in)" : {
+
     },
     "Week" : {
       "localizations" : {
@@ -32033,6 +32558,9 @@
 
     },
     "What should this agent review?" : {
+
+    },
+    "What this agent is for and how it should work" : {
 
     },
     "What you type becomes the description; the agent writes the title." : {
@@ -32352,6 +32880,9 @@
         }
       }
     },
+    "Working" : {
+
+    },
     "Working Directory" : {
       "localizations" : {
         "ko" : {
@@ -32380,7 +32911,13 @@
     "Workspace & Project Scope" : {
 
     },
+    "Workspace Default" : {
+
+    },
     "Workspace Default (%@)" : {
+
+    },
+    "Workspace default model" : {
 
     },
     "Workspace name" : {
@@ -32399,7 +32936,13 @@
         }
       }
     },
+    "Workspace Schedules" : {
+
+    },
     "Write" : {
+
+    },
+    "Write a message first." : {
 
     },
     "Write a schedule with AI" : {

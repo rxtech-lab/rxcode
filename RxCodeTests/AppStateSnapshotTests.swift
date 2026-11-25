@@ -150,6 +150,50 @@ final class AppStateSnapshotTests: XCTestCase {
         XCTAssertEqual(afterUpdate.first?.todos?.map(\.content), ["Verify build"])
     }
 
+    func testMobileSnapshotLoadsSavedAgentConversationsAndSubagentHistory() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        appState.persistence = PersistenceService(metaStore: appState.metaStore, cliStore: appState.cliStore, baseURL: root)
+        let agent = AgentProfile(name: "Mobile history")
+        appState.agentProfiles = [agent]
+        let messages = (0...AppState.mobileMessagePageSize).map { ChatMessage(role: .user, content: "Message \($0)") }
+        let conversation = ChatSession(id: "conversation", projectId: agent.id, messages: messages, origin: .codexAppServer)
+        let subagent = ChatSession(id: "subagent", projectId: agent.subagentProjectId,
+                                   messages: [ChatMessage(role: .assistant, content: "Job finished")], origin: .acpAgent)
+        appState.allSessionSummaries = [conversation.summary, subagent.summary]
+        // A thread can have runtime metadata before its transcript has been opened on the Mac.
+        appState.sessionStates[subagent.id] = SessionStreamState()
+        for session in [conversation, subagent] {
+            try await appState.persistence.saveSession(session)
+            let page = await appState.mobileActiveSessionPayload(for: session.id)
+            XCTAssertEqual(page.id, session.id)
+            XCTAssertEqual(page.messages?.map(\.id), session.messages.suffix(AppState.mobileMessagePageSize).map(\.id))
+            XCTAssertEqual(page.hasMore, session.messages.count > AppState.mobileMessagePageSize)
+        }
+    }
+
+    func testMobileSnapshotDistinguishesMissingHistoryFromAnEmptyThreadAndABroadcast() async {
+        let project = makeProject("History")
+        let missing = ChatSession(id: "missing", projectId: project.id)
+        let empty = ChatSession(id: "empty", projectId: project.id)
+        let placeholder = ChatSession(id: "pending-mobile-\(UUID().uuidString)", projectId: project.id)
+        appState.projects = [project]
+        appState.allSessionSummaries = [missing.summary, empty.summary, placeholder.summary]
+        await persistence.stubFullSession(empty)
+
+        let unavailable = await appState.mobileActiveSessionPayload(for: missing.id)
+        XCTAssertEqual(unavailable.id, missing.id)
+        XCTAssertNil(unavailable.messages)
+        let loaded = await appState.mobileActiveSessionPayload(for: empty.id)
+        XCTAssertEqual(loaded.id, empty.id)
+        XCTAssertEqual(loaded.messages, [])
+        let pending = await appState.mobileActiveSessionPayload(for: placeholder.id)
+        XCTAssertEqual(pending.messages, [])
+        let broadcast = await appState.mobileActiveSessionPayload(for: nil)
+        XCTAssertNil(broadcast.id)
+        XCTAssertNil(broadcast.messages)
+    }
+
     func testMobileTaskSnapshotResolvesLinksAndReviewFeedback() async {
         let project = makeProject("Board")
         appState.projects = [project]

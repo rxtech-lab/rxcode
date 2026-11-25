@@ -214,6 +214,9 @@ extension MobileSyncService {
             }
             pairedDevices[idx].lastSeen = .now
             savePairedDevices()
+        case .agentRequest, .screenShareRequest, .screenFrameAck, .remoteInput:
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: inbound.payload.logName) else { return }
+            Task { await agentPayloadHandler?(inbound.payload, inbound.fromHex) }
         case .requestSnapshot(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "request_snapshot") else { return }
             logger.info("[MobileSync] snapshot requested by mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) activeSession=\(req.activeSessionID ?? "<nil>", privacy: .public)")

@@ -100,7 +100,8 @@ extension AppState {
         includePriorContext: Bool = true,
         streamStart: Date
     ) async -> StreamPreflight {
-        if projectId == Project.globalChatID {
+        // Chat and agent projects have no repository; their folder may not exist yet.
+        if projectId == Project.globalChatID || isAgentProject(projectId) {
             do {
                 try await Task.detached(priority: .userInitiated) {
                     try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
@@ -219,6 +220,14 @@ extension AppState {
             global: UserDefaults.standard.string(forKey: "globalAgentPrompt"),
             project: projects.first(where: { $0.id == projectId })?.customPrompt
         )
+        // Identity, personality, memory, jobs and tools of an Agents-tab agent.
+        let agentContext = agentPromptContext(
+            projectId: projectId, sessionKey: sessionKey, provider: agentProvider,
+            model: model, hasIDETools: shouldIncludeIDEMCP,
+            // A thread whose model or provider changed starts a fresh native
+            // session; the agent then gets the recent messages replayed.
+            resumesNativeSession: cliSessionId != nil || agentProvider == .flowcy
+        )
 
         // The IDE-MCP port is provider-agnostic at allocation time — the
         // bridge command is built from the port. Per-backend MCP config
@@ -266,11 +275,12 @@ extension AppState {
         let mentionContext = agentProvider == .codex && !shouldIncludeIDEMCP
             ? "" : Self.mcpMentionContext(in: prompt, names: mentionNames)
         let codexAndACPContext = [
-            mentionContext, taskProgressContext, extensionContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
+            agentContext, mentionContext, taskProgressContext, extensionContext, skillContext, configuredPromptContext, briefingContext, resolvedMemoryContext, hookStartContext,
         ]
         switch agentProvider {
         case .claudeCode:
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
+            appendExtraSystemPrompt(agentContext)
             appendExtraSystemPrompt(mentionContext)
             appendExtraSystemPrompt(taskProgressContext)
             if mcpClaudeConfigPath != nil { appendExtraSystemPrompt(extensionContext) }
@@ -302,6 +312,7 @@ extension AppState {
         case .localAgent:
             // The harness renders one system prompt per turn, so background
             // context goes there rather than into the user's message.
+            appendExtraSystemPrompt(agentContext)
             if localModels.model(id: resolvedModel)?.studioKind.isStudio == false {
                 appendExtraSystemPrompt(mentionContext)
                 appendExtraSystemPrompt(taskProgressContext)

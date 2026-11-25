@@ -583,7 +583,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             windowState.inputText = request.messageText
         }
 
-        if chatBridge.isStreaming {
+        if chatBridge.isStreaming || chatBridge.queueDispatchInProgress {
             // Sending mid-turn queues by default: the message goes out when the
             // current response finishes. The queued row is where the user
             // overrides that — steering it into the running turn, or

@@ -60,6 +60,7 @@ struct ThisThreadDiffView: View {
 struct ThreadChangeList: View {
     let summaries: [FileEditSummary]?
     let showDiff: (FileEditSummary) -> Void
+    var showPreview: ((FileEditSummary) -> Void)? = nil
 
     var body: some View {
         Group {
@@ -73,7 +74,11 @@ struct ThreadChangeList: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 4) {
                             ForEach(summaries) { summary in
-                                ThisThreadFileRow(summary: summary) { showDiff(summary) }
+                                ThisThreadFileRow(
+                                    summary: summary,
+                                    showDiff: { showDiff(summary) },
+                                    showPreview: showPreview.map { action in { action(summary) } }
+                                )
                             }
                         }
                         .padding(12)
@@ -97,6 +102,7 @@ struct ThreadChangeList: View {
 private struct ThisThreadFileRow: View {
     let summary: FileEditSummary
     let showDiff: () -> Void
+    var showPreview: (() -> Void)? = nil
     @State private var isHovering = false
     @State private var snapshotStat: (added: Int, removed: Int)?
 
@@ -193,6 +199,15 @@ private struct ThisThreadFileRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .contextMenu {
+            Button("Show Diff", systemImage: "arrow.left.arrow.right") { showDiff() }
+            if let showPreview {
+                Button("Show Preview", systemImage: "eye") { showPreview() }
+                    .disabled(summary.isDeleted || !FileManager.default.fileExists(atPath: summary.path))
+            }
+            Divider()
+            GitFileSystemContextMenuItems(paths: [summary.path])
+        }
         .task(id: "\(summary.modifiedContent ?? "nil")-\(summary.hasExternalInterleaving)-\(summary.hunks.count)") {
             await computeSnapshotStat()
         }

@@ -424,6 +424,7 @@ extension AppState {
     }
 
     func removeQueuedMessage(id: UUID, in window: WindowState) {
+        guard !stateForSession(queueKey(for: window)).queueDispatchInProgress else { return }
         window.dequeueMessage(id: id)
         saveQueue(in: window)
         threadStore.removeQueued(id: id)
@@ -448,6 +449,12 @@ extension AppState {
     /// by name — or when the agent can't be steered at all.
     func sendQueuedNow(id: UUID, in window: WindowState) async {
         guard let target = window.messageQueue.first(where: { $0.id == id }) else { return }
+        let state = streamState(in: window)
+        guard !state.queueDispatchInProgress else { return }
+        if (state.agentProvider ?? effectiveModelSelection(in: window).provider) == .acp {
+            _ = await interruptACPAndSend([target], in: window)
+            return
+        }
 
         // Take a snapshot of remaining queue items so we can restore them after
         // `cancelStreaming` clobbers `window.inputText`/`window.attachments`.
@@ -500,6 +507,12 @@ extension AppState {
     func sendAllQueuedAsOne(in window: WindowState) async {
         guard !window.messageQueue.isEmpty else { return }
         let snapshot = window.messageQueue
+        let state = streamState(in: window)
+        guard !state.queueDispatchInProgress else { return }
+        if (state.agentProvider ?? effectiveModelSelection(in: window).provider) == .acp {
+            _ = await interruptACPAndSend(snapshot, in: window)
+            return
+        }
 
         let draftText = window.inputText
         let draftAttachments = window.attachments
@@ -517,10 +530,7 @@ extension AppState {
             await cancelStreaming(in: window, fireStopHooks: false)
         }
 
-        let combinedText = snapshot
-            .map(\.text)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: "\n\n")
+        let combinedText = combinedQueuedText(snapshot)
         let combinedAttachments = snapshot.flatMap(\.attachments)
 
         window.inputText = combinedText
@@ -533,6 +543,53 @@ extension AppState {
         broadcastMobileSessionStatus(sessionID: key)
     }
 
+    /// Keep the selected rows available until the agent has closed its old
+    /// prompt and RxCode has started the replacement in the same thread.
+    func interruptACPAndSend(_ messages: [QueuedMessage], in window: WindowState) async -> Bool {
+        guard let sessionID = window.currentSessionId, let project = window.selectedProject,
+              !messages.isEmpty, beginQueueDispatch(sessionID: sessionID, requiresActiveTurn: false) else { return false }
+        defer { endQueueDispatch(sessionID: sessionID) }
+
+        let state = stateForSession(sessionID)
+        let ready: Bool
+        if state.isStreaming {
+            ready = await cancelStreaming(in: window, fireStopHooks: false, waitForACPResponse: true)
+        } else if let service = backend(for: .acp) as? ACPService {
+            ready = await service.prepareQueuedFollowUp(
+                cancelling: nil, sessionKey: sessionID,
+                requiresSession: state.providerSessionIds[AgentProvider.acp.rawValue] != nil
+            )
+        } else {
+            ready = true
+        }
+        guard ready else {
+            if window.currentSessionId == resolveCurrentSessionId(sessionID) {
+                window.errorMessage = "The ACP client didn’t confirm that the response ended. Your instruction is still queued."
+                window.showError = true
+            }
+            return false
+        }
+        let key = resolveCurrentSessionId(sessionID)
+        let current = stateForSession(key)
+        guard !current.isStreaming, current.agentProvider == state.agentProvider,
+              current.acpClientId == state.acpClientId else { return false }
+        let sender: WindowState
+        if window.currentSessionId == key, window.selectedProject?.id == project.id {
+            sender = window
+        } else {
+            sender = WindowState()
+            sender.currentSessionId = key
+            sender.selectedProject = project
+        }
+        let text = combinedQueuedText(messages)
+        let (attachments, temporaryPaths) = AttachmentFactory.resolvingClipboardImages(messages.flatMap(\.attachments))
+        let prompt = buildPromptWithAttachments(text, attachments: attachments)
+        guard await sendPrompt(prompt, displayText: text, attachments: attachments,
+                               tempFilePaths: temporaryPaths, in: sender) != nil else { return false }
+        removeDispatchedMessages(messages, sessionID: key, sourceWindow: window)
+        return true
+    }
+
     /// Sends the next queued message for a background session (one the window is not currently displaying).
     /// Foreground session queues are handled by InputBarView via the isStreaming onChange handler.
     func processBackgroundQueue(
@@ -541,7 +598,8 @@ extension AppState {
         cwd: String,
         in window: WindowState
     ) async {
-        guard sessionStates[sessionKey]?.isStreaming != true else { return }
+        guard sessionStates[sessionKey]?.isStreaming != true,
+              sessionStates[sessionKey]?.queueDispatchInProgress != true else { return }
         guard var queue = window.draftQueues[sessionKey], !queue.isEmpty else { return }
         let next = queue.removeFirst()
         if queue.isEmpty { window.draftQueues.removeValue(forKey: sessionKey) }

@@ -239,6 +239,7 @@ private struct GitWorkflowView: View {
         }
         .disabled(store.operation != nil)
         .overlay { GitOperationOverlay(operation: store.operation) }
+        .task { ExternalEditorService.shared.detectIfNeeded() }
         .task { await repository.observe(store.root) }
         .task(id: store.selection) { await store.reloadHistory() }
         .onChange(of: repository.state) { Task { await store.reload() } }
@@ -358,9 +359,10 @@ private struct GitWorkflowView: View {
             Button("Stash", systemImage: "archivebox") { store.sheet = .stash }
                 .help("Stash uncommitted changes")
             Button("New Branch", systemImage: "plus") {
-                store.sheet = .createBranch(startPoint: "HEAD", label: store.snapshot.currentBranch ?? "HEAD")
+                store.presentCreateBranchFromHead()
             }
             .help("Create a branch from HEAD")
+            .disabled(store.snapshot.headCommit == nil)
             Button("Refresh", systemImage: "arrow.clockwise") {
                 Task {
                     await repository.refresh(at: store.root)
@@ -373,18 +375,7 @@ private struct GitWorkflowView: View {
 
         if let suggestion = store.pullRequestSuggestion {
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("Create Pull Request…", systemImage: "arrow.triangle.pull") {
-                        presentCreatePullRequest(suggestion)
-                    }
-                    Menu {
-                        PullRequestDraftModelMenuContent { _ in presentCreatePullRequest(suggestion) }
-                    } label: {
-                        Label("Draft with Agent", systemImage: "sparkles")
-                    }
-                } label: {
-                    Label("Create PR", systemImage: "arrow.triangle.pull")
-                } primaryAction: {
+                Button("Create PR", systemImage: "arrow.triangle.pull") {
                     presentCreatePullRequest(suggestion)
                 }
                 .help("\(suggestion.branch) is pushed but has no pull request. Create one with an agent-drafted title and description.")
@@ -481,8 +472,8 @@ private struct GitWorkflowView: View {
             GitRenameBranchSheet(store: store, branch: name)
         case .deleteBranch(let branch):
             GitDeleteBranchSheet(store: store, branch: branch)
-        case .createTag(let commit):
-            GitCreateTagSheet(store: store, commit: commit)
+        case .createTag(let target, let label):
+            GitCreateTagSheet(store: store, target: target, label: label)
         case .reword(let commit):
             GitRewordSheet(store: store, commit: commit)
         case .interactiveRebase(let base, let steps):
@@ -585,107 +576,5 @@ private struct GitWindowCommitSheet: View {
     var body: some View {
         GitCommitSheet(tree: tree, message: $message, amend: amend)
             .onDisappear { Task { await store.reload() } }
-    }
-}
-
-// MARK: - Pending operation banner
-
-private struct GitPendingOperationBanner: View {
-    let operation: GitPendingOperation
-    let store: GitWorkflowStore
-
-    private var title: LocalizedStringResource {
-        switch operation {
-        case .rebase: "Rebase in progress"
-        case .merge: "Merge in progress"
-        case .cherryPick: "Cherry-pick in progress"
-        case .revert: "Revert in progress"
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(ClaudeTheme.statusWarning)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                Text("Resolve conflicts and stage the files in Local Changes, then continue.")
-                    .font(.caption)
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-            }
-            Spacer()
-            Button("Local Changes") { store.selection = .localChanges }
-            if operation.supportsSkip {
-                Button("Skip") { resolve(.skip, "Skipping…") }
-            }
-            Button("Abort") { resolve(.abort, "Aborting…") }
-            Button("Continue") { resolve(.continue, "Continuing…") }
-                .buttonStyle(.borderedProminent)
-                .tint(ClaudeTheme.accent)
-        }
-        .controlSize(.small)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(ClaudeTheme.statusWarning.opacity(0.12))
-        .overlay(alignment: .bottom) { ClaudeThemeDivider() }
-    }
-
-    private func resolve(_ action: GitWorkflow.Continuation, _ label: LocalizedStringResource) {
-        store.perform(label) { await GitWorkflow.resolve(operation, action, at: store.root) }
-    }
-}
-
-// MARK: - Stash views
-
-private struct GitStashSummaryView: View {
-    let stash: GitStash
-    let store: GitWorkflowStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(stash.selector, systemImage: "archivebox")
-                .font(.headline.monospaced())
-            Text(stash.message)
-                .textSelection(.enabled)
-            Text(stash.tip).font(.caption.monospaced()).foregroundStyle(ClaudeTheme.textTertiary).textSelection(.enabled)
-            HStack {
-                Button("Apply") {
-                    store.perform("Applying stash…") { await GitWorkflow.applyStash(stash, pop: false, at: store.root) }
-                }
-                Button("Pop") {
-                    store.perform("Popping stash…") { await GitWorkflow.applyStash(stash, pop: true, at: store.root) }
-                }
-                Spacer()
-                Button("Drop…", role: .destructive) { store.confirmation = .dropStash(stash) }
-            }
-            Spacer()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-private struct GitStashDiffView: View {
-    let stash: GitStash
-    let root: String
-    @State private var lines: [DiffLine] = []
-    @State private var loading = true
-
-    var body: some View {
-        Group {
-            if loading {
-                ProgressView().controlSize(.small)
-            } else if lines.isEmpty {
-                ContentUnavailableView("No textual changes", systemImage: "doc.text.magnifyingglass")
-            } else {
-                DiffView(lines: lines, display: .scroll)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: stash.tip) {
-            loading = true
-            lines = DiffComputation.parseUnifiedDiff(await GitRepositoryLoader.stashDiff(stash, at: root))
-            loading = false
-        }
     }
 }

@@ -67,6 +67,10 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
         queue.sync { confirmationDecisions[id] }
     }
 
+    func setMessages(_ messages: [ChatMessage], for sessionID: String) {
+        queue.sync { dynamicMessagesBySession[sessionID] = messages }
+    }
+
     /// Ephemeral port the listener bound to. Valid after `start()` returns.
     private(set) var port: UInt16 = 0
 
@@ -192,8 +196,11 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
             confirmationDecisions[decision.id] = decision.confirmed
             send(.confirmationQueue(.init(confirmations: [])), on: connection)
         case .requestSnapshot(let request):
+            sendAgentHub(on: connection)
             send(.snapshot(currentSnapshot(activeSessionID: request.activeSessionID)),
                  on: connection)
+        case .agentRequest(let request) where request.operation == .refresh:
+            sendAgentHub(on: connection)
         case .subscribeSession(let request):
             send(.snapshot(currentSnapshot(activeSessionID: request.sessionID)),
                  on: connection)
@@ -224,6 +231,12 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
     }
 
     // MARK: - Snapshot assembly
+
+    private func sendAgentHub(on connection: NWConnection) {
+        if let hub = baseFixtures.agentHub {
+            send(.agentHubUpdate(.init(snapshot: hub)), on: connection)
+        }
+    }
 
     /// Builds a `snapshot` payload reflecting the current base fixtures plus
     /// any sessions that were created at runtime via `newSessionRequest`.

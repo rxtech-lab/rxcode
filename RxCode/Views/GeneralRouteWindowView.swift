@@ -147,6 +147,7 @@ private struct GeneralRouteWindowView: View {
         switch windowState.generalRoute ?? route {
         case .tasks: TaskBoardView()
         case .briefing: BriefingView()
+        case .agents: AgentHubView()
         case .scheduled: ScheduledTasksView()
         case .chat: GlobalChatView()
         }

@@ -11,6 +11,8 @@ public enum StreamEvent: Sendable {
     case todoSnapshot(TodoSnapshotEvent)
     case computerUseWindows([ComputerUseMonitorWindow])
     case acpModelsDiscovered(ACPModelsDiscoveredEvent)
+    case acpSteeringAvailable(Bool)
+    case acpSteeredMessage(ChatMessage, confirmed: Bool)
 
     // MARK: Incremental blocks
 

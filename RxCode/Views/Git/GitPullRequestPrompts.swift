@@ -59,38 +59,26 @@ struct GitPullRequestTipView: View {
     }
 }
 
-/// Compact "PR" control on the current branch's sidebar row: opens the create
-/// sheet, or picks the agent that drafts the title and description.
+/// Opens the pull request sheet from the current branch's sidebar row.
 struct GitSidebarPullRequestButton: View {
     let target: GitPullRequestTarget
     let onCreate: () -> Void
 
     var body: some View {
-        Menu {
-            Button("Create Pull Request…", systemImage: "arrow.triangle.pull", action: onCreate)
-            Menu {
-                PullRequestDraftModelMenuContent { _ in onCreate() }
-            } label: {
-                Label("Draft with Agent", systemImage: "sparkles")
-            }
-        } label: {
+        Button(action: onCreate) {
             HStack(spacing: 3) {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.system(size: 9, weight: .semibold))
                 Text("Create PR")
                     .font(.system(size: ClaudeTheme.size(10.5), weight: .semibold))
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7, weight: .bold))
             }
             .foregroundStyle(ClaudeTheme.textOnAccent)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(Capsule(style: .continuous).fill(ClaudeTheme.accent))
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        .menuIndicator(.hidden)
         .fixedSize()
         .help("“\(target.branch)” is pushed but has no pull request. Create one with an agent-drafted title and description.")
         .accessibilityIdentifier("git-create-pr-sidebar")

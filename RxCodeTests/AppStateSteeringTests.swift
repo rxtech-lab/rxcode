@@ -386,9 +386,7 @@ final class AppStateSteeringTests: XCTestCase {
 
     // MARK: - Offering the choice
 
-    /// The queue UI only offers "steer now" when the transport can reach a
-    /// running turn at all; ACP has no equivalent, so it gets the interrupt
-    /// button instead.
+    /// The queue UI offers steering when the active transport can reach a running turn.
     func testCanSteerFollowsTheBackendsTransport() {
         XCTAssertTrue(appState.canSteer(in: window), "The mock backend's transport supports steering")
     }

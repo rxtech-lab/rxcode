@@ -9,7 +9,7 @@ import TipKit
 /// leftover full-width entry.
 struct SidebarNavigationSection: View {
     /// Display order: the two routes people switch between most come first.
-    private static let routes: [GeneralRoute] = [.tasks, .chat, .briefing, .scheduled]
+    private static let routes: [GeneralRoute] = [.tasks, .chat, .briefing, .agents]
 
     var body: some View {
         VStack(spacing: 1) {
@@ -46,6 +46,7 @@ private struct SidebarNavigationRow: View {
         case .tasks: "Open the project task board"
         case .chat: "Chat with any agent"
         case .briefing: "Open project branch briefing"
+        case .agents: "Open agents and schedules"
         case .scheduled: "Open tasks that run on a cron schedule"
         }
     }
@@ -92,6 +93,8 @@ private struct SidebarNavigationRow: View {
             AttentionBadge(attention: appState.projectAttention(projectId: Project.globalChatID, in: windowState))
         case .tasks:
             countLabel(appState.projects.filter { !$0.isGlobalChat }.count, label: "projects")
+        case .agents:
+            countLabel(appState.agentProfiles.count, label: "agents")
         case .scheduled:
             countLabel(appState.scheduledTasks.filter(\.isEnabled).count, label: "enabled schedules")
         case .briefing:

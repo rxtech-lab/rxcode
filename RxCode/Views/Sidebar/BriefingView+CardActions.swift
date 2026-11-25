@@ -143,9 +143,7 @@ extension BriefingView {
 
             Divider()
 
-            let handler = appState.desktopMenuActionHandler { threadId in
-                appState.selectSession(id: threadId, in: windowState)
-            }
+            let handler = appState.desktopMenuActionHandler(navigatingIn: windowState)
 
             // The briefing card represents one branch, so it asks the hooks for a
             // branch-scoped menu: Code Review / Create PR target `group.branch`,

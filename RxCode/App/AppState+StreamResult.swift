@@ -249,7 +249,7 @@ extension AppState {
 
             // If this session is running in the background, automatically process any queued messages.
             // Foreground sessions are handled by InputBarView via isStreaming onChange.
-            if !isFg {
+            if !isFg, agentProvider != .acp {
                 await processBackgroundQueue(for: sessionKey, projectId: projectId, cwd: cwd, in: window)
             }
         }

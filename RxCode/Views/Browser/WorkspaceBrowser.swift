@@ -12,6 +12,7 @@ final class WorkspaceBrowser {
     @ObservationIgnored private let sessionKey: String?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let previousSessionKeys: [String]
+    @ObservationIgnored private let engineOverride: BrowserEngineKind?
     @ObservationIgnored private var hasRestoredSession = false
     @ObservationIgnored private var isRestoringSession = false
     @ObservationIgnored private var lastSavedSession: SavedSession?
@@ -22,8 +23,10 @@ final class WorkspaceBrowser {
             guard selectedID != oldValue else { return }
             if let tab = selectedTab {
                 let previous = tabs.first { $0.id == oldValue }
-                BrowserExtensionManager.shared.didActivate(tab, previous: previous)
-                didFocus()
+                if tab.engine == .webkit {
+                    BrowserExtensionManager.shared.didActivate(tab, previous: previous?.engine == .webkit ? previous : nil)
+                    didFocus()
+                }
             }
             saveSession()
         }
@@ -32,10 +35,20 @@ final class WorkspaceBrowser {
     /// How browser extensions see this browser: one window holding its tabs.
     @ObservationIgnored private(set) var extensionWindow: BrowserExtensionWindow!
 
-    init(sessionKey: String? = nil, defaults: UserDefaults = .standard, previousSessionKeys: [String] = []) {
+    var activeEngine: BrowserEngineKind {
+        engineOverride ?? BrowserEngineManager.shared.activeEngine
+    }
+
+    init(
+        sessionKey: String? = nil,
+        defaults: UserDefaults = .standard,
+        previousSessionKeys: [String] = [],
+        engineOverride: BrowserEngineKind? = nil
+    ) {
         self.sessionKey = sessionKey
         self.defaults = defaults
         self.previousSessionKeys = previousSessionKeys
+        self.engineOverride = engineOverride
         extensionWindow = BrowserExtensionWindow(browser: self)
     }
 
@@ -70,6 +83,45 @@ final class WorkspaceBrowser {
         }
     }
 
+    /// Rebuilds open tabs when the user switches the browser engine in Settings,
+    /// preserving each tab's current address and the active tab index.
+    func syncEngineIfNeeded() {
+        let targetEngine = activeEngine
+        guard !tabs.isEmpty, tabs.contains(where: { $0.engine != targetEngine }) else { return }
+
+        let savedAddresses = tabs.map { $0.address ?? $0.restorableAddress }
+        let selectedIndex = tabs.firstIndex { $0.id == selectedID } ?? 0
+
+        isRestoringSession = true
+        defer {
+            isRestoringSession = false
+            saveSession()
+        }
+
+        let oldTabs = tabs
+        tabs.removeAll()
+        for old in oldTabs {
+            if old.engine == .webkit {
+                BrowserExtensionManager.shared.didClose(old)
+            }
+            old.close()
+        }
+
+        let rebuilt = savedAddresses.map { address in
+            let tab = appendTab(engine: targetEngine)
+            if let address, Self.isWebURL(address) {
+                tab.load(address)
+            }
+            return tab
+        }
+
+        if rebuilt.indices.contains(selectedIndex) {
+            selectedID = rebuilt[selectedIndex].id
+        } else {
+            selectedID = rebuilt.first?.id
+        }
+    }
+
     fileprivate func saveSession() {
         guard let sessionKey, !isRestoringSession else { return }
         let session = SavedSession(addresses: tabs.map(\.restorableAddress),
@@ -82,26 +134,39 @@ final class WorkspaceBrowser {
     @discardableResult
     func addTab(url: URL? = nil, configuration: WKWebViewConfiguration? = nil, activate: Bool = true) -> WorkspaceBrowserTab {
         restoreSessionIfNeeded()
-        let tab = appendTab(configuration: configuration)
+        let engine: BrowserEngineKind = configuration != nil ? .webkit : activeEngine
+        let tab = appendTab(configuration: configuration, engine: engine)
         if let url { tab.load(url) }
         if activate || selectedID == nil { selectedID = tab.id }
         saveSession()
         return tab
     }
 
-    private func appendTab(configuration: WKWebViewConfiguration? = nil) -> WorkspaceBrowserTab {
-        let extensions = BrowserExtensionManager.shared
-        let tab = WorkspaceBrowserTab(configuration: extensions.webViewConfiguration(configuration ?? WKWebViewConfiguration()),
-                                      browser: self)
-        tabs.append(tab)
-        if tabs.count == 1 { extensions.didOpen(extensionWindow) }
-        extensions.didOpen(tab)
+    private func appendTab(
+        configuration: WKWebViewConfiguration? = nil,
+        engine: BrowserEngineKind? = nil
+    ) -> WorkspaceBrowserTab {
+        let resolvedEngine = engine ?? (configuration != nil ? .webkit : activeEngine)
+        let tab: WorkspaceBrowserTab
+        if resolvedEngine == .chrome {
+            tab = WorkspaceBrowserTab(chromeIn: self)
+            tabs.append(tab)
+        } else {
+            let extensions = BrowserExtensionManager.shared
+            tab = WorkspaceBrowserTab(
+                configuration: extensions.webViewConfiguration(configuration ?? WKWebViewConfiguration()),
+                browser: self
+            )
+            tabs.append(tab)
+            if tabs.filter({ $0.engine == .webkit }).count == 1 { extensions.didOpen(extensionWindow) }
+            extensions.didOpen(tab)
+        }
         return tab
     }
 
     /// Tells extensions this browser is the one the user is working in.
     func didFocus() {
-        guard !tabs.isEmpty else { return }
+        guard tabs.contains(where: { $0.engine == .webkit }) else { return }
         BrowserExtensionManager.shared.focus(extensionWindow)
     }
 
@@ -117,7 +182,9 @@ final class WorkspaceBrowser {
     func close(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let tab = tabs.remove(at: index)
-        BrowserExtensionManager.shared.didClose(tab)
+        if tab.engine == .webkit {
+            BrowserExtensionManager.shared.didClose(tab)
+        }
         tab.close()
         if tabs.isEmpty {
             addTab()
@@ -130,7 +197,9 @@ final class WorkspaceBrowser {
     /// Moves a tab into another tab's slot, or to the end when `target` is nil.
     func move(_ id: UUID, to target: UUID?) {
         guard let from = tabs.moveTab(id, to: target), let tab = tabs.first(where: { $0.id == id }) else { return }
-        BrowserExtensionManager.shared.didMove(tab, from: from, in: extensionWindow)
+        if tab.engine == .webkit {
+            BrowserExtensionManager.shared.didMove(tab, from: from, in: extensionWindow)
+        }
         saveSession()
     }
 
@@ -157,20 +226,26 @@ final class WorkspaceBrowser {
     /// Progress of the latest Chrome cookie import, shown as an overlay on the browser.
     var cookieImportStatus: CookieImportStatus?
 
-    /// Copies a Chrome profile's cookies into the shared WebKit store used by every tab.
+    /// Copies a Chrome profile's cookies into the active browser engine's cookie store.
     func importChromeCookies(from profile: ChromeProfile, sites: [String]) async {
         cookieImportStatus = .importing
         do {
             let cookies = try await Task.detached(priority: .userInitiated) {
                 try ChromeCookieImporter.cookies(from: profile, sites: sites)
             }.value
-            let store = WKWebsiteDataStore.default().httpCookieStore
+
             var imported = 0
-            for cookie in cookies {
-                guard let httpCookie = cookie.httpCookie else { continue }
-                await store.setCookie(httpCookie)
-                imported += 1
+            if activeEngine == .chrome {
+                imported = try await ChromeBrowserService.shared.importCookies(cookies)
+            } else {
+                let store = WKWebsiteDataStore.default().httpCookieStore
+                for cookie in cookies {
+                    guard let httpCookie = cookie.httpCookie else { continue }
+                    await store.setCookie(httpCookie)
+                    imported += 1
+                }
             }
+
             cookieImportStatus = .imported(imported)
             if let tab = selectedTab, tab.address != nil { tab.reload() }
         } catch {
@@ -209,11 +284,14 @@ final class WorkspaceBrowser {
     }
 }
 
-/// Each tab retains its WebKit view, including history, scroll position, and page state.
+/// Each tab retains its rendering view (WebKit or Chrome CDP controller),
+/// including history, scroll position, and page state.
 @MainActor
 final class WorkspaceBrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDelegate, WKUIDelegate {
     let id = UUID()
+    let engine: BrowserEngineKind
     let webView: WKWebView
+    let chromeController: ChromeTabController?
     @Published private(set) var requestedURL: URL?
     @Published private(set) var failure: String?
     private(set) var restorableAddress: URL?
@@ -222,14 +300,38 @@ final class WorkspaceBrowserTab: NSObject, ObservableObject, Identifiable, WKNav
     private(set) weak var browser: WorkspaceBrowser?
     private var observations: [NSKeyValueObservation] = []
 
-    var address: URL? { failure != nil ? requestedURL : webView.url ?? requestedURL }
+    var isLoading: Bool {
+        chromeController?.isLoading ?? webView.isLoading
+    }
+
+    var canGoBack: Bool {
+        chromeController?.canGoBack ?? webView.canGoBack
+    }
+
+    var canGoForward: Bool {
+        chromeController?.canGoForward ?? webView.canGoForward
+    }
+
+    var address: URL? {
+        if let chromeController {
+            return failure != nil ? requestedURL : chromeController.url ?? requestedURL
+        }
+        return failure != nil ? requestedURL : webView.url ?? requestedURL
+    }
+
     var title: String {
+        if let chromeController {
+            if let title = chromeController.title, !title.isEmpty { return title }
+            return address?.host ?? String(localized: "New tab")
+        }
         if let title = webView.title, !title.isEmpty { return title }
         return address?.host ?? String(localized: "New tab")
     }
 
     init(configuration: WKWebViewConfiguration, browser: WorkspaceBrowser) {
+        self.engine = .webkit
         self.browser = browser
+        self.chromeController = nil
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         webView.navigationDelegate = self
@@ -237,6 +339,26 @@ final class WorkspaceBrowserTab: NSObject, ObservableObject, Identifiable, WKNav
         webView.allowsBackForwardNavigationGestures = true
         observations = [observe(\.url, .URL), observe(\.title, .title), observe(\.isLoading, .loading),
                         observe(\.canGoBack), observe(\.canGoForward)]
+    }
+
+    init(chromeIn browser: WorkspaceBrowser) {
+        self.engine = .chrome
+        self.browser = browser
+        let controller = ChromeTabController()
+        self.chromeController = controller
+        self.webView = WKWebView(frame: .zero)
+        super.init()
+        controller.onStateChange = { [weak self] in
+            guard let self else { return }
+            self.failure = self.chromeController?.failure
+            self.objectWillChange.send()
+        }
+        controller.onURLCommit = { [weak self] url in
+            self?.rememberAddress(url)
+        }
+        controller.onPopupURL = { [weak self] url in
+            self?.browser?.addTab(url: url)
+        }
     }
 
     private func observe<Value>(_ keyPath: KeyPath<WKWebView, Value>,
@@ -252,9 +374,14 @@ final class WorkspaceBrowserTab: NSObject, ObservableObject, Identifiable, WKNav
     }
 
     func load(_ url: URL) {
-        observedWebURL = webView.url
         requestedURL = url
         failure = nil
+        if let chromeController {
+            chromeController.load(url)
+            rememberAddress(url)
+            return
+        }
+        observedWebURL = webView.url
         navigation = webView.load(URLRequest(url: url))
         rememberAddress(url)
     }
@@ -274,11 +401,50 @@ final class WorkspaceBrowserTab: NSObject, ObservableObject, Identifiable, WKNav
     }
 
     func reload() {
+        if let chromeController {
+            if let requestedURL, failure != nil { load(requestedURL) }
+            else { chromeController.reload() }
+            return
+        }
         if let requestedURL, failure != nil { load(requestedURL) }
         else { webView.reload() }
     }
 
+    func stopLoading() {
+        if let chromeController {
+            chromeController.stopLoading()
+        } else {
+            webView.stopLoading()
+        }
+    }
+
+    func goBack() {
+        if let chromeController {
+            chromeController.goBack()
+        } else {
+            webView.goBack()
+        }
+    }
+
+    func goForward() {
+        if let chromeController {
+            chromeController.goForward()
+        } else {
+            webView.goForward()
+        }
+    }
+
+    func takeSnapshot() async throws -> NSImage? {
+        if let chromeController {
+            return try await chromeController.takeSnapshot()
+        }
+        return try await webView.takeSnapshot(configuration: nil)
+    }
+
     func close() {
+        if let chromeController {
+            chromeController.close()
+        }
         observations.removeAll()
         webView.uiDelegate = nil
         webView.navigationDelegate = nil
@@ -341,11 +507,11 @@ final class WorkspaceBrowserTab: NSObject, ObservableObject, Identifiable, WKNav
 /// Exposes a workspace tab to browser extensions (`chrome.tabs`, content scripts, actions).
 extension WorkspaceBrowserTab: WKWebExtensionTab {
     func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? { browser?.extensionWindow }
-    func webView(for context: WKWebExtensionContext) -> WKWebView? { webView }
-    func title(for context: WKWebExtensionContext) -> String? { webView.title }
-    func url(for context: WKWebExtensionContext) -> URL? { webView.url }
-    func pendingURL(for context: WKWebExtensionContext) -> URL? { webView.isLoading ? requestedURL : nil }
-    func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !webView.isLoading }
+    func webView(for context: WKWebExtensionContext) -> WKWebView? { engine == .webkit ? webView : nil }
+    func title(for context: WKWebExtensionContext) -> String? { title }
+    func url(for context: WKWebExtensionContext) -> URL? { address }
+    func pendingURL(for context: WKWebExtensionContext) -> URL? { isLoading ? requestedURL : nil }
+    func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !isLoading }
     func isSelected(for context: WKWebExtensionContext) -> Bool { browser?.selectedID == id }
     func size(for context: WKWebExtensionContext) -> CGSize { webView.bounds.size }
     func zoomFactor(for context: WKWebExtensionContext) -> Double { webView.pageZoom }
@@ -362,17 +528,17 @@ extension WorkspaceBrowserTab: WKWebExtensionTab {
     }
 
     func reload(fromOrigin: Bool, for context: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        if fromOrigin { webView.reloadFromOrigin() } else { reload() }
+        if fromOrigin && engine == .webkit { webView.reloadFromOrigin() } else { reload() }
         completionHandler(nil)
     }
 
     func goBack(for context: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        webView.goBack()
+        goBack()
         completionHandler(nil)
     }
 
     func goForward(for context: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        webView.goForward()
+        goForward()
         completionHandler(nil)
     }
 
@@ -388,6 +554,16 @@ extension WorkspaceBrowserTab: WKWebExtensionTab {
 
     func takeSnapshot(using configuration: WKSnapshotConfiguration, for context: WKWebExtensionContext,
                       completionHandler: @escaping (NSImage?, (any Error)?) -> Void) {
+        if engine == .chrome {
+            Task {
+                do {
+                    completionHandler(try await takeSnapshot(), nil)
+                } catch {
+                    completionHandler(nil, error)
+                }
+            }
+            return
+        }
         webView.takeSnapshot(with: configuration) { image, error in completionHandler(image, error) }
     }
 }

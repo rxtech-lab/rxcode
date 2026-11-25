@@ -163,6 +163,10 @@ final class MobileAppState: ObservableObject {
         didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
     }
     @Published var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
+    @Published var agentHub = AgentHubSnapshot()
+    var agentHubSequence: UInt64?
+    @Published var latestAgentResult: AgentResultPayload?
+    let agentScreen = MobileAgentScreen()
     @Published var desktopSettings: MobileSettingsSnapshot?
     /// Agent rate-limit usage mirrored from the paired desktop. `nil` until the
     /// first snapshot arrives, or when paired with a desktop that predates
@@ -318,9 +322,8 @@ final class MobileAppState: ObservableObject {
     @Published var sessionsWithMoreMessages: Set<String> = []
     /// Sessions with an in-flight `load_more_messages` request.
     @Published var loadingMoreSessions: Set<String> = []
-    /// Sessions whose initial message page is being refreshed after opening the
-    /// chat detail view.
-    @Published var loadingThreadMessageSessions: Set<String> = []
+    /// Only the selected thread is subscribed. Each attempt has its own timeout.
+    @Published var pendingThreadMessageRequest: (id: UUID, sessionID: String)?
     /// Maps an outstanding load-more request ID to its session, so a late
     /// `more_messages` reply lands on the right thread.
     var pendingLoadMoreRequests: [UUID: String] = [:]

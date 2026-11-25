@@ -52,7 +52,7 @@ struct GitWorkflowSidebar: View {
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
 
-            Section("Branches", isExpanded: $branchesExpanded) {
+            Section(isExpanded: $branchesExpanded) {
                 let suggestion = store.pullRequestSuggestion
                 ForEach(store.snapshot.localBranches.filter { matches($0.name) }) { branch in
                     GitBranchRow(branch: branch, pullRequestSuggestion: branch.isCurrent ? suggestion : nil) { target in
@@ -61,6 +61,14 @@ struct GitWorkflowSidebar: View {
                     }
                     .themedListRow(GitSidebarItem.branch(branch.name), selection: store.selection)
                 }
+            } header: {
+                Text("Branches")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("git-branches-header")
+                    .contextMenu {
+                        GitBranchesSectionContextMenu(store: store)
+                    }
             }
 
             Section {
@@ -89,26 +97,30 @@ struct GitWorkflowSidebar: View {
                 }
             }
 
-            if !store.snapshot.tags.isEmpty {
-                Section {
-                    GitRefGroupHeader("Tags", isExpanded: $tagsExpanded) {
+            Section {
+                GitRefGroupHeader("Tags", isExpanded: $tagsExpanded) {
+                    if !store.snapshot.tags.isEmpty {
                         Button { store.sheet = .searchTags } label: { Image(systemName: "magnifyingglass") }
                             .help("Search Tags")
                             .accessibilityLabel("Search Tags")
                     }
-                    if tagsExpanded {
-                        let tags = filteredTags
-                        ForEach(tags.prefix(visibleTagCount)) { tag in
-                            GitTagRow(tag: tag)
-                                .padding(.leading, 12)
-                                .themedListRow(GitSidebarItem.tag(tag.name), selection: store.selection)
-                        }
-                        if tags.count > visibleTagCount {
-                            let nextCount = min(Self.tagPageSize, tags.count - visibleTagCount)
-                            Button("Show \(nextCount) More") { visibleTagCount += nextCount }
-                                .buttonStyle(.link)
-                                .padding(.leading, 12)
-                        }
+                }
+                .accessibilityIdentifier("git-tags-header")
+                .contextMenu {
+                    GitTagsSectionContextMenu(store: store)
+                }
+                if tagsExpanded {
+                    let tags = filteredTags
+                    ForEach(tags.prefix(visibleTagCount)) { tag in
+                        GitTagRow(tag: tag)
+                            .padding(.leading, 12)
+                            .themedListRow(GitSidebarItem.tag(tag.name), selection: store.selection)
+                    }
+                    if tags.count > visibleTagCount {
+                        let nextCount = min(Self.tagPageSize, tags.count - visibleTagCount)
+                        Button("Show \(nextCount) More") { visibleTagCount += nextCount }
+                            .buttonStyle(.link)
+                            .padding(.leading, 12)
                     }
                 }
             }

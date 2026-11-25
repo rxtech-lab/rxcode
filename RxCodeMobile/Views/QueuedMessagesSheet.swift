@@ -8,8 +8,9 @@ import SwiftUI
 
 struct QueuedMessagesSheet: View {
     let messages: [QueuedUserMessage]
+    let sendMode: QueuedSendMode
     let onRemove: (QueuedUserMessage) -> Void
-    let onAction: (QueuedUserMessage, String?) async throws -> Void
+    let onAction: (QueuedUserMessage, String?, Bool) async throws -> Void
     @State private var editing: QueuedUserMessage?
     @State private var draft = ""
     @State private var status: String?
@@ -41,22 +42,15 @@ struct QueuedMessagesSheet: View {
                                     editing = queued
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 }
-                                Button("Steer Now", systemImage: "arrow.turn.up.right") {
-                                    perform(queued, text: nil)
-                                }
-                                .disabled(busy)
+                                sendActions(queued)
                             }
                             .onTapGesture {
                                 draft = queued.text
                                 editing = queued
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                Button("Steer Now", systemImage: "arrow.turn.up.right") {
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    perform(queued, text: nil)
-                                }
+                                sendActions(queued)
                                 .tint(.orange)
-                                .disabled(busy)
 
                                 Button("Edit", systemImage: "pencil") {
                                     draft = queued.text
@@ -115,14 +109,37 @@ struct QueuedMessagesSheet: View {
         .mobileSheetPresentation([.medium, .large])
     }
 
-    private func perform(_ message: QueuedUserMessage, text: String?) {
+    @ViewBuilder
+    private func sendActions(_ message: QueuedUserMessage) -> some View {
+        if sendMode == .steer || sendMode == .steerOrInterrupt {
+            Button("Steer Now", systemImage: "arrow.turn.up.right") {
+                perform(message, text: nil)
+            }
+            .disabled(busy)
+        }
+        if sendMode == .interrupt || sendMode == .steerOrInterrupt {
+            Button("Interrupt and Send", systemImage: "paperplane.fill") {
+                perform(message, text: nil, interrupt: true)
+            }
+            .disabled(busy)
+        }
+    }
+
+    private func perform(_ message: QueuedUserMessage, text: String?, interrupt: Bool = false) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         busy = true
         Task { @MainActor in
             defer { busy = false }
             do {
-                try await onAction(message, text)
+                try await onAction(message, text, interrupt)
                 editing = nil
-                status = text == nil ? "Steer requested. If unavailable, the message stays queued." : "Update requested."
+                if text != nil {
+                    status = "Update requested."
+                } else if interrupt {
+                    status = "Interrupt requested. The instruction stays queued until the response ends."
+                } else {
+                    status = "Steer requested. If unavailable, the instruction stays queued."
+                }
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             } catch {
                 editing = nil

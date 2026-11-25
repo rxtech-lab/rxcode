@@ -97,8 +97,8 @@ extension AppState {
         case "ide__browser_close_tab": browser.close(id); return textResult("Closed tab.")
         case "ide__browser_navigate":
             switch args["action"]?.stringValue {
-            case "back" where tab.webView.canGoBack: tab.webView.goBack()
-            case "forward" where tab.webView.canGoForward: tab.webView.goForward()
+            case "back" where tab.canGoBack: tab.goBack()
+            case "forward" where tab.canGoForward: tab.goForward()
             case "reload": tab.reload()
             case "open":
                 guard let url = WorkspaceBrowser.webAddress(args["url"]?.stringValue ?? "") else { throw IDEToolError.invalidArguments("Provide a web address.") }
@@ -113,10 +113,15 @@ extension AppState {
             return try await tab.inspectPage("type", selector: selector, text: text)
         case "ide__browser_screenshot":
             reveal()
-            for _ in 0..<30 where tab.webView.window == nil || tab.webView.bounds.isEmpty {
-                try await Task.sleep(for: .milliseconds(40))
+            if tab.engine == .webkit {
+                for _ in 0..<30 where tab.webView.window == nil || tab.webView.bounds.isEmpty {
+                    try await Task.sleep(for: .milliseconds(40))
+                }
+                guard !tab.webView.bounds.isEmpty else {
+                    throw IDEToolError.handlerFailed("The tab has no visible screenshot.")
+                }
             }
-            guard !tab.webView.bounds.isEmpty, let data = designPNG(try await tab.webView.takeSnapshot(configuration: nil)) else {
+            guard let snapshot = try await tab.takeSnapshot(), let data = designPNG(snapshot) else {
                 throw IDEToolError.handlerFailed("The tab has no visible screenshot.")
             }
             return try designImageResult(data)

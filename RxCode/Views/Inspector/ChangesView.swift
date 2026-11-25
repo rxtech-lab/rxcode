@@ -101,13 +101,15 @@ private struct WorkingTreeChanges: View {
             .onChange(of: scope) { selection.removeAll() }
 
             if scope == .thread {
-                ThreadChangeList(summaries: threadFiles) { file in
+                ThreadChangeList(summaries: threadFiles, showDiff: { file in
                     windowState.diffFile = PreviewFile(
                         path: file.path, name: file.name, editHunks: file.hunks,
                         showFullFileDiff: true, originalContent: file.originalContent,
                         modifiedContent: file.modifiedContent, preferHunks: file.hasExternalInterleaving
                     )
-                }
+                }, showPreview: { file in
+                    windowState.inspectorFile = PreviewFile(path: file.path, name: file.name)
+                })
             } else if files.isEmpty {
                 ContentUnavailableView {
                     if clean {
@@ -153,6 +155,7 @@ private struct WorkingTreeChanges: View {
         }
         .disabled(operation != nil)
         .overlay { GitOperationOverlay(operation: operation) }
+        .task { ExternalEditorService.shared.detectIfNeeded() }
         .task(id: threadLoadID) { [key = threadLoadID] in
             let summaries = await appState.loadThreadDiffPreview(key)
             guard !Task.isCancelled, threadLoadID == key else { return }
@@ -191,8 +194,15 @@ private struct WorkingTreeChanges: View {
         }
         .listStyle(.inset)
         .contextMenu(forSelectionType: String.self) { paths in
-            if paths.count == 1 {
-                Button("Show Diff") { showDiff(paths) }
+            let selectedFiles = files.filter { paths.contains($0.displayPath) }
+            if selectedFiles.count == 1, let file = selectedFiles.first {
+                Button("Show Diff", systemImage: "arrow.left.arrow.right") { showDiff(paths) }
+                Button("Show Preview", systemImage: "eye") { showPreview(paths) }
+                    .disabled(file.statusChar == "D" || !FileManager.default.fileExists(atPath: file.path))
+                Divider()
+            }
+            if !selectedFiles.isEmpty {
+                GitFileSystemContextMenuItems(paths: selectedFiles.map(\.path))
             }
         } primaryAction: { paths in showDiff(paths) }
     }
@@ -200,6 +210,11 @@ private struct WorkingTreeChanges: View {
     private func showDiff(_ paths: Set<String>) {
         guard paths.count == 1, let file = files.first(where: { paths.contains($0.displayPath) }) else { return }
         windowState.diffFile = PreviewFile(path: file.path, name: file.name, gitDiffMode: file.diffMode)
+    }
+
+    private func showPreview(_ paths: Set<String>) {
+        guard paths.count == 1, let file = files.first(where: { paths.contains($0.displayPath) }) else { return }
+        windowState.inspectorFile = PreviewFile(path: file.path, name: file.name)
     }
 
     @ViewBuilder private var syncStatus: some View {

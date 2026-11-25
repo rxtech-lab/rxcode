@@ -1,101 +1,70 @@
 # Steering a running turn
 
-Sending a message while an agent is mid-turn used to mean one of two things:
-the message went into a queue and waited for the turn to end, or — if the user
-picked "send now" on a queued message — RxCode cancelled the turn and started a
-new one. The second is destructive: whatever the agent had in flight is thrown
-away, and the thread restarts from the last resume point.
+Sending during a response queues the instruction. The queued row lets the user steer
+the active response when the agent supports it, or explicitly interrupt and send.
+Leaving the instruction queued sends it in order when the turn finishes. The Mac chat
+also offers these choices for the whole queue, joined into one instruction.
 
-Both Claude Code and Codex can take extra user input *into* a running turn, so
-there is now a third option, and the user picks between all three.
-
-## Queue first, then the user decides
-
-Sending mid-turn always queues. Nothing reaches the agent until the user says
-when, and doing nothing is a real answer — the queue flushes on its own when the
-turn ends (`flushNextQueuedMessageIfNeeded`, at the tail of
-`finalizeStreamSession`).
-
-The queued row is where the default gets overridden:
-
-| Choice | What happens | Cost |
-| --- | --- | --- |
-| *(leave it)* | sent as a new turn once the current one finishes | none |
-| **Steer into current response** | handed to the turn already running, which keeps going | none, when the turn takes it |
-| **Interrupt and send now** | the running turn is cancelled, the message starts a new one | whatever the agent had in flight |
-
-"Steer all into current response" and "Interrupt and send all now" are the same
-pair applied to the whole queue, joined with blank lines into one message.
-
-The steer action is offered only when `ChatBridge.canSteer` is true — that is,
-when the session's backend declares `supportsSteering` — and only for messages
-with no attachments. Everything else gets the plain interrupt button, which is
-what this looked like before steering existed.
-
-## Per-provider transport
-
-| Provider | Mechanism | Notes |
-| --- | --- | --- |
-| Claude Code | another `{"type":"user",…}` NDJSON frame on the open stdin | `--input-format stream-json` already keeps stdin open until `closeStdin(streamId:)`, so there is no new transport — just one more write on the handle we were holding |
-| Codex | `turn/steer` JSON-RPC request | Needs `threadId` + `expectedTurnId`; the app server rejects the request if the turn ended first |
-| ACP | none | The protocol has no equivalent, so `steer` declines and the message queues |
-| RxAgentSDK | not yet | `AgentClient` in the pinned release has no steering entry point — see [rxagentsdk-migration.md](rxagentsdk-migration.md) |
-
-Codex's turn id comes from the `turn/started` notification (`params.turn.id`),
-which RxCode now records in `CodexAppServer.activeTurns` and clears on
-`turn/completed` / `turn/failed`. The presence of that record is what makes
-`steer` decline rather than write into a turn the app server has already closed.
-
-## The contract
-
-Two requirements, because the UI and the write need different answers:
-
-- `AgentBackend.supportsSteering: Bool` (default `false`, `nonisolated`) — can
-  this transport reach a running turn *at all*? Read from the bridge push loop
-  on every streaming update, which is why it is synchronous.
-- `AgentBackend.steer(streamId:prompt:) async -> Bool` (default `false`) — did
-  *this* turn take it? Only knowable at the moment of the write.
-
-Returning `false` from `steer` is normal, not an error — the turn may have
-finished between the click and the write landing. **A caller that gets `false`
-still owes the user their message**, so every call site has a fallback:
-
-| Call site | On `true` | On `false` |
-| --- | --- | --- |
-| "Steer now" on a queued message (`steerQueuedMessage`) | delivered, that one message leaves the queue | stays queued; if the turn had already ended, sent now instead |
-| "Steer all" (`steerAllQueuedAsOne`) | joined with blank lines, delivered as one | whole queue stays intact, same end-of-turn fallback |
-| "Interrupt and send now" (`sendQueuedNow` / `sendAllQueuedAsOne`) | — | never steers; cancels the turn and sends as a new one |
-
-A declined steer leaves the message exactly where it was, so the worst case is
-the default behaviour. The queued row says so inline rather than letting the
-click look like a no-op.
-
-## Transcript
-
-A steered message never passes through `sendPrompt`, which is what normally
-appends the user bubble — so `steerActiveStream` appends it directly and sets
-`needsNewMessage`, which makes the agent's next delta open a fresh bubble
-instead of extending the one it was part-way through writing.
-
-## Attachments are not steered
-
-Both transports can carry attachments in principle, but the encoding differs per
-provider. Rather than risk one being silently dropped mid-turn, a message
-carrying any attachment declines to steer — the UI doesn't offer the action for
-it, and `steerActiveStream` refuses it even if asked.
-Lifting this means encoding attachments per provider — Claude's `content` array
-takes image blocks, Codex's `UserInput` has image and file variants.
-
-## Files
-
-| File | Role |
+| Runtime | Steering transport |
 | --- | --- |
-| `Packages/Sources/RxCodeCore/Backend/AgentBackend.swift` | `steer` requirement + declining default |
-| `RxCode/Services/ClaudeService+Process.swift` | stdin frame |
-| `RxCode/Services/CodexAppServer.swift` | `turn/steer` + `activeTurns` |
-| `RxCode/Services/CodexAppServer+Turn.swift` | captures / clears the live turn id |
-| `RxCode/App/AppState+Steering.swift` | `steerActiveStream`, `steerQueuedMessage`, `steerAllQueuedAsOne`, `canSteer`, transcript append |
-| `RxCode/App/AppState+Helpers.swift` | `enqueueMessage` + the interrupting `sendQueuedNow` / `sendAllQueuedAsOne` |
-| `Packages/Sources/RxCodeChatKit/ChatBridge.swift` | `canSteer` state + the steer handlers |
-| `Packages/Sources/RxCodeChatKit/InputBarView+Queue.swift` | the queued row's send menu |
-| `RxCodeTests/AppStateSteeringTests.swift` | decision-logic coverage |
+| Claude Code | A user frame on the running CLI’s stream-json input |
+| Codex | `turn/steer` with the current thread ID and expected turn ID |
+| ACP v1 | An experimental extension negotiated with the running adapter |
+
+## ACP v1
+
+The standard v1 `session/prompt` response marks the end of that prompt. RxCode
+keeps one prompt in flight per session and holds queued instructions locally.
+Interrupt and Send sends `session/cancel`, answers outstanding permission
+requests with `cancelled`, and waits for the original request’s terminal response.
+The next prompt reuses the same process and ACP session ID. If cancellation
+cannot be confirmed with the current connection, the selected instruction
+stays queued. [ACP v1 prompt turn and cancellation](https://agentclientprotocol.com/protocol/v1/prompt-turn#cancellation)
+
+When `initialize` reports `_meta.steering.supported: true`, RxCode checks the
+adapter identity and version for support of host-owned idle fallback. The known
+versions are `@agentclientprotocol/codex-acp` 2.4.0 and later 2.x releases, and
+`@agentclientprotocol/claude-agent-acp` 0.65.0 and later 0.x releases. The
+capability appears on the active turn after negotiation. Older and unknown
+adapters offer Interrupt and Send. [ACP extensibility](https://agentclientprotocol.com/protocol/v1/extensibility) · [Codex ACP steering](https://github.com/agentclientprotocol/codex-acp/blob/v2.4.0/docs/steering.md) · [Claude ACP idle fallback](https://github.com/agentclientprotocol/claude-agent-acp/pull/919) · [Claude ACP turn lifecycle fix](https://github.com/agentclientprotocol/claude-agent-acp/releases/tag/v0.65.0)
+
+RxCode calls `_session/steering` with `_meta.steering.idleBehavior: "promptRequired"`.
+An `injected` receipt places the instruction in the transcript and keeps the
+original prompt as the owner of subsequent output. The host holds incoming
+updates behind the receipt and ignores echoed user chunks, so the instruction
+appears once before the response to it. A `promptRequired` receipt leaves the
+instruction queued for a normal prompt. A missing or ambiguous receipt shows
+the instruction with a delivery warning and prevents automatic replay.
+Attachments travel as path references, using the same encoding as a normal
+prompt.
+
+## ACP v2 preview
+
+The preview allows prompts during active work. The agent can insert or hold
+them and chooses how insertion affects active work. The explicit
+`delivery: "steer" | "queue"` field and corresponding advertised capabilities
+are proposed in RFD #1261. That design grew out of the earlier
+`session/inject` discussion and a separate concurrent queueing proposal.
+RxCode currently negotiates ACP v1. [ACP v2 prompt lifecycle](https://agentclientprotocol.com/protocol/v2/prompt-lifecycle) · [Prompt delivery RFD #1261](https://github.com/agentclientprotocol/agent-client-protocol/pull/1261) · [Mid-turn input discussion #1220](https://github.com/orgs/agentclientprotocol/discussions/1220) · [Concurrent prompt queueing proposal #484](https://github.com/agentclientprotocol/agent-client-protocol/pull/484)
+
+## Verification
+
+The pre-fix RxCode regression test sent a replacement before the original
+`session/prompt` settled. A strict ACP subprocess rejected it as still busy.
+The isolated macOS run passed 49 focused tests, including cancellation with a
+pending permission request, late output from the old turn, native steer
+ordering, idle fallback, missing receipts, legacy versions, queuing during a
+steer, and retry after a disconnect. The iOS Simulator build passed.
+
+| Locally probed adapter | Observed behavior |
+| --- | --- |
+| OpenCode 1.18.3, 1.19.4, 2.2.5 | Initialization omitted the steering extension. OpenCode 1.19.4 cancelled an active streamed turn and accepted a follow-up on the same session with the original instruction still in context. The model ran against a local fixture. |
+| Gemini CLI 0.42.0 | Initialization omitted the steering extension. Active-turn cancellation and inference were outside the probe. [Gemini CLI ACP docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md) · [Gemini steering request](https://github.com/google-gemini/gemini-cli/issues/30048) |
+| GitHub Copilot CLI 1.0.47 and 1.0.88 | Initialization omitted the steering extension. Active-turn cancellation and inference were outside the probe. [Copilot ACP prompt discussion](https://github.com/github/copilot-cli/issues/4555) |
+| Cursor 2026.10.22, Antigravity 1.5.2, legacy Zed Claude Code ACP 0.16.2 | Initialization omitted the steering extension. These were handshake checks. |
+| Codex ACP 2.4.0 | Initialization advertised the extension, the idle request returned `promptRequired`, and an injected steer streamed its reply before the original prompt completed against a local model fixture. |
+| Claude Agent ACP 0.65.0 | Initialization advertised the extension, the idle request returned `promptRequired`, and an injected steer streamed its reply before the original prompt completed against a local model fixture. |
+
+OpenCode documents one active prompt per session. Claude Agent ACP also offers
+its own advertised concurrent prompt queueing, independently of steering.
+RxCode’s queue stays local on both. [OpenCode ACP protocol reference](https://github.com/anomalyco/opencode/blob/dev/services/site/src/docs/content/cli/acp.mdx) · [Claude ACP queueing example](https://github.com/agentclientprotocol/claude-agent-acp/blob/main/examples/simple-client.ts)

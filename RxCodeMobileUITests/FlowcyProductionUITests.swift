@@ -1,6 +1,54 @@
+import RxCodeCore
+import RxCodeSync
 import XCTest
 
 final class FlowcyProductionUITests: XCTestCase {
+    @MainActor
+    func testSelectingPairedAgentsLoadsAndRetriesTheirConversations() throws {
+        continueAfterFailure = false
+        let saved = AgentProfile(name: "History Agent")
+        let missing = AgentProfile(name: "Recovery Agent")
+        let savedID = "saved-thread"
+        let missingID = "missing-thread"
+        let conversations = [(saved, savedID), (missing, missingID)]
+        let agents = conversations.map { profile, id in
+            AgentHubAgent(profile: profile, modelLabel: "Codex", primarySessionId: id)
+        }
+        let sessions = conversations.map { profile, id in
+            SessionSummary(id: id, projectId: profile.id, title: profile.name, updatedAt: .now, isPinned: false, isArchived: false)
+        }
+        let savedMessage = ChatMessage(role: .user, content: "Saved agent conversation")
+        let fixtures = MockFixtures(projects: [], sessions: sessions, branchBriefings: [], briefingPlans: [],
+                                    briefingDocuments: [], threadSummaries: [], messagesBySession: [savedID: [savedMessage]],
+                                    agentHub: AgentHubSnapshot(agents: agents))
+        let server = MockRelayServer(fixtures: fixtures)
+        try server.start()
+        defer { server.stop() }
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest-cloud", "-uitest-flowcy", "-uitest-relay-url", server.relayURL,
+                               "-uitest-desktop-pubkey", server.desktopPublicKeyHex]
+        app.launch()
+        let tab = app.buttons["Agent"].firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 15))
+        tab.tap()
+        let picker = app.buttons["assistant-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.tap()
+        app.buttons[saved.name].tap()
+        XCTAssertTrue(app.staticTexts[savedMessage.content].firstMatch.waitForExistence(timeout: 10))
+
+        picker.tap()
+        app.buttons[missing.name].tap()
+        let retry = app.buttons["Retry"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts[savedMessage.content].firstMatch.exists)
+        let recovered = ChatMessage(role: .user, content: "Recovered agent conversation")
+        server.setMessages([recovered], for: missingID)
+        retry.tap()
+        XCTAssertTrue(app.staticTexts[recovered.content].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(retry.exists)
+    }
+
     @MainActor
     func testDashboardWithoutPairingAndRootNavigation() {
         continueAfterFailure = false

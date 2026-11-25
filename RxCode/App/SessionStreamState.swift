@@ -25,6 +25,11 @@ struct SessionStreamState {
     var isThinking = false
     var needsNewMessage = false // After receiving .user(tool result), the next block starts a new ChatMessage
     var activeStreamId: UUID?
+    /// Bound to the stream that negotiated experimental ACP steering.
+    var acpSteeringStreamId: UUID?
+    /// A queued send owns its messages until the wire acknowledges the action.
+    var queueDispatchInProgress = false
+    var queueFlushDeferred = false
     /// Retained after streaming stops so a late save cannot settle a newer turn.
     var latestTurnID: UUID?
     /// Invalidated by a stop or newer turn while the completed transcript is saving.

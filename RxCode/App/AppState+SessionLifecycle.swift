@@ -9,6 +9,18 @@ extension AppState {
     // MARK: - View Convenience API
 
     func startNewChat(in window: WindowState) {
+        // An agent's conversation never starts over, like talking with a
+        // person: "New Chat" and /clear return to the ongoing conversation.
+        if let projectId = window.selectedProject?.id, let owner = agentOwning(projectId: projectId) {
+            openAgentConversation(owner.agent.id, in: window)
+            return
+        }
+        beginNewChat(in: window)
+    }
+
+    /// Leaves the current thread for an empty composer, without the agent
+    /// redirect of `startNewChat`.
+    func beginNewChat(in window: WindowState) {
         if isStreaming(in: window) { detachCurrentStream(in: window) }
         saveDraft(in: window)
         saveQueue(in: window)
@@ -21,7 +33,7 @@ extension AppState {
            let project = projects.first(where: { $0.id == projectId }) {
             window.selectedProject = project
         }
-        window.generalRoute = window.selectedProject?.isGlobalChat == true ? .chat : nil
+        window.generalRoute = chatRoute(for: window.selectedProject)
         window.currentSessionId = nil
         window.sessionAgentProvider = nil
         window.sessionModel = nil

@@ -8,6 +8,7 @@ struct GitLocalChangesView: View {
     @Environment(RepositoryStatus.self) private var repository
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection = Set<String>()
+    @State private var detailMode: GitFileDetailMode = .diff
     @State private var amend = false
     @State private var amendDraft: GitAmendDraft?
     @State private var flight: GitFileFlight?
@@ -29,6 +30,13 @@ struct GitLocalChangesView: View {
 
     private nonisolated static func tag(_ file: GitCommitFile) -> String { "c:" + file.path }
 
+    private nonisolated static func relativePath(from tag: String) -> String? {
+        for prefix in ["u:", "s:", "c:"] where tag.hasPrefix(prefix) {
+            return String(tag.dropFirst(prefix.count))
+        }
+        return nil
+    }
+
     private func content(_ tree: GitWorkingTree, lists: GitChangesSnapshot.Trees) -> some View {
         let unstaged = tree.changes.unstaged
         let staged = tree.changes.staged
@@ -48,9 +56,9 @@ struct GitLocalChangesView: View {
             } else {
                 HSplitView {
                     VSplitView {
-                        changesPane(lists.unstaged, staged: false) { move($0, toStaged: true, tree: tree) }
+                        changesPane(lists.unstaged, staged: false, root: tree.root) { move($0, toStaged: true, tree: tree) }
                             .frame(minHeight: 100, idealHeight: 330, maxHeight: .infinity)
-                        changesPane(lists.staged, staged: true, original: draft?.changes) { move($0, toStaged: false, tree: tree) }
+                        changesPane(lists.staged, staged: true, root: tree.root, original: draft?.changes) { move($0, toStaged: false, tree: tree) }
                             .frame(minHeight: 100, idealHeight: 240, maxHeight: .infinity)
                             .overlay { GitOperationOverlay(operation: amendHead != nil && draft == nil ? "Loading commit files…" : nil) }
                     }
@@ -72,14 +80,15 @@ struct GitLocalChangesView: View {
                         if let folder = selectedFolder(lists, draft: draft) {
                             GitFolderContents(
                                 folder: folder.path,
+                                root: tree.root,
                                 tree: folder.tree,
                                 ignoreFile: folder.prefix == "c:" ? nil : { editGitIgnore(paths: [$0]) }
                             ) { selection = [folder.prefix + $0] }
                         } else if selection.count == 1, let draft, let file = originalFiles.first(where: { selection.contains(Self.tag($0)) }) {
-                            GitCommitFileDiffView(file: file, commit: draft.commit, root: tree.root)
+                            GitCommitFileDiffView(file: file, commit: draft.commit, root: tree.root, mode: $detailMode)
                                 .id("\(draft.commit.id):\(file.path)")
                         } else {
-                            GitLocalChangeDiffView(file: selection.count == 1 ? selected.first : nil) {
+                            GitLocalChangeDetailView(file: selection.count == 1 ? selected.first : nil, mode: $detailMode) {
                                 selection.removeAll()
                             }
                         }
@@ -147,9 +156,27 @@ struct GitLocalChangesView: View {
         return nil
     }
 
+    private func isFileTag(
+        _ tag: String,
+        in changes: GitChangedFiles<GitChangeFile>,
+        prefix: String,
+        original: GitChangedFiles<GitCommitFile>?
+    ) -> Bool {
+        if tag.hasPrefix(prefix) {
+            let path = String(tag.dropFirst(prefix.count))
+            return changes.byPath[path] != nil
+        }
+        if tag.hasPrefix("c:") {
+            let path = String(tag.dropFirst(2))
+            return original?.byPath[path] != nil
+        }
+        return false
+    }
+
     private func changesPane(
         _ changes: GitChangedFiles<GitChangeFile>,
         staged: Bool,
+        root: String,
         original: GitChangedFiles<GitCommitFile>? = nil,
         update: @escaping ([GitChangeFile]) -> Void
     ) -> some View {
@@ -214,11 +241,31 @@ struct GitLocalChangesView: View {
             }
             .contextMenu(forSelectionType: String.self) { selectedTags in
                 let targets = changes.selectedFiles(in: selectedTags, prefix: prefix)
+                let relativePaths = selectedTags.compactMap(Self.relativePath(from:))
+                let absolutePaths = GitFileSystemActions.absolutePaths(for: relativePaths, root: root)
+                if selectedTags.count == 1, let tag = selectedTags.first,
+                   isFileTag(tag, in: changes, prefix: prefix, original: original) {
+                    Button("Show Diff", systemImage: "arrow.left.arrow.right") {
+                        selection = [tag]
+                        detailMode = .diff
+                    }
+                    Button("Show Preview", systemImage: "eye") {
+                        selection = [tag]
+                        detailMode = .preview
+                    }
+                    Divider()
+                }
                 if !targets.isEmpty {
                     Button(String(localized: action)) { update(targets) }
                     if !staged {
                         Button("Discard Changes…", role: .destructive) { store.confirmation = .discard(targets) }
                     }
+                    Divider()
+                }
+                if !absolutePaths.isEmpty {
+                    GitFileSystemContextMenuItems(paths: absolutePaths)
+                }
+                if !targets.isEmpty {
                     let paths = selectedTags.filter { $0.hasPrefix(prefix) }
                         .map { String($0.dropFirst(prefix.count)) }
                     Divider()
@@ -330,18 +377,65 @@ private extension View {
 }
 
 /// Detail column for a working tree file.
-private struct GitLocalChangeDiffView: View {
+private struct GitLocalChangeDetailView: View {
     let file: GitChangeFile?
+    @Binding var mode: GitFileDetailMode
     let onClose: () -> Void
 
     var body: some View {
         if let file {
-            FileDiffView(filePath: file.path, fileName: file.name, gitDiffMode: file.diffMode, onClose: onClose)
+            switch mode {
+            case .diff:
+                FileDiffView(
+                    filePath: file.path,
+                    fileName: file.name,
+                    gitDiffMode: file.diffMode,
+                    showsDiffBadge: false,
+                    onClose: onClose
+                ) {
+                    GitFileDetailModePicker(mode: $mode)
+                }
                 .id("\(file.diffMode)-\(file.path)")
+            case .preview:
+                if file.statusChar == "D" || !FileManager.default.fileExists(atPath: file.path) {
+                    VStack(spacing: 0) {
+                        HStack(spacing: 8) {
+                            GitFileDetailModePicker(mode: $mode)
+                            FilePreviewTitle(fileName: file.name)
+                                .help(file.path)
+                            Spacer(minLength: 0)
+                            WorkspaceTabStripButton(systemImage: "xmark", help: "Close Preview", action: onClose)
+                        }
+                        .frame(minHeight: 28)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(ClaudeTheme.surfacePrimary)
+                        ClaudeThemeDivider()
+                        ContentUnavailableView(
+                            "File deleted",
+                            systemImage: "trash",
+                            description: Text("This file does not exist in the working tree.")
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .background(ClaudeTheme.background)
+                } else {
+                    FileInspectorView(filePath: file.path, fileName: file.name, onClose: onClose) {
+                        HStack(spacing: 8) {
+                            GitFileDetailModePicker(mode: $mode)
+                            FilePreviewTitle(fileName: file.name)
+                        }
+                    }
+                    .id(file.path)
+                }
+            }
         } else {
-            ContentUnavailableView("Select a file", systemImage: "doc.text.magnifyingglass",
-                                   description: Text("Choose one changed file to see its diff."))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ContentUnavailableView(
+                "Select a file",
+                systemImage: "doc.text.magnifyingglass",
+                description: Text("Choose one changed file to see its diff or preview.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

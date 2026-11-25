@@ -189,10 +189,10 @@ extension MobileAppState {
                     } else {
                         logger.warning("[MobileSync] refused to overwrite \(existing) messages with empty page for session=\(active, privacy: .public)")
                     }
-                } else if messagesBySession[active] == nil {
-                    messagesBySession[active] = []
                 }
-                if loadingThreadMessageSessions.contains(active) { loadingThreadMessageSessions.remove(active) }
+                // A nil page acknowledges an unavailable transcript. Only a
+                // successful page (including []) establishes a history cache.
+                finishLoadingThreadMessages(for: active)
                 // The snapshot's activeSessionID is metadata that labels the
                 // carried activeSessionMessages — it must not be treated as a
                 // navigation command. Only adopt it when our local selection
@@ -200,7 +200,7 @@ extension MobileAppState {
                 // we're waiting for the desktop to assign a real id; otherwise
                 // a reconnect-driven snapshot would yank the user out of the
                 // thread they're currently reading.
-                if let current = activeSessionID, MobileDraftSessionID.isDraft(current) {
+                if snap.activeSessionMessages != nil, let current = activeSessionID, MobileDraftSessionID.isDraft(current) {
                     activeSessionID = active
                 }
             }
@@ -429,6 +429,20 @@ extension MobileAppState {
         case .taskBoardResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "task_board_result") else { return }
             applyTaskBoardResult(result)
+        case .agentHubUpdate(let update):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            if let seq = update.seq, let previous = agentHubSequence, seq <= previous { return }
+            agentHubSequence = update.seq
+            agentHub = update.snapshot
+        case .agentResult(let result):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            latestAgentResult = result
+        case .screenShareState(let status):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            agentScreen.receive(status, state: self)
+        case .screenFrame(let frame):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            agentScreen.receive(frame, state: self)
         case .taskBoardUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "task_board_update") else { return }
             storeTaskBoardSnapshot(update.snapshot, cloud: false)

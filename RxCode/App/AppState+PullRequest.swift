@@ -2,6 +2,12 @@ import Foundation
 import os
 import RxCodeCore
 
+struct ProjectPullRequestRequest: Identifiable {
+    let id = UUID()
+    let project: Project
+    let branch: String?
+}
+
 /// Errors surfaced while opening a pull request from a briefing card.
 enum PullRequestError: LocalizedError {
     case noGitHubRepo
@@ -28,11 +34,13 @@ extension AppState {
     /// Conventional-Commit title + markdown body from the branch briefing, and
     /// ask autopilot to open the PR (base = repo default branch, resolved
     /// server-side). Refreshes CI/PR status on success and returns the PR URL.
-    ///
-    /// `model` picks the agent model that writes the title + body; `nil` uses
-    /// the last model picked from the "Create with Model" menu, falling back to
-    /// the summarization settings when none was picked.
-    func createPullRequestForBranch(project: Project, branch: String, model: AgentModel? = nil) async throws -> URL {
+    func createPullRequestForBranch(project: Project, branch: String) async throws -> URL {
+        try await createPullRequestForBranch(project: project, branch: branch, model: rememberedPullRequestModel)
+    }
+
+    /// A nil model uses the summarization settings. Capture the chosen model
+    /// before pushing so another PR action cannot change this request's model.
+    func createPullRequestForBranch(project: Project, branch: String, model: AgentModel?) async throws -> URL {
         guard let slug = project.gitHubRepo else { throw PullRequestError.noGitHubRepo }
         let parts = slug.split(separator: "/", maxSplits: 1).map(String.init)
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
@@ -57,7 +65,7 @@ extension AppState {
         let (title, body) = await generateValidatedPullRequestContent(
             briefing: briefing,
             branch: branch,
-            model: model ?? rememberedPullRequestModel,
+            model: model,
             cwd: project.path
         )
 
@@ -91,18 +99,26 @@ extension AppState {
     /// resolve the project's current branch (the same way the CI poller does)
     /// and open a PR for it via ``createPullRequestForBranch(project:branch:)``.
     func createPullRequestForCurrentBranch(project: Project) async throws -> URL {
+        try await createPullRequestForCurrentBranch(project: project, model: rememberedPullRequestModel)
+    }
+
+    func createPullRequestForCurrentBranch(project: Project, model: AgentModel?) async throws -> URL {
         guard let branch = await GitHelper.currentBranch(at: project.path), !branch.isEmpty else {
             throw PullRequestError.createFailed("Couldn't determine the current branch for this project.")
         }
-        return try await createPullRequestForBranch(project: project, branch: branch)
+        return try await createPullRequestForBranch(project: project, branch: branch, model: model)
     }
 
     // MARK: - PR model selection
 
-    /// Model sections offered by the "Create with Model" menu: Claude Code,
-    /// Codex, and every enabled ACP client.
+    /// PR drafts use text generation, so media and decision studios are excluded.
     func pullRequestModelSections() -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
-        availableAgentModelSections()
+        availableAgentModelSections(includeFlowcy: isSignedIn).compactMap { section in
+            guard section.provider == .localAgent else { return section }
+            let models = section.models.filter { localStudioKind($0.id, provider: .localAgent) == .chat }
+            guard !models.isEmpty else { return nil }
+            return (section.id, section.title, section.provider, section.iconURL, models)
+        }
     }
 
     /// The model last picked for PR generation, or `nil` when the user hasn't
@@ -147,12 +163,19 @@ extension AppState {
                 }
                 // Client disabled or removed; fall through to the summarization settings.
                 logger.warning("ACP client for PR generation is unavailable; using summarization settings")
-            case .flowcy:
-                return nil
-            case .localAgent:
-                // Loading a local model for one-shot text would stall the UI
-                // for the model's load time; use the summarization settings.
-                break
+            case .flowcy, .localAgent:
+                let prompt = OpenAISummarizationService.pullRequestPrompt(briefing: briefing, branch: branch)
+                do {
+                    if model.provider == .flowcy {
+                        return try await flowcyCloudBackend.reply(model: model.id, prompt: prompt)
+                    }
+                    return try await LocalAgentBackendFactory.generateTextCompletion(prompt: prompt, modelID: model.id, store: localModels)
+                } catch is CancellationError {
+                    return nil
+                } catch {
+                    logger.warning("PR generation failed for \(model.key, privacy: .public): \(error.localizedDescription, privacy: .private)")
+                    return nil
+                }
             }
         }
         switch summarizationProvider {

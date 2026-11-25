@@ -18,7 +18,9 @@ extension AppState {
     public func ideAvailableTools(forSession sessionKey: String) async -> [IDETool] {
         let provider = ideAgentProvider(for: sessionKey)
         let caps = await backend(for: provider).capabilities(for: sessionKey)
-        return IDEToolRegistry.tools(for: caps, provider: provider)
+        // Agents from the Agents tab also get their memory, job, schedule,
+        // phone and computer-use tools.
+        return IDEToolRegistry.tools(for: caps, provider: provider) + agentHubTools(forSession: sessionKey)
     }
 
     private func ideAgentProvider(for sessionKey: String) -> AgentProvider {
@@ -47,6 +49,9 @@ extension AppState {
     ) async throws -> JSONValue {
         if IDEToolRegistry.designTools.contains(where: { $0.name == name }) {
             return try await handleDesignTool(name, arguments: arguments, sessionKey: sessionKey)
+        }
+        if IDEToolRegistry.agentHubToolNames.contains(name) {
+            return try await handleAgentHubTool(name, arguments: arguments, sessionKey: sessionKey)
         }
         switch name {
         case "ide__list_extensions", "ide__create_extension", "ide__reload_extension", "ide__test_extension":

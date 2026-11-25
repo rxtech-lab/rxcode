@@ -99,6 +99,7 @@ struct GitFileIcon: View {
 /// A selected folder opens its contents in the detail pane. Choosing a file opens its diff or preview.
 struct GitFolderContents: View {
     let folder: String
+    let root: String
     let tree: GitPathTree
     var ignoreFile: ((String) -> Void)? = nil
     let selectFile: (String) -> Void
@@ -126,7 +127,9 @@ struct GitFolderContents: View {
                 .buttonStyle(.plain)
                 .listRowSeparator(.hidden)
                 .contextMenu {
+                    GitFileSystemContextMenuItems(paths: [GitFileSystemActions.absolutePath(for: path, root: root)])
                     if let ignoreFile {
+                        Divider()
                         Button("Add to .gitignore…") { ignoreFile(path) }
                     }
                 }

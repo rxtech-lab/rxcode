@@ -284,6 +284,30 @@ final class AppState: IDEToolHandling {
     @ObservationIgnored var scheduledTaskPersistenceTask: Task<Void, Error>?
     @ObservationIgnored weak var scheduledPetReportReceiver: PetController?
 
+    // MARK: - Agents
+
+    /// Personal agents of this workspace (Agents tab). Loaded from disk on init.
+    var agentProfiles: [AgentProfile] = []
+    /// Memory notes of every agent, newest first.
+    var agentMemoryNotes: [AgentMemoryNote] = []
+    /// Subagents, background tasks and scheduled runs of every agent, newest first.
+    var agentJobs: [AgentJob] = []
+    /// What paired phones may do with the screen. Persisted per workspace.
+    let screenShareService = ScreenShareService()
+    var agentRemoteAccess = AgentRemoteAccessPolicy()
+    /// Agent ids with a computer-use tool call in flight, with the call count.
+    var agentComputerUseActivity: [UUID: Int] = [:]
+    @ObservationIgnored var agentHubStoreInstance: AgentHubStore?
+    /// Running work of each active job, so it can be cancelled.
+    @ObservationIgnored var agentJobTasks: [UUID: Task<Void, Never>] = [:]
+    /// Running shell jobs, so cancel can stop the process.
+    @ObservationIgnored var agentShellRuns: [UUID: BackgroundShellRun] = [:]
+    /// Agent owning each session key seen in a preflight, kept across renames.
+    @ObservationIgnored var agentSessionOwners: [String: UUID] = [:]
+    @ObservationIgnored var agentHubBroadcastTask: Task<Void, Never>?
+    @ObservationIgnored var agentHubPersistenceTask: Task<Void, Never>?
+    @ObservationIgnored var agentHubLoaded = false
+
     /// Selected default ACP client id (when `selectedAgentProvider == .acp`).
     var selectedACPClientId: String = "" {
         didSet { workspaceDefaults.set(selectedACPClientId, for: "selectedACPClientId") }
@@ -330,9 +354,8 @@ final class AppState: IDEToolHandling {
         didSet { workspaceDefaults.set(openAISummarizationModel, for: "openAISummarizationModel") }
     }
 
-    /// Last model picked from the briefing card's "Create PR › Create with
-    /// Model" submenu, as an `AgentModel.key` (`<provider>:<modelId>`). Empty
-    /// means "use the summarization settings", which is the default.
+    /// Last PR drafting model for this workspace. An empty key uses the
+    /// summarization settings.
     var pullRequestModelKey: String = "" {
         didSet { workspaceDefaults.set(pullRequestModelKey, for: "pullRequestModelKey") }
     }
@@ -716,6 +739,8 @@ final class AppState: IDEToolHandling {
     var hookProgressStatus: LocalizedStringKey?
     /// Non-nil while a hook is awaiting the user's pick from a choice sheet.
     var hookChoiceRequest: HookChoiceRequest?
+    /// PR creation sheets keyed by the window that requested them.
+    var projectPullRequestRequests: [UUID: ProjectPullRequestRequest] = [:]
     /// Non-nil while a hook is awaiting a confirm/cancel decision.
     var hookConfirmRequest: HookConfirmRequest?
     /// Non-nil to surface a failed menu/hook command as an alert (e.g. a desktop

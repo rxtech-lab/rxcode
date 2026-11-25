@@ -1,3 +1,5 @@
+import os
+import RxCodeCore
 import XCTest
 @testable import RxCode
 
@@ -157,6 +159,17 @@ final class DownloadCenterTests: XCTestCase {
         XCTAssertEqual(center.items.first?.phase, .installing)
     }
 
+    func testFirstByteUpdateAndNewlyLearnedTotalAreNotThrottled() {
+        let center = DownloadCenter()
+        let id = center.begin("ACP Client 1.0", kind: .acpAgent)
+        let start = Date(timeIntervalSince1970: 1_000)
+        center.update(id, phase: .downloading, now: start)
+        center.update(id, phase: .downloading, receivedBytes: 50, totalBytes: 500, transferredBytes: 50, now: start.addingTimeInterval(0.05))
+        XCTAssertEqual(center.items.first?.receivedBytes, 50)
+        XCTAssertEqual(center.items.first?.totalBytes, 500)
+        XCTAssertEqual(center.items.first?.fraction, 0.1)
+    }
+
     func testUpdatesAfterCompletionAreIgnored() {
         let center = DownloadCenter()
         let id = center.begin("MLX runtime", kind: .modelRuntime)
@@ -236,6 +249,170 @@ final class DownloadCenterTests: XCTestCase {
         }
         XCTAssertEqual(DownloadCenter.shared.items.first { $0.title == "Broken" }?.phase, .failed("boom"))
     }
+
+    func testACPInstallerReportsDownloadedBytesTotalBytesAndSpeed() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let archiveData = try Self.makeTestTarGzArchive(in: root, binaryName: "mock-acp", payloadBytes: 256_000)
+        ACPChunkedArchiveProtocol.archiveData = archiveData
+        defer { ACPChunkedArchiveProtocol.archiveData = nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ACPChunkedArchiveProtocol.self]
+        let installer = ACPInstallerService(sessionConfiguration: configuration, installRootURL: root.appending(path: "acp-binaries"))
+
+        let binJSON = Data(#"{"archive":"https://acp-download.test/mock-acp.tar.gz","cmd":"./mock-acp"}"#.utf8)
+        let bin = try JSONDecoder().decode(ACPBinaryDist.self, from: binJSON)
+
+        let collector = ProgressCollector()
+        let title = "MockACP 1.2.3"
+        let executablePath = try await installer.install(
+            bin,
+            registryId: "mock-acp",
+            version: "1.2.3",
+            displayName: "MockACP"
+        ) { update in
+            collector.record(update)
+        }
+
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: executablePath))
+        let updates = collector.snapshot()
+        let downloading = updates.filter { $0.phase == .downloading && $0.downloadedBytes > 0 }
+        XCTAssertFalse(downloading.isEmpty, "ACP downloads must report live byte progress")
+        XCTAssertEqual(downloading.last?.downloadedBytes, Int64(archiveData.count))
+        XCTAssertEqual(downloading.last?.expectedBytes, Int64(archiveData.count))
+        XCTAssertEqual(downloading.last?.fraction, 1.0)
+        XCTAssertTrue(downloading.contains { ($0.bytesPerSecond ?? 0) > 0 },
+                      "ACP downloads must report positive download speed per second")
+        XCTAssertTrue(updates.contains { $0.phase == .extracting })
+
+        // DownloadCenter should also reflect the downloaded and total bytes for the ACP agent.
+        let item = try XCTUnwrap(DownloadCenter.shared.items.first { $0.title == title && $0.kind == .acpAgent })
+        XCTAssertEqual(item.phase, .finished)
+        XCTAssertEqual(item.receivedBytes, Int64(archiveData.count))
+        XCTAssertEqual(item.totalBytes, Int64(archiveData.count))
+        DownloadCenter.shared.remove(item.id)
+    }
+
+    func testACPVersionSheetTransferLabelIncludesBytesAndSpeed() {
+        let initial = ACPInstallerService.Progress(phase: .downloading, downloadedBytes: 0, expectedBytes: nil, bytesPerSecond: nil)
+        XCTAssertNil(ACPVersionSheet.transferLabel(for: initial))
+
+        let withoutSpeed = ACPInstallerService.Progress(
+            phase: .downloading,
+            downloadedBytes: 2_000_000,
+            expectedBytes: 10_000_000,
+            bytesPerSecond: nil
+        )
+        XCTAssertEqual(
+            ACPVersionSheet.transferLabel(for: withoutSpeed),
+            "\(LocalModelFormat.bytes(2_000_000)) of \(LocalModelFormat.bytes(10_000_000))"
+        )
+
+        let withSpeed = ACPInstallerService.Progress(
+            phase: .downloading,
+            downloadedBytes: 5_000_000,
+            expectedBytes: 10_000_000,
+            bytesPerSecond: 2_500_000
+        )
+        XCTAssertEqual(
+            ACPVersionSheet.transferLabel(for: withSpeed),
+            "\(LocalModelFormat.bytes(5_000_000)) of \(LocalModelFormat.bytes(10_000_000)) · \(LocalModelFormat.bytes(2_500_000))/s"
+        )
+
+        let unknownTotal = ACPInstallerService.Progress(
+            phase: .downloading,
+            downloadedBytes: 3_000_000,
+            expectedBytes: nil,
+            bytesPerSecond: 1_500_000
+        )
+        XCTAssertEqual(
+            ACPVersionSheet.transferLabel(for: unknownTotal),
+            "\(LocalModelFormat.bytes(3_000_000)) · \(LocalModelFormat.bytes(1_500_000))/s"
+        )
+    }
+
+    private static func makeTestTarGzArchive(in root: URL, binaryName: String, payloadBytes: Int) throws -> Data {
+        let srcDir = root.appending(path: "archive-src")
+        try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
+        let binaryURL = srcDir.appending(path: binaryName)
+        var script = Data("#!/bin/sh\necho ok\n# ".utf8)
+        // Use pseudo-random bytes so gzip doesn't compress the archive down to a tiny single chunk.
+        var rng: UInt64 = 0x1234_5678_9ABC_DEF0
+        var padding = Data(capacity: payloadBytes)
+        for _ in 0..<payloadBytes {
+            rng = rng &* 6_364_136_223_846_793_005 &+ 1
+            padding.append(UInt8(truncatingIfNeeded: rng >> 33))
+        }
+        script.append(padding)
+        try script.write(to: binaryURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binaryURL.path)
+
+        let archiveURL = root.appending(path: "fixture.tar.gz")
+        let tar = Process()
+        tar.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        tar.arguments = ["-czf", archiveURL.path, "-C", srcDir.path, binaryName]
+        try tar.run()
+        tar.waitUntilExit()
+        XCTAssertEqual(tar.terminationStatus, 0)
+        return try Data(contentsOf: archiveURL)
+    }
+}
+
+nonisolated private final class ProgressCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [ACPInstallerService.Progress] = []
+
+    func record(_ progress: ACPInstallerService.Progress) {
+        lock.withLock { items.append(progress) }
+    }
+
+    func snapshot() -> [ACPInstallerService.Progress] {
+        lock.withLock { items }
+    }
+}
+
+nonisolated private final class ACPChunkedArchiveProtocol: URLProtocol, @unchecked Sendable {
+    private static let archiveStore = OSAllocatedUnfairLock<Data?>(initialState: nil)
+    static var archiveData: Data? {
+        get { archiveStore.withLock { $0 } }
+        set { archiveStore.withLock { $0 = newValue } }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "acp-download.test" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let data = Self.archiveData else {
+            client?.urlProtocol(self, didFailWithError: URLError(.fileDoesNotExist))
+            return
+        }
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Length": String(data.count)]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        DispatchQueue.global().async { [weak self] in
+            guard let self else { return }
+            let chunkSize = max(data.count / 4, 1)
+            var offset = 0
+            while offset < data.count {
+                let end = min(offset + chunkSize, data.count)
+                self.client?.urlProtocol(self, didLoad: data.subdata(in: offset..<end))
+                offset = end
+                if offset < data.count {
+                    Thread.sleep(forTimeInterval: 0.12)
+                }
+            }
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
 }
 
 nonisolated private final class DownloadFixtureProtocol: URLProtocol, @unchecked Sendable {

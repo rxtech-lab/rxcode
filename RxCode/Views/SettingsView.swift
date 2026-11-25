@@ -109,8 +109,11 @@ struct GeneralSettingsTab: View {
     @Binding var showWhatsNew: Bool
     @State private var showThemePicker = false
     @State private var showCacheStorage = false
+    @State private var showBrowserEngine = false
     @State private var occupiedBytes: Int64?
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
+
+    private var browserEngineManager: BrowserEngineManager { .shared }
 
     var body: some View {
         @Bindable var appState = appState
@@ -119,6 +122,8 @@ struct GeneralSettingsTab: View {
                 themeSection
                 ClaudeThemeDivider()
                 fontSizeSection
+                ClaudeThemeDivider()
+                inAppBrowserSection
                 ClaudeThemeDivider()
                 PetSettingsSection()
                 ClaudeThemeDivider()
@@ -154,9 +159,27 @@ struct GeneralSettingsTab: View {
         .sheet(isPresented: $showCacheStorage) {
             CacheStorageSheet(workspaceManager: workspaceManager)
         }
+        .sheet(isPresented: $showBrowserEngine) {
+            BrowserEngineSheet()
+                .frame(minWidth: 500, idealWidth: 560, minHeight: 420, idealHeight: 480)
+        }
         .task { await refreshOccupiedSpace() }
         .onChange(of: showCacheStorage) { _, isPresented in
             if !isPresented { Task { await refreshOccupiedSpace() } }
+        }
+    }
+
+    private var inAppBrowserSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("In-App Browser")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+            Text("Choose the rendering engine for the workspace browser and manage the optional downloadable Chrome runtime.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+            Text("Current engine: \(browserEngineManager.summaryLabel)")
+                .font(.system(size: ClaudeTheme.size(12)))
+            Button("Configure Browser Engine…") { showBrowserEngine = true }
+                .accessibilityIdentifier("settings-browser-engine")
         }
     }
 

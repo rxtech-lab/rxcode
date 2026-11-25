@@ -332,7 +332,11 @@ actor PermissionServer {
             streamPermissionMode: mode,
             sessionId: sessionId
         )
-        let outcome = await waitForDecision(request, autoApproveReadOnlyBash: autoApproveReadOnlyBash)
+        let outcome = await withTaskCancellationHandler {
+            await waitForDecision(request, autoApproveReadOnlyBash: autoApproveReadOnlyBash)
+        } onCancel: {
+            Task { await self.respond(to: request, decision: .deny) }
+        }
         return outcome.decision
     }
 

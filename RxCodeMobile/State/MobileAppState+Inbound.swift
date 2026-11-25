@@ -429,6 +429,20 @@ extension MobileAppState {
         case .taskBoardResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "task_board_result") else { return }
             applyTaskBoardResult(result)
+        case .agentHubUpdate(let update):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            if let seq = update.seq, let previous = agentHubSequence, seq <= previous { return }
+            agentHubSequence = update.seq
+            agentHub = update.snapshot
+        case .agentResult(let result):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            latestAgentResult = result
+        case .screenShareState(let status):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            agentScreen.receive(status, state: self)
+        case .screenFrame(let frame):
+            guard isPaired, inbound.fromHex == pairedDesktopPubkey else { return }
+            agentScreen.receive(frame, state: self)
         case .taskBoardUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "task_board_update") else { return }
             storeTaskBoardSnapshot(update.snapshot, cloud: false)

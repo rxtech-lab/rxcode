@@ -123,6 +123,7 @@ extension AppState {
     }
 
     func sendMobileSnapshot(toHex hex: String, activeSessionID: String?) async {
+        await sendAgentHub(to: hex)
         // Populate the OpenAI summarization model list so mobile's model
         // picker has options. Fetched at most once — a prior failure (no API
         // key, bad endpoint) is recorded in `openAISummarizationModelsError`
@@ -207,7 +208,8 @@ extension AppState {
 
     func mobileSessionSummaries() async -> [RxCodeSync.SessionSummary] {
         let persisted = await threadStoreReader.loadMobileSessionData()
-        let knownProjectIds = Set(projects.map(\.id))
+        // Agent conversations and subagent threads show in the phone's Chat tab.
+        let knownProjectIds = Set(projects.map(\.id)).union(agentVirtualProjects.map(\.id))
         return allSessionSummaries
             .filter { knownProjectIds.contains($0.projectId) }
             .sorted { lhs, rhs in
@@ -246,7 +248,16 @@ extension AppState {
         queued: [QueuedMessage],
         changedFileCount: Int
     ) -> RxCodeSync.SessionSummary {
-        RxCodeSync.SessionSummary(
+        let state = stateForSession(summary.id)
+        let provider = state.agentProvider ?? summary.agentProvider ?? selectedAgentProvider
+        let sendMode: QueuedSendMode
+        if state.isStreaming, !state.queueDispatchInProgress {
+            let steer = canSteer(sessionID: summary.id, fallbackProvider: provider)
+            sendMode = provider == .acp ? (steer ? .steerOrInterrupt : .interrupt) : (steer ? .steer : .wait)
+        } else {
+            sendMode = .wait
+        }
+        return RxCodeSync.SessionSummary(
             id: summary.id,
             projectId: summary.projectId,
             title: summary.title,
@@ -262,7 +273,8 @@ extension AppState {
             isInterrupted: summary.hasUnfinishedTurn == true && sessionActivity[summary.id]?.isStreaming != true,
             parentThreadId: summary.parentThreadId,
             threadLabel: summary.threadLabel,
-            changedFileCount: changedFileCount
+            changedFileCount: changedFileCount,
+            queuedSendMode: sendMode
         )
     }
 

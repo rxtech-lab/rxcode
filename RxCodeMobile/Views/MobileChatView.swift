@@ -168,9 +168,11 @@ struct MobileChatView: View {
             .sheet(isPresented: $showingQueueSheet) {
                 QueuedMessagesSheet(
                     messages: queuedMessages,
+                    sendMode: state.sessions.first { $0.id == resolvedSessionID }?.queuedSendMode
+                        ?? (isStreaming ? .steer : .wait),
                     onRemove: removeQueued,
-                    onAction: { message, text in
-                        try await state.queueMessageAction(sessionID: sessionID, queuedID: message.id, text: text)
+                    onAction: { message, text, interrupt in
+                        try await state.queueMessageAction(sessionID: sessionID, queuedID: message.id, text: text, interrupt: interrupt)
                     }
                 )
             }

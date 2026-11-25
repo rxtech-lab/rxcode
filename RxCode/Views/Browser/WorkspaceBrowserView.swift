@@ -6,7 +6,7 @@ struct WorkspaceBrowserView: View {
     var isFocused = true
 
     private enum BrowserSheet: String, Identifiable {
-        case importCookies, importExtensions, manageExtensions
+        case engine, importCookies, importExtensions, manageExtensions
         var id: String { rawValue }
     }
 
@@ -14,6 +14,8 @@ struct WorkspaceBrowserView: View {
     @State private var sheet: BrowserSheet?
     @State private var addingExtensionFile = false
     @State private var draggingTabID: UUID?
+
+    private var engineManager: BrowserEngineManager { .shared }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,8 +56,14 @@ struct WorkspaceBrowserView: View {
                 WorkspaceTabStripButton(systemImage: "plus", help: "New tab (⌘T)") { browser.addTab() }
                     .keyboardShortcut(isFocused ? KeyboardShortcut("t", modifiers: .command) : nil)
                     .accessibilityIdentifier("browser-new-tab")
-                BrowserExtensionActions { sheet = .manageExtensions }
+                if browser.activeEngine == .webkit {
+                    BrowserExtensionActions { sheet = .manageExtensions }
+                }
                 Menu {
+                    Button("Browser Engine: \(browser.activeEngine.shortTitle)…", systemImage: browser.activeEngine.systemImage) {
+                        sheet = .engine
+                    }
+                    Divider()
                     Button("Import Cookies from Chrome…", systemImage: "square.and.arrow.down") { sheet = .importCookies }
                         .disabled(browser.cookieImportStatus == .importing)
                     Divider()
@@ -90,6 +98,9 @@ struct WorkspaceBrowserView: View {
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: BrowserExtensionManager.shared.status)
         .sheet(item: $sheet) { sheet in
             switch sheet {
+            case .engine:
+                BrowserEngineSheet()
+                    .frame(minWidth: 500, idealWidth: 560, minHeight: 420, idealHeight: 480)
             case .importCookies:
                 NavigationStack { ChromeCookieImportSheet() }
                     .frame(minWidth: 420, idealWidth: 480, minHeight: 300, idealHeight: 340)
@@ -104,7 +115,11 @@ struct WorkspaceBrowserView: View {
         .extensionFileImporter(isPresented: $addingExtensionFile)
         .onAppear {
             browser.restoreSessionIfNeeded()
+            browser.syncEngineIfNeeded()
             if browser.tabs.isEmpty { browser.addTab() }
+        }
+        .onChange(of: engineManager.activeEngine) { _, _ in
+            browser.syncEngineIfNeeded()
         }
         .onChange(of: isFocused, initial: true) { _, focused in
             if focused { browser.didFocus() }
@@ -131,7 +146,7 @@ private struct BrowserTabLabel: View {
     var body: some View {
         HStack(spacing: 6) {
             Group {
-                if tab.webView.isLoading {
+                if tab.isLoading {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: tab.address?.scheme == "https" ? "lock.fill" : "globe")
@@ -188,12 +203,12 @@ private struct BrowserPageView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Button { tab.webView.goBack() } label: { Image(systemName: "chevron.left") }
-                    .disabled(!tab.webView.canGoBack)
+                Button { tab.goBack() } label: { Image(systemName: "chevron.left") }
+                    .disabled(!tab.canGoBack)
                     .accessibilityLabel("Back")
                     .help("Back")
-                Button { tab.webView.goForward() } label: { Image(systemName: "chevron.right") }
-                    .disabled(!tab.webView.canGoForward)
+                Button { tab.goForward() } label: { Image(systemName: "chevron.right") }
+                    .disabled(!tab.canGoForward)
                     .accessibilityLabel("Forward")
                     .help("Forward")
                 HStack(spacing: 7) {
@@ -206,11 +221,11 @@ private struct BrowserPageView: View {
                         .accessibilityIdentifier("browser-address")
                         .onSubmit(navigate)
                     Button {
-                        if tab.webView.isLoading { tab.webView.stopLoading() } else { tab.reload() }
-                    } label: { Image(systemName: tab.webView.isLoading ? "xmark" : "arrow.clockwise") }
+                        if tab.isLoading { tab.stopLoading() } else { tab.reload() }
+                    } label: { Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise") }
                     .disabled(tab.address == nil)
                     .keyboardShortcut(isFocused ? KeyboardShortcut("r", modifiers: .command) : nil)
-                    .accessibilityLabel(tab.webView.isLoading ? "Stop loading" : "Reload")
+                    .accessibilityLabel(tab.isLoading ? "Stop loading" : "Reload")
                 }
                 .padding(.vertical, 6)
                 .padding(.horizontal, 10)
@@ -233,10 +248,16 @@ private struct BrowserPageView: View {
             .padding(.vertical, 8)
             ClaudeThemeDivider()
             ZStack(alignment: .top) {
-                BrowserWebView(webView: tab.webView)
-                    .previewSelectionComments(for: designing || tab.webView.isLoading || tab.failure != nil ? nil : tab.address,
-                                              browserTabID: tab.id)
-                if designing, tab.failure == nil, !tab.webView.isLoading, let address = tab.address {
+                Group {
+                    if let chromeController = tab.chromeController {
+                        ChromeBrowserView(controller: chromeController)
+                    } else {
+                        BrowserWebView(webView: tab.webView)
+                    }
+                }
+                .previewSelectionComments(for: designing || tab.isLoading || tab.failure != nil ? nil : tab.address,
+                                          browserTabID: tab.id)
+                if designing, tab.failure == nil, !tab.isLoading, let address = tab.address {
                     DesignSelectionOverlay(boundsAtPoint: tab.designHoverBounds) { point, size in
                         try await tab.designSelection(at: point, size: size)
                     }
@@ -250,13 +271,13 @@ private struct BrowserPageView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(ClaudeTheme.background)
-                } else if tab.address == nil && !tab.webView.isLoading {
+                } else if tab.address == nil && !tab.isLoading {
                     ContentUnavailableView("New tab", systemImage: "globe",
                                            description: Text("Enter a web address or a local development URL above."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(ClaudeTheme.background)
                 }
-                if tab.webView.isLoading { ProgressView().progressViewStyle(.linear).controlSize(.mini) }
+                if tab.isLoading { ProgressView().progressViewStyle(.linear).controlSize(.mini) }
             }
         }
         .background {

@@ -102,6 +102,10 @@ extension AppState {
             return "computerUseWindows"
         case .acpModelsDiscovered:
             return "acpModelsDiscovered"
+        case .acpSteeringAvailable:
+            return "acpSteeringAvailable"
+        case .acpSteeredMessage:
+            return "acpSteeredMessage"
         case .textDelta:
             return "textDelta"
         case .thinkingDelta:

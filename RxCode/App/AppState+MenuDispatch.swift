@@ -207,24 +207,24 @@ extension AppState {
 
     // MARK: - Desktop menu action handler
 
-    /// Convenience handler that selects the spawned/affected thread in `window`
-    /// after a command runs — preserving the pre-migration behavior where code
-    /// review / commit actions navigated to the new thread.
+    /// Runs a local menu action and presents any resulting navigation in its window.
     func desktopMenuActionHandler(navigatingIn window: WindowState) -> MenuActionHandler {
-        desktopMenuActionHandler { [weak self] threadId in
-            self?.selectSession(id: threadId, in: window)
-        }
-    }
-
-    /// The `MenuActionHandler` to install (`.menuActionHandler(...)`) on desktop
-    /// context menus so a tapped `MenuItem` dispatches locally: commands run
-    /// through `dispatchMenuCommand`; deep links open their local sheet. `onThread`
-    /// is invoked with a spawned thread id so the caller can navigate if it wants.
-    func desktopMenuActionHandler(onThread: @escaping (String) -> Void = { _ in }) -> MenuActionHandler {
-        MenuActionHandler { [weak self] action in
-            guard let self else { return }
+        MenuActionHandler { [weak self, weak window] action in
+            guard let self, let window else { return }
             switch action {
             case .command(let command):
+                if command.kind == .projectCreatePullRequest {
+                    do {
+                        let project = try self.requireProject(command.projectId)
+                        self.projectPullRequestRequests[window.id] = ProjectPullRequestRequest(
+                            project: project,
+                            branch: command.branch.flatMap { $0.isEmpty ? nil : $0 }
+                        )
+                    } catch {
+                        self.hookErrorMessage = error.localizedDescription
+                    }
+                    return
+                }
                 Task { @MainActor in
                     // Async commands (push + open PR, code review, …) block on real
                     // work, so show the hook loading dialog and keep it up until the
@@ -234,7 +234,7 @@ extension AppState {
                     do {
                         let result = try await self.dispatchMenuCommand(command)
                         if let url = result.openURL { NSWorkspace.shared.open(url) }
-                        if let threadId = result.threadId { onThread(threadId) }
+                        if let threadId = result.threadId { self.selectSession(id: threadId, in: window) }
                     } catch {
                         // Surface the failure to the user — not just the log — so a
                         // failed command (e.g. Create Pull Request) doesn't silently

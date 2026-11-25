@@ -58,7 +58,7 @@ enum GitSheet: Identifiable {
     case createBranch(startPoint: String, label: String)
     case renameBranch(String)
     case deleteBranch(GitLocalBranch)
-    case createTag(GitCommit)
+    case createTag(target: String, label: String)
     case reword(GitCommit)
     case interactiveRebase(base: GitCommit, steps: [GitRebaseStep])
     case stash
@@ -76,7 +76,7 @@ enum GitSheet: Identifiable {
         case .createBranch(let start, _): "branch-\(start)"
         case .renameBranch(let name): "rename-\(name)"
         case .deleteBranch(let branch): "delete-branch-\(branch.name)"
-        case .createTag(let commit): "tag-\(commit.id)"
+        case .createTag(let target, _): "tag-\(target)"
         case .reword(let commit): "reword-\(commit.id)"
         case .interactiveRebase(let base, _): "rebase-\(base.id)"
         case .stash: "stash"
@@ -171,6 +171,35 @@ final class GitWorkflowStore {
     }
 
     var currentBranch: GitLocalBranch? { snapshot.currentLocalBranch }
+
+    /// Human-readable label for HEAD, used when creating branches or tags from
+    /// sidebar sections or the toolbar.
+    var headTargetLabel: String {
+        if let branch = snapshot.currentBranch {
+            return branch
+        }
+        if let head = snapshot.headCommit {
+            return String(head.prefix(7))
+        }
+        return "HEAD"
+    }
+
+    func presentCreateBranchFromHead() {
+        sheet = .createBranch(startPoint: "HEAD", label: headTargetLabel)
+    }
+
+    func presentCreateTagAtHead() {
+        let target = snapshot.headCommit ?? "HEAD"
+        let label: String
+        if let head = snapshot.headCommit, let commit = commits.first(where: { $0.id == head }) {
+            label = "\(commit.shortID) \(commit.subject)"
+        } else if let branch = snapshot.currentBranch, let head = snapshot.headCommit {
+            label = "\(branch) (\(String(head.prefix(7))))"
+        } else {
+            label = headTargetLabel
+        }
+        sheet = .createTag(target: target, label: label)
+    }
 
     /// PR status for the current checkout, or nil while unknown or stale.
     var pullRequestPresence: BranchPullRequestPresence? {

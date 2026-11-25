@@ -25,7 +25,8 @@ extension AppState {
         // fresh session so the user isn't stranded staring at a now-hidden chat.
         if archived, window.currentSessionId == session.id {
             detachCurrentStream(in: window)
-            startNewChat(in: window)
+            // Not `startNewChat`: in an agent's chat it would reopen this thread.
+            beginNewChat(in: window)
         }
         await setArchivedNoWindow(session, archived: archived)
     }
@@ -534,7 +535,7 @@ extension AppState {
             // Any General route (Tasks, Briefing) covers the chat, so clicking
             // the current thread must still reveal it.
             if window.generalRoute != nil || inChatTab {
-                window.generalRoute = inChatTab || window.selectedProject?.isGlobalChat == true ? .chat : nil
+                window.generalRoute = inChatTab ? .chat : chatRoute(for: window.selectedProject)
                 window.requestInputFocus = true
                 logger.info("[SelectSession] same sid, leaving general route sid=\(id, privacy: .public)")
             } else {

@@ -79,6 +79,14 @@ extension Payload: Codable {
         case taskBoardRequest = "task_board_request"
         case taskBoardResult = "task_board_result"
         case taskBoardUpdate = "task_board_update"
+        case agentHubUpdate = "agent_hub_update"
+        case agentRequest = "agent_request"
+        case agentResult = "agent_result"
+        case screenShareRequest = "screen_share_request"
+        case screenShareState = "screen_share_state"
+        case screenFrame = "screen_frame"
+        case screenFrameAck = "screen_frame_ack"
+        case remoteInput = "remote_input"
         case ping
         case pong
         case iceCandidates = "ice_candidates"
@@ -162,6 +170,14 @@ extension Payload: Codable {
         case .taskBoardRequest: self = .taskBoardRequest(try container.decode(TaskBoardRequestPayload.self, forKey: .data))
         case .taskBoardResult: self = .taskBoardResult(try container.decode(TaskBoardResultPayload.self, forKey: .data))
         case .taskBoardUpdate: self = .taskBoardUpdate(try container.decode(TaskBoardUpdatePayload.self, forKey: .data))
+        case .agentHubUpdate: self = .agentHubUpdate(try container.decode(AgentHubUpdatePayload.self, forKey: .data))
+        case .agentRequest: self = .agentRequest(try container.decode(AgentRequestPayload.self, forKey: .data))
+        case .agentResult: self = .agentResult(try container.decode(AgentResultPayload.self, forKey: .data))
+        case .screenShareRequest: self = .screenShareRequest(try container.decode(ScreenShareRequestPayload.self, forKey: .data))
+        case .screenShareState: self = .screenShareState(try container.decode(ScreenShareStatePayload.self, forKey: .data))
+        case .screenFrame: self = .screenFrame(try container.decode(ScreenFramePayload.self, forKey: .data))
+        case .screenFrameAck: self = .screenFrameAck(try container.decode(ScreenFrameAckPayload.self, forKey: .data))
+        case .remoteInput: self = .remoteInput(try container.decode(RemoteInputPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         case .iceCandidates: self = .iceCandidates(try container.decode(ICECandidatesPayload.self, forKey: .data))
@@ -241,6 +257,14 @@ extension Payload: Codable {
         case .taskBoardRequest(let p): try container.encode(TypeKey.taskBoardRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .taskBoardResult(let p): try container.encode(TypeKey.taskBoardResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .taskBoardUpdate(let p): try container.encode(TypeKey.taskBoardUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .agentHubUpdate(let p): try container.encode(TypeKey.agentHubUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .agentRequest(let p): try container.encode(TypeKey.agentRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .agentResult(let p): try container.encode(TypeKey.agentResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .screenShareRequest(let p): try container.encode(TypeKey.screenShareRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .screenShareState(let p): try container.encode(TypeKey.screenShareState.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .screenFrame(let p): try container.encode(TypeKey.screenFrame.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .screenFrameAck(let p): try container.encode(TypeKey.screenFrameAck.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .remoteInput(let p): try container.encode(TypeKey.remoteInput.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .iceCandidates(let p): try container.encode(TypeKey.iceCandidates.rawValue, forKey: .type); try container.encode(p, forKey: .data)

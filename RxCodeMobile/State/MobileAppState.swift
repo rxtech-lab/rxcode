@@ -163,6 +163,10 @@ final class MobileAppState: ObservableObject {
         didSet { cachedBriefingGroups = nil; cachedBriefingTimeline = nil }
     }
     @Published var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
+    @Published var agentHub = AgentHubSnapshot()
+    var agentHubSequence: UInt64?
+    @Published var latestAgentResult: AgentResultPayload?
+    let agentScreen = MobileAgentScreen()
     @Published var desktopSettings: MobileSettingsSnapshot?
     /// Agent rate-limit usage mirrored from the paired desktop. `nil` until the
     /// first snapshot arrives, or when paired with a desktop that predates

@@ -586,6 +586,10 @@ extension MobileAppState {
         briefingAssetBytesReceived = 0
         threadSummaries = []
         ciStatusByProject = [:]
+        agentHub = AgentHubSnapshot()
+        agentHubSequence = nil
+        latestAgentResult = nil
+        agentScreen.reset()
         desktopSettings = nil
         desktopUsage = nil
         desktopHostMetrics = nil

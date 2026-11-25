@@ -8,12 +8,13 @@ extension ACPService {
 
     // MARK: - JSON-RPC Framing
 
-    func sendRequest(key: String, method: String, params: [String: JSONValue])
+    func sendRequest(key: String, method: String, params: [String: JSONValue], requestId: Int? = nil)
         async throws -> JSONValue
     {
+        try Task.checkCancellation()
         guard sessions[key] != nil else { throw ACPError.streamClosed }
 
-        let id = nextRequestId(key: key)
+        let id = requestId ?? nextRequestId(key: key)
         let frame: [String: JSONValue] = [
             "jsonrpc": .string("2.0"),
             "id": .number(Double(id)),
@@ -182,9 +183,14 @@ extension ACPService {
     }
 
     func resolveResponse(key: String, id: Int, body: [String: JSONValue]) {
+        if sessions[key]?.steering?.id == id {
+            resolveSteering(key: key, body: body)
+            return
+        }
         var cont: CheckedContinuation<JSONValue, Error>?
         mutateSession(key) { entry in
             cont = entry.pending.removeValue(forKey: id)
+            if id == entry.promptRequestId { entry.acceptingUpdates = false }
         }
         guard let cont else {
             logger.warning("[ACP] ← response id=\(id) had no pending continuation key=\(key, privacy: .public)")
@@ -214,6 +220,13 @@ extension ACPService {
                 logger.info("[ACP] ⟵ pre-prompt session/update dropped kind=\(kind, privacy: .public)")
                 return
             }
+            if let sid = params["sessionId"]?.stringValue, sid != sessions[key]?.agentSessionId { return }
+            if sessions[key]?.steering != nil {
+                // Keep post-request output behind the local user message, even
+                // if the agent starts streaming before acknowledging the steer.
+                mutateSession(key) { $0.steering?.updates.append(params) }
+                return
+            }
             handleSessionUpdate(key: key, params: params)
         default:
             logger.warning("[ACP] ⟵ unknown notification: \(method, privacy: .public)")
@@ -230,6 +243,10 @@ extension ACPService {
         }
 
         switch kind {
+        case "user_message_chunk":
+            // RxCode owns the user bubbles for prompts and steers.
+            break
+
         case "agent_message_chunk":
             if let text = update["content"]?.objectValue?["text"]?.stringValue {
                 logger.info("[ACP] ⟵ agent_message_chunk len=\(text.count)")
@@ -374,7 +391,7 @@ extension ACPService {
         case "fs/write_text_file":
             await handleFsWriteTextFile(key: key, id: id, params: params)
         case "session/request_permission":
-            await handleSessionRequestPermission(key: key, id: id, params: params)
+            startPermissionRequest(key: key, id: id, params: params)
         default:
             logger.warning("[ACP] unsupported agent-request: \(method, privacy: .public)")
             sendError(key: key, id: id, code: -32601, message: "Method not supported: \(method)")
@@ -430,11 +447,45 @@ extension ACPService {
         return input?["question"]?.stringValue != nil && input?["options"]?.arrayValue != nil
     }
 
-    func handleSessionRequestPermission(key: String, id: JSONValue, params: JSONValue) async {
-        guard let entry = sessions[key] else {
-            logger.warning("[ACP] permission request arrived for closed session")
-            sendError(key: key, id: id, code: -32000, message: "Session closed")
+    func startPermissionRequest(key: String, id: JSONValue, params: JSONValue) {
+        guard let entry = sessions[key], entry.acceptingUpdates, !entry.cancellationRequested else {
+            sendCancelledPermission(key: key, id: id)
             return
+        }
+        // Waiting for a UI decision must leave the stdout reader free to
+        // receive steer and prompt responses, including after session/cancel.
+        let task = Task {
+            await handleSessionRequestPermission(key: key, id: id, params: params,
+                                                 streamId: entry.currentStreamId, generation: entry.generation)
+        }
+        mutateSession(key) { $0.permissionRequests[id] = task }
+    }
+
+    func sendCancelledPermission(key: String, id: JSONValue) {
+        sendResult(key: key, id: id, result: .object([
+            "outcome": .object(["outcome": .string("cancelled")])
+        ]))
+    }
+
+    func cancelPermissionRequests(key: String) {
+        guard let requests = sessions[key]?.permissionRequests, !requests.isEmpty else { return }
+        mutateSession(key) { $0.permissionRequests.removeAll() }
+        for (id, task) in requests {
+            sendCancelledPermission(key: key, id: id)
+            task.cancel()
+        }
+    }
+
+    private func handleSessionRequestPermission(key: String, id: JSONValue, params: JSONValue,
+                                                streamId: UUID?, generation: UUID) async {
+        func isCurrent() -> Bool {
+            guard let entry = sessions[key], entry.currentStreamId == streamId,
+                  entry.generation == generation else { return false }
+            return entry.permissionRequests[id] != nil
+        }
+        guard isCurrent(), let entry = sessions[key] else { return }
+        defer {
+            if isCurrent() { mutateSession(key) { $0.permissionRequests.removeValue(forKey: id) } }
         }
         let toolCall = params.objectValue?["toolCall"]?.objectValue ?? [:]
         if entry.isEphemeral {
@@ -451,9 +502,7 @@ extension ACPService {
                     ])
                 ]))
             } else {
-                sendResult(key: key, id: id, result: .object([
-                    "outcome": .object(["outcome": .string("cancelled")])
-                ]))
+                sendCancelledPermission(key: key, id: id)
             }
             return
         }
@@ -483,6 +532,7 @@ extension ACPService {
             toolInput: toolInput,
             mode: nil
         )
+        guard isCurrent() else { return }
         logger.info("[ACP] permission decision tool=\(toolName, privacy: .public) decision=\(String(describing: decision), privacy: .public)")
 
         let options = params.objectValue?["options"]?.arrayValue ?? []

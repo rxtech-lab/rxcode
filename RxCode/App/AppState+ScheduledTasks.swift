@@ -147,6 +147,10 @@ extension AppState {
             await executePetScheduledReport(scheduledTasks[index])
             return nil
         }
+        // An agent's schedule runs as one of its subagents, which reports back.
+        if let agentId = task.agentId {
+            return await runAgentScheduledTask(task, agentId: agentId, trigger: trigger)
+        }
         let project: Project
         if let projectId = task.projectId {
             guard let found = projects.first(where: { $0.id == projectId }) else {
@@ -206,6 +210,54 @@ extension AppState {
         if task.notification != .none {
             // The run owns its notification, so the automatic briefing
             // notification leaves it alone.
+            scheduledRunNotificationSessions[sessionKey] = task.notification
+        }
+        if task.notification == .completionReport {
+            Task { [weak self] in
+                await self?.sendScheduledTaskCompletionReport(task, sessionKey: sessionKey, startedAt: startedAt)
+            }
+        }
+        return sessionKey
+    }
+
+    /// One run of an agent-owned schedule: a subagent thread in the agent's
+    /// subagent project, recorded in the run history like any other run.
+    private func runAgentScheduledTask(
+        _ task: ScheduledTask,
+        agentId: UUID,
+        trigger: ScheduledTaskRun.Trigger
+    ) async -> String? {
+        let startedAt = Date.now
+        guard let agent = agentProfile(id: agentId) else {
+            recordScheduledTaskRun(ScheduledTaskRun(
+                taskId: task.id, projectId: nil, trigger: trigger, status: .failed, finishedAt: .now,
+                errorMessage: String(localized: "The schedule's agent no longer exists.")
+            ))
+            return nil
+        }
+        // Marked before the launch, which can take a while, so a one-off
+        // isn't picked up again by the next scheduler tick.
+        if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+            scheduledTasks[idx].lastRunAt = startedAt
+            saveScheduledTasks()
+        }
+        guard let sessionKey = await launchAgentScheduledRun(task, agentId: agent.id) else {
+            recordScheduledTaskRun(ScheduledTaskRun(
+                taskId: task.id, projectId: agent.subagentProjectId, trigger: trigger, status: .failed,
+                startedAt: startedAt, finishedAt: .now,
+                errorMessage: String(localized: "The agent's subagent couldn't start.")
+            ))
+            return nil
+        }
+        let run = ScheduledTaskRun(
+            taskId: task.id, projectId: agent.subagentProjectId, sessionKey: sessionKey,
+            trigger: trigger, startedAt: startedAt
+        )
+        recordScheduledTaskRun(run)
+        Task { [weak self] in
+            await self?.finishScheduledTaskRun(id: run.id, sessionKey: sessionKey)
+        }
+        if task.notification != .none {
             scheduledRunNotificationSessions[sessionKey] = task.notification
         }
         if task.notification == .completionReport {
@@ -432,6 +484,7 @@ extension AppState {
     }
 
     private func saveScheduledTasks() {
+        scheduleAgentHubBroadcast()
         let saved = enqueueScheduledTaskSave()
         Task { [logger] in
             do {

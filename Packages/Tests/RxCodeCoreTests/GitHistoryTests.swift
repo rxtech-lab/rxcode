@@ -502,5 +502,21 @@ struct GitWorkflowIntegrationTests {
         #expect(snapshot.currentBranch == "main")
         #expect(snapshot.pendingOperation == nil)
     }
+
+    @Test("Loading fileData returns binary and text blobs while enforcing maxBytes")
+    func loadsCommitFileData() async throws {
+        let repo = try makeRepo(commits: ["base"])
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let binary = Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0x01, 0x02, 0x03])
+        try binary.write(to: repo.appendingPathComponent("image.png"))
+        try git(["add", "image.png"], at: repo)
+        try git(["commit", "-q", "-m", "add binary"], at: repo)
+
+        let head = try #require(await GitRepositoryLoader.history(at: repo.path, ref: "HEAD", limit: 1).first)
+        #expect(await GitRepositoryLoader.fileData(at: "image.png", in: head, root: repo.path) == binary)
+        #expect(await GitRepositoryLoader.fileData(at: "file0.txt", in: head, root: repo.path) == Data("0\n".utf8))
+        #expect(await GitRepositoryLoader.fileData(at: "image.png", in: head, root: repo.path, maxBytes: 4) == nil)
+        #expect(await GitRepositoryLoader.fileData(at: "missing.txt", in: head, root: repo.path) == nil)
+    }
 }
 #endif

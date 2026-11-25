@@ -2,6 +2,77 @@ import AppKit
 import RxCodeCore
 import SwiftUI
 
+enum GitFileSystemActions {
+    static func absolutePath(for relativePath: String, root: String) -> String {
+        let trimmed = relativePath.hasSuffix("/") ? String(relativePath.dropLast()) : relativePath
+        guard !trimmed.isEmpty else { return root }
+        return URL(fileURLWithPath: root).appendingPathComponent(trimmed).path
+    }
+
+    static func absolutePaths(for relativePaths: [String], root: String) -> [String] {
+        relativePaths.map { absolutePath(for: $0, root: root) }
+    }
+
+    static func existingURLs(for absolutePaths: [String]) -> [URL] {
+        var seen = Set<String>()
+        var urls: [URL] = []
+        for path in absolutePaths {
+            guard seen.insert(path).inserted, FileManager.default.fileExists(atPath: path) else { continue }
+            urls.append(URL(fileURLWithPath: path))
+        }
+        return urls
+    }
+
+    @MainActor
+    static var fileEditors: [ExternalEditor] {
+        ExternalEditorService.shared.detectedEditors.filter {
+            $0.id != "finder" && $0.id != "terminal" && $0.id != "warp"
+        }
+    }
+
+    @MainActor
+    static func openInDefaultApp(_ urls: [URL]) {
+        for url in urls {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @MainActor
+    static func showInFinder(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+}
+
+struct GitFileSystemContextMenuItems: View {
+    let paths: [String]
+
+    var body: some View {
+        let urls = GitFileSystemActions.existingURLs(for: paths)
+        let editors = GitFileSystemActions.fileEditors
+        Button("Open in Default App", systemImage: "arrow.up.forward.app") {
+            GitFileSystemActions.openInDefaultApp(urls)
+        }
+        .disabled(urls.isEmpty)
+        if !editors.isEmpty {
+            Menu("Open in Editor", systemImage: "chevron.left.forwardslash.chevron.right") {
+                ForEach(editors) { editor in
+                    Button(editor.displayName, systemImage: editor.systemSymbol) {
+                        for url in urls {
+                            ExternalEditorService.shared.open(editor, path: url.path)
+                        }
+                    }
+                }
+            }
+            .disabled(urls.isEmpty)
+        }
+        Button("Show in Finder", systemImage: "folder") {
+            GitFileSystemActions.showInFinder(urls)
+        }
+        .disabled(urls.isEmpty)
+    }
+}
+
 struct GitCommitContextMenu: View {
     let commit: GitCommit
     let store: GitWorkflowStore
@@ -19,7 +90,9 @@ struct GitCommitContextMenu: View {
         Button("Create Branch Here…") {
             store.sheet = .createBranch(startPoint: commit.id, label: commit.shortID)
         }
-        Button("Create Tag Here…") { store.sheet = .createTag(commit) }
+        Button("Create Tag Here…") {
+            store.sheet = .createTag(target: commit.id, label: "\(commit.shortID) \(commit.subject)")
+        }
 
         Divider()
 
@@ -61,6 +134,28 @@ struct GitCommitContextMenu: View {
     private func copy(_ value: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+    }
+}
+
+struct GitBranchesSectionContextMenu: View {
+    let store: GitWorkflowStore
+
+    var body: some View {
+        Button("New Branch…") {
+            store.presentCreateBranchFromHead()
+        }
+        .disabled(store.snapshot.headCommit == nil)
+    }
+}
+
+struct GitTagsSectionContextMenu: View {
+    let store: GitWorkflowStore
+
+    var body: some View {
+        Button("New Tag…") {
+            store.presentCreateTagAtHead()
+        }
+        .disabled(store.snapshot.headCommit == nil)
     }
 }
 
@@ -132,6 +227,10 @@ struct GitTagContextMenu: View {
         Button("Checkout Tag") {
             store.perform("Checking out tag…") { await GitWorkflow.checkoutDetached("refs/tags/\(tag.name)", at: store.root) }
         }
+        Button("New Tag…") {
+            store.presentCreateTagAtHead()
+        }
+        .disabled(store.snapshot.headCommit == nil)
         Button("Push Tag…") {
             store.sheet = .push(.tag(tag))
         }

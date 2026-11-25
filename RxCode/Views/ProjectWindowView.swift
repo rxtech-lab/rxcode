@@ -159,6 +159,8 @@ struct ProjectWindowView: View {
                 TaskBoardView()
             } else if windowState.showingBriefing {
                 BriefingView()
+            } else if windowState.generalRoute == .agents {
+                AgentHubView()
             } else if windowState.generalRoute == .scheduled {
                 ScheduledTasksView()
             } else if windowState.selectedProject != nil {

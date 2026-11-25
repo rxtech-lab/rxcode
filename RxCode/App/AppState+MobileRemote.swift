@@ -416,7 +416,7 @@ extension AppState {
         // Resolve the project so cancelStreaming can persist the partial
         // messages accumulated up to the cancellation point.
         if let summary = allSessionSummaries.first(where: { $0.id == sessionID }) {
-            window.selectedProject = projects.first(where: { $0.id == summary.projectId })
+            window.selectedProject = projects.first(where: { $0.id == summary.projectId }) ?? agentVirtualProject(id: summary.projectId)
         }
         await cancelStreaming(in: window)
         // cancelStreaming intentionally skips finalizeStreamSession, so no
@@ -431,7 +431,7 @@ extension AppState {
 
         let sessionID = resolveCurrentSessionId(message.sessionID)
         guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
-              let project = projects.first(where: { $0.id == summary.projectId })
+              let project = projects.first(where: { $0.id == summary.projectId }) ?? agentVirtualProject(id: summary.projectId)
         else {
             logger.error("[MobileSync] user message for unknown thread=\(message.sessionID, privacy: .public)")
             await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
@@ -454,7 +454,7 @@ extension AppState {
         // If a turn is already streaming, the mobile message goes into the
         // shared (threadStore-backed) queue so it flushes once the current turn
         // ends — same behavior as the macOS InputBarView's enqueue path.
-        if sessionStates[sessionID]?.isStreaming == true {
+        if stateForSession(sessionID).isStreaming || stateForSession(sessionID).queueDispatchInProgress {
             let queued = QueuedMessage(text: text, attachments: [])
             threadStore.appendQueued(sessionKey: sessionID, message: queued)
             appendToWindowQueueMirrors(sessionID: sessionID, message: queued)
@@ -474,7 +474,8 @@ extension AppState {
 
     func handleMobileQueueAction(_ payload: QueueMessageActionPayload) async {
         let sessionID = resolveCurrentSessionId(payload.sessionID)
-        guard let target = threadStore.loadQueue(sessionKey: sessionID).first(where: { $0.id == payload.queuedMessageID }) else { return }
+        guard !stateForSession(sessionID).queueDispatchInProgress,
+              let target = threadStore.loadQueue(sessionKey: sessionID).first(where: { $0.id == payload.queuedMessageID }) else { return }
         if let text = payload.text {
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             threadStore.editQueued(id: target.id, text: text)
@@ -489,20 +490,24 @@ extension AppState {
             }
         } else {
             guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
-                  let project = projects.first(where: { $0.id == summary.projectId }) else { return }
-            let window = WindowState()
-            window.currentSessionId = sessionID
-            window.selectedProject = project
-            window.sessionAgentProvider = sessionStates[sessionID]?.agentProvider ?? summary.agentProvider
-            window.sessionModel = sessionStates[sessionID]?.model ?? summary.model
-            if await steerActiveStream(text: target.text, attachments: target.attachments, in: window) {
-                handleMobileRemoveQueuedMessage(.init(sessionID: sessionID, queuedMessageID: target.id))
+                  let project = projects.first(where: { $0.id == summary.projectId }) ?? agentVirtualProject(id: summary.projectId) else { return }
+            let provider = sessionStates[sessionID]?.agentProvider ?? summary.agentProvider ?? selectedAgentProvider
+            if payload.interrupt == true, provider == .acp {
+                let window = WindowState()
+                window.currentSessionId = sessionID
+                window.selectedProject = project
+                _ = await interruptACPAndSend([target], in: window)
+            } else if payload.interrupt != true {
+                _ = await steerQueuedMessages(
+                    [target], sessionID: sessionID, projectID: project.id, fallbackProvider: provider
+                )
             }
         }
         broadcastMobileSessionStatus(sessionID: sessionID)
     }
 
     func handleMobileRemoveQueuedMessage(_ payload: RemoveQueuedMessagePayload) {
+        guard !stateForSession(resolveCurrentSessionId(payload.sessionID)).queueDispatchInProgress else { return }
         threadStore.removeQueued(id: payload.queuedMessageID)
         evictFromWindowQueueMirrors(sessionID: payload.sessionID, queuedID: payload.queuedMessageID)
         broadcastMobileSessionStatus(sessionID: payload.sessionID)
@@ -517,12 +522,20 @@ extension AppState {
     /// the queue in `window.messageQueue`; clear the popped entry from those
     /// mirrors so the UI doesn't show a stale queued row.
     func flushNextQueuedMessageIfNeeded(sessionID: String) async {
+        let state = stateForSession(sessionID)
+        guard !state.isStreaming else { return }
+        if state.queueDispatchInProgress {
+            updateState(sessionID) { $0.queueFlushDeferred = true }
+            return
+        }
         let queue = threadStore.loadQueue(sessionKey: sessionID)
         guard let next = queue.first else { return }
         guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
               let project = projects.first(where: { $0.id == summary.projectId })
         else { return }
 
+        updateState(sessionID) { $0.queueDispatchInProgress = true }
+        defer { endQueueDispatch(sessionID: sessionID) }
         threadStore.removeQueued(id: next.id)
         evictFromWindowQueueMirrors(sessionID: sessionID, queuedID: next.id)
         broadcastMobileSessionStatus(sessionID: sessionID)
@@ -530,10 +543,11 @@ extension AppState {
         let window = WindowState()
         window.selectedProject = project
         window.currentSessionId = sessionID
+        let (attachments, temporaryPaths) = AttachmentFactory.resolvingClipboardImages(next.attachments)
         _ = await sendPrompt(
-            next.text,
+            buildPromptWithAttachments(next.text, attachments: attachments),
             displayText: next.text,
-            attachments: next.attachments,
+            attachments: attachments, tempFilePaths: temporaryPaths,
             in: window
         )
     }

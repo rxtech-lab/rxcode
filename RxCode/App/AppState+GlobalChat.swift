@@ -12,10 +12,15 @@ extension AppState {
         )
     }
 
-    var sessionProjects: [Project] { projects + [globalChatProject] }
+    /// Every project a thread can belong to: repositories, Chat, and the
+    /// conversation and subagent projects of each agent.
+    var sessionProjects: [Project] { projects + [globalChatProject] + agentVirtualProjects }
 
     func sessionProject(id: UUID) -> Project? {
-        id == Project.globalChatID ? globalChatProject : (projects.first { $0.id == id } ?? threadStore.retainedProject(id: id))
+        if id == Project.globalChatID { return globalChatProject }
+        if let project = projects.first(where: { $0.id == id }) { return project }
+        if let project = agentVirtualProject(id: id) { return project }
+        return threadStore.retainedProject(id: id)
     }
 
     /// Search follows stored chats, including those whose projects were removed.

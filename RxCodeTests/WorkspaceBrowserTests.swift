@@ -420,4 +420,180 @@ final class WorkspaceBrowserTests: XCTestCase {
         }
         XCTAssertEqual(marker, "1")
     }
+
+    func testChromeRuntimeManifestParsingAndVersionComparison() throws {
+        let manifest = """
+        {
+          "channels": {
+            "Stable": {
+              "version": "158.0.8127.88",
+              "downloads": {
+                "chrome": [
+                  {"platform": "mac-arm64", "url": "https://storage.googleapis.com/cft/158.0.8127.88/mac-arm64/chrome-mac-arm64.zip"},
+                  {"platform": "mac-x64", "url": "https://storage.googleapis.com/cft/158.0.8127.88/mac-x64/chrome-mac-x64.zip"}
+                ]
+              }
+            }
+          }
+        }
+        """
+
+        let arm = try ChromeBrowserRuntimeInstaller.parseLatestRelease(from: Data(manifest.utf8), platform: "mac-arm64")
+        XCTAssertEqual(arm.version, "158.0.8127.88")
+        XCTAssertEqual(arm.downloadURL.absoluteString, "https://storage.googleapis.com/cft/158.0.8127.88/mac-arm64/chrome-mac-arm64.zip")
+
+        let x64 = try ChromeBrowserRuntimeInstaller.parseLatestRelease(from: Data(manifest.utf8), platform: "mac-x64")
+        XCTAssertEqual(x64.downloadURL.absoluteString, "https://storage.googleapis.com/cft/158.0.8127.88/mac-x64/chrome-mac-x64.zip")
+
+        XCTAssertThrowsError(try ChromeBrowserRuntimeInstaller.parseLatestRelease(from: Data(manifest.utf8), platform: "linux64")) { error in
+            XCTAssertEqual(error as? ChromeBrowserRuntimeInstaller.InstallError, .noAsset)
+        }
+
+        XCTAssertTrue(ChromeBrowserRuntimeInstaller.isNewer("158.0.8127.88", than: "158.0.8127.37"))
+        XCTAssertTrue(ChromeBrowserRuntimeInstaller.isNewer("159.0.0.1", than: "158.9.9999.99"))
+        XCTAssertFalse(ChromeBrowserRuntimeInstaller.isNewer("158.0.8127.88", than: "158.0.8127.88"))
+        XCTAssertFalse(ChromeBrowserRuntimeInstaller.isNewer("157.0.8127.99", than: "158.0.8127.1"))
+    }
+
+    func testChromeRuntimeLocateAndRemoveManaged() throws {
+        let tempRoot = try temporaryDirectory()
+        func writeFakeBinary(version: String) throws -> URL {
+            let binary = ChromeBrowserRuntimeInstaller.managedRoot(tempRoot)
+                .appending(path: "\(version)/chrome-\(ChromeBrowserRuntimeInstaller.platformName)/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")
+            try FileManager.default.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("#!/bin/sh\n".utf8).write(to: binary)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+            return binary
+        }
+
+        XCTAssertNil(ChromeBrowserRuntimeInstaller.locateManaged(appSupport: tempRoot))
+
+        _ = try writeFakeBinary(version: "158.0.8127.37")
+        let newest = try writeFakeBinary(version: "158.0.8127.88")
+
+        let located = try XCTUnwrap(ChromeBrowserRuntimeInstaller.locateManaged(appSupport: tempRoot))
+        XCTAssertEqual(located.version, "158.0.8127.88")
+        XCTAssertEqual(located.source, .managed)
+        XCTAssertEqual(located.executablePath, newest.path)
+
+        try ChromeBrowserRuntimeInstaller.removeManaged(appSupport: tempRoot)
+        XCTAssertNil(ChromeBrowserRuntimeInstaller.locateManaged(appSupport: tempRoot))
+    }
+
+    func testChromeDevToolsURLParsing() {
+        let stderr = """
+        [0101/000000.123456:WARNING:sandbox.cc(1)] some warning
+        DevTools listening on ws://127.0.0.1:54321/devtools/browser/abc-123-def
+        """
+        XCTAssertEqual(
+            ChromeBrowserService.extractDevToolsURL(from: stderr)?.absoluteString,
+            "ws://127.0.0.1:54321/devtools/browser/abc-123-def"
+        )
+        XCTAssertNil(ChromeBrowserService.extractDevToolsURL(from: "no devtools url here"))
+    }
+
+    func testBrowserEngineManagerPersistsPreferenceAndFallsBackWhenUnavailable() throws {
+        let suiteName = "ChromeBrowserEngineTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let tempRoot = try temporaryDirectory()
+        let manager = BrowserEngineManager(defaults: defaults, appSupport: tempRoot)
+        XCTAssertEqual(manager.selectedEngine, .webkit)
+        XCTAssertEqual(manager.activeEngine, .webkit)
+
+        manager.useSystemChromeFallback = false
+        manager.selectedEngine = .chrome
+        XCTAssertEqual(manager.selectedEngine, .chrome)
+        XCTAssertEqual(manager.activeEngine, .webkit)
+
+        let reloaded = BrowserEngineManager(defaults: defaults, appSupport: tempRoot)
+        XCTAssertEqual(reloaded.selectedEngine, .chrome)
+        XCTAssertFalse(reloaded.useSystemChromeFallback)
+        XCTAssertEqual(reloaded.activeEngine, .webkit)
+    }
+
+    func testChromeEngineLiveNavigationInspectionAndSnapshot() async throws {
+        guard ChromeBrowserRuntimeInstaller.locate() != nil else {
+            throw XCTSkip("No Chrome binary available on this Mac.")
+        }
+
+        // Start a minimal single-response local HTTP server on loopback.
+        let html = """
+        <!doctype html><html><head><title>Chrome Fixture</title></head><body>
+        <input id="draft" aria-label="Task title">
+        <button id="apply" onclick="this.textContent='Applied'">Apply</button>
+        </body></html>
+        """
+        let serverFD = socket(AF_INET, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(serverFD, 0)
+        defer { Darwin.close(serverFD) }
+        var reuse: Int32 = 1
+        setsockopt(serverFD, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = 0
+        addr.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+        let bound = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(serverFD, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        XCTAssertEqual(bound, 0)
+        XCTAssertEqual(Darwin.listen(serverFD, 8), 0)
+        var boundAddr = sockaddr_in()
+        var addrLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+        _ = withUnsafeMutablePointer(to: &boundAddr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(serverFD, $0, &addrLen)
+            }
+        }
+        let port = Int(UInt16(bigEndian: boundAddr.sin_port))
+        let serverTask = Task.detached {
+            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
+            let bytes = Array(response.utf8)
+            for _ in 0..<4 {
+                let clientFD = Darwin.accept(serverFD, nil, nil)
+                guard clientFD >= 0 else { break }
+                var buf = [UInt8](repeating: 0, count: 1024)
+                _ = Darwin.read(clientFD, &buf, buf.count)
+                _ = bytes.withUnsafeBytes { Darwin.write(clientFD, $0.baseAddress, $0.count) }
+                Darwin.close(clientFD)
+            }
+        }
+        defer {
+            serverTask.cancel()
+            Task { await ChromeBrowserService.shared.stop() }
+        }
+
+        let browser = WorkspaceBrowser(engineOverride: .chrome)
+        let url = try XCTUnwrap(URL(string: "http://127.0.0.1:\(port)/"))
+        let tab = browser.addTab(url: url)
+        XCTAssertEqual(tab.engine, .chrome)
+
+        for _ in 0..<120 where tab.title != "Chrome Fixture" {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(tab.title, "Chrome Fixture")
+        XCTAssertEqual(tab.address?.host, "127.0.0.1")
+
+        let elements = try await tab.inspectPage("elements")
+        guard case .array(let entries) = elements else { return XCTFail("Missing DOM elements") }
+        XCTAssertEqual(entries.count, 2)
+
+        _ = try await tab.inspectPage("type", selector: "#draft", text: "Hello Chrome")
+        _ = try await tab.inspectPage("click", selector: "#apply")
+        let updated = try await tab.inspectPage("elements")
+        guard case .array(let updatedEntries) = updated else { return XCTFail("Missing updated DOM elements") }
+        XCTAssertTrue(updatedEntries.contains { $0["label"] == .string("Applied") })
+
+        let snapshot = try await tab.takeSnapshot()
+        XCTAssertNotNil(snapshot)
+        XCTAssertGreaterThan(snapshot?.size.width ?? 0, 0)
+
+        tab.close()
+        await ChromeBrowserService.shared.stop()
+    }
+
 }

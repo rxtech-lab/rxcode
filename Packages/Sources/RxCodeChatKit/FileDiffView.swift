@@ -3,7 +3,7 @@ import SwiftUI
 import RxCodeCore
 import DiffView
 
-public struct FileDiffView: View {
+public struct FileDiffView<LeadingHeader: View>: View {
     public let filePath: String
     public let fileName: String
     public let editHunks: [PreviewFile.EditHunk]
@@ -20,7 +20,9 @@ public struct FileDiffView: View {
     /// True when another thread edited this file between two turns of the
     /// current thread; instructs `buildThreadEditDiff` to isolate this thread's hunks.
     public let preferHunks: Bool
+    private let showsDiffBadge: Bool
     private let onClose: (() -> Void)?
+    private let leadingHeader: () -> LeadingHeader
     @Environment(WindowState.self) private var windowState
     @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
@@ -39,7 +41,9 @@ public struct FileDiffView: View {
         originalContent: String? = nil,
         modifiedContent: String? = nil,
         preferHunks: Bool = false,
-        onClose: (() -> Void)? = nil
+        showsDiffBadge: Bool = true,
+        onClose: (() -> Void)? = nil,
+        @ViewBuilder leadingHeader: @escaping () -> LeadingHeader
     ) {
         self.filePath = filePath
         self.fileName = fileName
@@ -49,7 +53,9 @@ public struct FileDiffView: View {
         self.originalContent = originalContent
         self.modifiedContent = modifiedContent
         self.preferHunks = preferHunks
+        self.showsDiffBadge = showsDiffBadge
         self.onClose = onClose
+        self.leadingHeader = leadingHeader
     }
 
     public var body: some View {
@@ -83,25 +89,32 @@ public struct FileDiffView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.system(size: ClaudeTheme.messageSize(13)))
-                .foregroundStyle(ClaudeTheme.accent)
+        HStack(spacing: 8) {
+            leadingHeader()
 
-            Text(fileName)
-                .font(.system(size: ClaudeTheme.messageSize(13), weight: .semibold, design: .monospaced))
-                .foregroundStyle(ClaudeTheme.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: ClaudeTheme.messageSize(13)))
+                    .foregroundStyle(ClaudeTheme.accent)
 
-            Spacer()
+                Text(fileName)
+                    .font(.system(size: ClaudeTheme.messageSize(13), weight: .semibold, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .help(filePath)
 
-            Text("Diff", bundle: .module)
-                .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+            Spacer(minLength: 0)
+
+            if showsDiffBadge {
+                Text("Diff", bundle: .module)
+                    .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+            }
 
             if !diffLines.isEmpty {
                 Button {
@@ -140,8 +153,9 @@ public struct FileDiffView: View {
             .buttonStyle(.borderless)
             .focusable(false)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .frame(minHeight: 28)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
         .background(ClaudeTheme.surfacePrimary)
     }
 
@@ -155,7 +169,7 @@ public struct FileDiffView: View {
                 ProgressView().controlSize(.small)
                 Spacer()
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ClaudeTheme.codeBackground)
         } else if diffLines.isEmpty {
             VStack(spacing: 8) {
@@ -168,7 +182,7 @@ public struct FileDiffView: View {
                     .foregroundStyle(ClaudeTheme.textSecondary)
                 Spacer()
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ClaudeTheme.codeBackground)
         } else {
             DiffView(
@@ -350,6 +364,36 @@ public struct FileDiffView: View {
         diffLines = await Task.detached(priority: .userInitiated) {
             DiffComputation.parseUnifiedDiff(raw)
         }.value
+    }
+}
+
+public extension FileDiffView where LeadingHeader == EmptyView {
+    init(
+        filePath: String,
+        fileName: String,
+        editHunks: [PreviewFile.EditHunk] = [],
+        gitDiffMode: PreviewFile.GitDiffMode? = nil,
+        showFullFileDiff: Bool = false,
+        originalContent: String? = nil,
+        modifiedContent: String? = nil,
+        preferHunks: Bool = false,
+        showsDiffBadge: Bool = true,
+        onClose: (() -> Void)? = nil
+    ) {
+        self.init(
+            filePath: filePath,
+            fileName: fileName,
+            editHunks: editHunks,
+            gitDiffMode: gitDiffMode,
+            showFullFileDiff: showFullFileDiff,
+            originalContent: originalContent,
+            modifiedContent: modifiedContent,
+            preferHunks: preferHunks,
+            showsDiffBadge: showsDiffBadge,
+            onClose: onClose
+        ) {
+            EmptyView()
+        }
     }
 }
 #endif

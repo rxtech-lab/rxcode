@@ -249,7 +249,8 @@ extension MobileAppState {
             isInterrupted: current.isInterrupted && !isStreaming,
             parentThreadId: current.parentThreadId,
             threadLabel: current.threadLabel,
-            changedFileCount: current.changedFileCount
+            changedFileCount: current.changedFileCount,
+            queuedSendMode: current.queuedSendMode
         )
     }
 

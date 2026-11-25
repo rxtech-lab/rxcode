@@ -48,6 +48,25 @@ extension AppState {
         setupKind: String? = nil,
         includeIDEMCP: Bool = true
     ) async throws -> CrossProjectSendResult {
+        // An agent has one endless conversation: a "new thread" sent to it
+        // (from another agent, a hook or a tool) continues that conversation.
+        // Teammate reply threads are the exception and stay separate.
+        var threadId = threadId
+        if threadId == nil, let projectId, threadLabel != AgentJob.collaborationThreadLabel,
+           let owner = agentOwning(projectId: projectId), owner.role == .conversation,
+           let summary = agentConversationSummary(owner.agent) {
+            let sessionId = resolveCurrentSessionId(summary.id)
+            if sessionStates[sessionId]?.isStreaming == true {
+                // Delivered right after the running turn, like a message typed meanwhile.
+                let queued = QueuedMessage(text: prompt, attachments: attachments)
+                threadStore.appendQueued(sessionKey: sessionId, message: queued)
+                appendToWindowQueueMirrors(sessionID: sessionId, message: queued)
+                broadcastMobileSessionStatus(sessionID: sessionId)
+                return CrossProjectSendResult(threadId: sessionId, projectId: owner.agent.id, done: false, assistantText: "", error: nil)
+            }
+            threadId = sessionId
+        }
+
         logger.info("[IDE_SEND_THREAD] requested projectId=\(projectId?.uuidString ?? "<nil>", privacy: .public) threadId=\(threadId ?? "<nil>", privacy: .public) wait=\(waitForResponse, privacy: .public) timeout=\(String(format: "%.1f", timeoutSeconds), privacy: .public)s provider=\(agentProvider?.rawValue ?? "<default>", privacy: .public) includeIDEMCP=\(includeIDEMCP, privacy: .public) promptChars=\(prompt.count, privacy: .public)")
 
         // Resolve target project + thread.
@@ -68,7 +87,7 @@ extension AppState {
             resolvedThreadId = threadId
             resolvedThreadSummary = summary
         } else if let projectId {
-            guard let proj = projects.first(where: { $0.id == projectId }) else {
+            guard let proj = projects.first(where: { $0.id == projectId }) ?? agentVirtualProject(id: projectId) else {
                 throw CrossProjectSendError.unknownProject(projectId)
             }
             resolvedProject = proj

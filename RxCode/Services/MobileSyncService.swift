@@ -428,6 +428,9 @@ final class MobileSyncService: ObservableObject {
     /// so a slow remote-relay RTT for one peer does not stall delivery to the
     /// others. The previous serial loop made a 5-peer broadcast cost roughly
     /// 5× the slowest relay RTT.
+    var agentHubSyncSeq = UInt64(Date().timeIntervalSince1970 * 1000)
+    var agentPayloadHandler: ((RxCodeSync.Payload, String) async -> Void)?
+
     private func broadcastToAllClients(_ payload: RxCodeSync.Payload) async {
         let targets: [(pubkeyHex: String, client: SyncClient)] = pairedDevices
             .filter { $0.onlineState != .offline }

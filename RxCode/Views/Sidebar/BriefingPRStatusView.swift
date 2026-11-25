@@ -8,18 +8,11 @@ import RxCodeCore
 /// briefing branch (not just current branches).
 struct BriefingPRStatusView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
 
     let projectId: UUID
     let branch: String
     let project: Project?
-
-    @State private var inFlight = false
-    @State private var prError: PRErrorAlert?
-
-    private struct PRErrorAlert: Identifiable {
-        let id = UUID()
-        let message: String
-    }
 
     var body: some View {
         let _ = BriefingPerformanceLog.log("PR status body\(BriefingTimelineScrollActivity.isAnyScrolling ? " [scrolling]" : "") \(branch)")
@@ -31,13 +24,6 @@ struct BriefingPRStatusView: View {
             } else if let project, project.gitHubRepo != nil {
                 createPRButton(project: project)
             }
-        }
-        .alert(item: $prError) { error in
-            Alert(
-                title: Text("Couldn't Create Pull Request"),
-                message: Text(error.message),
-                dismissButton: .default(Text("OK"))
-            )
         }
     }
 
@@ -86,70 +72,24 @@ struct BriefingPRStatusView: View {
         .overlay(Capsule(style: .continuous).strokeBorder(color.opacity(0.25), lineWidth: 0.5))
     }
 
-    /// "Create PR" dropdown: create right away with the remembered model, or
-    /// pick a model from the "Create with Model" submenu (remembered for next time).
     private func createPRButton(project: Project) -> some View {
-        let remembered = appState.rememberedPullRequestModel
-        return BriefingDeferredMenu {
-            Button {
-                startCreatePR(project: project)
-            } label: {
-                Label(
-                    "Create Now (\(remembered.map { $0.displayName } ?? "Settings Default"))",
-                    systemImage: "arrow.triangle.pull"
-                )
-            }
-            Menu {
-                Toggle(isOn: Binding(
-                    get: { remembered == nil },
-                    set: { _ in startCreatePR(project: project, model: nil, remember: true) }
-                )) {
-                    Text("Settings Default (\(appState.summarizationProvider.displayNameText))")
-                }
-                ForEach(appState.pullRequestModelSections(), id: \.id) { section in
-                    Section(section.title) {
-                        ForEach(section.models, id: \.key) { model in
-                            Toggle(isOn: Binding(
-                                get: { remembered?.key == model.key },
-                                set: { _ in startCreatePR(project: project, model: model, remember: true) }
-                            )) {
-                                Text(model.displayName)
-                            }
-                        }
-                    }
-                }
-            } label: {
-                Label("Create with Model", systemImage: "cpu")
-            }
+        Button {
+            appState.projectPullRequestRequests[windowState.id] = ProjectPullRequestRequest(project: project, branch: branch)
         } label: {
             HStack(spacing: 4) {
-                if inFlight {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .controlSize(.mini)
-                        .frame(width: 10, height: 10)
-                } else {
-                    Image(systemName: "arrow.triangle.pull")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                Text(inFlight ? "Creating…" : "Create PR")
+                Image(systemName: "arrow.triangle.pull")
+                    .font(.system(size: 9, weight: .semibold))
+                Text("Create PR")
                     .font(.system(size: 10.5, weight: .semibold))
                     .lineLimit(1)
-                if !inFlight {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                }
             }
             .foregroundStyle(ClaudeTheme.textOnAccent)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(Capsule(style: .continuous).fill(ClaudeTheme.accent))
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .disabled(inFlight)
         .help("Push the branch and open a pull request from this briefing")
     }
 
@@ -162,26 +102,5 @@ struct BriefingPRStatusView: View {
             return URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(number)")
         }
         return nil
-    }
-
-    /// Create the PR. With `remember`, `model` (nil = settings default) is saved
-    /// as the pick for next time and used for this PR; otherwise the remembered
-    /// model is used.
-    private func startCreatePR(project: Project, model: AgentModel? = nil, remember: Bool = false) {
-        guard !inFlight else { return }
-        if remember { appState.rememberPullRequestModel(model) }
-        inFlight = true
-        Task { @MainActor in
-            defer { inFlight = false }
-            do {
-                let url = try await appState.createPullRequestForBranch(
-                    project: project,
-                    branch: branch
-                )
-                NSWorkspace.shared.open(url)
-            } catch {
-                prError = PRErrorAlert(message: error.localizedDescription)
-            }
-        }
     }
 }

@@ -544,6 +544,40 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(acpSections.first?.models.map(\.id), ["enabled::model-a"])
     }
 
+    func testPullRequestModelRestoresFromWorkspaceSettings() throws {
+        let defaults = appState.workspaceDefaults
+        let key = "pullRequestModelKey"
+        let previousValue = defaults.string(for: key)
+        defer { defaults.set(previousValue, for: key) }
+
+        let sections = appState.pullRequestModelSections()
+        XCTAssertTrue(sections.contains { $0.provider == .claudeCode && !$0.models.isEmpty })
+        let codex = try XCTUnwrap(sections.first { $0.provider == .codex }?.models.first)
+        appState.rememberPullRequestModel(codex)
+
+        let restored = AppState(persistence: persistence, startBackgroundServices: false)
+        XCTAssertEqual(defaults.string(for: key), codex.key)
+        XCTAssertEqual(restored.rememberedPullRequestModel?.key, codex.key)
+
+        restored.rememberPullRequestModel(nil)
+        XCTAssertEqual(defaults.string(for: key), "")
+        XCTAssertNil(restored.rememberedPullRequestModel)
+    }
+
+    func testDesktopPullRequestMenuPresentsModelSelectionInOriginatingWindow() throws {
+        let project = Project(name: "Example", path: "/tmp/example", gitHubRepo: "example/repository")
+        appState.projects = [project]
+        let otherWindow = WindowState()
+        let handler = appState.desktopMenuActionHandler(navigatingIn: window)
+
+        handler.perform(.command(MenuActionCommand(kind: .projectCreatePullRequest, projectId: project.id, branch: "feature")))
+
+        let request = try XCTUnwrap(appState.projectPullRequestRequests[window.id])
+        XCTAssertEqual(request.project.id, project.id)
+        XCTAssertEqual(request.branch, "feature")
+        XCTAssertNil(appState.projectPullRequestRequests[otherWindow.id])
+    }
+
     func testACPModelSectionsSeparateSubscriptionProvidersWithoutChangingSelectionKeys() {
         appState.acpClients = [ACPClientSpec(
             id: "opencode", displayName: "OpenCode",

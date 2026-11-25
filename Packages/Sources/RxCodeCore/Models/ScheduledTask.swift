@@ -40,6 +40,10 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
     /// Durable notification outbox; cleared only after the pet acknowledges delivery.
     public var pendingPetReport: String? = nil
     public var petReportDeliveredAt: Date? = nil
+    /// The agent that owns this schedule. Its runs are handled by one of the
+    /// agent's subagents, which reports back to the agent when it finishes.
+    /// `nil` for workspace schedules that run as ordinary chats.
+    public var agentId: UUID? = nil
 
     public init(
         id: UUID = UUID(),
@@ -70,6 +74,7 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, projectId, name, prompt, cronExpression, isEnabled, agent, notification, createdAt, updatedAt, lastRunAt
         case dueAt, timeZoneIdentifier, reportsPetProgress, petScheduleKind, claimedAt, pendingPetReport, petReportDeliveredAt
+        case agentId
     }
 
     /// Tolerates missing optional keys so records written by older or newer
@@ -94,6 +99,7 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
         claimedAt = try? c.decodeIfPresent(Date.self, forKey: .claimedAt)
         pendingPetReport = try? c.decodeIfPresent(String.self, forKey: .pendingPetReport)
         petReportDeliveredAt = try? c.decodeIfPresent(Date.self, forKey: .petReportDeliveredAt)
+        agentId = try? c.decodeIfPresent(UUID.self, forKey: .agentId)
     }
 
     /// The parsed schedule, or `nil` when `cronExpression` is invalid.

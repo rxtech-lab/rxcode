@@ -269,7 +269,7 @@ extension AppState {
 
         markCompletionRead(for: session.id)
 
-        window.generalRoute = window.selectedProject?.isGlobalChat == true ? .chat : nil
+        window.generalRoute = chatRoute(for: window.selectedProject)
         window.pendingWorktreePath = nil
         window.pendingWorktreeBranch = nil
         window.currentSessionId = session.id

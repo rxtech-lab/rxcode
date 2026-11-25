@@ -52,7 +52,10 @@ struct GitCommitSheet: View {
                                         GitWorkingFileRow(file: file)
                                     }
                                 } else {
-                                    ForEach(tree.changes.staged) { file in ChangeFileRow(file: file) }
+                                    ForEach(tree.changes.staged) { file in
+                                        ChangeFileRow(file: file)
+                                            .tag("s:" + file.displayPath)
+                                    }
                                 }
                             }
                         }
@@ -65,6 +68,14 @@ struct GitCommitSheet: View {
                         }
                     }
                     .listStyle(.inset)
+                    .contextMenu(forSelectionType: String.self) { selectedTags in
+                        let relativePaths = selectedTags.compactMap(Self.relativePath(from:))
+                        if !relativePaths.isEmpty {
+                            GitFileSystemContextMenuItems(
+                                paths: GitFileSystemActions.absolutePaths(for: relativePaths, root: tree.root)
+                            )
+                        }
+                    }
                 }
             }
             .padding(20)
@@ -88,6 +99,13 @@ struct GitCommitSheet: View {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
         .onAppear { editingMessage = true }
+    }
+
+    private nonisolated static func relativePath(from tag: String) -> String? {
+        for prefix in ["s:", "c:"] where tag.hasPrefix(prefix) {
+            return String(tag.dropFirst(prefix.count))
+        }
+        return nil
     }
 
     private var messageHeader: some View {

@@ -39,6 +39,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
     /// the desktop's per-session queue (threadStore). `nil` when the summary
     /// comes from an older desktop that doesn't know about queue sync.
     public let queuedMessages: [QueuedUserMessage]?
+    public let queuedSendMode: QueuedSendMode?
     /// Whether the session's stream finished while the user wasn't viewing it
     /// and it hasn't been opened since. Mirrors the desktop's
     /// `hasUncheckedCompletion` so mobile can show the same green
@@ -73,7 +74,8 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
         isInterrupted: Bool = false,
         parentThreadId: String? = nil,
         threadLabel: String? = nil,
-        changedFileCount: Int? = nil
+        changedFileCount: Int? = nil,
+        queuedSendMode: QueuedSendMode? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -86,6 +88,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
         self.progress = progress
         self.todos = todos
         self.queuedMessages = queuedMessages
+        self.queuedSendMode = queuedSendMode
         self.hasUncheckedCompletion = hasUncheckedCompletion
         self.isInterrupted = isInterrupted
         self.parentThreadId = parentThreadId
@@ -94,7 +97,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion, isInterrupted, parentThreadId, threadLabel, changedFileCount
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, queuedSendMode, hasUncheckedCompletion, isInterrupted, parentThreadId, threadLabel, changedFileCount
     }
 
     public init(from decoder: Decoder) throws {
@@ -110,6 +113,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable, Equatable {
         progress = try container.decodeIfPresent(SessionProgressSnapshot.self, forKey: .progress)
         todos = try container.decodeIfPresent([TodoItem].self, forKey: .todos)
         queuedMessages = try container.decodeIfPresent([QueuedUserMessage].self, forKey: .queuedMessages)
+        queuedSendMode = try container.decodeIfPresent(String.self, forKey: .queuedSendMode).flatMap(QueuedSendMode.init(rawValue:))
         hasUncheckedCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUncheckedCompletion) ?? false
         isInterrupted = try container.decodeIfPresent(Bool.self, forKey: .isInterrupted) ?? false
         parentThreadId = try container.decodeIfPresent(String.self, forKey: .parentThreadId)
@@ -683,15 +687,21 @@ public struct PongPayload: Codable, Sendable {
     public init(t: Date = .now) { self.t = t }
 }
 
-/// Edits queued text when `text` is present; otherwise requests live steering.
-/// A separate wire type prevents older desktops from treating edits as removals.
+public enum QueuedSendMode: String, Codable, Equatable, Sendable {
+    case wait, steer, interrupt, steerOrInterrupt
+}
+
+/// Edits queued text or requests explicit delivery of a queued instruction.
+/// Missing `interrupt` keeps the existing live-steering action.
 public struct QueueMessageActionPayload: Codable, Sendable {
     public let sessionID: String
     public let queuedMessageID: UUID
     public let text: String?
-    public init(sessionID: String, queuedMessageID: UUID, text: String? = nil) {
+    public let interrupt: Bool?
+    public init(sessionID: String, queuedMessageID: UUID, text: String? = nil, interrupt: Bool? = nil) {
         self.sessionID = sessionID
         self.queuedMessageID = queuedMessageID
         self.text = text
+        self.interrupt = interrupt
     }
 }

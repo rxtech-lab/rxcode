@@ -478,6 +478,14 @@ extension AppState {
                     logger.info("[Stream:UI] event #\(eventCount) .acpModelsDiscovered clientId=\(event.clientId, privacy: .public) configId=\(event.config.configId, privacy: .public) models=\(event.config.options.count) [\(Self.acpModelListDescription(event.config.options), privacy: .public)]")
                     applyDiscoveredACPModels(clientId: event.clientId, config: event.config)
 
+                case .acpSteeringAvailable(let supported):
+                    updateState(sessionKey) { $0.acpSteeringStreamId = supported ? streamId : nil }
+                    broadcastMobileSessionStatus(sessionID: sessionKey)
+
+                case .acpSteeredMessage(let message, let confirmed):
+                    recordACPSteeredMessage(message, confirmed: confirmed, sessionID: sessionKey)
+                    await CodingAnalyticsRecorder.shared.update(turnID: streamId, prompt: message.content)
+
                 // The four cases below are the decoded equivalents of the raw
                 // `content_block_*` frames that arrive as `.unknown`. Backends
                 // built on RxAgentSDK emit these directly; both paths converge

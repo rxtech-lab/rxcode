@@ -1370,6 +1370,7 @@
 
     },
     "Combine and send all queued messages as a single turn" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1962,6 +1963,7 @@
 
     },
     "Couldn't reach the current response — still queued, sends when it ends." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3572,6 +3574,15 @@
         }
       }
     },
+    "Interrupt and send now. This ACP response has no compatible steering capability." : {
+
+    },
+    "Interrupt the current response and send now" : {
+
+    },
+    "Interrupt the current response and send the queued messages as one turn" : {
+
+    },
     "Interrupted" : {
       "localizations" : {
         "en" : {
@@ -3984,6 +3995,9 @@
       }
     },
     "Maximum length: %lld tokens" : {
+
+    },
+    "MCP Servers" : {
 
     },
     "Memory of the local model process, including model weights, cache, and runtime overhead. Excludes other apps and system memory." : {
@@ -5639,6 +5653,7 @@
       }
     },
     "Send before the current response ends — steer it in, or interrupt" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5671,6 +5686,7 @@
       }
     },
     "Send now — cancels current response" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -5685,6 +5701,9 @@
           }
         }
       }
+    },
+    "Sending queued instruction" : {
+
     },
     "Session analysis report" : {
       "localizations" : {
@@ -6225,6 +6244,9 @@
         }
       }
     },
+    "Steer the current response or interrupt and send" : {
+
+    },
     "Steps appear here while a video is being prepared and rendered." : {
 
     },
@@ -6456,6 +6478,9 @@
           }
         }
       }
+    },
+    "This instruction is still queued." : {
+
     },
     "This message will be sent when the button is clicked" : {
       "localizations" : {

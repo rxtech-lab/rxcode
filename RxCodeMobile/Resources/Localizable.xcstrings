@@ -1097,6 +1097,9 @@
         }
       }
     },
+    "Agent default" : {
+
+    },
     "Agent is working on this task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2117,6 +2120,9 @@
     "Channel" : {
 
     },
+    "Chat" : {
+
+    },
     "Chats and review feedback appear here after this task runs on your Mac." : {
 
     },
@@ -2500,6 +2506,12 @@
         }
       }
     },
+    "Coding plan" : {
+
+    },
+    "Coding plans" : {
+
+    },
     "Collaboration" : {
 
     },
@@ -2643,6 +2655,9 @@
 
     },
     "Confirmation required before execution" : {
+
+    },
+    "Connect a Mac" : {
 
     },
     "Connect a Mac first." : {
@@ -2864,6 +2879,9 @@
         }
       }
     },
+    "Connecting to Mac…" : {
+
+    },
     "Connecting to your Mac…" : {
 
     },
@@ -2967,6 +2985,9 @@
           }
         }
       }
+    },
+    "Control" : {
+
     },
     "Control desktop summaries" : {
       "localizations" : {
@@ -3216,6 +3237,9 @@
         }
       }
     },
+    "Couldn’t send your decision to your Mac. Tap Review to retry." : {
+
+    },
     "Couldn't Start Thread" : {
 
     },
@@ -3299,6 +3323,9 @@
       }
     },
     "Create a webhook to receive Flowcy events." : {
+
+    },
+    "Create an agent in RxCode on your paired Mac." : {
 
     },
     "Create branch" : {
@@ -6178,6 +6205,12 @@
         }
       }
     },
+    "Implementation" : {
+
+    },
+    "Implementation evidence" : {
+
+    },
     "Import JSON File" : {
 
     },
@@ -6440,6 +6473,12 @@
     "Integrations" : {
 
     },
+    "Interrupt and Send" : {
+
+    },
+    "Interrupted" : {
+
+    },
     "Into" : {
 
     },
@@ -6490,6 +6529,9 @@
           }
         }
       }
+    },
+    "Jobs" : {
+
     },
     "Keep Editing" : {
 
@@ -6988,6 +7030,9 @@
         }
       }
     },
+    "Mac Screen" : {
+
+    },
     "main" : {
       "localizations" : {
         "ko" : {
@@ -7328,6 +7373,12 @@
     "Merged" : {
 
     },
+    "Message" : {
+
+    },
+    "Message Delivery" : {
+
+    },
     "Message Flowcy…" : {
 
     },
@@ -7352,6 +7403,9 @@
           }
         }
       }
+    },
+    "Messages from Agent" : {
+
     },
     "Messages from this session will appear here." : {
 
@@ -7730,6 +7784,9 @@
     "No %@" : {
 
     },
+    "No Agents" : {
+
+    },
     "No agents found." : {
       "localizations" : {
         "en" : {
@@ -8073,6 +8130,9 @@
     "No jobs are available yet. Pull to refresh." : {
 
     },
+    "No Jobs Yet" : {
+
+    },
     "No matches" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8130,6 +8190,9 @@
           }
         }
       }
+    },
+    "No Memory Yet" : {
+
     },
     "No Messages" : {
 
@@ -8380,6 +8443,9 @@
           }
         }
       }
+    },
+    "No Schedules" : {
+
     },
     "No Secrets" : {
       "localizations" : {
@@ -9023,6 +9089,9 @@
         }
       }
     },
+    "Open Conversation" : {
+
+    },
     "Open failing CI run" : {
       "localizations" : {
         "en" : {
@@ -9259,6 +9328,9 @@
           }
         }
       }
+    },
+    "Pair Mac" : {
+
     },
     "Pair New Mac" : {
       "extractionState" : "stale",
@@ -9511,6 +9583,12 @@
     "Pinned account button" : {
 
     },
+    "Plan" : {
+
+    },
+    "Plan ID" : {
+
+    },
     "Plan mode" : {
       "localizations" : {
         "en" : {
@@ -9532,6 +9610,12 @@
           }
         }
       }
+    },
+    "Plan unavailable" : {
+
+    },
+    "Planned features" : {
+
     },
     "Previous change" : {
       "localizations" : {
@@ -9940,6 +10024,9 @@
           }
         }
       }
+    },
+    "Release Control" : {
+
     },
     "Release Failed" : {
 
@@ -10459,6 +10546,9 @@
     "Results" : {
 
     },
+    "Resume" : {
+
+    },
     "Retry" : {
       "localizations" : {
         "en" : {
@@ -10485,6 +10575,9 @@
 
     },
     "Retry Response" : {
+
+    },
+    "Return" : {
 
     },
     "Return to your request to generate a new draft." : {
@@ -11082,6 +11175,9 @@
         }
       }
     },
+    "Schedules" : {
+
+    },
     "Scheme" : {
       "localizations" : {
         "en" : {
@@ -11119,6 +11215,12 @@
           }
         }
       }
+    },
+    "Screen Sharing Ended" : {
+
+    },
+    "Screen Unavailable" : {
+
     },
     "Script" : {
       "localizations" : {
@@ -11493,6 +11595,9 @@
     "Send Voice Message" : {
 
     },
+    "Sending…" : {
+
+    },
     "Sent today" : {
 
     },
@@ -11637,6 +11742,9 @@
           }
         }
       }
+    },
+    "Settings (%@)" : {
+
     },
     "Settings menu item" : {
 
@@ -12918,6 +13026,12 @@
         }
       }
     },
+    "Thinking Level" : {
+
+    },
+    "Thinking level: %@" : {
+
+    },
     "This Device" : {
 
     },
@@ -13516,6 +13630,9 @@
           }
         }
       }
+    },
+    "Type on Mac" : {
+
     },
     "Type your answer…" : {
       "localizations" : {
@@ -14135,6 +14252,9 @@
 
     },
     "View Log" : {
+
+    },
+    "View Mac Screen" : {
 
     },
     "View pull request" : {

@@ -2,44 +2,33 @@ import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
-/// Model choices for drafting a PR title and body: the summarization settings
-/// default, then every Claude Code, Codex, and enabled ACP model. Picking an
-/// entry remembers it for the next draft and calls `onSelect`.
-struct PullRequestDraftModelMenuContent: View {
+struct PullRequestDraftModelPicker: View {
     @Environment(AppState.self) private var appState
-    let onSelect: (AgentModel?) -> Void
 
     var body: some View {
-        let remembered = appState.rememberedPullRequestModel
-        Toggle(isOn: Binding(
-            get: { remembered == nil },
-            set: { _ in select(nil) }
+        let sections = appState.pullRequestModelSections()
+        let models = sections.flatMap(\.models)
+        Picker("Drafting Model", selection: Binding(
+            get: { models.first { $0.key == appState.pullRequestModelKey }?.key ?? "" },
+            set: { key in appState.rememberPullRequestModel(models.first { $0.key == key }) }
         )) {
             Text("Settings Default (\(appState.summarizationProvider.displayNameText))")
-        }
-        ForEach(appState.pullRequestModelSections(), id: \.id) { section in
-            Section(section.title) {
-                ForEach(section.models, id: \.key) { model in
-                    Toggle(isOn: Binding(
-                        get: { remembered?.key == model.key },
-                        set: { _ in select(model) }
-                    )) {
-                        Text(model.displayName)
+                .tag("")
+            ForEach(sections, id: \.id) { section in
+                Section(section.title) {
+                    ForEach(section.models, id: \.key) { model in
+                        Text(model.displayName).tag(model.key)
                     }
                 }
             }
         }
-    }
-
-    private func select(_ model: AgentModel?) {
-        appState.rememberPullRequestModel(model)
-        onSelect(model)
+        .pickerStyle(.menu)
+        .menuOrder(.fixed)
+        .accessibilityIdentifier("git-pr-model-picker")
     }
 }
 
-/// Reviews and opens a pull request for a pushed branch. An agent drafts the
-/// title and body when the sheet opens; the "Draft with" menu redrafts with a
-/// different model.
+/// Drafts, reviews, and opens a pull request for a pushed branch.
 struct GitCreatePullRequestSheet: View {
     private enum BodyMode: Hashable { case write, preview }
 
@@ -85,6 +74,16 @@ struct GitCreatePullRequestSheet: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     }
+                }
+
+                Section {
+                    PullRequestDraftModelPicker()
+                    Button {
+                        draft(with: appState.rememberedPullRequestModel)
+                    } label: {
+                        Label("Generate Draft", systemImage: "sparkles")
+                    }
+                    .accessibilityIdentifier("git-pr-generate-draft")
                 }
 
                 Section("Title") {
@@ -141,18 +140,6 @@ struct GitCreatePullRequestSheet: View {
                     }
                     .disabled(creating)
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        PullRequestDraftModelMenuContent { model in draft(with: model) }
-                    } label: {
-                        Label("Draft with Agent", systemImage: "sparkles")
-                    } primaryAction: {
-                        draft(with: appState.rememberedPullRequestModel)
-                    }
-                    .help("Draft the title and description with an agent")
-                    .disabled(draftingModelName != nil || creating)
-                    .accessibilityIdentifier("git-pr-draft-menu")
-                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create", action: create)
                         .keyboardShortcut(.defaultAction)
@@ -166,9 +153,6 @@ struct GitCreatePullRequestSheet: View {
         .alert("Couldn't Create Pull Request", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
-        .onAppear {
-            if title.isEmpty && prBody.isEmpty { draft(with: appState.rememberedPullRequestModel) }
-        }
         .onDisappear { draftTask?.cancel() }
     }
 
@@ -206,6 +190,79 @@ struct GitCreatePullRequestSheet: View {
                     body: prBody
                 )
                 if let checkout { store.setPullRequestPresence(.exists(url: url), for: checkout) }
+                openURL(url)
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+}
+
+/// A project or briefing action can publish the branch as part of creating its PR.
+struct ProjectPullRequestSheet: View {
+    let request: ProjectPullRequestRequest
+
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var creating = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent("Repository", value: request.project.gitHubRepo ?? request.project.name)
+                    if let branch = request.branch {
+                        LabeledContent("Branch", value: branch)
+                    } else {
+                        LabeledContent("Branch") { Text("Current branch") }
+                    }
+                }
+                Section {
+                    PullRequestDraftModelPicker()
+                } footer: {
+                    Text("RxCode will push the branch, draft the title and description, and open the pull request.")
+                }
+            }
+            .formStyle(.grouped)
+            .disabled(creating)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle("Create Pull Request")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(creating)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Generate and Create", action: create)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(creating)
+                }
+            }
+        }
+        .frame(minWidth: 480, maxWidth: .infinity, minHeight: 260, maxHeight: .infinity)
+        .overlay { GitOperationOverlay(operation: creating ? "Creating pull request…" : nil) }
+        .interactiveDismissDisabled(creating)
+        .alert("Couldn't Create Pull Request", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") { error = nil }
+        } message: { Text(error ?? "") }
+    }
+
+    private func create() {
+        guard !creating else { return }
+        let model = appState.rememberedPullRequestModel
+        creating = true
+        Task { @MainActor in
+            defer { creating = false }
+            do {
+                let url: URL
+                if let branch = request.branch {
+                    url = try await appState.createPullRequestForBranch(project: request.project, branch: branch, model: model)
+                } else {
+                    url = try await appState.createPullRequestForCurrentBranch(project: request.project, model: model)
+                }
                 openURL(url)
                 dismiss()
             } catch {

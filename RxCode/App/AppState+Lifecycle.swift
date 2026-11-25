@@ -242,6 +242,7 @@ extension AppState {
         // Hydrate ACP state (clients + cached registry) so the model picker and
         // Settings tab don't flash empty on first open.
         await loadACPClientsFromDisk()
+        await loadAgentHubFromDisk()
         await loadScheduledTasksFromDisk()
         startScheduledTaskTimer()
         await loadBriefingNotificationSettings()
@@ -663,6 +664,7 @@ extension AppState {
                     bridge.acpUsageSnapshot = acpUsage
                 }
                 bridge.canSteer = self.canSteer(in: window)
+                bridge.queueDispatchInProgress = state.queueDispatchInProgress
                 bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
                 let studioKind = localStudioKind(currentModel, provider: provider)
                 if bridge.studioKind != studioKind { bridge.studioKind = studioKind }

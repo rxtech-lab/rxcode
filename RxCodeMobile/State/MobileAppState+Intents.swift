@@ -48,9 +48,11 @@ extension MobileAppState {
         try? await client.send(.cancelStream(payload), toHex: pairedDesktopPubkey)
     }
 
-    func queueMessageAction(sessionID: String, queuedID: UUID, text: String?) async throws {
+    func queueMessageAction(sessionID: String, queuedID: UUID, text: String?, interrupt: Bool) async throws {
         guard isPaired else { throw URLError(.notConnectedToInternet) }
-        try await client.send(.queueMessageAction(.init(sessionID: resolveSessionID(sessionID), queuedMessageID: queuedID, text: text)), toHex: pairedDesktopPubkey)
+        let payload = QueueMessageActionPayload(sessionID: resolveSessionID(sessionID), queuedMessageID: queuedID,
+                                                text: text, interrupt: interrupt ? true : nil)
+        try await client.send(.queueMessageAction(payload), toHex: pairedDesktopPubkey)
     }
 
     func removeQueuedMessage(sessionID: String, queuedID: UUID) async {
@@ -252,7 +254,8 @@ extension MobileAppState {
                 isStreaming: current.isStreaming,
                 attention: current.attention,
                 progress: current.progress,
-                queuedMessages: current.queuedMessages
+                queuedMessages: current.queuedMessages,
+                queuedSendMode: current.queuedSendMode
             )
         }
         await sendThreadAction(sessionID: sessionID, action: .rename, newTitle: trimmed)
@@ -274,7 +277,8 @@ extension MobileAppState {
                 isStreaming: current.isStreaming,
                 attention: current.attention,
                 progress: current.progress,
-                queuedMessages: current.queuedMessages
+                queuedMessages: current.queuedMessages,
+                queuedSendMode: current.queuedSendMode
             )
         }
         await sendThreadAction(sessionID: sessionID, action: .archive)

@@ -234,7 +234,8 @@ extension AppState {
         approved.approvedVersionID = versionID
         approved.implementationReview = nil
         let inChatTab = window.generalRoute == .chat
-        startNewChat(in: window)
+        // The implementation always runs in its own thread, even in an agent's chat.
+        beginNewChat(in: window)
         window.inputText = ""
         window.attachments = []
         window.messageQueue = []

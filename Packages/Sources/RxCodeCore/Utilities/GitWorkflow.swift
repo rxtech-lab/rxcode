@@ -194,6 +194,21 @@ public enum GitRepositoryLoader {
         return text
     }
 
+    public static func fileData(
+        at path: String,
+        in commit: GitCommit,
+        root: String,
+        maxBytes: Int = 20 * 1024 * 1024
+    ) async -> Data? {
+        let object = "\(commit.id):\(path)"
+        guard let rawSize = await GitHelper.run(["cat-file", "-s", object], at: root),
+              let size = Int(rawSize.trimmingCharacters(in: .newlines)),
+              size <= maxBytes,
+              let output = await GitHelper.execute(["cat-file", "blob", object], at: root),
+              output.status == 0 else { return nil }
+        return output.stdout
+    }
+
     public static func diff(of file: GitCommitFile, in commit: GitCommit, at root: String) async -> String {
         let paths = [file.path] + (file.originalPath.map { [$0] } ?? [])
         if let parent = commit.parents.first {

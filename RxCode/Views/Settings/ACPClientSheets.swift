@@ -117,8 +117,9 @@ struct ACPVersionSheet: View {
                 : progressLabel)
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
-            if let progress, progress.phase == .downloading {
-                Text(byteCountLabel(progress))
+            if !didFinish, let progress, progress.phase == .downloading,
+               let transferSummary = Self.transferLabel(for: progress) {
+                Text(transferSummary)
                     .font(.system(size: ClaudeTheme.size(11)).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -134,14 +135,23 @@ struct ACPVersionSheet: View {
         }
     }
 
-    private func byteCountLabel(_ progress: ACPInstallerService.Progress) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useMB]
-        formatter.countStyle = .file
-        formatter.includesActualByteCount = false
-        let downloaded = formatter.string(fromByteCount: progress.downloadedBytes)
-        guard let expected = progress.expectedBytes, expected > 0 else { return downloaded }
-        return "\(downloaded) of \(formatter.string(fromByteCount: expected))"
+    static func transferLabel(for progress: ACPInstallerService.Progress) -> String? {
+        let byteSummary: String
+        if let expected = progress.expectedBytes, expected > 0 {
+            let downloaded = LocalModelFormat.bytes(progress.downloadedBytes)
+            let total = LocalModelFormat.bytes(max(expected, progress.downloadedBytes))
+            byteSummary = "\(downloaded) of \(total)"
+        } else if progress.downloadedBytes > 0 {
+            byteSummary = LocalModelFormat.bytes(progress.downloadedBytes)
+        } else {
+            return nil
+        }
+
+        if let speed = progress.bytesPerSecond, speed >= 0 {
+            let formattedSpeed = LocalModelFormat.bytes(Int64(min(speed, Double(Int64.max / 2))))
+            return "\(byteSummary) · \(formattedSpeed)/s"
+        }
+        return byteSummary
     }
 
     private var footer: some View {
@@ -201,6 +211,10 @@ struct ACPVersionSheet: View {
                         // Delegate callbacks may reach the main actor after extraction starts.
                         if progress?.phase == .preparing { return }
                         if progress?.phase == .extracting, update.phase == .downloading { return }
+                        if progress?.phase == .downloading, update.phase == .downloading,
+                           update.downloadedBytes < (progress?.downloadedBytes ?? 0) {
+                            return
+                        }
                         progress = update
                     }
                 }

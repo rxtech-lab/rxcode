@@ -5,10 +5,25 @@ import WebKit
 extension WorkspaceBrowserTab {
     /// This isolated content world only accepts data arguments. Page code has no native message handler.
     func inspectPage(_ operation: String, selector: String = "", text: String = "", point: CGPoint = .zero) async throws -> JSONValue {
-        let value = try await webView.callAsyncJavaScript(Self.inspectionScript, arguments: [
-            "operation": operation, "selector": selector, "newText": text, "x": point.x, "y": point.y
-        ], in: nil, contentWorld: .defaultClient)
-        guard let json = value as? String else { throw IDEToolError.handlerFailed("The page did not return an element.") }
+        let json: String
+        if let chromeController {
+            json = try await chromeController.evaluateIsolatedScript(
+                body: Self.inspectionScript,
+                arguments: [
+                    "operation": .string(operation),
+                    "selector": .string(selector),
+                    "newText": .string(text),
+                    "x": .number(point.x),
+                    "y": .number(point.y),
+                ]
+            )
+        } else {
+            let value = try await webView.callAsyncJavaScript(Self.inspectionScript, arguments: [
+                "operation": operation, "selector": selector, "newText": text, "x": point.x, "y": point.y
+            ], in: nil, contentWorld: .defaultClient)
+            guard let string = value as? String else { throw IDEToolError.handlerFailed("The page did not return an element.") }
+            json = string
+        }
         return try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
     }
 
@@ -16,7 +31,7 @@ extension WorkspaceBrowserTab {
         let value = try await inspectDesignPoint("pick", at: point, size: size)
         return DesignSelection(title: value["label"]?.stringValue ?? value["tag"]?.stringValue ?? "HTML element",
                                context: "Browser tab \(id.uuidString)\nPage \(address?.absoluteString ?? "")\n\(value)",
-                               image: try? await webView.takeSnapshot(configuration: nil), point: point,
+                               image: try? await takeSnapshot(), point: point,
                                rect: Self.designRect(value["bounds"], size: size))
     }
 

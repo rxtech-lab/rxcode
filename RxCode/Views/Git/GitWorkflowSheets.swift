@@ -240,7 +240,8 @@ struct GitDeleteBranchSheet: View {
 
 struct GitCreateTagSheet: View {
     let store: GitWorkflowStore
-    let commit: GitCommit
+    let target: String
+    let label: String
     @State private var name = ""
     @State private var message = ""
 
@@ -251,9 +252,9 @@ struct GitCreateTagSheet: View {
             progressTitle: "Creating tag…",
             canConfirm: isValidRefName(name),
             store: store,
-            action: { await GitWorkflow.createTag(name, at: commit.id, message: message, root: store.root) }
+            action: { await GitWorkflow.createTag(name, at: target, message: message, root: store.root) }
         ) {
-            LabeledContent("Commit", value: "\(commit.shortID) \(commit.subject)")
+            LabeledContent("Commit", value: label)
             TextField("Tag name", text: $name, prompt: Text("v1.0.0"))
             Section("Annotation (optional)") {
                 TextEditor(text: $message)

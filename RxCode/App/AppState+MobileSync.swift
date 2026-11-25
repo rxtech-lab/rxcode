@@ -14,6 +14,10 @@ extension AppState {
     func bindMobileSyncOwnership() {
         guard mobileSyncObservers.isEmpty else { return }
         setupMobileSyncBridge()
+        MobileSyncService.shared.agentPayloadHandler = { [weak self] payload, peer in
+            await self?.handleAgentPayload(payload, from: peer)
+        }
+        scheduleAgentHubBroadcast()
         broadcastMobileConfirmationQueue()
 
         // Supply MobileSyncService with desktop-side context for the mobile
@@ -46,9 +50,12 @@ extension AppState {
     /// observers so it stops responding to mobile requests once another
     /// workspace becomes frontmost.
     func unbindMobileSyncOwnership() {
+        guard !mobileSyncObservers.isEmpty else { return }
         let center = NotificationCenter.default
         mobileSyncObservers.forEach { center.removeObserver($0) }
         mobileSyncObservers.removeAll()
+        screenShareService.stop()
+        MobileSyncService.shared.agentPayloadHandler = nil
     }
 
     func setupMobileSyncBridge() {

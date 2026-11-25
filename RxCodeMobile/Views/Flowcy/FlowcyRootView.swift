@@ -1,8 +1,9 @@
 import RxAuthSwift
 import RxCodeCore
+import RxCodeSync
 import SwiftUI
 
-private enum FlowcyTab: Hashable { case tasks, projects, settings, agent }
+private enum FlowcyTab: Hashable { case tasks, projects, chat, settings, agent }
 
 struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -12,6 +13,7 @@ struct RootView: View {
     @State private var agent = FlowcyAgentState()
     @AppStorage("flowcy.appearance") private var appearance = "system"
     @State private var selected: FlowcyTab = .tasks
+    @State private var agentChatPath = NavigationPath()
     @State private var showingRemote = false
     @State private var showingPairing = false
     @State private var pairingCompleted = false
@@ -38,7 +40,7 @@ struct RootView: View {
             agent.restore(accountID: cloud.accountID)
             if cloud.isSignedIn {
                 state.usesCloudTasks = true
-                if state.pendingDeepLink != nil && state.isPaired { openRemote() }
+                if state.pendingDeepLink != nil && state.isPaired { openLinkedThread() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .rxAuthSessionExpired)) { _ in
@@ -68,7 +70,7 @@ struct RootView: View {
             if request != nil && cloud.isSignedIn && state.isPaired { openRemote() }
         }
         .onChange(of: state.pendingDeepLink) { _, link in
-            if link != nil && cloud.isSignedIn && state.isPaired { openRemote() }
+            if link != nil && cloud.isSignedIn && state.isPaired { openLinkedThread() }
         }
         .sheet(item: Binding(get: {
             cloud.isSignedIn && !showingRemote && !showingTools && !showingPairing ? cloud.pendingNotification : nil
@@ -123,6 +125,12 @@ struct RootView: View {
             Tab("Projects", systemImage: "square.grid.2x2", value: FlowcyTab.projects) {
                 FlowcyProjectsView()
             }
+            Tab("Chat", systemImage: "bubble.left.and.bubble.right", value: FlowcyTab.chat) {
+                NavigationStack(path: $agentChatPath) {
+                    MobileAgentHubView(onPair: { showingPairing = true })
+                        .navigationDestination(for: String.self) { MobileChatView(sessionID: $0) }
+                }
+            }
             Tab("Settings", systemImage: "gear", value: FlowcyTab.settings) {
                 FlowcySettingsView()
             }
@@ -152,6 +160,20 @@ struct RootView: View {
                     }
                 }
         }
+    }
+
+    private func openLinkedThread() {
+        guard let link = state.pendingDeepLink,
+              state.agentHub.agents.contains(where: { $0.id == link.projectID || $0.primarySessionId == link.sessionID }) else {
+            openRemote()
+            return
+        }
+        state.pendingDeepLink = nil
+        showingRemote = false
+        selected = .chat
+        var path = NavigationPath()
+        path.append(link.sessionID)
+        agentChatPath = path
     }
 
     private func openRemote() {

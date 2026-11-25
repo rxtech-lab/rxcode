@@ -42,10 +42,15 @@ actor ACPService {
         var stderr: String = ""
         var stdoutReaderTask: Task<Void, Never>?
         var stdoutLineCount: Int = 0
+        var supportsHostOwnedSteering = false
 
         // Per-turn (reset before `session/prompt`)
         var currentStreamId: UUID?
         var continuation: AsyncStream<StreamEvent>.Continuation?
+        var promptRequestId: Int?
+        var cancellationRequested = false
+        var permissionRequests: [JSONValue: Task<Void, Never>] = [:]
+        var steering: SteeringRequest?
         var liveToolCalls: Set<String> = []
         var planSyntheticId: String = "acp-plan-\(UUID().uuidString)"
         var planEmitted: Bool = false
@@ -62,6 +67,9 @@ actor ACPService {
 
     var sessions: [String: SessionEntry] = [:]
     var completedErrors: [UUID: String] = [:]
+    var turnTasks: [UUID: Task<Void, Never>] = [:]
+    var startingTurns: [String: UUID] = [:]
+    var turnWaiters: [UUID: [UUID: CheckedContinuation<Bool, Never>]] = [:]
     /// Maps an externally-issued streamId to its canonical pool key.
     var streamToKey: [UUID: String] = [:]
     /// Maps a previously-seen pool key (e.g. AppState's "pending-…" key) to
@@ -88,15 +96,21 @@ actor ACPService {
 
     // MARK: - Pool Lifecycle
 
-    /// Releases per-stream bookkeeping for a turn that ran to completion.
-    /// The pooled agent process stays alive so the next turn for the same
-    /// session inherits its conversation memory.
+    /// The turn owns its wire lifetime even when the transcript consumer stops.
     func finalize(streamId: UUID) {
+        guard turnTasks[streamId] == nil else { return }
+        releaseStream(streamId: streamId)
+    }
+
+    func releaseStream(streamId: UUID) {
         guard let key = streamToKey.removeValue(forKey: streamId) else { return }
+        if sessions[key]?.currentStreamId == streamId { cancelPermissionRequests(key: key) }
         guard var entry = sessions[key] else { return }
         if entry.currentStreamId == streamId {
             entry.currentStreamId = nil
             entry.continuation = nil
+            entry.promptRequestId = nil
+            entry.cancellationRequested = false
             entry.acceptingUpdates = false
             entry.liveToolCalls.removeAll()
             entry.planEmitted = false
@@ -114,34 +128,79 @@ actor ACPService {
         logger.info("[ACP] finalize streamId=\(streamId.uuidString, privacy: .public) key=\(key, privacy: .public) keepingProcess=\(!entry.isEphemeral) running=\(entry.process.isRunning)")
     }
 
-    /// Cancels the in-flight turn for `streamId` via `session/cancel` but
-    /// keeps the agent process alive so the user can immediately send a new
-    /// prompt without losing conversation state.
+    /// ACP v1 acknowledges cancellation in the original prompt response.
+    /// Keep its request and session slot until that response arrives.
     func cancel(streamId: UUID) {
-        guard let key = streamToKey[streamId], let entry = sessions[key] else {
+        guard let key = streamToKey[streamId],
+              let entry = sessions[key], entry.currentStreamId == streamId else {
+            turnTasks[streamId]?.cancel()
             return
         }
-        if let agentSid = entry.agentSessionId {
-            let frame: [String: Any] = [
-                "jsonrpc": "2.0",
-                "method": "session/cancel",
-                "params": ["sessionId": agentSid]
-            ]
-            if let data = try? JSONSerialization.data(withJSONObject: frame),
-               let line = String(data: data, encoding: .utf8) {
-                _ = try? entry.stdin.write(contentsOf: Data((line + "\n").utf8))
+        guard !entry.cancellationRequested else { return }
+        guard let agentSid = entry.agentSessionId, entry.promptRequestId != nil else {
+            // No prompt has started. Cancel only an in-progress setup.
+            turnTasks[streamId]?.cancel()
+            if entry.agentSessionId == nil || entry.isEphemeral {
+                killSession(key: key)
+            } else {
+                releaseStream(streamId: streamId)
             }
+            return
         }
-        // Resume any pending requests with .streamClosed so the runTurn await
-        // unblocks and we hit the per-turn cleanup path in finalize.
-        mutateSession(key) { e in
-            for (_, cont) in e.pending {
-                cont.resume(throwing: ACPError.streamClosed)
+        guard entry.acceptingUpdates else { return }
+        mutateSession(key) { $0.cancellationRequested = true }
+        do {
+            try writeFrame(key: key, frame: .object([
+                "jsonrpc": .string("2.0"),
+                "method": .string("session/cancel"),
+                "params": .object(["sessionId": .string(agentSid)])
+            ]))
+        } catch {
+            logger.warning("[ACP] cancellation write failed: \(error.localizedDescription, privacy: .public)")
+        }
+        cancelPermissionRequests(key: key)
+    }
+
+    func waitForTurnEnd(streamId: UUID, timeout: Duration = .seconds(10)) async -> Bool {
+        guard turnTasks[streamId] != nil else { return true }
+        let waiterId = UUID()
+        let timer = Task {
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            finishTurnWaiter(streamId: streamId, waiterId: waiterId)
+        }
+        defer { timer.cancel() }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                turnWaiters[streamId, default: [:]][waiterId] = continuation
             }
-            e.pending.removeAll()
-            e.continuation?.finish()
+        } onCancel: {
+            Task { await self.finishTurnWaiter(streamId: streamId, waiterId: waiterId) }
         }
-        finalize(streamId: streamId)
+    }
+
+    func prepareQueuedFollowUp(cancelling streamId: UUID?, sessionKey: String, requiresSession: Bool) async -> Bool {
+        let key = streamId.flatMap { streamToKey[$0] } ?? aliasToCanonical[sessionKey] ?? sessionKey
+        let generation = sessions[key].flatMap { $0.agentSessionId == nil ? nil : $0.generation }
+        let pendingStream = streamId ?? sessions[key]?.currentStreamId ?? startingTurns[key]
+        if let streamId { cancel(streamId: streamId) }
+        if let pendingStream, !(await waitForTurnEnd(streamId: pendingStream)) { return false }
+        guard let generation else { return !requiresSession }
+        return sessions[key]?.generation == generation && sessions[key]?.process.isRunning == true
+    }
+
+    private func finishTurnWaiter(streamId: UUID, waiterId: UUID) {
+        let waiter = turnWaiters[streamId]?.removeValue(forKey: waiterId)
+        if turnWaiters[streamId]?.isEmpty == true { turnWaiters.removeValue(forKey: streamId) }
+        waiter?.resume(returning: false)
+    }
+
+    func finishTurn(streamId: UUID) {
+        releaseStream(streamId: streamId)
+        turnTasks.removeValue(forKey: streamId)
+        if let waiters = turnWaiters.removeValue(forKey: streamId) {
+            for waiter in waiters.values { waiter.resume(returning: true) }
+        }
     }
 
     func consumeStderr(for streamId: UUID) -> String? {
@@ -154,6 +213,7 @@ actor ACPService {
     }
 
     func cleanup() {
+        for task in turnTasks.values { task.cancel() }
         for (key, _) in sessions {
             killSession(key: key)
         }
@@ -167,6 +227,8 @@ actor ACPService {
     /// references. Used by `cleanup()`, ephemeral probe sessions, and as a
     /// recovery path when a pooled process dies between turns.
     func killSession(key: String) {
+        finishSteering(key: key, outcome: .unconfirmed)
+        cancelPermissionRequests(key: key)
         guard var entry = sessions.removeValue(forKey: key) else { return }
         try? entry.stdin.close()
         if entry.process.isRunning {
@@ -177,7 +239,6 @@ actor ACPService {
             cont.resume(throwing: ACPError.streamClosed)
         }
         entry.pending.removeAll()
-        entry.continuation?.finish()
         if let sid = entry.currentStreamId {
             streamToKey.removeValue(forKey: sid)
         }
@@ -246,7 +307,6 @@ actor ACPService {
             cont.resume(throwing: ACPError.processExited(code: entry.process.terminationStatus))
         }
         mutateSession(resolved) { $0.pending.removeAll() }
-        entry.continuation?.finish()
         // Drop the entire pool entry — once the agent process is gone we
         // can't reuse it for the next turn anyway. The next `send()` will
         // spawn fresh.
@@ -263,6 +323,7 @@ enum ACPError: LocalizedError {
     case processExited(code: Int32)
     case probeTimeout(seconds: Int)
     case authRequired(clientName: String)
+    case previousTurnUnconfirmed
 
     /// JSON-RPC error code ACP agents return when a request needs sign-in.
     static let authRequiredCode = -32000
@@ -275,6 +336,7 @@ enum ACPError: LocalizedError {
         case .processExited(let code): return "ACP agent exited (code \(code))"
         case .probeTimeout(let s): return "ACP agent did not respond within \(s)s"
         case .authRequired(let name): return "\(name) requires sign-in. Open Settings → Agent and choose Manage → Sign In…"
+        case .previousTurnUnconfirmed: return "The ACP client hasn’t confirmed that the previous response ended."
         }
     }
 }

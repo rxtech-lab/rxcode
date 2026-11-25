@@ -34,6 +34,7 @@ public final class ChatBridge {
     /// false the queue's only options are to wait for the turn to end or to
     /// interrupt it.
     public var canSteer: Bool = false
+    public var queueDispatchInProgress = false
     public var modelDisplayName: String = ""
     /// The studio the selected local model opens in. Anything but `.chat`
     /// replaces the message list with that studio, and the message becomes

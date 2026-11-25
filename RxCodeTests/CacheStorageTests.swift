@@ -70,6 +70,7 @@ final class CacheStorageTests: XCTestCase {
 
         let badge = BriefingPRStatusView(projectId: project.id, branch: "Feature", project: project)
             .environment(state)
+            .environment(WindowState())
             .padding(8)
         let renderer = ImageRenderer(content: badge)
         renderer.scale = 2

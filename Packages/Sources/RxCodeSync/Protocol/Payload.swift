@@ -76,6 +76,16 @@ public enum Payload: Sendable {
     case taskBoardRequest(TaskBoardRequestPayload)
     case taskBoardResult(TaskBoardResultPayload)
     case taskBoardUpdate(TaskBoardUpdatePayload)
+    // Agents (see Payload+Agents.swift).
+    case agentHubUpdate(AgentHubUpdatePayload)
+    case agentRequest(AgentRequestPayload)
+    case agentResult(AgentResultPayload)
+    // Live screen sharing and remote control (see Payload+Agents.swift).
+    case screenShareRequest(ScreenShareRequestPayload)
+    case screenShareState(ScreenShareStatePayload)
+    case screenFrame(ScreenFramePayload)
+    case screenFrameAck(ScreenFrameAckPayload)
+    case remoteInput(RemoteInputPayload)
     case ping(PingPayload)
     case pong(PongPayload)
     // Direct-path (P2P) signaling — exchanged over the relay, consumed inside
@@ -157,6 +167,14 @@ public extension Payload {
         case .taskBoardRequest: return "task_board_request"
         case .taskBoardResult: return "task_board_result"
         case .taskBoardUpdate: return "task_board_update"
+        case .agentHubUpdate: return "agent_hub_update"
+        case .agentRequest: return "agent_request"
+        case .agentResult: return "agent_result"
+        case .screenShareRequest: return "screen_share_request"
+        case .screenShareState: return "screen_share_state"
+        case .screenFrame: return "screen_frame"
+        case .screenFrameAck: return "screen_frame_ack"
+        case .remoteInput: return "remote_input"
         case .ping: return "ping"
         case .pong: return "pong"
         case .iceCandidates: return "ice_candidates"

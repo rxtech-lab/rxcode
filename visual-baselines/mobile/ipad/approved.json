@@ -5,12 +5,12 @@
     "xcode": "Xcode 27.0\nBuild version 27A266a"
   },
   "sha256": {
-    "settings": "f021921b69f22867d82608fedc09ad443e60f20ce98b013faede9da62f1760a6",
-    "integrations": "16669d1f23b92d0d180e24ba53b143635ffd5cfd861d24677babbb8711370f41",
-    "account": "df90682e1f5f3cff09ae2e479631c2059c5a6108add1716b9158cc3a8a6a91fa"
+    "settings": "255a3351abbea55ef6ad5c65d5484108c090794439d7fe7b12a45b81443b7bfb",
+    "integrations": "c47d018b8bf3dd9e763e03cbf2d5a6847eabd3d0c79d657000909c0ba64350c2",
+    "account": "fe9342c2589aac413c032f6f634ec8c2883fdf7e78e8a399e5af90ad7191ee9d"
   },
   "approval": {
     "reviewer": "qiweili",
-    "at": "2026-11-25T07:35:05.687783+00:00"
+    "at": "2026-11-25T09:21:56.027975+00:00"
   }
 }
